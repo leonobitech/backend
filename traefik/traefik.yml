@@ -24,5 +24,6 @@ certificatesResolvers:
   le:
     acme:
       email: ${SSL_EMAIL}
-      storage: /letsencrypt/acme.json
-      tlsChallenge: true
+      storage: /acme.json
+      httpChallenge:
+        entryPoint: web
