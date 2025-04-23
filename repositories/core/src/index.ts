@@ -1,0 +1,108 @@
+import { webcrypto } from "node:crypto";
+
+if (!globalThis.crypto) {
+  globalThis.crypto = webcrypto as unknown as Crypto;
+}
+
+import "dotenv/config";
+import { NODE_ENV, PORT, API_ORIGIN, APP_ORIGIN } from "@config/env";
+import express from "express";
+import { Application } from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import { redis } from "@config/redis";
+redis.once;
+
+// constants
+import { HTTP_CODE } from "@constants/httpCode";
+import { UserRole } from "@constants/userRole";
+
+// middleware
+import authenticate from "@middlewares/authenticate";
+import errorHandler from "@middlewares/errorHandler";
+import authorize from "@middlewares/authorize";
+import { requestMeta } from "@middlewares/requestMeta";
+import { detectLanguage } from "@middlewares/detectLanguage";
+
+// routes
+import accountRoutes from "@routes/account.routes";
+import sessionRoutes from "@routes/session.routes";
+import userRoutes from "@routes/user.routes";
+import adminRouter from "@routes/admin.routes";
+
+// test route for error handling
+import testRouter from "@routes/test.routes";
+
+// Test para los type@
+import devDebugRoutes from "@routes/devDebug.routes";
+import { testHandler } from "@test/test";
+
+const app: Application = express();
+
+// parse application/json
+app.use(express.json());
+
+// parse application/x-www-form-urlencoded
+app.use(express.urlencoded({ extended: true }));
+
+// enable cors
+app.use(
+  cors({
+    origin: APP_ORIGIN, // allow to server to accept request from different origin
+    methods: ["GET", "POST", "PUT", "DELETE"], // allow to server to accept request from different method
+    allowedHeaders: ["Content-Type", "Authorization, X-Requested-With"], // allow to server to accept request from different headers
+    credentials: true, // allow session cookie from browser to pass through
+  })
+);
+// enable req.cookies.
+app.use(cookieParser());
+
+// Middleware global (si querés en toda la API)
+app.use(requestMeta);
+
+// initialize the app
+app.get("/", (req, res) => {
+  res.status(HTTP_CODE.OK).json({
+    service: "core",
+    status: "running",
+    version: "1.0.0",
+    environment: NODE_ENV,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 🩺 health check
+app.get("/health", (req, res) => {
+  res.status(HTTP_CODE.OK).json({
+    status: "healthy",
+    service: "core",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 🧪 Debug Test for types
+app.get("/test-types", testHandler);
+if (NODE_ENV === "development") {
+  app.use("/dev", detectLanguage, devDebugRoutes);
+}
+
+// Test route for error handling
+app.use("/api", testRouter);
+
+// Usar las rutas de account
+app.use("/account", accountRoutes);
+
+// 🔐 Auth & protected routes
+app.use("/account", authenticate, userRoutes);
+app.use("/account/sessions", authenticate, sessionRoutes);
+app.use("/admin", authenticate, authorize(UserRole.Admin), adminRouter);
+
+// 🚨 add  error's handler middleware
+app.use("/dev", authenticate, devDebugRoutes);
+app.use(errorHandler);
+
+// 🚀 Bootstrap controlado
+app.listen(PORT, async () => {
+  console.log(`Server listening on ${API_ORIGIN} in ${NODE_ENV} environment`);
+});

@@ -1,0 +1,143 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  email            String   @unique
+  password         String
+  name             String?
+  avatar           String?  @default("https://ui-avatars.com/api/?name=User")
+  bio              String?
+  role             String   @default("user")
+  verified         Boolean  @default(false)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  lastLogin        DateTime?
+
+  twoFactorEnabled Boolean  @default(false)
+  twoFactorSecret  String?
+  twoFactorAttempts Int     @default(0)
+
+  sessions          Session[]
+  verificationCodes VerificationCode[]
+  devices           Device[]
+  tokenRecords      TokenRecord[]
+  securityEventLogs SecurityEventLog[]
+}
+
+model Device {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @map("userId") @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id])
+  device      String
+  os          String
+  browser     String
+  ipAddress   String
+  userAgent   String
+  language    String?
+  timezone    String?
+  platform    String?
+  screenResolution String?
+  label       String?
+
+  lastUsedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions    Session[]
+  @@unique([userId, device, os, browser, ipAddress], name: "unique_device")
+}
+
+model Session {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @map("userId") @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id])
+  deviceId   String   @map("deviceId") @db.ObjectId
+  device     Device   @relation(fields: [deviceId], references: [id])
+  clientKey  String
+  isRevoked  Boolean  @default(false)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastUsedAt DateTime? @default(now())
+
+  tokens              TokenRecord[]        // ✅ tokens relacionados
+  securityEventLogs   SecurityEventLog[]   // ✅ logs de seguridad
+
+  @@index([userId])
+  @@unique([userId, deviceId, clientKey], name: "unique_session_fingerprint")
+}
+model TokenRecord {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  jti        String   @unique
+  token      String
+  publicKey  String
+  type       TokenType
+  encrypted  Boolean  @default(true)
+  issuedAt   DateTime @default(now())
+  expiresAt  DateTime
+  revoked    Boolean  @default(false)
+
+  sessionId  String   @map("sessionId") @db.ObjectId
+  session    Session  @relation(fields: [sessionId], references: [id]) // ✅ limpia
+
+  userId     String   @map("userId") @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([sessionId])
+}
+
+enum TokenType {
+  ACCESS
+  REFRESH
+}
+
+model VerificationCode {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @map("userId") @db.ObjectId
+  type       String
+  hashedCode String
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+}
+
+model SecurityEventLog {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @map("userId") @db.ObjectId
+  sessionId  String   @map("sessionId") @db.ObjectId
+  type       String
+  ipAddress  String
+  browser    String
+  os         String
+  path       String
+  method     String
+  host       String
+  details    String?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+  session    Session  @relation(fields: [sessionId], references: [id]) // ✅ también limpia
+
+  @@index([userId])
+  @@index([sessionId])
+}

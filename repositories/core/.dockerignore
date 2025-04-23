@@ -1,0 +1,35 @@
+# ─────────────────────────────
+# Ignorar archivos sensibles
+# ─────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# ─────────────────────────────
+# Archivos de construcción
+# ─────────────────────────────
+node_modules
+dist
+*.tsbuildinfo
+coverage/
+*.log
+
+# ─────────────────────────────
+# Archivos de tests o solo desarrollo
+# ─────────────────────────────
+*.test.ts
+__tests__/
+.vscode/
+
+# ─────────────────────────────
+# Bases de datos locales
+# ─────────────────────────────
+*.sqlite
+*.db
+
+# ─────────────────────────────
+# Prisma (si usás SQLite local)
+# ─────────────────────────────
+prisma/dev.db
