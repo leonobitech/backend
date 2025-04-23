@@ -34,3 +34,4 @@ Thumbs.db
 # 🔐 Certificates SSL (Let's Encrypt - Traefik)
 # ─────────────────────────────────────────────
 traefik/acme.json
+.github/workflows/
