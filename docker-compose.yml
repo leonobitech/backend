@@ -78,7 +78,7 @@ services:
         condition: service_started
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.core.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.core.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`)"
       - "traefik.http.routers.core.entrypoints=websecure"
       - "traefik.http.routers.core.tls.certresolver=le"
       - "traefik.http.services.core.loadbalancer.server.port=8000"
