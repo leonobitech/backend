@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   traefik:
     image: traefik:latest
@@ -31,6 +33,13 @@ services:
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.tls.certresolver=le"
       - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
+      - "traefik.http.middlewares.n8n-secure.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.n8n-secure.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.n8n-secure.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.n8n-secure.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.n8n-secure.headers.STSIncludeSubdomains=true"
+      - "traefik.http.middlewares.n8n-secure.headers.STSPreload=true"
 
   redis_core:
     image: redis:latest
@@ -71,15 +80,12 @@ services:
         condition: service_started
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.core.rule=Host(`core.leonobitech.com`)"
+      - "traefik.http.routers.core.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)"
       - "traefik.http.routers.core.entrypoints=websecure"
       - "traefik.http.routers.core.tls.certresolver=le"
       - "traefik.http.services.core.loadbalancer.server.port=8000"
     healthcheck:
-      test: [
-        "CMD-SHELL",
-        "node -e \"require('http').get('http://localhost:8000/health', res => process.exit(res.statusCode === 200 ? 0 : 1))\""
-      ]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:8000/health', res => process.exit(res.statusCode === 200 ? 0 : 1))\""]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -90,8 +96,112 @@ services:
     tmpfs:
       - /tmp
 
+  n8n_main:
+    container_name: n8n_main
+    build:
+      context: ./repositories/n8n
+    image: leonobitech/n8n:latest
+    restart: unless-stopped
+    env_file:
+      - ./repositories/n8n/.env
+    volumes:
+      - n8n_data_main:/home/node/.n8n
+    networks:
+      - leonobitech-net
+    depends_on:
+      postgres_n8n:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
+      - traefik.http.routers.n8n.tls=true
+      - traefik.http.routers.n8n.entrypoints=web,websecure
+      - traefik.http.routers.n8n.tls.certresolver=le
+      - traefik.http.services.n8n.loadbalancer.server.port=5678
+      - traefik.http.routers.n8n.middlewares=n8n-secure@docker
+
+  n8n_webhook_1:
+    container_name: n8n_webhook_1
+    build:
+      context: ./repositories/n8n
+    image: leonobitech/n8n:latest
+    restart: unless-stopped
+    env_file:
+      - ./repositories/n8n/.env
+    command: webhook
+    volumes:
+      - n8n_data_webhook_1:/home/node/.n8n
+    networks:
+      - leonobitech-net
+    depends_on:
+      postgres_n8n:
+        condition: service_healthy
+      redis_n8n:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)
+      - traefik.http.routers.n8n_webhook.entrypoints=websecure
+      - traefik.http.routers.n8n_webhook.tls.certresolver=le
+      - traefik.http.routers.n8n_webhook.middlewares=n8n-secure@docker
+      - traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678
+
+  n8n_worker_1:
+    container_name: n8n_worker_1
+    build:
+      context: ./repositories/n8n
+    image: leonobitech/n8n:latest
+    restart: unless-stopped
+    env_file:
+      - ./repositories/n8n/.env
+    command: worker
+    volumes:
+      - n8n_data_worker_1:/home/node/.n8n
+    networks:
+      - leonobitech-net
+    depends_on:
+      postgres_n8n:
+        condition: service_healthy
+      redis_n8n:
+        condition: service_healthy
+    labels: []
+
+  redis_n8n:
+    image: redis:latest
+    container_name: redis_n8n
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - leonobitech-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+
+  postgres_n8n:
+    image: postgres:latest
+    container_name: postgres_n8n
+    restart: unless-stopped
+    env_file:
+      - ./repositories/n8n/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - leonobitech-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+
 volumes:
   redis_core_data:
+  n8n_data_main:
+  n8n_data_webhook_1:
+  n8n_data_worker_1:
+  redis_data:
+  postgres_data:
 
 networks:
   leonobitech-net:

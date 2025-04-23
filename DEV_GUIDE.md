@@ -1,7 +1,7 @@
 # 🧪 Leonobitech Dev Guide – Makefile vs Compose
 
 This guide explains the difference between using `make` and `docker compose`  
-in the **Leonobitech backend monorepo**, and when to use each depending on your goal.
+in the **Leonobitech backend**, and when to use each depending on your goal.
 
 ---
 
@@ -30,10 +30,10 @@ Use these for:
 
 ## 🚀 `docker compose` – Full Stack Integration
 
-Use `docker-compose.prod.yml` to bring up the **entire backend infrastructure**:
+Use `docker-compose.yml` to bring up the **entire backend infrastructure**:
 
 ```bash
-docker compose -f docker-compose.prod.yml up --build -d
+docker compose -f docker-compose.yml up --build -d
 ```
 
 This spins up:
