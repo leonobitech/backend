@@ -109,12 +109,18 @@ services:
         condition: service_healthy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/rest`) || PathPrefix(`/webhook-test`)
-      - traefik.http.routers.n8n.tls=true
-      - traefik.http.routers.n8n.entrypoints=web,websecure
-      - traefik.http.routers.n8n.tls.certresolver=le
-      - traefik.http.services.n8n.loadbalancer.server.port=5678
-      - traefik.http.routers.n8n.middlewares=n8n-secure@docker
+      - traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
+      - traefik.http.routers.n8n_ui.entrypoints=websecure
+      - traefik.http.routers.n8n_ui.tls=true
+      - traefik.http.routers.n8n_ui.tls.certresolver=le
+      - traefik.http.routers.n8n_ui.service=n8n_ui
+      - traefik.http.services.n8n_ui.loadbalancer.server.port=5678
+      - traefik.http.routers.n8n_ui.middlewares=n8n-secure@docker
+      - traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)
+      - traefik.http.routers.n8n_webhooktest.entrypoints=websecure
+      - traefik.http.routers.n8n_webhooktest.tls=true
+      - traefik.http.routers.n8n_webhooktest.tls.certresolver=le
+      - traefik.http.routers.n8n_webhooktest.service=n8n_ui
 
   n8n_webhook_1:
     image: n8nio/n8n:latest
