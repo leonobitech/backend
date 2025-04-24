@@ -1,7 +1,7 @@
 # 🧱 Leonobitech Backend – Production-Ready Architecture
 
 This is the official monorepo for the **Leonobitech Backend**, built for modularity, performance, and security using Docker Compose and Traefik.  
-Designed for real-world deployments with automatic HTTPS, service isolation, Redis caching, and a clean CI/CD-ready structure.
+Designed for real-world deployments with automatic HTTPS, service isolation, Redis caching, workflow automation, and a clean CI/CD-ready structure.
 
 ---
 
@@ -24,6 +24,11 @@ backend/
     │   ├── README.core.md
     │   ├── keys/                   # PEM keypair (ignored in Git)
     │   └── src/index.mjs
+    │
+    ├── n8n/                        # ⚙️ n8n workflow automation (workers + webhooks)
+    │   ├── .env.example
+    │   ├── Dockerfile
+    │   └── README.n8n.md
     │
     └── redis/                      # ⚡ Redis instance for token caching
         ├── .env
@@ -66,6 +71,34 @@ core:
     timeout: 5s
     retries: 5
     start_period: 10s
+```
+
+### ⚙️ n8n
+
+```yaml
+n8n_main:
+  container_name: n8n_main
+  build:
+    context: ./repositories/n8n
+  image: leonobitech/n8n:latest
+  restart: unless-stopped
+  env_file:
+    - ./repositories/n8n/.env
+  volumes:
+    - n8n_data_main:/home/node/.n8n
+  networks:
+    - leonobitech-net
+  depends_on:
+    postgres_n8n:
+      condition: service_healthy
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.n8n.rule=Host(`n8n.leonobitech.com`) && PathPrefix(`/rest`) || PathPrefix(`/webhook-test`)"
+    - "traefik.http.routers.n8n.tls=true"
+    - "traefik.http.routers.n8n.entrypoints=web,websecure"
+    - "traefik.http.routers.n8n.tls.certresolver=le"
+    - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+    - "traefik.http.routers.n8n.middlewares=n8n-secure@docker"
 ```
 
 ### 🧠 redis_core
@@ -179,6 +212,7 @@ docker system prune -a --volumes
 ## 📘 Internal Docs
 
 - [README.core.md](./repositories/core/README.core.md)
+- [README.n8n.md](./repositories/n8n/README.n8n.md)
 - [Redis DB Mapping](./repositories/redis/REDIS_DB_USAGE.md)
 
 ---

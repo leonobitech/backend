@@ -5,6 +5,7 @@ This is the **official backend monorepo** for the Leonobitech platform.
 It follows a **modular microservices architecture**, powered by:
 - ⚡ **Traefik** as reverse proxy with automatic HTTPS via Let's Encrypt
 - 🔐 **core** microservice (authentication, sessions, token issuance)
+- 🧠 **n8n** microservice (workflow automation, webhook processing)
 - 🚀 **Redis** as secure token cache with logical DBs
 - 🐳 Full **Docker Compose** support for local and production deployment
 
@@ -22,6 +23,7 @@ backend/                        # Project root
 │   └── acme.json               # SSL cert storage (auto-generated)
 └── repositories/               # All microservices live here
     ├── core/                   # 🧠 Main backend microservice (auth/session)
+    ├── n8n/                    # ⚙️ Workflow automation (queue, webhooks, workers)
     └── redis/                  # 🔌 Redis config (.env + usage docs)
 ```
 
@@ -91,11 +93,12 @@ make reset-test-redis # Reset + test Redis in isolation
 
 Each service is mapped to a subdomain:
 
-| Service | URL                          |
-|---------|------------------------------|
-| core    | https://core.leonobitech.com |
-| redis   | internal only                |
-| traefik | https://traefik.leonobitech.com (optional)
+| Service | URL                              |
+|---------|----------------------------------|
+| core    | https://core.leonobitech.com     |
+| n8n     | https://n8n.leonobitech.com      |
+| redis   | internal only                    |
+| traefik | https://traefik.leonobitech.com (optional) |
 
 ---
 
@@ -103,6 +106,7 @@ Each service is mapped to a subdomain:
 
 - ✅ Modular microservices under `/repositories`
 - 🔐 Authentication & Session Management (core)
+- ⚙️ Scalable workflow automation with n8n (workers, webhook queues)
 - ♻️ Token lifecycle via Redis (DB 2)
 - ☁️ HTTPS with Let's Encrypt (Traefik)
 - 🧪 Health checks per service
