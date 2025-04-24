@@ -21,7 +21,23 @@ jobs:
       - name: 🚀 Deploy to VPS via SSH
         run: |
           ssh -p 2222 -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            set -e
             cd ~/backend
+
+            echo "📊 Espacio en disco antes del deploy:"
+            df -h /
+
+            echo "🧼 Limpieza ligera: contenedores parados e imágenes huérfanas"
+            docker container prune -f
+            docker image prune -f
+
+            echo "📥 Pull de cambios y rebuild..."
             git pull
             docker compose up -d --build
+
+            echo "📊 Espacio en disco después del deploy:"
+            df -h /
+
+            echo "✅ Deploy completado correctamente 🚀"
           EOF
+
