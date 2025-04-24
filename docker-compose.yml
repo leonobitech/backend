@@ -31,6 +31,8 @@ services:
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.tls.certresolver=le"
       - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.middlewares.auth-traefik.basicauth.users=${TRAEFIK_AUTH}"
+      - "traefik.http.routers.traefik.middlewares=auth-traefik@docker"
       - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
       - "traefik.http.middlewares.n8n-secure.headers.browserXSSFilter=true"
       - "traefik.http.middlewares.n8n-secure.headers.contentTypeNosniff=true"
@@ -95,32 +97,33 @@ services:
       - /tmp
 
   n8n_main:
-    image: n8nio/n8n:latest
-    container_name: n8n_main
-    restart: unless-stopped
-    env_file:
-      - ./repositories/n8n/.env
-    volumes:
-      - n8n_data_main:/home/node/.n8n
-    networks:
-      - leonobitech-net
-    depends_on:
-      postgres_n8n:
-        condition: service_healthy
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
-      - traefik.http.routers.n8n_ui.entrypoints=websecure
-      - traefik.http.routers.n8n_ui.tls=true
-      - traefik.http.routers.n8n_ui.tls.certresolver=le
-      - traefik.http.routers.n8n_ui.service=n8n_ui
-      - traefik.http.services.n8n_ui.loadbalancer.server.port=5678
-      - traefik.http.routers.n8n_ui.middlewares=n8n-secure@docker
-      - traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)
-      - traefik.http.routers.n8n_webhooktest.entrypoints=websecure
-      - traefik.http.routers.n8n_webhooktest.tls=true
-      - traefik.http.routers.n8n_webhooktest.tls.certresolver=le
-      - traefik.http.routers.n8n_webhooktest.service=n8n_ui
+      image: n8nio/n8n:latest
+      container_name: n8n_main
+      restart: unless-stopped
+      env_file:
+        - ./repositories/n8n/.env
+      volumes:
+        - n8n_data_main:/home/node/.n8n
+      networks:
+        - leonobitech-net
+      depends_on:
+        postgres_n8n:
+          condition: service_healthy
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
+        - traefik.http.routers.n8n_ui.entrypoints=websecure
+        - traefik.http.routers.n8n_ui.tls=true
+        - traefik.http.routers.n8n_ui.tls.certresolver=le
+        - traefik.http.routers.n8n_ui.service=n8n_ui
+        - traefik.http.services.n8n_ui.loadbalancer.server.port=5678
+        - traefik.http.routers.n8n_ui.middlewares=n8n-secure@docker,auth-n8n@docker
+        - traefik.http.middlewares.auth-n8n.basicauth.users=${N8N_AUTH}
+        - traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)
+        - traefik.http.routers.n8n_webhooktest.entrypoints=websecure
+        - traefik.http.routers.n8n_webhooktest.tls=true
+        - traefik.http.routers.n8n_webhooktest.tls.certresolver=le
+        - traefik.http.routers.n8n_webhooktest.service=n8n_ui
 
   n8n_webhook_1:
     image: n8nio/n8n:latest
