@@ -95,10 +95,8 @@ services:
       - /tmp
 
   n8n_main:
+    image: n8n:latest
     container_name: n8n_main
-    build:
-      context: ./repositories/n8n
-    image: leonobitech/n8n:latest
     restart: unless-stopped
     env_file:
       - ./repositories/n8n/.env
@@ -119,10 +117,8 @@ services:
       - traefik.http.routers.n8n.middlewares=n8n-secure@docker
 
   n8n_webhook_1:
+    image: n8n:latest
     container_name: n8n_webhook_1
-    build:
-      context: ./repositories/n8n
-    image: leonobitech/n8n:latest
     restart: unless-stopped
     env_file:
       - ./repositories/n8n/.env
@@ -145,10 +141,8 @@ services:
       - traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678
 
   n8n_worker_1:
+    image: n8n:latest
     container_name: n8n_worker_1
-    build:
-      context: ./repositories/n8n
-    image: leonobitech/n8n:latest
     restart: unless-stopped
     env_file:
       - ./repositories/n8n/.env

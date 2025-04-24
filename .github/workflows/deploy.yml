@@ -1,4 +1,4 @@
-name: 🚀 Deploy to VPS
+name: 🚀 Deploy to Production - Main
 
 on:
   push:
@@ -27,13 +27,16 @@ jobs:
             echo "📊 Espacio en disco antes del deploy:"
             df -h /
 
-            echo "🧼 Limpieza ligera: contenedores parados e imágenes huérfanas"
-            docker container prune -f
-            docker image prune -f
+            echo "📦 Actualización de imágenes desde Docker Hub"
+            docker compose pull
 
-            echo "📥 Pull de cambios y rebuild..."
+            echo "📥 Pull de cambios y rebuild personalizado"
             git pull
             docker compose up -d --build
+
+            echo "🧼 Limpieza post-deploy de contenedores parados e imágenes huérfanas"
+            docker container prune -f
+            docker image prune -f
 
             echo "📊 Espacio en disco después del deploy:"
             df -h /
