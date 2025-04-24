@@ -63,7 +63,6 @@ services:
     container_name: core
     build:
       context: ./repositories/core
-    image: leonobitech/core:latest
     restart: unless-stopped
     env_file:
       - ./repositories/core/.env
