@@ -4,7 +4,7 @@ import { Response, CookieOptions } from "express";
 import { fifteenMinutesFromNow, thirtyDaysFromNow } from "@utils/date/date";
 
 // 📍 Ruta base para cookies persistentes como el refresh
-export const AUTH_COOKIE_PATH = "/api";
+export const AUTH_COOKIE_PATH = "/";
 
 // 🧱 Configuración base para todas las cookies de autenticación
 const baseCookieOptions: CookieOptions = {
@@ -18,12 +18,13 @@ const baseCookieOptions: CookieOptions = {
 export const accessTokenCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
   expires: fifteenMinutesFromNow(),
+  path: AUTH_COOKIE_PATH,
 });
 
 // 🍪 Configuración para el clientKey (más persistente, sirve para buscar el refresh token)
 export const clientKeyCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  expires: thirtyDaysFromNow(),
+  expires: fifteenMinutesFromNow(),
   path: AUTH_COOKIE_PATH,
 });
 
@@ -46,5 +47,5 @@ export const setAuthCookies = ({
 // ❌ Función para limpiar ambas cookies de autenticación
 export const clearAuthCookies = (res: Response): Response =>
   res
-    .clearCookie("accessKey")
+    .clearCookie("accessKey", { path: AUTH_COOKIE_PATH })
     .clearCookie("clientKey", { path: AUTH_COOKIE_PATH });
