@@ -98,6 +98,7 @@ export const createNewDevice = async (
       platform,
       screenResolution,
       label,
+      source: "auth.verifyEmailService.createNewDevice",
     },
     req
   );

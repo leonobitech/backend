@@ -71,7 +71,7 @@ const authenticate: RequestHandler = catchErrors(
     logger.info("🔑 Token recibido", {
       ...meta,
       ttlSeconds: ttl,
-      audience,
+      audience: audience,
       event: "auth.token.received",
     });
 
