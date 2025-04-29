@@ -7,22 +7,33 @@ export const generateClientKeyFromMeta = async (
   sessionId: string,
   verbose = NODE_ENV !== "production"
 ): Promise<string> => {
+  // 1️⃣ Masked IP: conservar solo primer /24
+  let ipSegment = "";
+  if (meta.ipAddress) {
+    const parts = meta.ipAddress.split(".");
+    if (parts.length === 4) {
+      ipSegment = parts.slice(0, 3).join("."); // ej. "172.69.138"
+    }
+  }
+
+  // 2️⃣ Campos inmutables
   const fields: Record<string, string> = {
     userId,
     sessionId,
-    ipAddress: meta.ipAddress ?? "",
-    device: meta.deviceInfo.device ?? "",
-    os: meta.deviceInfo.os ?? "",
-    browser: meta.deviceInfo.browser ?? "",
-    userAgent: meta.userAgent ?? "",
-    language: meta.language ?? "",
-    platform: meta.platform ?? "",
-    timezone: meta.timezone ?? "",
-    screenResolution: meta.screenResolution ?? "",
-    label: meta.label ?? "",
-    host: meta.host ?? "",
+    ipAddress: ipSegment,
+    device: meta.deviceInfo.device,
+    os: meta.deviceInfo.os,
+    browser: meta.deviceInfo.browser,
+    userAgent: meta.userAgent,
+    language: meta.language,
+    platform: meta.platform,
+    timezone: meta.timezone,
+    screenResolution: meta.screenResolution,
+    label: meta.label,
+    host: meta.host,
   };
 
+  // 3️⃣ Montamos la cadena
   const raw = Object.values(fields).join(":");
   const secret = CLIENT_KEY_SECRET;
 
@@ -32,6 +43,7 @@ export const generateClientKeyFromMeta = async (
 
   const fingerprint = hmacHash(raw, secret);
 
+  // 4️⃣ Logging en dev
   if (verbose) {
     const logLine = () =>
       console.log("--------------------------------------------------");

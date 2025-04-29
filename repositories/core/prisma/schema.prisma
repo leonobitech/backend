@@ -48,18 +48,18 @@ model Device {
   browser     String
   ipAddress   String
   userAgent   String
-  language    String?
-  timezone    String?
-  platform    String?
-  screenResolution String?
-  label       String?
+  language    String
+  timezone    String
+  platform    String
+  screenResolution String
+  label       String
 
   lastUsedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   sessions    Session[]
-  @@unique([userId, device, os, browser, ipAddress], name: "unique_device")
+  @@unique([userId, device, os, browser], name: "unique_device")
 }
 
 model Session {

@@ -18,7 +18,15 @@ export const checkDeviceOrSendVerification = async (
   meta: RequestMeta
 ): Promise<LoginDeviceCheckResponse> => {
   const { device, os, browser } = meta.deviceInfo;
-  const { ipAddress } = meta;
+  const {
+    ipAddress,
+    userAgent,
+    language,
+    timezone,
+    platform,
+    screenResolution,
+    label,
+  } = meta;
 
   const existingDevice = await prisma.device.findUnique({
     where: {
@@ -27,7 +35,6 @@ export const checkDeviceOrSendVerification = async (
         device,
         os,
         browser,
-        ipAddress,
       },
     },
   });
@@ -40,6 +47,12 @@ export const checkDeviceOrSendVerification = async (
       os,
       browser,
       ipAddress,
+      userAgent,
+      language,
+      timezone,
+      platform,
+      screenResolution,
+      label,
     });
 
     return {
@@ -73,6 +86,12 @@ export const checkDeviceOrSendVerification = async (
     os,
     browser,
     ipAddress,
+    userAgent,
+    language,
+    timezone,
+    platform,
+    screenResolution,
+    label,
   });
 
   return {

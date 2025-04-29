@@ -1,6 +1,7 @@
 // 📁 utils/auth/findOrCreateDevice.ts
 
 import { prisma } from "@config/prisma";
+import { dispatchEvent } from "@utils/logging/eventDispatcher";
 
 export const findOrCreateDevice = async (userId: string, meta: RequestMeta) => {
   const { device, os, browser } = meta.deviceInfo;
@@ -8,8 +9,8 @@ export const findOrCreateDevice = async (userId: string, meta: RequestMeta) => {
     ipAddress,
     userAgent,
     language,
-    platform,
     timezone,
+    platform,
     screenResolution,
     label,
   } = meta;
@@ -22,7 +23,6 @@ export const findOrCreateDevice = async (userId: string, meta: RequestMeta) => {
         device,
         os,
         browser,
-        ipAddress,
       },
     },
   });
@@ -38,8 +38,8 @@ export const findOrCreateDevice = async (userId: string, meta: RequestMeta) => {
         ipAddress,
         userAgent,
         language,
-        platform,
         timezone,
+        platform,
         screenResolution,
         label,
       },
@@ -57,13 +57,28 @@ export const findOrCreateDevice = async (userId: string, meta: RequestMeta) => {
         ipAddress,
         userAgent,
         language,
-        platform,
         timezone,
+        platform,
         screenResolution,
         label,
       },
     });
   }
+
+  // 📡 Registrar creación exitosa
+  dispatchEvent("auth.device.created", {
+    performedBy: userId,
+    device,
+    os,
+    browser,
+    ipAddress,
+    userAgent,
+    language,
+    timezone,
+    platform,
+    screenResolution,
+    label,
+  });
 
   return deviceRecord;
 };

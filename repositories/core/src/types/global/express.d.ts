@@ -15,10 +15,10 @@ declare global {
     };
     userAgent: string; // ✅ ahora es obligatorio
     language: string;
-    platform: string | null;
-    timezone: string | null;
-    screenResolution: string | null;
-    label: string | null;
+    platform: string;
+    timezone: string;
+    screenResolution: string;
+    label: string;
     path: string;
     method: string;
     host: string;

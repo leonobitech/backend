@@ -30,6 +30,11 @@ const parseUserAgent = (userAgent: string) => {
 };
 
 export const getRequestMeta = (req: Request): RequestMeta => {
+  //
+  // 1) Si el cliente envía ya un meta completo, lo usamos de una:
+  if (req.body?.meta) return req.body.meta as RequestMeta;
+
+  // 2) Si no, parseamos legacy:
   const userAgent = req.headers["user-agent"] || "unknown";
   const ipAddress = getIpAddress(req);
   const deviceInfo = parseUserAgent(userAgent);
@@ -40,10 +45,10 @@ export const getRequestMeta = (req: Request): RequestMeta => {
     deviceInfo,
     userAgent,
     language: req.lang || "en",
-    platform: extra.platform ?? "",
-    timezone: extra.timezone ?? "",
-    screenResolution: extra.screenResolution ?? "",
-    label: extra.label ?? "",
+    platform: extra.platform,
+    timezone: extra.timezone,
+    screenResolution: extra.screenResolution,
+    label: extra.label,
     path: req.originalUrl,
     method: req.method,
     host: req.hostname,

@@ -35,7 +35,6 @@ export const createNewDevice = async (
         device,
         os,
         browser,
-        ipAddress,
       },
     },
   });
@@ -77,8 +76,8 @@ export const createNewDevice = async (
       ipAddress,
       userAgent,
       language,
-      platform,
       timezone,
+      platform,
       screenResolution,
       label,
     },
@@ -93,10 +92,12 @@ export const createNewDevice = async (
       os,
       browser,
       ipAddress,
-      label,
-      platform,
+      userAgent,
+      language,
       timezone,
+      platform,
       screenResolution,
+      label,
     },
     req
   );
