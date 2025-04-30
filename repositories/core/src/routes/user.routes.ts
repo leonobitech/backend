@@ -7,7 +7,7 @@ const userRoutes = Router();
 // 🌐 prefix: /account
 
 // ✅ GET /account/me
-userRoutes.get("/me", getMe);
+userRoutes.post("/me", getMe);
 
 // ✅ PATCH /account/profile
 userRoutes.patch("/profile", updateProfile);

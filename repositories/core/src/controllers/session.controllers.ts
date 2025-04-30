@@ -92,6 +92,7 @@ export const deleteSession = catchErrors(
       {
         userId: req.userId,
         sessionId: sessionId.data,
+        meta: req.meta!,
       },
       lang
     );
