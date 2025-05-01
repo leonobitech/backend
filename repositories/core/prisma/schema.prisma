@@ -19,7 +19,7 @@ model User {
   email            String   @unique
   password         String
   name             String?
-  avatar           String?  @default("https://ui-avatars.com/api/?name=User")
+  avatar           String?
   bio              String?
   role             String   @default("user")
   verified         Boolean  @default(false)
