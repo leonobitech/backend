@@ -862,14 +862,24 @@ export const logoutService = async (
     },
   });
 
-  // 6️⃣ Marcar la sesión como revocada (sin eliminar)
-  await prisma.session.update({
-    where: { id: tokenRecord.session.id },
-    data: {
-      isRevoked: true,
-      lastUsedAt: new Date(),
+  // 6️⃣ Buscar la sesión activa por clientKey (más preciso)
+  const session = await prisma.session.findFirst({
+    where: {
+      userId: tokenRecord.user.id,
+      clientKey: tokenRecord.publicKey,
+      isRevoked: false,
     },
   });
+
+  if (session) {
+    await prisma.session.update({
+      where: { id: session.id },
+      data: {
+        isRevoked: true,
+        lastUsedAt: new Date(),
+      },
+    });
+  }
 
   // 7️⃣ Registrar auditoría
   await loggerAudit("user.logged_out", {
@@ -894,7 +904,6 @@ export const logoutAllOtherSessionsService = async (
   meta: RequestMeta,
   lang: SupportedLang
 ): Promise<LogoutOthersResponse> => {
-  // 1️⃣ Buscar el refresh token actual por fingerprint
   const tokenRecord = await findRefreshTokenByClientKey(clientKey);
 
   appAssert(
@@ -904,7 +913,6 @@ export const logoutAllOtherSessionsService = async (
     ERROR_CODE.INVALID_REFRESH_TOKEN
   );
 
-  // 2️⃣ Validar huella digital actual contra la registrada
   const expectedClientKey = await generateClientKeyFromMeta(
     meta,
     tokenRecord.user.id,
@@ -918,48 +926,32 @@ export const logoutAllOtherSessionsService = async (
     ERROR_CODE.FINGERPRINT_MISMATCH
   );
 
-  // 🚨 Log de seguridad si hay desajuste en la fingerprint
-  if (expectedClientKey !== tokenRecord.publicKey) {
-    await loggerSecurityEvent({
-      meta,
-      type: "auth.logout_others.fingerprint.mismatch",
-      userId: tokenRecord.user.id,
-      sessionId: tokenRecord.session.id,
-      details: {
-        expected: tokenRecord.publicKey,
-        received: expectedClientKey,
-      },
-    });
-  }
-
-  // 3️⃣ Obtener info de sesión actual desde el payload JWT
-  const { payload } = await verifyToken(tokenRecord.token, lang);
-  const currentSessionId = payload.sessionId;
+  const currentClientKey = tokenRecord.publicKey;
   const userId = tokenRecord.user.id;
 
-  // 4️⃣ Buscar todas las otras sesiones activas (excluyendo la actual)
+  // 1️⃣ Buscar sesiones activas distintas a la del clientKey actual
   const otherSessions = await prisma.session.findMany({
     where: {
       userId,
-      NOT: { id: currentSessionId },
+      clientKey: { not: currentClientKey },
+      isRevoked: false,
     },
   });
 
   const otherSessionIds = otherSessions.map((s) => s.id);
 
-  // 💤 Si no hay otras sesiones, respondemos directamente
   if (otherSessionIds.length === 0) {
     return {
       status: "othersLoggedOut",
       message: "No hay otras sesiones activas.",
       data: {
         userId,
-        sessionKept: currentSessionId,
+        sessionKept: tokenRecord.session.id,
       },
     };
   }
 
-  // 5️⃣ Revocar tokens de las otras sesiones
+  // 2️⃣ Revocar tokens de esas sesiones
   const tokenRecords = await prisma.tokenRecord.findMany({
     where: {
       sessionId: { in: otherSessionIds },
@@ -969,48 +961,44 @@ export const logoutAllOtherSessionsService = async (
 
   for (const token of tokenRecords) {
     if (token.type === TokenType.ACCESS) {
-      // 🧹 Eliminar el token ACCESS de Redis y DB
-      await revokeAccessToken(token.jti); // Redis
+      await revokeAccessToken(token.jti);
       await prisma.tokenRecord.deleteMany({
-        where: { jti: token.jti, userId: tokenRecord.user.id }, // DB
+        where: { jti: token.jti, userId },
       });
     } else {
-      // 🔒 Revocar el token REFRESH sin eliminarlo (auditoría)
       await prisma.tokenRecord.updateMany({
-        where: { jti: token.jti, userId: tokenRecord.user.id },
+        where: { jti: token.jti, userId },
         data: { revoked: true },
       });
     }
   }
 
-  // 6️⃣ Eliminar sesiones en DB
+  // 3️⃣ Revocar esas sesiones
   await prisma.session.updateMany({
     where: {
-      userId,
-      NOT: { id: currentSessionId },
+      id: { in: otherSessionIds },
       isRevoked: false,
     },
     data: {
       isRevoked: true,
-      lastUsedAt: new Date(), // o null si querés resetear
+      lastUsedAt: new Date(),
     },
   });
 
-  // 📜 Log de auditoría
+  // 4️⃣ Auditoría
   await loggerAudit("user.logged_out_other_sessions", {
     performedBy: userId,
-    sessionKept: currentSessionId,
+    sessionKept: tokenRecord.session.id,
     revokedSessions: otherSessionIds,
     totalRevoked: otherSessionIds.length,
   });
 
-  // 7️⃣ Respuesta final
   return {
     status: "othersLoggedOut",
     message: "Todas las sesiones fueron cerradas excepto la actual.",
     data: {
       userId,
-      sessionKept: currentSessionId,
+      sessionKept: tokenRecord.session.id,
     },
   };
 };
@@ -1176,6 +1164,9 @@ export const resetPasswordService = async ({
     targetId: user.id,
   });
 
+  //REVIEW: Revisar Vulnerabilidad.
+  //TODO: revisar si se puede crear nuevo dispositivo desde una ruta publica,
+  //  deberia haber un dispositvo registrado por que hay un usuario!
   // 📱 Crear o encontrar el dispositivo
   const device = await findOrCreateDevice(user.id, meta);
 
