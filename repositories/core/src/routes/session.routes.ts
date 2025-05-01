@@ -10,7 +10,7 @@ const sessionRoutes = Router();
 // prefix: /account/sessions
 
 // ✅ Ver todas las sesiones activas del usuario
-sessionRoutes.post("/", getActiveSessions);
+sessionRoutes.get("/", getActiveSessions);
 
 // ✅ Cerrar una sesión específica (no la actual)
 sessionRoutes.delete("/:sessionId", deleteSession);

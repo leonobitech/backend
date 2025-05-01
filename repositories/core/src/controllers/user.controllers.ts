@@ -8,7 +8,10 @@ import logger from "@utils/logging/logger";
 import { ERROR_CODE } from "@constants/errorCode";
 import { loggerAudit } from "@utils/logging/loggerAudit";
 
-// 📌 GET /account/me
+/**
+ * 📌 POST /account/me
+ * Retorna los datos del usuario autenticado y su sesión actual
+ */
 export const getMe = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
     const user = await prisma.user.findUnique({
@@ -37,6 +40,8 @@ export const getMe = catchErrors(
       where: { id: req.sessionId },
       select: {
         id: true,
+        isRevoked: true,
+        expiresAt: true,
         createdAt: true,
         updatedAt: true,
         lastUsedAt: true,
@@ -62,13 +67,37 @@ export const getMe = catchErrors(
         sessionId: req.sessionId,
         userId: req.userId,
       });
+
+      res.status(HTTP_CODE.UNAUTHORIZED).json({
+        message: "Sesión no encontrada.",
+        session: null,
+        user: null,
+      });
+      return;
+    }
+
+    if (session.isRevoked || session.expiresAt <= new Date()) {
+      logger.warn("[getMe] Sesión inválida (revocada o expirada)", {
+        sessionId: session.id,
+        userId: req.userId,
+        isRevoked: session.isRevoked,
+        expiresAt: session.expiresAt,
+      });
+
+      res.status(HTTP_CODE.UNAUTHORIZED).json({
+        message: "Sesión inválida o expirada.",
+        session: null,
+        user: null,
+      });
+      return;
     }
 
     res.status(HTTP_CODE.OK).json({
       message: "Datos del usuario obtenidos con éxito.",
       user,
-      session: session ?? null,
+      session,
     });
+    return;
   }
 );
 //==============================================================================
