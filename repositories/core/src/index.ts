@@ -36,8 +36,12 @@ import testRouter from "@routes/test.routes";
 // Test para los type@
 import devDebugRoutes from "@routes/devDebug.routes";
 import { testHandler } from "@test/test";
+import monitorCookies from "@middlewares/monitorCookies";
 
 const app: Application = express();
+
+// 🔐 Necesario para Traefik o NGINX
+app.set("trust proxy", true);
 
 // parse application/json
 app.use(express.json());
@@ -59,6 +63,9 @@ app.use(cookieParser());
 
 // Middleware global (si querés en toda la API)
 app.use(requestMeta);
+
+// 🔍 Middleware de cookies
+app.use(monitorCookies);
 
 // initialize the app
 app.get("/", (req, res) => {

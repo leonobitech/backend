@@ -1,7 +1,7 @@
 // src/utils/auth/authCookies.ts
 
 import { Response, CookieOptions } from "express";
-import { fifteenMinutesFromNow, thirtyDaysFromNow } from "@utils/date/date";
+import { fifteenMinutesFromNow } from "@utils/date/date";
 
 // 📍 Ruta base para cookies persistentes como el refresh
 export const AUTH_COOKIE_PATH = "/";
@@ -12,6 +12,13 @@ const baseCookieOptions: CookieOptions = {
   httpOnly: true,
   secure: true,
   maxAge: 3600000, // 1h por default, pero se sobrescribe con expires
+};
+
+const clearCookieOptions: CookieOptions = {
+  path: AUTH_COOKIE_PATH,
+  httpOnly: true,
+  secure: true,
+  sameSite: "strict",
 };
 
 // 🍪 Configuración para el access token (corto, temporal)
@@ -47,5 +54,5 @@ export const setAuthCookies = ({
 // ❌ Función para limpiar ambas cookies de autenticación
 export const clearAuthCookies = (res: Response): Response =>
   res
-    .clearCookie("accessKey", { path: AUTH_COOKIE_PATH })
-    .clearCookie("clientKey", { path: AUTH_COOKIE_PATH });
+    .clearCookie("accessKey", clearCookieOptions)
+    .clearCookie("clientKey", clearCookieOptions);

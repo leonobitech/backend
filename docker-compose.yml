@@ -26,20 +26,31 @@ services:
     networks:
       - leonobitech-net
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.leonobitech.com`)"
-      - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.tls.certresolver=le"
-      - "traefik.http.routers.traefik.service=api@internal"
-      - "traefik.http.middlewares.auth-traefik.basicauth.users=${TRAEFIK_AUTH}"
-      - "traefik.http.routers.traefik.middlewares=auth-traefik@docker"
-      - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
-      - "traefik.http.middlewares.n8n-secure.headers.browserXSSFilter=true"
-      - "traefik.http.middlewares.n8n-secure.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.n8n-secure.headers.forceSTSHeader=true"
-      - "traefik.http.middlewares.n8n-secure.headers.SSLHost=${DOMAIN_NAME}"
-      - "traefik.http.middlewares.n8n-secure.headers.STSIncludeSubdomains=true"
-      - "traefik.http.middlewares.n8n-secure.headers.STSPreload=true"
+    - "traefik.enable=true"
+
+    # 🚪 Rutas y entrada segura
+    - "traefik.http.routers.traefik.rule=Host(`traefik.leonobitech.com`)"
+    - "traefik.http.routers.traefik.entrypoints=websecure"
+    - "traefik.http.routers.traefik.tls.certresolver=le"
+    - "traefik.http.routers.traefik.service=api@internal"
+
+    # 🔐 Autenticación básica para el dashboard
+    - "traefik.http.middlewares.auth-traefik.basicauth.users=${TRAEFIK_AUTH}"
+    - "traefik.http.routers.traefik.middlewares=auth-traefik@docker,block-trackers@docker,traefik-secure@docker"
+
+    # 🛡️ Seguridad reforzada (headers HTTP)
+    - "traefik.http.middlewares.traefik-secure.headers.STSSeconds=315360000"
+    - "traefik.http.middlewares.traefik-secure.headers.browserXSSFilter=true"
+    - "traefik.http.middlewares.traefik-secure.headers.contentTypeNosniff=true"
+    - "traefik.http.middlewares.traefik-secure.headers.forceSTSHeader=true"
+    - "traefik.http.middlewares.traefik-secure.headers.SSLHost=${DOMAIN_NAME}"
+    - "traefik.http.middlewares.traefik-secure.headers.STSIncludeSubdomains=true"
+    - "traefik.http.middlewares.traefik-secure.headers.STSPreload=true"
+
+    # 🚫 Bloqueo preventivo a cookies de tracking (tipo EasyList)
+    - "traefik.http.middlewares.block-trackers.headers.customResponseHeaders.X-Blocked-By=Traefik"
+    - "traefik.http.middlewares.block-trackers.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; connect-src 'self';"
+
 
   redis_core:
     image: redis:latest
@@ -79,11 +90,29 @@ services:
       traefik:
         condition: service_started
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.core.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`)"
-      - "traefik.http.routers.core.entrypoints=websecure"
-      - "traefik.http.routers.core.tls.certresolver=le"
-      - "traefik.http.services.core.loadbalancer.server.port=8000"
+    - "traefik.enable=true"
+
+    # 📍 Ruta del servicio core
+    - "traefik.http.routers.core.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`)"
+    - "traefik.http.routers.core.entrypoints=websecure"
+    - "traefik.http.routers.core.tls.certresolver=le"
+    - "traefik.http.services.core.loadbalancer.server.port=8000"
+
+    # 🔐 Middlewares de seguridad: tracker blocker + security headers para core
+    - "traefik.http.routers.core.middlewares=block-trackers@docker,core-secure@docker"
+
+    # 🧱 Seguridad por headers (ya definida en n8n-secure)
+    - "traefik.http.middlewares.core-secure.headers.STSSeconds=315360000"
+    - "traefik.http.middlewares.core-secure.headers.browserXSSFilter=true"
+    - "traefik.http.middlewares.core-secure.headers.contentTypeNosniff=true"
+    - "traefik.http.middlewares.core-secure.headers.forceSTSHeader=true"
+    - "traefik.http.middlewares.core-secure.headers.SSLHost=${DOMAIN_NAME}"
+    - "traefik.http.middlewares.core-secure.headers.STSIncludeSubdomains=true"
+    - "traefik.http.middlewares.core-secure.headers.STSPreload=true"
+
+    # 🚫 Middleware anti-tracking (CSP + header personalizado)
+    - "traefik.http.middlewares.block-trackers.headers.customResponseHeaders.X-Blocked-By=Traefik"
+    - "traefik.http.middlewares.block-trackers.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';"
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:8000/health', res => process.exit(res.statusCode === 200 ? 0 : 1))\""]
       interval: 15s
@@ -111,19 +140,37 @@ services:
           condition: service_healthy
       labels:
         - traefik.enable=true
+      # 📍 Ruta de acceso para n8n
         - traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
         - traefik.http.routers.n8n_ui.entrypoints=websecure
         - traefik.http.routers.n8n_ui.tls=true
         - traefik.http.routers.n8n_ui.tls.certresolver=le
         - traefik.http.routers.n8n_ui.service=n8n_ui
         - traefik.http.services.n8n_ui.loadbalancer.server.port=5678
-        - traefik.http.routers.n8n_ui.middlewares=n8n-secure@docker,auth-n8n@docker
+
+       # 🧱 Middlewares para n8n
+        - traefik.http.routers.n8n_ui.middlewares=auth-n8n@docker,n8n-secure@docker,block-trackers@docker
+
+      # 🔐 Seguridad de headers para webhooks
         - traefik.http.middlewares.auth-n8n.basicauth.users=${N8N_AUTH}
         - traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)
         - traefik.http.routers.n8n_webhooktest.entrypoints=websecure
         - traefik.http.routers.n8n_webhooktest.tls=true
         - traefik.http.routers.n8n_webhooktest.tls.certresolver=le
         - traefik.http.routers.n8n_webhooktest.service=n8n_ui
+
+        # 🛡️ Seguridad reforzada (headers HTTP)
+        - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
+        - "traefik.http.middlewares.n8n-secure.headers.browserXSSFilter=true"
+        - "traefik.http.middlewares.n8n-secure.headers.contentTypeNosniff=true"
+        - "traefik.http.middlewares.n8n-secure.headers.forceSTSHeader=true"
+        - "traefik.http.middlewares.n8n-secure.headers.SSLHost=${DOMAIN_NAME}"
+        - "traefik.http.middlewares.n8n-secure.headers.STSIncludeSubdomains=true"
+        - "traefik.http.middlewares.n8n-secure.headers.STSPreload=true"
+
+      # 🚫 Middleware de bloqueo de rastreadores (mismo que en core)
+        - "traefik.http.middlewares.block-trackers.headers.customResponseHeaders.X-Blocked-By=Traefik"
+        - "traefik.http.middlewares.block-trackers.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';"
 
   n8n_webhook_1:
     image: n8nio/n8n:latest
@@ -142,12 +189,24 @@ services:
       redis_n8n:
         condition: service_healthy
     labels:
-      - traefik.enable=true
-      - traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)
-      - traefik.http.routers.n8n_webhook.entrypoints=websecure
-      - traefik.http.routers.n8n_webhook.tls.certresolver=le
-      - traefik.http.routers.n8n_webhook.middlewares=n8n-secure@docker
-      - traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678
+    - traefik.enable=true
+
+    - traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)
+    - traefik.http.routers.n8n_webhook.entrypoints=websecure
+    - traefik.http.routers.n8n_webhook.tls.certresolver=le
+
+    - traefik.http.routers.n8n_webhook.middlewares=n8n-webhook-secure@docker
+
+    - traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678
+
+    # 📦 Headers seguros pero más relajados (sin CSP ni bloqueo de tracking)
+    - traefik.http.middlewares.n8n-webhook-secure.headers.STSSeconds=315360000
+    - traefik.http.middlewares.n8n-webhook-secure.headers.browserXSSFilter=true
+    - traefik.http.middlewares.n8n-webhook-secure.headers.contentTypeNosniff=true
+    - traefik.http.middlewares.n8n-webhook-secure.headers.forceSTSHeader=true
+    - traefik.http.middlewares.n8n-webhook-secure.headers.SSLHost=${DOMAIN_NAME}
+    - traefik.http.middlewares.n8n-webhook-secure.headers.STSIncludeSubdomains=true
+    - traefik.http.middlewares.n8n-webhook-secure.headers.STSPreload=true
 
   n8n_worker_1:
     image: n8nio/n8n:latest

@@ -27,3 +27,13 @@ certificatesResolvers:
       storage: /acme.json
       httpChallenge:
         entryPoint: web
+
+# 🛡️ Middlewares globales definidos aquí si deseás reusarlos entre servicios
+# (Este bloque es opcional si los defines por labels en docker-compose)
+http:
+  middlewares:
+    block-trackers:
+      headers:
+        customResponseHeaders:
+          X-Blocked-By: "Traefik"
+        contentSecurityPolicy: "default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';"
