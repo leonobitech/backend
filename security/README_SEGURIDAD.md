@@ -74,6 +74,11 @@ sudo tail -n 50 /var/log/mail.log
 ```bash
 0 6 * * * /usr/local/bin/vps-monitor-mail
 ```
+- Probar envío de reporte diario:
+  ```bash
+  /usr/local/bin/vps-monitor | mail -s "📋 Reporte de Seguridad VPS $(date +%F)" admin@leonobitech.com
+  ```
+
 
 ---
 
