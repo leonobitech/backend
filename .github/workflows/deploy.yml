@@ -21,9 +21,17 @@ jobs:
       - name: 🚀 Ejecutar deploy.sh via ci → len
         run: |
           echo "🟢 Conectando a VPS como usuario 'ci'..."
-          ssh -p 2222 -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -p 2222 -A -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             echo "📡 Conectando desde ci@ a len@localhost para ejecutar el script deploy.sh..."
-            ssh -p 2222 -i ~/.ssh/id_ed25519 len@localhost
+
+            ssh -p 2222 \
+              -o IdentitiesOnly=yes \
+              -o PreferredAuthentications=publickey \
+              len@localhost << 'EOC'
+                echo "✅ Ejecutando deploy.sh como 'len'..."
+                cd /home/len/backend && ./deploy.sh
+              EOC
+
           EOF
 
 
