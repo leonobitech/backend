@@ -3,7 +3,7 @@ name: 🚀 Deploy to Production - Main
 on:
   push:
     branches:
-      - main  # o "master", según tu repo
+      - main
 
 jobs:
   deploy:
@@ -18,29 +18,25 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.VPS_DEPLOY_KEY }}
 
-      - name: 🚀 Deploy to VPS via SSH
+      - name: 🚀 Ejecutar deploy.sh via ci → len
         run: |
+          echo "🟢 Conectando a VPS como usuario 'ci'..."
           ssh -p 2222 -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            set -e
-            cd ~/backend
-
-            echo "📊 Espacio en disco antes del deploy:"
-            df -h /
-
-            echo "📦 Actualización de imágenes desde Docker Hub"
-            docker compose pull traefik redis_core redis_n8n postgres_n8n n8n_main n8n_webhook_1 n8n_worker_1
-
-            echo "📥 Pull de cambios y rebuild personalizado"
-            git pull
-            docker compose up -d --build
-
-            echo "🧼 Limpieza post-deploy de contenedores parados e imágenes huérfanas"
-            docker container prune -f
-            docker image prune -f
-
-            echo "📊 Espacio en disco después del deploy:"
-            df -h /
-
-            echo "✅ Deploy completado correctamente 🚀"
+            echo "📡 Conectando desde ci@ a len@localhost para ejecutar el script deploy.sh..."
+            ssh -o StrictHostKeyChecking=no len@localhost
           EOF
 
+
+# Este workflow se conecta al usuario 'len' del VPS a través del usuario 'ci'
+# usando una clave SSH que está restringida a ejecutar un único script de deploy.
+# El script en /home/len/scripts/deploy.sh realiza:
+# - git pull
+# - docker compose pull y up
+# - limpieza
+# - y envío de email con el resultado del deploy
+# Seguridad reforzada con:
+# - SSH en puerto 2222
+# - Fail2Ban
+# - OTP para len
+# - PublicKey restricta para ci con "command=..."
+# - Sin PTY ni reenvíos SSH

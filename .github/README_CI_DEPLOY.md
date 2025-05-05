@@ -1,69 +1,80 @@
+
 # 🛡️ Guía PRO para Configurar Usuario CI en VPS con Deploy via GitHub Actions
 
-Este documento describe cómo crear un usuario seguro (`ci`) en tu VPS para automatizar despliegues de producción mediante GitHub Actions y SSH, usando claves modernas `ed25519`.
+Este documento explica cómo crear un usuario CI seguro en tu VPS y configurarlo para que realice deploys automáticos desde GitHub con acceso limitado mediante llaves SSH `ed25519`.
 
 ---
 
-## 📦 Paso 1: Crear usuario `ci`
+## 📦 Paso 1: Crear el usuario `ci`
 
 ```bash
 sudo adduser ci
-sudo usermod -aG sudo ci
+```
+
+Sigue las instrucciones para definir contraseña y otros datos. Cuando termine, desactiva el acceso interactivo:
+
+```bash
+sudo usermod -s /usr/sbin/nologin ci
 ```
 
 ---
 
-## 🔐 Paso 2: Generar clave SSH (ed25519)
+## 🔐 Paso 2: Crear la clave SSH (ed25519)
 
-**En tu máquina local (NO en el VPS):**
+Desde tu máquina local, ejecutá:
 
 ```bash
-ssh-keygen -t ed25519 -C "ci@github-actions"
+ssh-keygen -t ed25519 -C "deploy@github-actions" -f ~/.ssh/id_ed25519_ci
 ```
 
-Guarda la clave como `~/.ssh/id_ed25519_ci` y **no** uses passphrase.
+- Esto genera dos archivos:
+  - `id_ed25519_ci` (clave privada)
+  - `id_ed25519_ci.pub` (clave pública)
 
 ---
 
-## 🔑 Paso 3: Copiar la clave pública al VPS
+## 📤 Paso 3: Copiar la clave pública al VPS
 
 ```bash
-ssh-copy-id -i ~/.ssh/id_ed25519_ci.pub -p 2222 ci@IP_DEL_VPS
+ssh-copy-id -i ~/.ssh/id_ed25519_ci.pub -p 2222 ci@TU_IP_DEL_VPS
 ```
 
-O manualmente:
+Asegurate que la carpeta `.ssh/authorized_keys` exista en `/home/ci/` y tenga permisos correctos:
 
 ```bash
-cat ~/.ssh/id_ed25519_ci.pub
-```
-
-Luego, en el VPS:
-
-```bash
-mkdir -p /home/ci/.ssh
-nano /home/ci/.ssh/authorized_keys
-# Pega la clave pública aquí
-chmod 600 /home/ci/.ssh/authorized_keys
-chown -R ci:ci /home/ci/.ssh
+sudo chown -R ci:ci /home/ci/.ssh
+sudo chmod 700 /home/ci/.ssh
+sudo chmod 600 /home/ci/.ssh/authorized_keys
 ```
 
 ---
 
-## 🔐 Paso 4: Asegurar el acceso SSH del usuario
+## 🔒 Paso 4: Restringir permisos del usuario `ci`
 
-Edita `/etc/ssh/sshd_config`:
+Editá el archivo `sudoers`:
 
 ```bash
-# Asegura que estos valores estén presentes:
-Port 2222
-PermitRootLogin no
-PasswordAuthentication no
-ChallengeResponseAuthentication no
-UsePAM yes
-AuthenticationMethods publickey
+sudo visudo
 ```
 
-Reinicia el servicio:
+Agregá esta línea al final para impedir que `ci` tenga permisos de superusuario:
+
+```
+ci ALL=(ALL) NOPASSWD: /bin/false
+```
+
+También podés agregar reglas a `sshd_config` para limitar aún más:
+
+```bash
+Match User ci
+    AuthenticationMethods publickey
+    AllowTcpForwarding no
+    X11Forwarding no
+    PermitTTY no
+    ForceCommand /bin/false
+```
+
+Luego reiniciá el servicio SSH:
 
 ```bash
 sudo systemctl restart ssh
@@ -71,27 +82,23 @@ sudo systemctl restart ssh
 
 ---
 
-## 🧪 Paso 5: Verificar conexión SSH
+## 🔁 Paso 5: Subir la clave privada a GitHub
 
-Desde tu máquina local:
+Desde tu máquina, copiá el contenido de la clave privada:
 
 ```bash
-ssh -p 2222 -i ~/.ssh/id_ed25519_ci ci@IP_DEL_VPS
+cat ~/.ssh/id_ed25519_ci
 ```
 
----
+En GitHub > Settings > Secrets and variables > Actions > *New Repository Secret*:
 
-## 🤖 Paso 6: Agregar secrets a GitHub
-
-Ve a tu repositorio > Settings > Secrets and variables > Actions y agrega:
-
-- `VPS_USER` → `ci`
-- `VPS_HOST` → IP o dominio de tu VPS
-- `VPS_DEPLOY_KEY` → Contenido de `~/.ssh/id_ed25519_ci` (clave privada)
+- `VPS_DEPLOY_KEY`: 🔐 la clave privada (`id_ed25519_ci`)
+- `VPS_HOST`: 🖥️ tu IP o dominio del VPS
+- `VPS_USER`: 👤 `ci`
 
 ---
 
-## 🚀 Paso 7: Agrega el workflow a `.github/workflows/deploy.yml`
+## 🚀 Paso 6: Crear el workflow en `.github/workflows/deploy.yml`
 
 ```yaml
 name: 🚀 Deploy to Production - Main
@@ -104,7 +111,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: 📦 Checkout repo
         uses: actions/checkout@v3
@@ -118,28 +124,24 @@ jobs:
         run: |
           ssh -p 2222 -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             set -e
-            cd ~/backend
-
-            echo "📊 Espacio en disco antes del deploy:"
-            df -h /
-
-            echo "📦 Actualización de imágenes desde Docker Hub"
-            docker compose pull
-
-            echo "📥 Pull de cambios y rebuild personalizado"
+            cd /home/ci/backend  # Asegúrate que exista
             git pull
             docker compose up -d --build
-
-            echo "🧼 Limpieza post-deploy de contenedores parados e imágenes huérfanas"
-            docker container prune -f
             docker image prune -f
-
-            echo "📊 Espacio en disco después del deploy:"
-            df -h /
-
-            echo "✅ Deploy completado correctamente 🚀"
           EOF
 ```
+
+---
+
+## 🧪 Probar conexión local
+
+Desde tu máquina podés probar el login SSH sin contraseña:
+
+```bash
+ssh -p 2222 ci@TU_IP_DEL_VPS -i ~/.ssh/id_ed25519_ci
+```
+
+No debería dejarte hacer nada (ni usar shell), pero sí debería permitir el deploy vía GitHub Actions.
 
 ---
 
