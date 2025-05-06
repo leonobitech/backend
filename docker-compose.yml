@@ -158,7 +158,7 @@ services:
         - traefik.http.routers.n8n_ui.service=n8n_ui
         - traefik.http.services.n8n_ui.loadbalancer.server.port=5678
       # 🧱 Middlewares para n8n
-        - traefik.http.routers.n8n_ui.middlewares=auth-n8n@docker,n8n-secure@docker,block-trackers@docker
+        - traefik.http.routers.n8n_ui.middlewares=auth-n8n@docker,n8n-secure@docker
 
       # 🔐 Seguridad de headers para webhooks
         - traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)
