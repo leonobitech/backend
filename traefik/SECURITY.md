@@ -103,6 +103,8 @@ Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'sel
 
 - Agrega header `X-Blocked-By: Traefik`
 
+⚠️ **Este middleware no debe usarse en servicios con interfaces web complejas como `n8n_main`, ya que bloquea scripts, conexiones y WebSockets necesarios para el funcionamiento del frontend.**
+
 ---
 
 ## 🧠 Express Middleware: `monitorCookies.ts`
@@ -135,19 +137,9 @@ Seteadas y limpiadas usando el helper centralizado:
 
 ---
 
-## 📌 Recomendaciones futuras
-
-- Integrar `loggerSecurityEvent` para trazabilidad de intentos sospechosos
-- Activar firewall a nivel VPS (UFW) para cerrar puertos no usados
-- Monitoreo activo con fail2ban o crowdsec
-- Revisar accesos SSH y proteger con 2FA
-
----
 > Última actualización: 2025-05-02
 
 ## 👥 Maintained by
 
 **Leonobitech DevOps Team** ✨  
 [https://www.leonobitech.com](https://www.leonobitech.com)
-
-
