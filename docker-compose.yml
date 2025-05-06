@@ -103,10 +103,6 @@ services:
       - "traefik.http.middlewares.core-secure.headers.STSIncludeSubdomains=true"
       - "traefik.http.middlewares.core-secure.headers.STSPreload=true"
 
-    # 🚫 Middleware anti-tracking (CSP + header personalizado)
-      - "traefik.http.middlewares.block-trackers.headers.customResponseHeaders.X-Blocked-By=Traefik"
-      - "traefik.http.middlewares.block-trackers.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';"
-
     # 📍 Ruta del servicio core
       - "traefik.http.routers.core.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`)"
       - "traefik.http.routers.core.entrypoints=websecure"
@@ -153,10 +149,6 @@ services:
         - "traefik.http.middlewares.n8n-secure.headers.SSLHost=${DOMAIN_NAME}"
         - "traefik.http.middlewares.n8n-secure.headers.STSIncludeSubdomains=true"
         - "traefik.http.middlewares.n8n-secure.headers.STSPreload=true"
-
-      # 🚫 Middleware de bloqueo de rastreadores (mismo que en core)
-        - "traefik.http.middlewares.block-trackers.headers.customResponseHeaders.X-Blocked-By=Traefik"
-        - "traefik.http.middlewares.block-trackers.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';"
 
       # 📍 Ruta de acceso para n8n UI
         - traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
