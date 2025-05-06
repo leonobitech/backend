@@ -79,7 +79,6 @@ sudo tail -n 50 /var/log/mail.log
   /usr/local/bin/vps-monitor | mail -s "📋 Reporte de Seguridad VPS $(date +%F)" admin@leonobitech.com
   ```
 
-
 ---
 
 ## 🧪 Comandos de prueba
@@ -109,28 +108,62 @@ sudo tail -n 50 /var/log/mail.log
 ## 🛠️ Archivos de configuración editados
 
 - `/etc/ssh/sshd_config` → Configuración SSH
-- `/etc/pam.d/sshd` → Integración con Google Authenticator
+  - `Match User ci`: solo permite clave pública, sin TTY ni comandos
+  - `Match User len Address 127.0.0.1,::1`: ejecuta directamente `deploy.sh` al recibir conexión local desde `ci`
+- `/etc/pam.d/sshd` → Integración con Google Authenticator (2FA)
 - `/etc/postfix/main.cf` → Configuración del servidor de correo
 - `/etc/aliases` (opcional) → Alias de correo
 - `~/.google_authenticator` → Archivo generado por Google Authenticator para el usuario
 
 ---
 
-## ✅ Estado actual verificado
+## 🍪 Doble Capa Anti-Tracking (Traefik + Express)
 
-- [x] Protección SSH funcionando
-- [x] Fail2Ban operativo
-- [x] Firewall UFW activo
-- [x] Envío de emails exitoso (incluye emojis)
-- [x] Cron jobs activos y verificados
+Leonobitech implementa una **estrategia defensiva en dos niveles** para evitar cookies de rastreo (como GA, RudderStack, PostHog, Intercom, etc.) que comprometan la privacidad de los usuarios o interfieran con el sistema de autenticación.
+
+### 🧱 Nivel 1 – Proxy Traefik (Prevención)
+
+A través del middleware `block-trackers@docker`, Traefik aplica una **Content Security Policy (CSP)** restrictiva a los servicios expuestos:
+
+```http
+Content-Security-Policy:
+  default-src 'self';
+  script-src 'self';
+  connect-src 'self';
+  object-src 'none';
+  base-uri 'self';
+```
+
+También agrega un header de rastreo:
+
+```http
+X-Blocked-By: Traefik
+```
+
+### 🔍 Nivel 2 – Backend Express (Detección y bloqueo activo)
+
+El servicio `core` usa el middleware `monitorCookies.ts` para analizar todas las cookies entrantes. Si se detecta alguna con prefijos sospechosos (como `_ga`, `ajs_`, `ph_`, etc.), la petición se bloquea con `403 Forbidden` y se registra el evento.
+
+```json
+{
+  "status": "error",
+  "message": "Se detectaron cookies no autorizadas. Limpiá tu navegador y volvé a intentar.",
+  "cookies": ["_ga", "ajs_user_id"]
+}
+```
+
+✅ Esto garantiza que **solo cookies legítimas como `accessKey` y `clientKey`** atraviesen hasta el backend.
 
 ---
 
-## 🧠 Recomendaciones futuras
+## ✅ Estado actual verificado
 
-- Integrar los logs con una solución tipo Loki + Grafana
-- Redirigir logs críticos a un bucket S3 o sistema externo
-- Instalar sistema de detección de intrusos (`aide`, `rkhunter`, etc.)
+- [x] Protección SSH funcionando con OTP
+- [x] Fail2Ban operativo
+- [x] Firewall UFW activo
+- [x] Envío de emails exitoso (con emojis)
+- [x] Cron jobs activos y verificados
+- [x] Traefik y Express filtrando cookies sospechosas
 
 ---
 
