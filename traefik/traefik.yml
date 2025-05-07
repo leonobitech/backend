@@ -29,12 +29,26 @@ certificatesResolvers:
       httpChallenge:
         entryPoint: web
 
-# 🛡️ Middlewares globales definidos aquí si deseás reusarlos entre servicios
+# 🛡️ Middleware de Seguridad HTTP – Protege el navegador del cliente con políticas CSP y headers anti-XSS
 # (Este bloque es opcional si los defines por labels en docker-compose)
 http:
   middlewares:
     block-trackers:
       headers:
+        contentSecurityPolicy: >-
+          default-src 'self';
+          script-src 'self' https://challenges.cloudflare.com 'unsafe-inline';
+          connect-src 'self' https://api.leonobitech.com https://challenges.cloudflare.com;
+          img-src 'self' data:;
+          style-src 'self' 'unsafe-inline';
+          font-src 'self';
+          frame-ancestors 'none';
+          base-uri 'self';
+          object-src 'none';
+        browserXssFilter: true
+        contentTypeNosniff: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        xFrameOptions: "DENY"
         customResponseHeaders:
           X-Blocked-By: "Traefik"
-        contentSecurityPolicy: "default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';"

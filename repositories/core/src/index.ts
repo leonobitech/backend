@@ -36,7 +36,7 @@ import testRouter from "@routes/test.routes";
 // Test para los type@
 import devDebugRoutes from "@routes/devDebug.routes";
 import { testHandler } from "@test/test";
-import monitorCookies from "@middlewares/monitorCookies";
+import cleanCookies from "@middlewares/cleanCookies";
 
 const app: Application = express();
 
@@ -61,11 +61,11 @@ app.use(
 // enable req.cookies.
 app.use(cookieParser());
 
+// 🔍 Middleware de cookies
+app.use(cleanCookies);
+
 // Middleware global (si querés en toda la API)
 app.use(requestMeta);
-
-// 🔍 Middleware de cookies
-app.use(monitorCookies);
 
 // initialize the app
 app.get("/", (req, res) => {
@@ -90,8 +90,10 @@ app.get("/health", (req, res) => {
 
 // 🧪 Debug Test for types
 app.get("/test-types", testHandler);
+
+// 🚨 add  error's handler middleware
 if (NODE_ENV === "development") {
-  app.use("/dev", detectLanguage, devDebugRoutes);
+  app.use("/dev", authenticate, detectLanguage, devDebugRoutes);
 }
 
 // Test route for error handling
@@ -105,8 +107,7 @@ app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
 app.use("/admin", authenticate, authorize(UserRole.Admin), adminRouter);
 
-// 🚨 add  error's handler middleware
-app.use("/dev", authenticate, devDebugRoutes);
+// Error handling middleware
 app.use(errorHandler);
 
 // 🚀 Bootstrap controlado

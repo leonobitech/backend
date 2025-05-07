@@ -24,7 +24,7 @@ services:
       - .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik/acme.json:/letsencrypt/acme.json
+      - ./traefik/acme.json:/letsencrypt/acme.json:rw
     networks:
       - leonobitech-net
     labels:
@@ -42,7 +42,7 @@ services:
       - "traefik.http.middlewares.traefik-secure.headers.STSIncludeSubdomains=true"
       - "traefik.http.middlewares.traefik-secure.headers.STSPreload=true"
 
-    # 🚫 Middleware anti-tracking - Bloqueo preventivo a cookies de tracking (tipo EasyList)
+    # 🛡️ Middleware de Seguridad HTTP – Protege el navegador del cliente con políticas CSP y headers anti-XSS
       - "traefik.http.middlewares.block-trackers.headers.customResponseHeaders.X-Blocked-By=Traefik"
       - "traefik.http.middlewares.block-trackers.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; connect-src 'self';"
 
