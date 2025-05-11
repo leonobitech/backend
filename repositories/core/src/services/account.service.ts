@@ -52,11 +52,7 @@ import { getJwtExpiration } from "@utils/auth/getJwtExpiration";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
 import logger from "@utils/logging/logger";
 import { findOrCreateDevice } from "@utils/auth/findOrCreateDevice";
-import {
-  findRefreshTokenByClientKey,
-  revokeTokenByJti,
-  saveTokenRecord,
-} from "@utils/auth/tokenDatabase";
+import { findRefreshTokenByClientKey } from "@utils/auth/tokenDatabase";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
 import { revokeAccessToken } from "@utils/auth/tokenRedis";
 import { loggerAudit } from "@utils/logging/loggerAudit";
@@ -132,6 +128,7 @@ export const createAccountService = async (
       userId: newUser.id,
       email: newUser.email,
       requestId: requestId,
+      expiresIn: 300,
       verified: false,
     },
   };

@@ -60,6 +60,7 @@ export type CreateAccountResponse = BaseResponse & {
     userId: string;
     email: string;
     requestId: string;
+    expiresIn: number;
     verified: boolean;
   };
 };

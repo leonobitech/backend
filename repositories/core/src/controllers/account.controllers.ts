@@ -65,14 +65,18 @@ export const registerController = catchErrors(
       );
     }
 
-    const { email, password } = parsed.data;
+    const { email: userEmail, password } = parsed.data;
 
     // 🛠 Crear usuario
-    const result = await createAccountService({ email, password, meta });
+    const result = await createAccountService({
+      email: userEmail,
+      password,
+      meta,
+    });
 
     logger.info("✅ Usuario registrado exitosamente", {
       ...meta,
-      email,
+      email: result.data.email,
       userId: result.data.userId,
       event: "user.account.created",
       source: "registerController",
@@ -89,14 +93,15 @@ export const registerController = catchErrors(
     );
 
     // 🔐 Sanitizar antes de responder al cliente
-    const { requestId } = result.data;
+    const { requestId, expiresIn, email } = result.data;
 
     return void res.status(HTTP_CODE.CREATED).json({
       status: result.status,
       message: result.message,
       data: {
+        email,
         requestId,
-        expiresIn: 300,
+        expiresIn,
       },
       timestamp: new Date().toISOString(),
     });
