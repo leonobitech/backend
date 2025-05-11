@@ -80,6 +80,8 @@ export type VerifyEmailResult =
   | {
       status: typeof API_STATUS.RESEND;
       message: string;
+      requestId: string;
+      expiresIn: number;
       resend: true;
     }
   | {

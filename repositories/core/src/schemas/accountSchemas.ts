@@ -27,6 +27,7 @@ export const registerSchema = loginSchema
 export const verifyEmailSchema = z.object({
   email: emailSchema,
   code: z.string().length(6, "El código debe tener 6 dígitos"),
+  requestId: z.string(),
 });
 
 export const resetPasswordSchema = z.object({

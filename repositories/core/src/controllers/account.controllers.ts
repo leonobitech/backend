@@ -146,12 +146,13 @@ export const verifyEmailController = catchErrors(
       );
     }
 
-    const { email, code } = parsed.data;
+    const { email, code, requestId } = parsed.data;
 
     // 🔑 Ejecutar lógica de verificación
     const result = await verifyEmailService({
       email,
       code,
+      requestId,
       meta,
     });
 
@@ -168,6 +169,8 @@ export const verifyEmailController = catchErrors(
         status: result.status,
         message: result.message,
         resend: true,
+        requestId: result.requestId,
+        expiresIn: result.expiresIn,
         timestamp: new Date().toISOString(),
       });
     }

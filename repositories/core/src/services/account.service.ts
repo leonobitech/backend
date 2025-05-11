@@ -137,6 +137,7 @@ export const createAccountService = async (
 export const verifyEmailService = async ({
   email,
   code,
+  requestId,
   meta,
 }: VerifyEmailParams): Promise<VerifyEmailResult> => {
   // 1. Buscar al usuario
@@ -201,17 +202,33 @@ export const verifyEmailService = async ({
     ]
   );
 
+  // 3.1 Comparar el requestId con el requestId almacenado (token-url)
+  appAssert(
+    validCode.requestId === requestId,
+    HTTP_CODE.UNAUTHORIZED,
+    "Este requestId no corresponde con el intento actual.",
+    ERROR_CODE.INVALID_VERIFICATION_CODE,
+    [
+      {
+        field: "requestId",
+        message: "requestId inválido o caducado.",
+      },
+    ]
+  );
+
   // 4. Revisar si el código ha expirado
   const isExpired = validCode.expiresAt < new Date();
   if (isExpired) {
     const newCode = crypto.randomInt(100000, 999999).toString();
     const hashedNewCode = await hashValue(newCode);
+    const newRequestId = uuidv4();
 
     await prisma.verificationCode.create({
       data: {
         userId: user.id,
         type: VerificationCodeType.EmailVerification,
         hashedCode: hashedNewCode,
+        requestId: newRequestId,
         expiresAt: fiveMinutesFromNow(),
       },
     });
@@ -221,6 +238,8 @@ export const verifyEmailService = async ({
     return {
       status: "resend",
       message: "Your code has expired. A new one was sent to your email.",
+      requestId: newRequestId,
+      expiresIn: 300,
       resend: true,
     };
   }
