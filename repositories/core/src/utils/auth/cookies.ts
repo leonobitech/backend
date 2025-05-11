@@ -11,7 +11,7 @@ const baseCookieOptions: CookieOptions = {
   sameSite: "strict",
   httpOnly: true,
   secure: true,
-  maxAge: 3600000, // 1h por default, pero se sobrescribe con expires
+  //maxAge: 3600000, // 1h por default, pero se sobrescribe con expires
 };
 
 const clearCookieOptions: CookieOptions = {
