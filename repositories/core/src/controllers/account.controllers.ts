@@ -88,8 +88,16 @@ export const registerController = catchErrors(
       "registerController"
     );
 
+    // 🔐 Sanitizar antes de responder al cliente
+    const { requestId } = result.data;
+
     return void res.status(HTTP_CODE.CREATED).json({
-      ...result,
+      status: result.status,
+      message: result.message,
+      data: {
+        requestId,
+        expiresIn: 300,
+      },
       timestamp: new Date().toISOString(),
     });
   }

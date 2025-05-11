@@ -112,6 +112,7 @@ model VerificationCode {
   userId     String   @map("userId") @db.ObjectId
   type       String
   hashedCode String
+  requestId  String
   used       Boolean  @default(false)
   createdAt  DateTime @default(now())
   expiresAt  DateTime
@@ -119,6 +120,7 @@ model VerificationCode {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
+  @@index([requestId])
 }
 
 model SecurityEventLog {

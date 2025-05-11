@@ -1,6 +1,7 @@
 // 📁 @services/account.service.ts
 
 import crypto from "crypto";
+import { v4 as uuidv4 } from "uuid";
 
 import { HTTP_CODE } from "@constants/httpCode";
 import { ERROR_CODE } from "@constants/errorCode";
@@ -100,12 +101,14 @@ export const createAccountService = async (
   // 4️⃣ Generar código de verificación
   const verificationCode = crypto.randomInt(100000, 999999).toString();
   const hashedCode = await hashValue(verificationCode);
+  const requestId = uuidv4();
 
   await prisma.verificationCode.create({
     data: {
       userId: newUser.id,
       type: VerificationCodeType.EmailVerification,
       hashedCode,
+      requestId,
       expiresAt: fiveMinutesFromNow(),
     },
   });
@@ -128,6 +131,7 @@ export const createAccountService = async (
     data: {
       userId: newUser.id,
       email: newUser.email,
+      requestId: requestId,
       verified: false,
     },
   };

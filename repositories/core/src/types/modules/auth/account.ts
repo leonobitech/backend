@@ -59,6 +59,7 @@ export type CreateAccountResponse = BaseResponse & {
   data: {
     userId: string;
     email: string;
+    requestId: string;
     verified: boolean;
   };
 };
