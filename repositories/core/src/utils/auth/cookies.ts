@@ -1,7 +1,7 @@
 // src/utils/auth/authCookies.ts
 
 import { Response, CookieOptions } from "express";
-import { fifteenMinutesFromNow } from "@utils/date/date";
+//import { fifteenMinutesFromNow } from "@utils/date/date";
 
 // 📍 Ruta base para cookies persistentes como el refresh
 export const AUTH_COOKIE_PATH = "/";
@@ -24,14 +24,14 @@ const clearCookieOptions: CookieOptions = {
 // 🍪 Configuración para el access token (corto, temporal)
 export const accessTokenCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  expires: fifteenMinutesFromNow(),
+  //expires: fifteenMinutesFromNow(),
   path: AUTH_COOKIE_PATH,
 });
 
 // 🍪 Configuración para el clientKey (más persistente, sirve para buscar el refresh token)
 export const clientKeyCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  expires: fifteenMinutesFromNow(),
+  //expires: fifteenMinutesFromNow(),
   path: AUTH_COOKIE_PATH,
 });
 
