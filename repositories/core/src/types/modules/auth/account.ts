@@ -117,6 +117,8 @@ export type LoginDevicePendingVerificationResponse = {
     userId: string;
     email: string;
     codeSent: boolean;
+    requestId: string;
+    expiresIn: number;
   };
 };
 

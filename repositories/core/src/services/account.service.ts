@@ -13,6 +13,7 @@ import { fiveMinutesFromNow, thirtyDaysFromNow } from "@utils/date/date";
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendDeviceValidationEmail,
 } from "@utils/notifications/sendMail";
 
 import appAssert from "@utils/validation/appAssert";
@@ -99,7 +100,7 @@ export const createAccountService = async (
   const hashedCode = await hashValue(verificationCode);
   const requestId = uuidv4();
 
-  await prisma.verificationCode.create({
+  const verifyCode = await prisma.verificationCode.create({
     data: {
       userId: newUser.id,
       type: VerificationCodeType.EmailVerification,
@@ -112,7 +113,7 @@ export const createAccountService = async (
   // 5️⃣ Enviar email de verificación
   await sendVerificationEmail(newUser.email, verificationCode);
 
-  // 6️⃣ Manejo del dispositivo: Buscar o crear el registro en el modelo Device
+  // 6️⃣ Logger del registro
   logger.info("👤 Registro con metadata", {
     ...data.meta,
     email: newUser.email,
@@ -120,6 +121,9 @@ export const createAccountService = async (
     event: "user.registered.with.meta",
   });
 
+  const expiresIn = Math.floor(
+    (verifyCode.expiresAt.getTime() - Date.now()) / 1000
+  );
   // ✅ Retornar estructura profesional y expandible
   return {
     status: API_STATUS.CREATED,
@@ -128,7 +132,7 @@ export const createAccountService = async (
       userId: newUser.id,
       email: newUser.email,
       requestId: requestId,
-      expiresIn: 300,
+      expiresIn: expiresIn,
       verified: false,
     },
   };
@@ -156,16 +160,11 @@ export const verifyEmailService = async ({
   );
 
   // 2. Buscar el código de verificación (más recientes primero)
-  const validCode = await prisma.verificationCode.findFirst({
-    where: {
-      userId: user.id,
-      type: VerificationCodeType.EmailVerification,
-      used: false,
-    },
-    orderBy: { createdAt: "desc" },
+  const validCode = await prisma.verificationCode.findUnique({
+    where: { requestId },
   });
 
-  // Si no hay un código válido y el usuario ya está verificado
+  // 3. Si no hay código y el usuario ya está verificado
   if (!validCode) {
     if (user.verified) {
       return {
@@ -187,7 +186,23 @@ export const verifyEmailService = async ({
     );
   }
 
-  // 3. Comparar el código ingresado con el código almacenado (hasheado)
+  // 4. Validar que el código pertenece al usuario correcto
+  appAssert(
+    validCode.userId === user.id,
+    HTTP_CODE.UNAUTHORIZED,
+    "Este código no pertenece a este usuario.",
+    ERROR_CODE.INVALID_VERIFICATION_CODE
+  );
+
+  // 5. Validar que no fue usado
+  appAssert(
+    !validCode.used,
+    HTTP_CODE.UNAUTHORIZED,
+    "Este código ya fue utilizado.",
+    ERROR_CODE.INVALID_VERIFICATION_CODE
+  );
+
+  // 6. Validar el valor del código (comparación con hash)
   const isValid = await compareValue(code, validCode.hashedCode);
   appAssert(
     isValid,
@@ -202,21 +217,7 @@ export const verifyEmailService = async ({
     ]
   );
 
-  // 3.1 Comparar el requestId con el requestId almacenado (token-url)
-  appAssert(
-    validCode.requestId === requestId,
-    HTTP_CODE.UNAUTHORIZED,
-    "Este requestId no corresponde con el intento actual.",
-    ERROR_CODE.INVALID_VERIFICATION_CODE,
-    [
-      {
-        field: "requestId",
-        message: "requestId inválido o caducado.",
-      },
-    ]
-  );
-
-  // 4. Revisar si el código ha expirado
+  // 7. Validar expiración
   const isExpired = validCode.expiresAt < new Date();
   if (isExpired) {
     const newCode = crypto.randomInt(100000, 999999).toString();
@@ -226,14 +227,18 @@ export const verifyEmailService = async ({
     await prisma.verificationCode.create({
       data: {
         userId: user.id,
-        type: VerificationCodeType.EmailVerification,
+        type: validCode.type, // ✅ mismo tipo que el original
         hashedCode: hashedNewCode,
         requestId: newRequestId,
         expiresAt: fiveMinutesFromNow(),
       },
     });
 
-    await sendVerificationEmail(user.email, newCode);
+    if (validCode.type === VerificationCodeType.EmailVerification) {
+      await sendVerificationEmail(user.email, newCode);
+    } else if (validCode.type === VerificationCodeType.DeviceValidation) {
+      await sendDeviceValidationEmail(user.email, newCode);
+    }
 
     return {
       status: "resend",
@@ -244,16 +249,11 @@ export const verifyEmailService = async ({
     };
   }
 
-  // 5. Actualizar al usuario y limpiar códigos anteriores
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { verified: true },
-  });
-
+  // 8. Marcar códigos anteriores como usados y limpiar
   await prisma.verificationCode.updateMany({
     where: {
       userId: user.id,
-      type: VerificationCodeType.EmailVerification,
+      type: validCode.type,
     },
     data: { used: true },
   });
@@ -261,17 +261,26 @@ export const verifyEmailService = async ({
   await prisma.verificationCode.deleteMany({
     where: {
       userId: user.id,
-      type: VerificationCodeType.EmailVerification,
+      type: validCode.type,
       used: true,
     },
   });
 
-  // 6. Manejo del dispositivo: Buscar o crear el registro en el modelo Device
-  // Se asume que 'meta.deviceInfo' contiene: { device, os, browser }
-  // y que 'meta' contiene 'ipAddress'
+  // 9. Si es email verification → marcar usuario como verificado
+  if (
+    validCode.type === VerificationCodeType.EmailVerification &&
+    !user.verified
+  ) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { verified: true },
+    });
+  }
+
+  // 10. Crear dispositivo para esta sesión
   const device = await createNewDevice(user.id, meta);
 
-  // 7. Crear la sesión utilizando el 'deviceId' del registro Device
+  // 11. Crear la sesión
   const session = await prisma.session.create({
     data: {
       userId: user.id,
@@ -287,13 +296,12 @@ export const verifyEmailService = async ({
     session.id
   );
 
-  // ⬇️ Guardar clientKey en la sesión
   await prisma.session.update({
     where: { id: session.id },
     data: { clientKey: hashedPublicKey },
   });
 
-  // 8. Generar tokens de acceso y refresh
+  // 12. Generar tokens
   const { token: accessToken, hashedJti: accessTokenId } =
     await generateAccessToken(
       user.id,
@@ -310,7 +318,6 @@ export const verifyEmailService = async ({
       hashedPublicKey
     );
 
-  // 9. Guardar los registros de tokens en el modelo TokenRecord
   await prisma.tokenRecord.createMany({
     data: [
       {
@@ -320,7 +327,7 @@ export const verifyEmailService = async ({
         sessionId: session.id,
         userId: user.id,
         publicKey: hashedPublicKey,
-        expiresAt: await getJwtExpiration(accessToken), // utilitario que convierte el claim 'exp' a Date
+        expiresAt: await getJwtExpiration(accessToken),
         revoked: false,
       },
       {
@@ -336,10 +343,10 @@ export const verifyEmailService = async ({
     ],
   });
 
-  // 10. Retornar la respuesta del servicio con la información necesaria.
+  // 13. Final: retornar payload
   return {
     status: API_STATUS.VERIFIED,
-    message: "Your email has been successfully verified.",
+    message: "Your verification was successful.",
     data: {
       userId: user.id,
       email: user.email,

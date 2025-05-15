@@ -1,5 +1,6 @@
 import { prisma } from "@config/prisma";
 import crypto from "crypto";
+import { v4 as uuidv4 } from "uuid";
 import { hashValue } from "./bcrypt";
 import { sendDeviceValidationEmail } from "@utils/notifications/sendMail";
 import { fiveMinutesFromNow } from "@utils/date/date";
@@ -66,12 +67,13 @@ export const checkDeviceOrSendVerification = async (
 
   const rawCode = crypto.randomInt(100000, 999999).toString();
   const hashedCode = await hashValue(rawCode);
-
+  const requestId = uuidv4();
   const verifyCode = await prisma.verificationCode.create({
     data: {
       userId,
       type: VerificationCodeType.DeviceValidation,
       hashedCode,
+      requestId,
       expiresAt: fiveMinutesFromNow(),
     },
   });
@@ -82,6 +84,7 @@ export const checkDeviceOrSendVerification = async (
     performedBy: userId,
     email,
     codeId: verifyCode.id,
+    requestId: requestId,
     device,
     os,
     browser,
@@ -94,13 +97,20 @@ export const checkDeviceOrSendVerification = async (
     label,
   });
 
+  const expiresIn = Math.floor(
+    (verifyCode.expiresAt.getTime() - Date.now()) / 1000
+  );
+
   return {
     status: API_STATUS.DEVICE_PENDING_VERIFICATION,
-    message: "Verificación requerida para nuevo dispositivo.",
+    message:
+      "New device detected — we've sent a verification code to your email.",
     data: {
       userId: userId,
       email: email,
       codeSent: true,
+      requestId: requestId,
+      expiresIn: expiresIn,
     },
   };
 };
