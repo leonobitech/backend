@@ -22,10 +22,36 @@ const extractServerIp = (req: Request): string => {
 const parseUA = (ua: string) => {
   const p = new UAParser.UAParser();
   p.setUA(ua);
+  const browserRaw = p.getBrowser();
+  const osRaw = p.getOS();
+  const deviceRaw = p.getDevice();
+
+  let browser = browserRaw.name || "Unknown";
+
+  // 🔍 Correcciones manuales para navegadores mal detectados
+  if (ua.includes("EdgA")) {
+    browser = "Edge Mobile";
+  } else if (ua.includes("EdgiOS")) {
+    browser = "Edge iOS";
+  } else if (ua.includes("Edg/")) {
+    browser = "Edge";
+  } else if (ua.includes("Brave")) {
+    browser = "Brave";
+  } else if (ua.includes("Vivaldi")) {
+    browser = "Vivaldi";
+  } else if (ua.includes("OPR/")) {
+    browser = "Opera";
+  }
+
+  const os =
+    osRaw.name && osRaw.version
+      ? `${osRaw.name} ${osRaw.version}`
+      : osRaw.name || "Unknown";
+
   return {
-    browser: p.getBrowser().name || "Unknown",
-    os: p.getOS().name || "Unknown",
-    device: p.getDevice().type || "Desktop",
+    device: deviceRaw.type || "Desktop",
+    os,
+    browser,
   };
 };
 
@@ -60,7 +86,7 @@ export const getRequestMeta = (req: Request): RequestMeta => {
     deviceInfo: serverDevice,
     userAgent: serverUa,
     language: (req.headers["accept-language"] as string)?.split(",")[0] || "en",
-    platform: extra.platform ?? "",
+    platform: extra.platform ?? req.headers["sec-ch-ua-platform"] ?? "",
     timezone: extra.timezone ?? "",
     screenResolution: extra.screenResolution ?? "",
     label: extra.label ?? "",
