@@ -20,7 +20,6 @@ import {
   refreshAccessTokenService,
   requestPasswordResetService,
   resetPasswordService,
-  verifyDeviceService,
   verifyEmailService,
 } from "@services/account.service";
 import { clearAuthCookies, setAuthCookies } from "@utils/auth/cookies";
@@ -340,137 +339,6 @@ export const loginController = catchErrors(
   }
 );
 
-export const verifyDeviceController = catchErrors(
-  async (req: Request, res: Response): Promise<void> => {
-    // 🏷️ Idioma del cliente
-    const lang = (req.headers["accept-language"]?.split(",")[0] ||
-      "en") as SupportedLang;
-
-    // 🧠 Metadatos del request inyectados por middleware
-    const meta = req.meta!;
-
-    // 📝 Validar body con Zod
-    const parsed = verifyEmailSchema.safeParse(req.body);
-
-    if (!parsed.success) {
-      const validationErrors = parsed.error.errors.map((e) => ({
-        field: e.path.join("."),
-        message: e.message,
-      }));
-
-      const fallbackEmail =
-        typeof req.body.email === "string" ? req.body.email : "unknown";
-
-      logger.warn("🚫 Invalid input on device verification", {
-        ...meta,
-        email: fallbackEmail,
-        input: sanitizeInput(req.body),
-        errors: validationErrors,
-        event: "auth.device.verification.failed",
-      });
-
-      throw new HttpException(
-        HTTP_CODE.BAD_REQUEST,
-        getErrorMessage("INVALID_INPUT", lang) +
-          `: ${validationErrors.map((e) => e.message).join(", ")}`,
-        ERROR_CODE.BAD_REQUEST,
-        validationErrors
-      );
-    }
-
-    const { email, code } = parsed.data;
-
-    // 🔑 Ejecutar lógica de verificación
-    const result = await verifyDeviceService({
-      email,
-      code,
-      meta,
-    });
-
-    // 🔁 Código expirado: se reenvió uno nuevo
-    if (result.status === API_STATUS.RESEND) {
-      logger.warn("🔁 Verification code expired, new code sent", {
-        ...meta,
-        email,
-        event: "user.device.verification.code_resent",
-        source: "verifyDeviceController",
-      });
-
-      return void res.status(HTTP_CODE.OK).json({
-        status: result.status,
-        message: result.message,
-        resend: true,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    // ℹ️ Ya verificado anteriormente
-    if (result.status === API_STATUS.ALREADY_VALIDATED) {
-      logger.info("ℹ️ Email already verified", {
-        ...meta,
-        email,
-        event: "user.device.verification.already_verified",
-        source: "verifyDeviceController",
-      });
-
-      return void res.status(HTTP_CODE.OK).json({
-        status: result.status,
-        message: result.message,
-        alreadyVerified: true,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    // ✅ Verificación exitosa
-    if (result.status === API_STATUS.DEVICE_VALIDATED) {
-      // 🍪 Guardar tokens en cookies
-      setAuthCookies({
-        res,
-        accessKey: result.tokens.accessTokenId,
-        clientKey: result.tokens.hashedPublicKey,
-      });
-
-      logger.info("✅ User verified and session started successfully", {
-        ...meta,
-        email: result.data.email,
-        userId: result.data.userId,
-        sessionId: result.data.sessionId,
-        role: result.data.role,
-        sessionStarted: true,
-        source: "verifyDeviceController",
-        event: "user.device.verification.success",
-      });
-
-      loggerEvent(
-        "user.logged_in.success",
-        {
-          email: result.data.email,
-          userId: result.data.userId,
-          sessionId: result.data.sessionId,
-          role: result.data.role,
-          sessionStarted: true,
-        },
-        req,
-        "verifyDeviceController"
-      );
-
-      return void res.status(HTTP_CODE.OK).json({
-        status: result.status,
-        message: result.message,
-        data: result.data,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    // 🧨 Estado inesperado
-    throw new HttpException(
-      HTTP_CODE.INTERNAL_SERVER_ERROR,
-      "Unexpected verification state.",
-      ERROR_CODE.INTERNAL_SERVER_ERROR
-    );
-  }
-);
-
 export const refreshAccessTokenController = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
     // Extracción del idioma y metadata desde la petición
@@ -611,23 +479,32 @@ export const requestPasswordResetController = catchErrors(
       );
     }
 
-    const email = parsed.data;
+    const Useremail = parsed.data;
 
-    const result = await requestPasswordResetService(email);
+    const result = await requestPasswordResetService(Useremail);
 
     logger.info("📩 Password reset code sent", {
       ...meta,
-      email,
+      email: result.data.email,
       event: "auth.reset_password.code.sent",
     });
 
     loggerEvent("user.password.reset.requested", {
-      email,
+      email: result.data.email,
       ...meta,
     });
 
-    return void res.status(HTTP_CODE.OK).json({
-      ...result,
+    // 🔐 Sanitizar antes de responder al cliente
+    const { requestId, expiresIn, email } = result.data;
+
+    return void res.status(HTTP_CODE.CREATED).json({
+      status: result.status,
+      message: result.message,
+      data: {
+        email,
+        requestId,
+        expiresIn,
+      },
       timestamp: new Date().toISOString(),
     });
   }
@@ -666,11 +543,12 @@ export const resetPasswordController = catchErrors(
       );
     }
 
-    const { email, code, newPassword } = parsed.data;
+    const { email, code, newPassword, requestId } = parsed.data;
 
     const result = await resetPasswordService({
       email,
       code,
+      requestId,
       newPassword,
       meta,
     });
@@ -680,12 +558,15 @@ export const resetPasswordController = catchErrors(
         ...meta,
         email,
         event: "auth.reset_password.code.resent",
+        source: "resetPasswordController",
       });
 
       return void res.status(HTTP_CODE.OK).json({
         status: result.status,
         message: result.message,
         resend: true,
+        requestId: result.requestId,
+        expiresIn: result.expiresIn,
         timestamp: new Date().toISOString(),
       });
     }

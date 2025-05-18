@@ -38,8 +38,6 @@ import {
   type LoginParams,
   type LoginResponse,
   type LoginDeviceCheckResponse,
-  type DeviceValidationParams,
-  type DeviceValidationResponse,
   type RefreshTokenResponse,
   type LogoutResponse,
   type LogoutOthersResponse,
@@ -486,206 +484,6 @@ export const loginService = async ({
   };
 };
 
-export const verifyDeviceService = async ({
-  email,
-  code,
-  meta,
-}: DeviceValidationParams): Promise<DeviceValidationResponse> => {
-  // 1. Buscar al usuario
-  const user = await prisma.user.findUnique({ where: { email } });
-  appAssert(
-    user,
-    HTTP_CODE.NOT_FOUND,
-    "User not found. Please check the email or register.",
-    ERROR_CODE.USER_NOT_FOUND,
-    [
-      {
-        field: "email",
-        message: "No user found with this email.",
-      },
-    ]
-  );
-
-  // 2. Buscar el código de verificación (más recientes primero)
-  const codes = await prisma.verificationCode.findMany({
-    where: {
-      userId: user.id,
-      type: VerificationCodeType.DeviceValidation,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  const validCode = codes.find((v) => !v.used);
-
-  // Si no hay un código válido y el usuario ya está verificado
-  if (!validCode) {
-    if (user.verified) {
-      return {
-        status: "alreadyValidated",
-        message: "Your device is already verified.",
-        alreadyVerified: true,
-      };
-    }
-    throw new HttpException(
-      HTTP_CODE.UNAUTHORIZED,
-      "Invalid or expired verification code.",
-      ERROR_CODE.INVALID_VERIFICATION_CODE,
-      [
-        {
-          field: "code",
-          message: "The code provided is invalid or already used.",
-        },
-      ]
-    );
-  }
-
-  // 3. Comparar el código ingresado con el código almacenado (hasheado)
-  const isValid = await compareValue(code, validCode.hashedCode);
-  appAssert(
-    isValid,
-    HTTP_CODE.UNAUTHORIZED,
-    "Invalid verification code.",
-    ERROR_CODE.INVALID_VERIFICATION_CODE,
-    [
-      {
-        field: "code",
-        message: "The code entered is incorrect.",
-      },
-    ]
-  );
-
-  // 4. Revisar si el código ha expirado
-  const isExpired = validCode.expiresAt < new Date();
-  if (isExpired) {
-    const newCode = crypto.randomInt(100000, 999999).toString();
-    const hashedNewCode = await hashValue(newCode);
-
-    await prisma.verificationCode.create({
-      data: {
-        userId: user.id,
-        type: VerificationCodeType.DeviceValidation,
-        hashedCode: hashedNewCode,
-        expiresAt: fiveMinutesFromNow(),
-      },
-    });
-
-    await sendVerificationEmail(user.email, newCode);
-
-    return {
-      status: "resend",
-      message: "Your code has expired. A new one was sent to your email.",
-      resend: true,
-    };
-  }
-
-  // 5. Actualizar al usuario y limpiar códigos anteriores
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { verified: true },
-  });
-
-  await prisma.verificationCode.updateMany({
-    where: {
-      userId: user.id,
-      type: VerificationCodeType.DeviceValidation,
-    },
-    data: { used: true },
-  });
-
-  await prisma.verificationCode.deleteMany({
-    where: {
-      userId: user.id,
-      type: VerificationCodeType.DeviceValidation,
-      used: true,
-    },
-  });
-
-  // 6. Manejo del dispositivo: Buscar o crear el registro en el modelo Device
-  // Se asume que 'meta.deviceInfo' contiene: { device, os, browser }
-  // y que 'meta' contiene 'ipAddress'
-  const device = await createNewDevice(user.id, meta);
-
-  // 7. Crear la sesión utilizando el 'deviceId' del registro Device
-  const session = await prisma.session.create({
-    data: {
-      userId: user.id,
-      deviceId: device.id,
-      clientKey: "",
-      expiresAt: thirtyDaysFromNow(),
-    },
-  });
-
-  const hashedPublicKey = await generateClientKeyFromMeta(
-    meta,
-    user.id,
-    session.id
-  );
-
-  // ⬇️ Guardar clientKey en la sesión
-  await prisma.session.update({
-    where: { id: session.id },
-    data: { clientKey: hashedPublicKey },
-  });
-
-  // 8. Generar tokens de acceso y refresh
-  const { token: accessToken, hashedJti: accessTokenId } =
-    await generateAccessToken(
-      user.id,
-      session.id,
-      user.role as UserRole,
-      hashedPublicKey
-    );
-
-  const { token: refreshToken, hashedJti: refreshTokenId } =
-    await generateRefreshToken(
-      user.id,
-      session.id,
-      user.role as UserRole,
-      hashedPublicKey
-    );
-
-  // 9. Guardar los registros de tokens en el modelo TokenRecord
-  await prisma.tokenRecord.createMany({
-    data: [
-      {
-        jti: accessTokenId,
-        type: "ACCESS",
-        token: accessToken,
-        sessionId: session.id,
-        userId: user.id,
-        publicKey: hashedPublicKey,
-        expiresAt: await getJwtExpiration(accessToken), // utilitario que convierte el claim 'exp' a Date
-        revoked: false,
-      },
-      {
-        jti: refreshTokenId,
-        type: "REFRESH",
-        token: refreshToken,
-        sessionId: session.id,
-        userId: user.id,
-        publicKey: hashedPublicKey,
-        expiresAt: await getJwtExpiration(refreshToken),
-        revoked: false,
-      },
-    ],
-  });
-
-  // 10. Retornar la respuesta del servicio con la información necesaria.
-  return {
-    status: API_STATUS.DEVICE_VALIDATED,
-    message: "Your device has been successfully verified.",
-    data: {
-      userId: user.id,
-      email: user.email,
-      sessionId: session.id,
-      role: user.role as UserRole,
-    },
-    tokens: {
-      accessTokenId,
-      hashedPublicKey,
-    },
-  };
-};
-
 export const refreshAccessTokenService = async (
   clientKey: string,
   meta: RequestMeta,
@@ -1059,12 +857,14 @@ export const requestPasswordResetService = async (
   // 2️⃣ Generar nuevo código y hashear
   const rawCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
   const hashedCode = await hashValue(rawCode);
+  const requestId = uuidv4();
 
-  await prisma.verificationCode.create({
+  const verifyCode = await prisma.verificationCode.create({
     data: {
       userId: user.id,
       type: VerificationCodeType.PasswordReset,
       hashedCode,
+      requestId,
       expiresAt: fiveMinutesFromNow(),
     },
   });
@@ -1072,11 +872,17 @@ export const requestPasswordResetService = async (
   // 3️⃣ Enviar email
   await sendPasswordResetEmail(user.email, rawCode);
 
+  const expiresIn = Math.floor(
+    (verifyCode.expiresAt.getTime() - Date.now()) / 1000
+  );
+
   return {
     status: "passwordResetCodeSent",
     message: "Password reset code sent to your email.",
     data: {
       email: user.email,
+      requestId: requestId,
+      expiresIn: expiresIn,
       codeSent: true,
     },
   };
@@ -1085,6 +891,7 @@ export const requestPasswordResetService = async (
 export const resetPasswordService = async ({
   email,
   code,
+  requestId,
   newPassword,
   meta,
 }: ResetPasswordParamsRequest): Promise<ResetPasswordResponse> => {
@@ -1131,12 +938,14 @@ export const resetPasswordService = async ({
   if (isExpired) {
     const newCode = crypto.randomInt(100000, 999999).toString();
     const hashedNewCode = await hashValue(newCode);
+    const newRequestId = uuidv4();
 
     await prisma.verificationCode.create({
       data: {
         userId: user.id,
         type: VerificationCodeType.PasswordReset,
         hashedCode: hashedNewCode,
+        requestId: newRequestId,
         expiresAt: fiveMinutesFromNow(),
       },
     });
@@ -1146,6 +955,8 @@ export const resetPasswordService = async ({
     return {
       status: API_STATUS.RESEND,
       message: "The code has expired. A new one was sent to your email.",
+      requestId: newRequestId,
+      expiresIn: 300,
       resend: true,
     };
   }

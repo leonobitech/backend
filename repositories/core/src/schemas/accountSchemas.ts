@@ -37,6 +37,7 @@ export const resetPasswordSchema = z.object({
   email: emailSchema,
   newPassword: passwordSchema,
   code: z.string().length(6, "El código debe tener 6 dígitos"),
+  requestId: z.string(),
 });
 
 export const verificationCodeSchema = z.string().min(1).max(24);

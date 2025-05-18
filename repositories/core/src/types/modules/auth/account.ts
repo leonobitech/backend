@@ -27,7 +27,6 @@ export type CreateAccountParams = {
 
 export type VerifyEmailParams = VerifyEmailBody & { meta: RequestMeta };
 export type LoginParams = LoginBody & { meta: RequestMeta };
-export type DeviceValidationParams = VerifyEmailBody & { meta: RequestMeta };
 export type ResetPasswordRequest = z.infer<typeof emailSchema>;
 export type ResetPasswordParamsRequest = ResetPasswordBody & {
   meta: RequestMeta;
@@ -126,29 +125,6 @@ export type LoginDeviceCheckResponse =
   | LoginDeviceValidatedResponse
   | LoginDevicePendingVerificationResponse;
 
-export type DeviceValidationResponse =
-  | {
-      status: typeof API_STATUS.DEVICE_VALIDATED;
-      message: string;
-      data: {
-        userId: string;
-        email: string;
-        sessionId: string;
-        role: UserRole;
-      };
-      tokens: TokenSet;
-    }
-  | {
-      status: typeof API_STATUS.RESEND;
-      message: string;
-      resend: true;
-    }
-  | {
-      status: typeof API_STATUS.ALREADY_VALIDATED;
-      message: string;
-      alreadyVerified: true;
-    };
-
 export type RefreshTokenResponse = {
   status: typeof API_STATUS.REFRESHED;
   message: string;
@@ -190,6 +166,8 @@ export type ResetPasswordRequestResponse = {
   data: {
     email: string;
     codeSent: boolean;
+    requestId: string;
+    expiresIn: number;
   };
 };
 
@@ -207,5 +185,7 @@ export type ResetPasswordResponse =
   | {
       status: typeof API_STATUS.RESEND;
       message: string;
+      requestId: string;
+      expiresIn: number;
       resend: true;
     };
