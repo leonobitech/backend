@@ -8,7 +8,6 @@ import {
   logoutAllOtherSessionsController,
   requestPasswordResetController,
   resetPasswordController,
-  verifyDeviceController,
 } from "@controllers/account.controllers";
 import authenticate from "@middlewares/authenticate";
 
@@ -40,12 +39,6 @@ accountRoutes.post(
   },
   loginController
 );
-
-/**
- * @route   POST /account/verify-device
- * @desc    Verifica Device con código por email y inicia session normalmente
- */
-accountRoutes.post("/verify-device", verifyDeviceController);
 
 /**
  * @route   POST /account/refresh-token
