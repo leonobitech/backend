@@ -35,19 +35,19 @@ Este archivo es ejecutado automáticamente por GitHub Actions cada vez que se re
 
 ### 2. El script `deploy.sh` realiza:
 
-| Paso | Acción |
-|------|--------|
-| 🔒 Seguridad | Habilita `set -euo pipefail` para abortar en errores silenciosos |
-| 📂 Contexto | Cambia al directorio del proyecto |
-| 📥 Pull | Hace `git pull` del repositorio Leonobitech |
-| 🛠️ Rebuild `core` | Reconstruye la imagen Docker del microservicio `core` usando `build:` |
-| 🚀 Update `core` | Recrea el contenedor `core` con la nueva imagen |
-| 📦 Pull `n8n` | Descarga la última imagen `n8nio/n8n:latest` desde Docker Hub |
-| ♻️ Recreate `n8n` | Aplica la nueva imagen recreando los contenedores `n8n_main`, `n8n_webhook_1`, `n8n_worker_1` |
-| 🧼 Cleanup | Elimina imágenes y contenedores no utilizados (`prune -a`) |
-| 📊 Espacio en disco | Muestra uso de disco antes y después |
-| ✉️ Email | Envía un resumen del deploy a `admin@leonobitech.com` |
-| 🧽 Log rotation | Borra logs temporales de más de 3 días |
+| Paso                   |                         Acción                                   |
+|------------------------|------------------------------------------------------------------|
+| 🔒 Seguridad           | Habilita `set -euo pipefail` para abortar en errores silenciosos |
+| 📂 Contexto            | Cambia al directorio del proyecto                                |
+| 📥 Pull                | Hace `git pull` del repositorio Leonobitech                      |
+| 🛠️ Rebuild `core`      | Reconstruye imagen del microservicio `core` usando `build:`      |
+| 🚀 Update `core`       | Recrea el contenedor `core` con la nueva imagen                  |
+| 📦 Pull `n8n`          | Descarga la última imagen `n8nio/n8n:latest` desde Docker Hub    |
+| ♻️ Recreate `n8n`      | Usa nueva imagen en `n8n_main`, `n8n_webhook_1`, `n8n_worker_1`  |
+| 🧼 Cleanup             | Elimina imágenes y contenedores no utilizados (`prune -a`)       |
+| 📊 Espacio en disco    | Muestra uso de disco antes y después                             |
+| ✉️ Email               | Envía un resumen del deploy a `admin@leonobitech.com`            |
+| 🧽 Log rotation        | Borra logs temporales de más de 3 días                           |
 
 ---
 
