@@ -248,6 +248,57 @@ services:
       interval: 10s
       retries: 5
       start_period: 10s
+  
+  postgres_odoo:
+    image: postgres:latest
+    container_name: postgres_odoo
+    restart: unless-stopped
+    env_file:
+      - ./repositories/odoo/.env
+    volumes:
+      - odoo_postgres_data:/var/lib/postgresql/data
+    networks:
+      - leonobitech-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+
+  odoo:
+    image: odoo:17
+    container_name: odoo
+    restart: unless-stopped
+    env_file:
+      - ./repositories/odoo/.env
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+    depends_on:
+      postgres_odoo:
+        condition: service_healthy
+    volumes:
+      - odoo_data:/var/lib/odoo
+    networks:
+      - leonobitech-net
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.odoo.rule=Host(`odoo.${DOMAIN_NAME}`)
+      - traefik.http.routers.odoo.entrypoints=websecure
+      - traefik.http.routers.odoo.tls.certresolver=le
+      - traefik.http.services.odoo.loadbalancer.server.port=8069
+      - traefik.http.routers.odoo.middlewares=odoo-secure@docker
+
+      # Middleware de seguridad
+      - traefik.http.middlewares.odoo-secure.headers.STSSeconds=315360000
+      - traefik.http.middlewares.odoo-secure.headers.browserXSSFilter=true
+      - traefik.http.middlewares.odoo-secure.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.odoo-secure.headers.forceSTSHeader=true
+      - traefik.http.middlewares.odoo-secure.headers.SSLHost=${DOMAIN_NAME}
+      - traefik.http.middlewares.odoo-secure.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.odoo-secure.headers.STSPreload=true
 
 volumes:
   redis_core_data:
@@ -256,6 +307,8 @@ volumes:
   n8n_data_worker_1:
   redis_data:
   postgres_data:
+  odoo_postgres_data:
+  odoo_data:
 
 networks:
   leonobitech-net:
