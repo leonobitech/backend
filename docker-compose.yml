@@ -266,20 +266,26 @@ services:
       start_period: 10s
 
   odoo:
-    image: odoo:latest
-    container_name: odoo
-    restart: unless-stopped
-    env_file:
-      - ./repositories/odoo/.env
-    volumes:
-      - odoo_data:/var/lib/odoo
-    networks:
-      - leonobitech-net
-    depends_on:
-      postgres_odoo:
-        condition: service_healthy
-      traefik:
-        condition: service_started
+  image: odoo:latest
+  container_name: odoo
+  restart: unless-stopped
+  env_file:
+    - ./repositories/odoo/.env
+  volumes:
+    - odoo_data:/var/lib/odoo
+  networks:
+    - leonobitech-net
+  depends_on:
+    postgres_odoo:
+      condition: service_healthy
+    traefik:
+      condition: service_started
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8069"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 10s
     labels:
       - traefik.enable=true
       - traefik.http.routers.odoo.rule=Host(`odoo.${DOMAIN_NAME}`)
