@@ -271,8 +271,6 @@ services:
     restart: unless-stopped
     env_file:
       - ./repositories/odoo/.env
-    command: >
-      odoo -i base --without-demo=all --log-level=info
     volumes:
       - odoo_data:/var/lib/odoo
     networks:
