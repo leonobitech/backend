@@ -244,7 +244,7 @@ services:
     networks:
       - leonobitech-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER_N8N} -d ${POSTGRES_DB_N8N}"]
       interval: 10s
       retries: 5
       start_period: 10s
@@ -260,7 +260,7 @@ services:
     networks:
       - leonobitech-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER_ODOO} -d ${POSTGRES_DB_ODOO}"]
       interval: 10s
       retries: 5
       start_period: 10s
