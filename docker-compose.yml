@@ -288,13 +288,11 @@ services:
       start_period: 10s
     labels:
       - traefik.enable=true
-      - traefik.http.routers.odoo.rule=Host(`odoo.${DOMAIN_NAME}`)
-      - traefik.http.routers.odoo.entrypoints=websecure
-      - traefik.http.routers.odoo.tls.certresolver=le
-      - traefik.http.services.odoo.loadbalancer.server.port=8069
-      - traefik.http.routers.odoo.middlewares=odoo-secure@docker
 
-      # Middleware de seguridad
+      # 🔐 Definición de Middleware para odoo
+      - traefik.http.middlewares.auth-odoo.basicauth.users=${ODOO_AUTH}
+
+      # 🛡️ Seguridad reforzada (headers HTTP)
       - traefik.http.middlewares.odoo-secure.headers.STSSeconds=315360000
       - traefik.http.middlewares.odoo-secure.headers.browserXSSFilter=true
       - traefik.http.middlewares.odoo-secure.headers.contentTypeNosniff=true
@@ -303,6 +301,16 @@ services:
       - traefik.http.middlewares.odoo-secure.headers.STSIncludeSubdomains=true
       - traefik.http.middlewares.odoo-secure.headers.STSPreload=true
 
+      # 📍 Ruta de acceso para odoo UI
+      - traefik.http.routers.odoo.rule=Host(`odoo.${DOMAIN_NAME}`)
+      - traefik.http.routers.odoo.entrypoints=websecure
+      - traefik.http.routers.odoo.tls=true
+      - traefik.http.routers.odoo.tls.certresolver=le
+      - traefik.http.services.odoo.loadbalancer.server.port=8069
+      - traefik.http.routers.odoo.middlewares=odoo-secure@docker
+      
+      # 🔒 Middlewares en el router
+      - traefik.http.routers.odoo.middlewares=auth-odoo@docker,odoo-secure@docker
 volumes:
   redis_core_data:
   n8n_data_main:

@@ -1,3 +1,4 @@
+
 # 🔐 Leonobitech Backend – SECURITY.md
 
 Este archivo documenta las medidas de seguridad aplicadas en la infraestructura backend de Leonobitech, incluyendo proxy inverso, microservicios y manejo de cookies.
@@ -55,6 +56,13 @@ Este archivo documenta las medidas de seguridad aplicadas en la infraestructura 
                               │
                               ▼
                  🌍 WhatsApp, MercadoPago, etc.
+
+        ┌──────────────────────────────────────────────┐
+        │  odoo.leonobitech.com                        │
+        │  Middlewares:                                │
+        │  - auth-odoo                                 │
+        │  - odoo-secure                               │
+        └──────────────────────────────────────────────┘
 ```
 ---
 
@@ -71,19 +79,20 @@ Este archivo documenta las medidas de seguridad aplicadas en la infraestructura 
 
 ### ✅ Seguridad por servicio
 
-| Servicio               | Middleware de seguridad       | Middleware anti-tracking        |
-|------------------------|-------------------------------|---------------------------------|
-| `core.leonobitech.com` | `core-secure@docker`          | `block-trackers@docker`         |
-| `n8n.leonobitech.com`  | `n8n-secure@docker`           | `block-trackers@docker`         |
-| `n8n_webhook_1`        | `n8n-webhook-secure@docker`   | ❌ (No se aplica CSP)           |
-| `n8n_worker_1`         | ❌ No expuesto públicamente   | ❌                              |
-| `traefik` dashboard    | `auth-traefik@docker`         | `block-trackers@docker`         |
+| Servicio                | Middleware de seguridad     | Autenticación básica     | Middleware anti-tracking |
+|-------------------------|-----------------------------|--------------------------|--------------------------|
+| `core.leonobitech.com`  | `core-secure@docker`        | ❌                       | `block-trackers@docker`  |
+| `n8n.leonobitech.com`   | `n8n-secure@docker`         | ✅ `auth-n8n@docker`     | `block-trackers@docker`  |
+| `n8n_webhook_1`         | `n8n-webhook-secure@docker` | ❌                       | ❌ (No se aplica CSP)    |
+| `n8n_worker_1`          | ❌ No expuesto públicamente | ❌                       | ❌                       |
+| `odoo.leonobitech.com`  | `odoo-secure@docker`        | ✅ `auth-odoo@docker`    | ❌                       |
+| `traefik` dashboard     | `traefik-secure@docker`     | ✅ `auth-traefik@docker` | `block-trackers@docker`  |
 
 ---
 
 ## 🧱 Middlewares definidos
 
-### `core-secure`, `n8n-secure`, `n8n-webhook-secure`
+### `core-secure`, `n8n-secure`, `odoo-secure`, `n8n-webhook-secure`
 
 Aplican headers de seguridad:
 
@@ -104,6 +113,18 @@ Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'sel
 - Agrega header `X-Blocked-By: Traefik`
 
 ⚠️ **Este middleware no debe usarse en servicios con interfaces web complejas como `n8n_main`, ya que bloquea scripts, conexiones y WebSockets necesarios para el funcionamiento del frontend.**
+
+---
+
+## 🔐 Autenticación Básica (`basicauth`)
+
+### Protege servicios críticos que no deben estar expuestos al público:
+
+- `traefik.leonobitech.com` → `auth-traefik`
+- `n8n.leonobitech.com` → `auth-n8n`
+- `odoo.leonobitech.com` → `auth-odoo`
+
+Credenciales definidas como variables de entorno (`TRAEFIK_AUTH`, `N8N_AUTH`, `ODOO_AUTH`) en `.env`, usando formato htpasswd con hash bcrypt o Apache `$apr1$`.
 
 ---
 
@@ -137,7 +158,7 @@ Seteadas y limpiadas usando el helper centralizado:
 
 ---
 
-> Última actualización: 2025-05-02
+> Última actualización: 2025-05-20
 
 ## 👥 Maintained by
 
