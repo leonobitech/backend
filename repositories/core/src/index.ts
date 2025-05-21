@@ -38,6 +38,7 @@ import devDebugRoutes from "@routes/devDebug.routes";
 import { testHandler } from "@test/test";
 import cleanCookies from "@middlewares/cleanCookies";
 import { apiKeyGuard } from "@middlewares/apiKey";
+import securityRoutes from "@routes/security.routes";
 
 const app: Application = express();
 
@@ -96,6 +97,9 @@ app.get("/test-types", testHandler);
 if (NODE_ENV === "development") {
   app.use("/dev", authenticate, detectLanguage, devDebugRoutes);
 }
+
+// 🔐 Endpoint usado por Traefik para permitir ver Dashboard de n8n y odoo
+app.use("/security", securityRoutes);
 
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave

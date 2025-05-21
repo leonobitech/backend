@@ -31,7 +31,7 @@ services:
       - "traefik.enable=true"
 
       ############################################
-      # 🔐 Middleware: Autenticación básica
+      ## 🔐 Middleware: Autenticación básica para el dashboard de Traefik
       ############################################
       - "traefik.http.middlewares.auth-traefik.basicauth.users=${TRAEFIK_AUTH}"
 
@@ -168,9 +168,11 @@ services:
       - "traefik.enable=true"
 
       ############################################
-      # 🔐 Middleware: autenticación básica para UI
+      # 🔐 Middleware que redirige autenticación a /security/verify-admin
       ############################################
-      - "traefik.http.middlewares.auth-n8n.basicauth.users=${N8N_AUTH}"
+      - "traefik.http.middlewares.forward-auth-n8n.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
+      - "traefik.http.middlewares.forward-auth-n8n.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.forward-auth-n8n.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
 
       ############################################
       # 🛡️ Middleware: headers de seguridad para UI
@@ -195,7 +197,7 @@ services:
       - "traefik.http.routers.n8n_ui.tls.certresolver=le"
       - "traefik.http.routers.n8n_ui.service=n8n_ui"
       - "traefik.http.services.n8n_ui.loadbalancer.server.port=5678"
-      - "traefik.http.routers.n8n_ui.middlewares=auth-n8n@docker,n8n-secure@docker"
+      - "traefik.http.routers.n8n_ui.middlewares=forward-auth-n8n@docker,n8n-secure@docker"
 
       ############################################
       # 🚀 Webhook público controlado (/webhook-test)
@@ -373,9 +375,11 @@ services:
       - "traefik.enable=true"
 
       ############################################
-      # 🔐 Middleware: autenticación básica Odoo
+      # 🔐 Middleware que redirige autenticación a /security/verify-admin
       ############################################
-      - "traefik.http.middlewares.auth-odoo.basicauth.users=${ODOO_AUTH}"
+      - "traefik.http.middlewares.forward-auth-odoo.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
+      - "traefik.http.middlewares.forward-auth-odoo.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.forward-auth-odoo.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
 
       ############################################
       # 🛡️ Middleware: headers de seguridad Odoo (CSP corregido)
@@ -389,7 +393,7 @@ services:
       - "traefik.http.middlewares.odoo-secure.headers.contentTypeNosniff=true"
       # - "traefik.http.middlewares.odoo-secure.headers.frameDeny=true"
       - "traefik.http.middlewares.odoo-secure.headers.referrerPolicy=no-referrer"
-      - "traefik.http.middlewares.odoo-secure.headers.contentSecurityPolicy=default-src * data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; connect-src *; frame-ancestors *;"
+      - "traefik.http.middlewares.odoo-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'self'; connect-src 'self'"
 
 
       ############################################
@@ -405,7 +409,7 @@ services:
       ############################################
       # 📦 Middlewares aplicados al router
       ############################################
-      - "traefik.http.routers.odoo.middlewares=auth-odoo@docker,odoo-secure@docker"
+      - "traefik.http.routers.odoo.middlewares=forward-auth-odoo@docker,odoo-secure@docker"
 
 volumes:
   redis_core_data:
