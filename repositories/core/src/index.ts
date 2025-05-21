@@ -37,6 +37,7 @@ import testRouter from "@routes/test.routes";
 import devDebugRoutes from "@routes/devDebug.routes";
 import { testHandler } from "@test/test";
 import cleanCookies from "@middlewares/cleanCookies";
+import { apiKeyGuard } from "@middlewares/apiKey";
 
 const app: Application = express();
 
@@ -96,8 +97,8 @@ if (NODE_ENV === "development") {
   app.use("/dev", authenticate, detectLanguage, devDebugRoutes);
 }
 
-// Test route for error handling
-app.use("/api", testRouter);
+// 🛡️ Aplicar X-API-KEY solo a rutas sensibles
+app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
 
 // Usar las rutas de account
 app.use("/account", accountRoutes);
@@ -106,6 +107,9 @@ app.use("/account", accountRoutes);
 app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
 app.use("/admin", authenticate, authorize(UserRole.Admin), adminRouter);
+
+// Test route for error handling
+app.use("/api", testRouter);
 
 // Error handling middleware
 app.use(errorHandler);
