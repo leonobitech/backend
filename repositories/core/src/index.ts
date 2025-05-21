@@ -38,6 +38,7 @@ import devDebugRoutes from "@routes/devDebug.routes";
 import { testHandler } from "@test/test";
 import cleanCookies from "@middlewares/cleanCookies";
 import { apiKeyGuard } from "@middlewares/apiKey";
+import securityRoutes from "@routes/security.routes";
 
 const app: Application = express();
 
@@ -99,6 +100,9 @@ if (NODE_ENV === "development") {
 
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
+
+// 🔐 Endpoint usado por Traefik para validar sesión y rol de admin
+app.use("/security", securityRoutes);
 
 // Usar las rutas de account
 app.use("/account", accountRoutes);
