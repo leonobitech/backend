@@ -362,6 +362,7 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    command: --no-database-list
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8069"]
       interval: 15s
@@ -377,7 +378,7 @@ services:
       - "traefik.http.middlewares.auth-odoo.basicauth.users=${ODOO_AUTH}"
 
       ############################################
-      # 🛡️ Middleware: headers de seguridad Odoo
+      # 🛡️ Middleware: headers de seguridad Odoo (CSP corregido)
       ############################################
       - "traefik.http.middlewares.odoo-secure.headers.STSSeconds=315360000"
       - "traefik.http.middlewares.odoo-secure.headers.forceSTSHeader=true"
@@ -404,6 +405,7 @@ services:
       # 📦 Middlewares aplicados al router
       ############################################
       - "traefik.http.routers.odoo.middlewares=auth-odoo@docker,odoo-secure@docker"
+
 
 volumes:
   redis_core_data:
