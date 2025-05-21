@@ -30,28 +30,38 @@ services:
     labels:
       - "traefik.enable=true"
 
-    # 🔐 Definición de middleware para autenticación básica para el dashboard
+      ############################################
+      # 🔐 Middleware: Autenticación básica
+      ############################################
       - "traefik.http.middlewares.auth-traefik.basicauth.users=${TRAEFIK_AUTH}"
 
-    # 🛡️ Seguridad reforzada (headers HTTP)
+      ############################################
+      # 🛡️ Middleware: Headers de seguridad
+      ############################################
       - "traefik.http.middlewares.traefik-secure.headers.STSSeconds=315360000"
-      - "traefik.http.middlewares.traefik-secure.headers.browserXSSFilter=true"
-      - "traefik.http.middlewares.traefik-secure.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.traefik-secure.headers.forceSTSHeader=true"
-      - "traefik.http.middlewares.traefik-secure.headers.SSLHost=${DOMAIN_NAME}"
       - "traefik.http.middlewares.traefik-secure.headers.STSIncludeSubdomains=true"
       - "traefik.http.middlewares.traefik-secure.headers.STSPreload=true"
+      - "traefik.http.middlewares.traefik-secure.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.traefik-secure.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.traefik-secure.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.traefik-secure.headers.frameDeny=true"
+      - "traefik.http.middlewares.traefik-secure.headers.referrerPolicy=no-referrer"
+      - "traefik.http.middlewares.traefik-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none';"
 
-    # 🛡️ Middleware de Seguridad HTTP – Protege el navegador del cliente con políticas CSP y headers anti-XSS
+      ############################################
+      # 📵 Middleware: Bloqueo de rastreadores básicos
+      ############################################
       - "traefik.http.middlewares.block-trackers.headers.customResponseHeaders.X-Blocked-By=Traefik"
       - "traefik.http.middlewares.block-trackers.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; connect-src 'self';"
 
-    # 🚪 Rutas y entrada segura
+      ############################################
+      # 🚪 Router: acceso al dashboard
+      ############################################
       - "traefik.http.routers.traefik.rule=Host(`traefik.leonobitech.com`)"
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.tls.certresolver=le"
       - "traefik.http.routers.traefik.service=api@internal"
-    # 🔐 Autenticación básica para el dashboard
       - "traefik.http.routers.traefik.middlewares=auth-traefik@docker,block-trackers@docker,traefik-secure@docker"
 
   redis_core:
@@ -65,14 +75,15 @@ services:
       - redis_core_data:/data
     networks:
       - leonobitech-net
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    security_opt:
-      - no-new-privileges:true
+
 
   core:
     container_name: core
@@ -91,81 +102,112 @@ services:
         condition: service_healthy
       traefik:
         condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     labels:
       - "traefik.enable=true"
 
-    # 🧱 Seguridad por headers (ya definida en n8n-secure)
+      ############################################
+      # 🛡️ Middleware: Headers de seguridad (core-secure)
+      ############################################
       - "traefik.http.middlewares.core-secure.headers.STSSeconds=315360000"
-      - "traefik.http.middlewares.core-secure.headers.browserXSSFilter=true"
-      - "traefik.http.middlewares.core-secure.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.core-secure.headers.forceSTSHeader=true"
-      - "traefik.http.middlewares.core-secure.headers.SSLHost=${DOMAIN_NAME}"
       - "traefik.http.middlewares.core-secure.headers.STSIncludeSubdomains=true"
       - "traefik.http.middlewares.core-secure.headers.STSPreload=true"
+      - "traefik.http.middlewares.core-secure.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.core-secure.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.core-secure.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.core-secure.headers.frameDeny=true"
+      - "traefik.http.middlewares.core-secure.headers.referrerPolicy=no-referrer"
+      - "traefik.http.middlewares.core-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none';"
 
-    # 📍 Ruta del servicio core
+      ############################################
+      # 🛡️ Middleware: Bloqueo básico de trackers (block-trackers)
+      ############################################
+      - "traefik.http.middlewares.block-trackers.headers.customResponseHeaders.X-Blocked-By=Traefik"
+      - "traefik.http.middlewares.block-trackers.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; connect-src 'self';"
+
+      ############################################
+      # 🌐 Router principal del microservicio core
+      ############################################
       - "traefik.http.routers.core.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`)"
       - "traefik.http.routers.core.entrypoints=websecure"
       - "traefik.http.routers.core.tls.certresolver=le"
       - "traefik.http.services.core.loadbalancer.server.port=8000"
-    # 🔐 Middlewares de seguridad: tracker blocker + security headers para core
+
+      ############################################
+      # 🔐 Aplicación de middlewares al router core
+      ############################################
       - "traefik.http.routers.core.middlewares=block-trackers@docker,core-secure@docker"
+
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:8000/health', res => process.exit(res.statusCode === 200 ? 0 : 1))\""]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 10s
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
+
 
   n8n_main:
-      image: n8nio/n8n:latest
-      container_name: n8n_main
-      restart: unless-stopped
-      env_file:
-        - ./repositories/n8n/.env
-      volumes:
-        - n8n_data_main:/home/node/.n8n
-      networks:
-        - leonobitech-net
-      depends_on:
-        postgres_n8n:
-          condition: service_healthy
-      labels:
-        - traefik.enable=true
+    image: n8nio/n8n:latest
+    container_name: n8n_main
+    restart: unless-stopped
+    env_file:
+      - ./repositories/n8n/.env
+    volumes:
+      - n8n_data_main:/home/node/.n8n
+    networks:
+      - leonobitech-net
+    depends_on:
+      postgres_n8n:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
 
-      # 🔐 Definición de Middleware para n8n
-        - traefik.http.middlewares.auth-n8n.basicauth.users=${N8N_AUTH}
+      ############################################
+      # 🔐 Middleware: autenticación básica para UI
+      ############################################
+      - "traefik.http.middlewares.auth-n8n.basicauth.users=${N8N_AUTH}"
 
-      # 🛡️ Seguridad reforzada (headers HTTP)
-        - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
-        - "traefik.http.middlewares.n8n-secure.headers.browserXSSFilter=true"
-        - "traefik.http.middlewares.n8n-secure.headers.contentTypeNosniff=true"
-        - "traefik.http.middlewares.n8n-secure.headers.forceSTSHeader=true"
-        - "traefik.http.middlewares.n8n-secure.headers.SSLHost=${DOMAIN_NAME}"
-        - "traefik.http.middlewares.n8n-secure.headers.STSIncludeSubdomains=true"
-        - "traefik.http.middlewares.n8n-secure.headers.STSPreload=true"
+      ############################################
+      # 🛡️ Middleware: headers de seguridad para UI
+      ############################################
+      - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
+      - "traefik.http.middlewares.n8n-secure.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.n8n-secure.headers.STSIncludeSubdomains=true"
+      - "traefik.http.middlewares.n8n-secure.headers.STSPreload=true"
+      - "traefik.http.middlewares.n8n-secure.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.n8n-secure.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.n8n-secure.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.n8n-secure.headers.frameDeny=true"
+      - "traefik.http.middlewares.n8n-secure.headers.referrerPolicy=no-referrer"
+      - "traefik.http.middlewares.n8n-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none';"
 
-      # 📍 Ruta de acceso para n8n UI
-        - traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
-        - traefik.http.routers.n8n_ui.entrypoints=websecure
-        - traefik.http.routers.n8n_ui.tls=true
-        - traefik.http.routers.n8n_ui.tls.certresolver=le
-        - traefik.http.routers.n8n_ui.service=n8n_ui
-        - traefik.http.services.n8n_ui.loadbalancer.server.port=5678
-      # 🧱 Middlewares para n8n
-        - traefik.http.routers.n8n_ui.middlewares=auth-n8n@docker,n8n-secure@docker
+      ############################################
+      # 🌐 Router principal de acceso UI n8n
+      ############################################
+      - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.n8n_ui.entrypoints=websecure"
+      - "traefik.http.routers.n8n_ui.tls=true"
+      - "traefik.http.routers.n8n_ui.tls.certresolver=le"
+      - "traefik.http.routers.n8n_ui.service=n8n_ui"
+      - "traefik.http.services.n8n_ui.loadbalancer.server.port=5678"
+      - "traefik.http.routers.n8n_ui.middlewares=auth-n8n@docker,n8n-secure@docker"
 
-      # 🔐 Seguridad de headers para webhooks
-        - traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)
-        - traefik.http.routers.n8n_webhooktest.entrypoints=websecure
-        - traefik.http.routers.n8n_webhooktest.tls=true
-        - traefik.http.routers.n8n_webhooktest.tls.certresolver=le
-        - traefik.http.routers.n8n_webhooktest.service=n8n_ui
+      ############################################
+      # 🚀 Webhook público controlado (/webhook-test)
+      ############################################
+      - "traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)"
+      - "traefik.http.routers.n8n_webhooktest.entrypoints=websecure"
+      - "traefik.http.routers.n8n_webhooktest.tls=true"
+      - "traefik.http.routers.n8n_webhooktest.tls.certresolver=le"
+      - "traefik.http.routers.n8n_webhooktest.service=n8n_ui"
+      # 👇 Podés aplicar headers también si querés seguridad en el webhook
+      # - "traefik.http.routers.n8n_webhooktest.middlewares=n8n-secure@docker"
+
 
   n8n_webhook_1:
     image: n8nio/n8n:latest
@@ -183,24 +225,35 @@ services:
         condition: service_healthy
       redis_n8n:
         condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     labels:
-      - traefik.enable=true
+      - "traefik.enable=true"
 
-    # 📦 Headers seguros pero más relajados (sin CSP ni bloqueo de tracking)
-      - traefik.http.middlewares.n8n-webhook-secure.headers.STSSeconds=315360000
-      - traefik.http.middlewares.n8n-webhook-secure.headers.browserXSSFilter=true
-      - traefik.http.middlewares.n8n-webhook-secure.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.n8n-webhook-secure.headers.forceSTSHeader=true
-      - traefik.http.middlewares.n8n-webhook-secure.headers.SSLHost=${DOMAIN_NAME}
-      - traefik.http.middlewares.n8n-webhook-secure.headers.STSIncludeSubdomains=true
-      - traefik.http.middlewares.n8n-webhook-secure.headers.STSPreload=true
+      ############################################
+      # 🛡️ Middleware: seguridad para webhooks
+      ############################################
+      - "traefik.http.middlewares.n8n-webhook-secure.headers.STSSeconds=315360000"
+      - "traefik.http.middlewares.n8n-webhook-secure.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.n8n-webhook-secure.headers.STSIncludeSubdomains=true"
+      - "traefik.http.middlewares.n8n-webhook-secure.headers.STSPreload=true"
+      - "traefik.http.middlewares.n8n-webhook-secure.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.n8n-webhook-secure.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.n8n-webhook-secure.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.n8n-webhook-secure.headers.referrerPolicy=no-referrer"
 
-    # 📍 Ruta del webhook (se registra después del middleware)
-      - traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)
-      - traefik.http.routers.n8n_webhook.entrypoints=websecure
-      - traefik.http.routers.n8n_webhook.tls.certresolver=le
-      - traefik.http.routers.n8n_webhook.middlewares=n8n-webhook-secure@docker
-      - traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678
+      ############################################
+      # 🌐 Router para /webhook
+      ############################################
+      - "traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)"
+      - "traefik.http.routers.n8n_webhook.entrypoints=websecure"
+      - "traefik.http.routers.n8n_webhook.tls.certresolver=le"
+      - "traefik.http.routers.n8n_webhook.middlewares=n8n-webhook-secure@docker"
+      - "traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678"
+
 
   n8n_worker_1:
     image: n8nio/n8n:latest
@@ -218,20 +271,32 @@ services:
         condition: service_healthy
       redis_n8n:
         condition: service_healthy
-    labels: []
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
 
   redis_n8n:
     image: redis:latest
     container_name: redis_n8n
     restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_N8N_PASSWORD} --databases 1
+    env_file:
+      - ./repositories/n8n/.env
     volumes:
       - redis_data:/data
     networks:
       - leonobitech-net
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_N8N_PASSWORD}", "ping"]
       interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 10s
 
   postgres_n8n:
     image: postgres:latest
@@ -243,11 +308,17 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - leonobitech-net
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER_N8N} -d ${POSTGRES_DB_N8N}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_N8N}", "-d", "${POSTGRES_DB_N8N}"]
       interval: 10s
+      timeout: 5s
       retries: 5
       start_period: 10s
+
   
   postgres_odoo:
     image: postgres:latest
@@ -259,11 +330,17 @@ services:
       - odoo_postgres_data:/var/lib/postgresql/data
     networks:
       - leonobitech-net
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER_ODOO} -d ${POSTGRES_DB_ODOO}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_ODOO}", "-d", "${POSTGRES_DB_ODOO}"]
       interval: 10s
+      timeout: 5s
       retries: 5
       start_period: 10s
+
 
   odoo:
     image: odoo:latest
@@ -280,6 +357,11 @@ services:
         condition: service_healthy
       traefik:
         condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8069"]
       interval: 15s
@@ -287,30 +369,42 @@ services:
       retries: 5
       start_period: 10s
     labels:
-      - traefik.enable=true
+      - "traefik.enable=true"
 
-      # 🔐 Definición de Middleware para odoo
-      - traefik.http.middlewares.auth-odoo.basicauth.users=${ODOO_AUTH}
+      ############################################
+      # 🔐 Middleware: autenticación básica Odoo
+      ############################################
+      - "traefik.http.middlewares.auth-odoo.basicauth.users=${ODOO_AUTH}"
 
-      # 🛡️ Seguridad reforzada (headers HTTP)
-      - traefik.http.middlewares.odoo-secure.headers.STSSeconds=315360000
-      - traefik.http.middlewares.odoo-secure.headers.browserXSSFilter=true
-      - traefik.http.middlewares.odoo-secure.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.odoo-secure.headers.forceSTSHeader=true
-      - traefik.http.middlewares.odoo-secure.headers.SSLHost=${DOMAIN_NAME}
-      - traefik.http.middlewares.odoo-secure.headers.STSIncludeSubdomains=true
-      - traefik.http.middlewares.odoo-secure.headers.STSPreload=true
+      ############################################
+      # 🛡️ Middleware: headers de seguridad Odoo
+      ############################################
+      - "traefik.http.middlewares.odoo-secure.headers.STSSeconds=315360000"
+      - "traefik.http.middlewares.odoo-secure.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.odoo-secure.headers.STSIncludeSubdomains=true"
+      - "traefik.http.middlewares.odoo-secure.headers.STSPreload=true"
+      - "traefik.http.middlewares.odoo-secure.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.odoo-secure.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.odoo-secure.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.odoo-secure.headers.frameDeny=true"
+      - "traefik.http.middlewares.odoo-secure.headers.referrerPolicy=no-referrer"
+      - "traefik.http.middlewares.odoo-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none';"
 
-      # 📍 Ruta de acceso para odoo UI
-      - traefik.http.routers.odoo.rule=Host(`odoo.${DOMAIN_NAME}`)
-      - traefik.http.routers.odoo.entrypoints=websecure
-      - traefik.http.routers.odoo.tls=true
-      - traefik.http.routers.odoo.tls.certresolver=le
-      - traefik.http.services.odoo.loadbalancer.server.port=8069
-      - traefik.http.routers.odoo.middlewares=odoo-secure@docker
-      
-      # 🔒 Middlewares en el router
-      - traefik.http.routers.odoo.middlewares=auth-odoo@docker,odoo-secure@docker
+      ############################################
+      # 🌐 Router principal de Odoo
+      ############################################
+      - "traefik.http.routers.odoo.rule=Host(`odoo.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.odoo.entrypoints=websecure"
+      - "traefik.http.routers.odoo.tls=true"
+      - "traefik.http.routers.odoo.tls.certresolver=le"
+      - "traefik.http.routers.odoo.service=odoo"
+      - "traefik.http.services.odoo.loadbalancer.server.port=8069"
+
+      ############################################
+      # 📦 Middlewares aplicados al router
+      ############################################
+      - "traefik.http.routers.odoo.middlewares=auth-odoo@docker,odoo-secure@docker"
+
 volumes:
   redis_core_data:
   n8n_data_main:
