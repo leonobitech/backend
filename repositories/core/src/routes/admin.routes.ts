@@ -7,11 +7,11 @@ const adminRouter = Router();
 // Solo los administradores pueden acceder a este panel
 adminRouter.get("/info", getAdminInfo);
 
-adminRouter.get("/n8n", (req, res) => {
+adminRouter.post("/n8n", (req, res) => {
   res.json({ url: "https://n8n.leonobitech.com" });
 });
 
-adminRouter.get("/odoo", (req, res) => {
+adminRouter.post("/odoo", (req, res) => {
   res.json({ url: "https://odoo.leonobitech.com" });
 });
 
