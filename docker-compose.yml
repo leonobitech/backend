@@ -411,7 +411,7 @@ services:
       ############################################
       # 📦 Middlewares aplicados al router
       ############################################
-      - "traefik.http.routers.odoo.middlewares=forward-auth-odoo@docker,odoo-secure@docker"
+      - "traefik.http.routers.odoo.middlewares=odoo-secure@docker"
 
 volumes:
   redis_core_data:
