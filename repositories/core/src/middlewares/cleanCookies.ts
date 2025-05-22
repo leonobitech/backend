@@ -1,8 +1,17 @@
 import { Request, Response, NextFunction } from "express";
 import { loggerAudit } from "@utils/logging/loggerAudit";
 
-// 🔐 Solo cookies válidas del sistema
-const allowedCookies = ["accessKey", "clientKey", "sidebar:state"];
+// 🔐 Cookies siempre permitidas
+const baseAllowedCookies = ["accessKey", "clientKey", "sidebar:state"];
+
+// 🍪 Cookies necesarias para Traefik ForwardAuth (n8n, Odoo)
+const forwardAuthExtras = [
+  "n8n-auth",
+  "tz",
+  "frontend_lang",
+  "session_id",
+  "cids",
+];
 
 export default function cleanCookies(
   req: Request,
@@ -10,6 +19,12 @@ export default function cleanCookies(
   next: NextFunction
 ): void {
   const rawCookies = req.headers.cookie?.split(";") || [];
+
+  // Solo agregamos extras si estamos en /security/verify-admin
+  const isForwardAuth = req.path === "/security/verify-admin";
+  const allowedCookies = isForwardAuth
+    ? [...baseAllowedCookies, ...forwardAuthExtras]
+    : baseAllowedCookies;
 
   const kept: string[] = [];
   const removed: string[] = [];
