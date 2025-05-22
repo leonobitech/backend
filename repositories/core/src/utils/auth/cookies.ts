@@ -1,39 +1,38 @@
 // src/utils/auth/authCookies.ts
 
 import { Response, CookieOptions } from "express";
-//import { fifteenMinutesFromNow } from "@utils/date/date";
 
 // 📍 Ruta base para cookies persistentes como el refresh
 export const AUTH_COOKIE_PATH = "/";
 
 // 🧱 Configuración base para todas las cookies de autenticación
 const baseCookieOptions: CookieOptions = {
-  sameSite: "strict",
+  sameSite: "none", // ← ahora None para compartir entre subdominios
   httpOnly: true,
   secure: true,
-  //maxAge: 3600000, // 1h por default, pero se sobrescribe con expires
-};
-
-const clearCookieOptions: CookieOptions = {
+  domain: ".leonobitech.com", // ← dominio de nivel superior para todos los subdominios
   path: AUTH_COOKIE_PATH,
-  httpOnly: true,
-  secure: true,
-  sameSite: "strict",
 };
 
 // 🍪 Configuración para el access token (corto, temporal)
 export const accessTokenCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  //expires: fifteenMinutesFromNow(),
-  path: AUTH_COOKIE_PATH,
+  // expires: fifteenMinutesFromNow(),
 });
 
 // 🍪 Configuración para el clientKey (más persistente, sirve para buscar el refresh token)
 export const clientKeyCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  //expires: fifteenMinutesFromNow(),
-  path: AUTH_COOKIE_PATH,
+  // expires: fifteenMinutesFromNow(),
 });
+
+// 🧼 Opciones para limpiar ambas cookies
+const clearCookieOptions: CookieOptions = {
+  domain: ".leonobitech.com",
+  path: AUTH_COOKIE_PATH,
+};
+
+// —— Funciones exportadas ——
 
 type SetAuthCookiesParams = {
   res: Response;
@@ -41,7 +40,10 @@ type SetAuthCookiesParams = {
   clientKey: string; // fingerprint hash
 };
 
-// ✅ Función para setear las cookies de autenticación
+/**
+ * ✅ Setea las cookies de autenticación (accessKey + clientKey)
+ *    con dominio compartido y SameSite=None para subdominios.
+ */
 export const setAuthCookies = ({
   res,
   accessKey,
@@ -51,7 +53,9 @@ export const setAuthCookies = ({
     .cookie("accessKey", accessKey, accessTokenCookieOptions())
     .cookie("clientKey", clientKey, clientKeyCookieOptions());
 
-// ❌ Función para limpiar ambas cookies de autenticación
+/**
+ * ❌ Limpia las cookies de autenticación.
+ */
 export const clearAuthCookies = (res: Response): Response =>
   res
     .clearCookie("accessKey", clearCookieOptions)
