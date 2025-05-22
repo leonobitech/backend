@@ -98,9 +98,6 @@ if (NODE_ENV === "development") {
   app.use("/dev", authenticate, detectLanguage, devDebugRoutes);
 }
 
-// 🔐 Endpoint usado por Traefik para permitir ver Dashboard de n8n y odoo
-app.use("/security", securityRoutes);
-
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
 
@@ -111,6 +108,9 @@ app.use("/account", accountRoutes);
 app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
 app.use("/admin", authenticate, authorize(UserRole.Admin), adminRouter);
+
+// 🔐 Endpoint usado por Traefik para permitir ver Dashboard de n8n y odoo
+app.use("/security", securityRoutes);
 
 // Test route for error handling
 app.use("/api", testRouter);
