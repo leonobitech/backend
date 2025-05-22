@@ -79,17 +79,14 @@ const authenticate: RequestHandler = catchErrors(
     if (refreshed) {
       const result = await refreshAccessTokenService(clientKey, meta, lang);
 
-      // Verificás el nuevo access token
       const { payload } = await verifyToken(result.tokens.accessToken, lang);
 
-      // // Seteás cookies nuevas
       setAuthCookies({
         res,
         accessKey: result.tokens.accessTokenId,
         clientKey: result.tokens.hashedPublicKey,
       });
 
-      // Reconstruís req.user
       if (
         payload.aud !== Audience.Access ||
         !("userId" in payload) ||
@@ -103,7 +100,6 @@ const authenticate: RequestHandler = catchErrors(
         );
       }
 
-      // ✅ Autenticación exitosa
       req.user = payload;
       req.userId = payload.userId;
       req.sessionId = payload.sessionId;
@@ -162,25 +158,39 @@ const authenticate: RequestHandler = catchErrors(
         );
       }
 
-      // 🧠 Reconstruir clientKey esperada (huella digital)
-      const expectedClientKey = await generateClientKeyFromMeta(
-        meta,
-        tokenPayload.userId,
-        tokenPayload.sessionId
-      );
-      // 🔑 Verificar clientKey
-      if (clientKey !== expectedClientKey) {
-        await loggerSecurityEvent({
-          meta,
-          type: "client_key_mismatch",
-          userId: tokenPayload.userId,
-          sessionId: tokenPayload.sessionId,
-        });
+      // 💡 Saltear verificación de clientKey si es Traefik (forward-auth)
+      const isForwardAuth = req.path === "/security/verify-admin";
 
-        throw new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          "This token was not generated from this device or IP address.",
-          ERROR_CODE.INVALID_CLIENT_KEY
+      if (!isForwardAuth) {
+        const expectedClientKey = await generateClientKeyFromMeta(
+          meta,
+          tokenPayload.userId,
+          tokenPayload.sessionId
+        );
+
+        if (clientKey !== expectedClientKey) {
+          await loggerSecurityEvent({
+            meta,
+            type: "client_key_mismatch",
+            userId: tokenPayload.userId,
+            sessionId: tokenPayload.sessionId,
+          });
+
+          throw new HttpException(
+            HTTP_CODE.UNAUTHORIZED,
+            "This token was not generated from this device or IP address.",
+            ERROR_CODE.INVALID_CLIENT_KEY
+          );
+        }
+      } else {
+        logger.warn(
+          "⚠️ Validación de clientKey omitida (forward-auth Traefik)",
+          {
+            ...meta,
+            userId: tokenPayload.userId,
+            sessionId: tokenPayload.sessionId,
+            reason: "Request desde /security/verify-admin",
+          }
         );
       }
 
