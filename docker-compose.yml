@@ -429,7 +429,7 @@ services:
     tmpfs:
       - /tmp
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/collections"]
+      test: ["CMD-SHELL", "nc -z localhost 6333"]
       interval: 10s
       timeout: 5s
       retries: 5
