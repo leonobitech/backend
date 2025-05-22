@@ -14,11 +14,26 @@ const securityRoutes = Router();
  */
 securityRoutes.get(
   "/verify-admin",
+  // 🔍 DEBUG: imprimimos path y headers
+  (req, res, next) => {
+    console.log("=== DEBUG /security/verify-admin ===");
+    console.log("Path:", req.path);
+    console.log("Headers:", {
+      cookie: req.headers.cookie,
+      host: req.headers.host,
+      "user-agent": req.headers["user-agent"],
+    });
+    next();
+  },
   (req, res, next) => {
     const accessKey = req.cookies?.accessKey;
     const clientKey = req.cookies?.clientKey;
 
     if (!accessKey || !clientKey) {
+      console.log("→ DEBUG: falta accessKey o clientKey", {
+        accessKey,
+        clientKey,
+      });
       res.status(401).send("Unauthorized");
       return; // ⛔ corta flujo
     }
@@ -28,6 +43,7 @@ securityRoutes.get(
   authenticate,
   authorize(UserRole.Admin),
   (req, res) => {
+    console.log("→ DEBUG: authenticate y authorize pasados, enviando OK");
     res.status(HTTP_CODE.OK).send("✅ OK");
   }
 );
