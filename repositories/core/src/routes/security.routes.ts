@@ -1,50 +1,63 @@
 // src/routes/security.routes.ts
-import { Router } from "express";
-import authenticate from "@middlewares/authenticate";
-import authorize from "@middlewares/authorize";
-import { UserRole } from "@constants/userRole";
+import { Router, Request, Response } from "express";
 import { HTTP_CODE } from "@constants/httpCode";
+import { UserRole } from "@constants/userRole";
+import { SupportedLang } from "@constants/errorMessages";
+import { Audience } from "@constants/audience";
+import HttpException from "@utils/http/HttpException";
+import { verifyToken } from "@utils/auth/jwt";
 
 const securityRoutes = Router();
 
-/**
- * 🔐 Endpoint utilizado por Traefik (ForwardAuth) para verificar que el usuario:
- * 1. Esté autenticado (accessKey + clientKey)
- * 2. Tenga rol de administrador
- */
 securityRoutes.get(
-  "/verify-admin",
-  // 🔍 DEBUG: imprimimos path y headers
-  (req, res, next) => {
-    console.log("=== DEBUG /security/verify-admin ===");
-    console.log("Path:", req.path);
-    console.log("Headers:", {
-      cookie: req.headers.cookie,
-      host: req.headers.host,
-      "user-agent": req.headers["user-agent"],
-    });
-    next();
-  },
-  (req, res, next) => {
-    const accessKey = req.cookies?.accessKey;
-    const clientKey = req.cookies?.clientKey;
+  "/forward-verify-admin",
+  async (req: Request, res: Response) => {
+    // 1️⃣ Locale multilanguage
+    const rawLang = req.headers["accept-language"];
+    const lang =
+      ((Array.isArray(rawLang)
+        ? rawLang[0]
+        : rawLang?.split(",")[0]) as SupportedLang) || "en";
 
-    if (!accessKey || !clientKey) {
-      console.log("→ DEBUG: falta accessKey o clientKey", {
-        accessKey,
-        clientKey,
-      });
-      res.status(401).send("Unauthorized");
-      return; // ⛔ corta flujo
+    // 2️⃣ Extraemos el JWE (accessKey)
+    const jwe = req.cookies.accessKey;
+    if (!jwe) {
+      res
+        .status(HTTP_CODE.UNAUTHORIZED)
+        .send("Unauthorized – missing accessKey");
+      return;
     }
 
-    next(); // ✅ pasa al authenticate
-  },
-  authenticate,
-  authorize(UserRole.Admin),
-  (req, res) => {
-    console.log("→ DEBUG: authenticate y authorize pasados, enviando OK");
-    res.status(HTTP_CODE.OK).send("✅ OK");
+    try {
+      // 3️⃣ Verificamos token JOSE / Zod
+      const { payload } = await verifyToken(jwe, lang);
+
+      // 4️⃣ Chequeo audience = access
+      if (payload.aud !== Audience.Access) {
+        res
+          .status(HTTP_CODE.FORBIDDEN)
+          .send("Forbidden – invalid token audience");
+        return;
+      }
+
+      // 5️⃣ Rol admin
+      if (payload.role !== UserRole.Admin) {
+        res.status(HTTP_CODE.FORBIDDEN).send("Forbidden – admin role required");
+        return;
+      }
+
+      // 6️⃣ OK para Traefik
+      res.sendStatus(HTTP_CODE.OK);
+      return;
+    } catch (err: unknown) {
+      if (err instanceof HttpException) {
+        res.status(err.statusCode).send(err.message);
+        return;
+      }
+      // cualquier otro error → 401
+      res.status(HTTP_CODE.UNAUTHORIZED).send("Unauthorized");
+      return;
+    }
   }
 );
 
