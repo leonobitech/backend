@@ -37,8 +37,8 @@ http:
       headers:
         contentSecurityPolicy: >-
           default-src 'self';
-          script-src 'self' https://challenges.cloudflare.com 'unsafe-inline';
-          connect-src 'self' https://api.leonobitech.com https://challenges.cloudflare.com;
+          script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com 'unsafe-inline';
+          connect-src 'self' https://core.leonobitech.com https://challenges.cloudflare.com https://static.cloudflareinsights.com;
           img-src 'self' data:;
           style-src 'self' 'unsafe-inline';
           font-src 'self';
