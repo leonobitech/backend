@@ -413,6 +413,28 @@ services:
       ############################################
       - "traefik.http.routers.odoo.middlewares=forward-auth-odoo@docker,odoo-secure@docker"
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - leonobitech-net
+    expose:
+      - "6333" # opcional, solo para claridad interna
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:6333/collections"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   redis_core_data:
   n8n_data_main:
@@ -422,6 +444,7 @@ volumes:
   postgres_data:
   odoo_postgres_data:
   odoo_data:
+  qdrant_data:
 
 networks:
   leonobitech-net:
