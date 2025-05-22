@@ -417,15 +417,15 @@ services:
     image: qdrant/qdrant:latest
     container_name: qdrant
     restart: unless-stopped
-    volumes:
-      - qdrant_data:/qdrant/storage
     networks:
       - leonobitech-net
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
     expose:
-      - "6333" # opcional, solo para claridad interna
+      - "6333"
     security_opt:
       - no-new-privileges:true
-    read_only: true
     tmpfs:
       - /tmp
     healthcheck:
@@ -434,6 +434,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
 
 volumes:
   redis_core_data:
@@ -445,6 +446,7 @@ volumes:
   odoo_postgres_data:
   odoo_data:
   qdrant_data:
+  qdrant_snapshots:
 
 networks:
   leonobitech-net:
