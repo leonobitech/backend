@@ -159,7 +159,7 @@ const authenticate: RequestHandler = catchErrors(
       }
 
       // 💡 Saltear verificación de clientKey si es Traefik (forward-auth)
-      const isForwardAuth = req.path === "/security/verify-admin";
+      const isForwardAuth = req.originalUrl.includes("/security/verify-admin");
 
       if (!isForwardAuth) {
         const expectedClientKey = await generateClientKeyFromMeta(
