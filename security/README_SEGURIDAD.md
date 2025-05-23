@@ -63,20 +63,23 @@ sudo tail -n 50 /var/log/mail.log
 
 ---
 
-## ⏱️ Tareas Cron
-
-### 📝 Guardar en log local (diariamente a las 2AM)
+## ⏱️ Tareas prgramadas en crontab (sudo crontab -e)
 ```bash
-0 2 * * * /usr/local/bin/vps-monitor | tee -a /var/log/vps-monitor.log
+0 13 * * * /usr/local/bin/vps-monitor-mail
 ```
 
-### 📧 Enviar por email (diariamente a las 6AM)
+### 📧 vps-monitor-mail y 📋 logger vps-monitor (diariamente a las 8AM de Argentina)
 ```bash
-0 6 * * * /usr/local/bin/vps-monitor-mail
+# Ejecuta y guarda el log diario
+REPORTE=$(/usr/local/bin/vps-monitor | tee -a /var/log/vps-monitor.log)
+
+# 📧 Envia reporte por email (diariamente a las 8AM de Argentina)
+echo "$REPORTE" | mail -a "Content-Type: text/plain; charset=UTF-8" -s "📋 Reporte de Seguridad VPS $(date +%F)" admin@leonobitech.com
 ```
+
 - Probar envío de reporte diario:
   ```bash
-  /usr/local/bin/vps-monitor | mail -s "📋 Reporte de Seguridad VPS $(date +%F)" admin@leonobitech.com
+  sudo /usr/local/bin/vps-monitor | mail -s "📋 Reporte de Seguridad VPS $(date +%F)" admin@leonobitech.com
   ```
 
 ---
@@ -102,6 +105,15 @@ sudo tail -n 50 /var/log/mail.log
 - `/var/log/vps-monitor.log` → Log local de los reportes
 - `/etc/crontab` o `crontab -e` → Tareas programadas
 - `/var/log/mail.log` → Log del sistema de correo
+
+---
+
+## 📊 Seguridad de Logs del VPS
+
+- Los logs de auditoría diaria generados por `/usr/local/bin/vps-monitor` se almacenan en `/var/log/vps-monitor.log`.
+- Se rota automáticamente todos los días usando `logrotate`, conservando 14 días de historial comprimido.
+- Configuración en: `/etc/logrotate.d/vps-monitor`
+- Permisos: `root:adm` (chmod 640) con directiva `su` para máxima seguridad.
 
 ---
 
@@ -168,3 +180,9 @@ El servicio `core` usa el middleware `monitorCookies.ts` para analizar todas las
 ---
 
 > 🧬 VPS defendido por Leonobitech. Modo ninja activado ⚔️
+
+## ✨ Maintained by
+
+**Leonobitech Dev Team**  
+https://www.leonobitech.com  
+Made with 🧠, 🥷, and Docker love 🐳
