@@ -185,7 +185,7 @@ services:
       - "traefik.http.middlewares.n8n-secure.headers.contentSecurityPolicy=script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io; style-src 'self' 'unsafe-inline'; img-src * data:; connect-src *; frame-ancestors 'self';"
 
       # 🎯 Protege solo el ingreso inicial a la UI
-      - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && Path(`/`)"
+      - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && (PathPrefix(`/`) || Path(`/`))"
       - "traefik.http.routers.n8n_ui.entrypoints=websecure"
       - "traefik.http.routers.n8n_ui.tls=true"
       - "traefik.http.routers.n8n_ui.tls.certresolver=le"
