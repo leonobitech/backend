@@ -190,15 +190,24 @@ services:
       - "traefik.http.middlewares.n8n-secure.headers.contentSecurityPolicy=script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io; style-src 'self' 'unsafe-inline'; img-src * data:; connect-src *; frame-ancestors 'self';"
 
       ############################################
-      # 🌐 Router principal de acceso UI n8n
+      # 🌐 Router principal de acceso UI n8n (excluye /icons/)
       ############################################
-      - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && !PathPrefix(`/icons/`)"
       - "traefik.http.routers.n8n_ui.entrypoints=websecure"
       - "traefik.http.routers.n8n_ui.tls=true"
       - "traefik.http.routers.n8n_ui.tls.certresolver=le"
       - "traefik.http.routers.n8n_ui.service=n8n_ui"
       - "traefik.http.services.n8n_ui.loadbalancer.server.port=5678"
       - "traefik.http.routers.n8n_ui.middlewares=forward-auth-n8n@docker,n8n-secure@docker"
+
+      ############################################
+      # 🖼️ Router libre para íconos (/icons/)
+      ############################################
+      - "traefik.http.routers.n8n_icons.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/icons/`)"
+      - "traefik.http.routers.n8n_icons.entrypoints=websecure"
+      - "traefik.http.routers.n8n_icons.tls=true"
+      - "traefik.http.routers.n8n_icons.tls.certresolver=le"
+      - "traefik.http.routers.n8n_icons.service=n8n_ui"
 
       ############################################
       # 🚀 Webhook público controlado (/webhook-test)
@@ -210,7 +219,6 @@ services:
       - "traefik.http.routers.n8n_webhooktest.service=n8n_ui"
       # 👇 Podés aplicar headers también si querés seguridad en el webhook
       # - "traefik.http.routers.n8n_webhooktest.middlewares=n8n-secure@docker"
-
 
   n8n_webhook_1:
     image: n8nio/n8n:latest
