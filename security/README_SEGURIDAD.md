@@ -21,6 +21,7 @@ Este documento describe las medidas de **seguridad activa** y **auditoría autom
 - Banea automáticamente IPs con múltiples intentos fallidos
 - Estado actual:
   ```bash
+  sudo systemctl status fail2ban
   sudo fail2ban-client status sshd
   ```
 
