@@ -150,75 +150,70 @@ services:
       retries: 5
       start_period: 10s
 
+n8n_main:
+  image: n8nio/n8n:latest
+  container_name: n8n_main
+  restart: unless-stopped
+  env_file:
+    - ./repositories/n8n/.env
+  volumes:
+    - n8n_data_main:/home/node/.n8n
+  networks:
+    - leonobitech-net
+  depends_on:
+    postgres_n8n:
+      condition: service_healthy
+  labels:
+    - "traefik.enable=true"
 
-  n8n_main:
-    image: n8nio/n8n:latest
-    container_name: n8n_main
-    restart: unless-stopped
-    env_file:
-      - ./repositories/n8n/.env
-    volumes:
-      - n8n_data_main:/home/node/.n8n
-    networks:
-      - leonobitech-net
-    depends_on:
-      postgres_n8n:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=true"
+    # 🔐 Middleware de autenticación via core
+    - "traefik.http.middlewares.forward-auth-n8n.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
+    - "traefik.http.middlewares.forward-auth-n8n.forwardauth.trustForwardHeader=true"
+    - "traefik.http.middlewares.forward-auth-n8n.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
+    - "traefik.http.middlewares.forward-auth-n8n.forwardauth.authRequestHeaders=Cookie"
 
-      ############################################
-      # 🔐 Middleware que redirige autenticación a /security/verify-admin
-      ############################################
-      - "traefik.http.middlewares.forward-auth-n8n.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
-      - "traefik.http.middlewares.forward-auth-n8n.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.forward-auth-n8n.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
-      - "traefik.http.middlewares.forward-auth-n8n.forwardauth.authRequestHeaders=Cookie"
+    # 🛡️ Middleware de seguridad
+    - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
+    - "traefik.http.middlewares.n8n-secure.headers.forceSTSHeader=true"
+    - "traefik.http.middlewares.n8n-secure.headers.STSIncludeSubdomains=true"
+    - "traefik.http.middlewares.n8n-secure.headers.STSPreload=true"
+    - "traefik.http.middlewares.n8n-secure.headers.SSLHost=${DOMAIN_NAME}"
+    - "traefik.http.middlewares.n8n-secure.headers.browserXSSFilter=true"
+    - "traefik.http.middlewares.n8n-secure.headers.contentTypeNosniff=true"
+    - "traefik.http.middlewares.n8n-secure.headers.frameDeny=true"
+    - "traefik.http.middlewares.n8n-secure.headers.referrerPolicy=no-referrer"
+    - "traefik.http.middlewares.n8n-secure.headers.contentSecurityPolicy=script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io; style-src 'self' 'unsafe-inline'; img-src * data:; connect-src *; frame-ancestors 'self';"
 
-      ############################################
-      # 🛡️ Middleware: headers de seguridad para UI
-      ############################################
-      - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
-      - "traefik.http.middlewares.n8n-secure.headers.forceSTSHeader=true"
-      - "traefik.http.middlewares.n8n-secure.headers.STSIncludeSubdomains=true"
-      - "traefik.http.middlewares.n8n-secure.headers.STSPreload=true"
-      - "traefik.http.middlewares.n8n-secure.headers.SSLHost=${DOMAIN_NAME}"
-      - "traefik.http.middlewares.n8n-secure.headers.browserXSSFilter=true"
-      - "traefik.http.middlewares.n8n-secure.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.n8n-secure.headers.frameDeny=true"
-      - "traefik.http.middlewares.n8n-secure.headers.referrerPolicy=no-referrer"
-      - "traefik.http.middlewares.n8n-secure.headers.contentSecurityPolicy=script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io; style-src 'self' 'unsafe-inline'; img-src * data:; connect-src *; frame-ancestors 'self';"
+    # 🎯 Protege solo el ingreso inicial a la UI
+    - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && Path(`/`)"
+    - "traefik.http.routers.n8n_ui.entrypoints=websecure"
+    - "traefik.http.routers.n8n_ui.tls=true"
+    - "traefik.http.routers.n8n_ui.tls.certresolver=le"
+    - "traefik.http.routers.n8n_ui.service=n8n_ui"
+    - "traefik.http.routers.n8n_ui.middlewares=forward-auth-n8n@docker,n8n-secure@docker"
 
-      ############################################
-      # 🌐 Router principal de acceso UI n8n (excluye /icons/)
-      ############################################
-      - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && !PathPrefix(`/icons/`)"
-      - "traefik.http.routers.n8n_ui.entrypoints=websecure"
-      - "traefik.http.routers.n8n_ui.tls=true"
-      - "traefik.http.routers.n8n_ui.tls.certresolver=le"
-      - "traefik.http.routers.n8n_ui.service=n8n_ui"
-      - "traefik.http.services.n8n_ui.loadbalancer.server.port=5678"
-      - "traefik.http.routers.n8n_ui.middlewares=forward-auth-n8n@docker,n8n-secure@docker"
+    # 🚪 Resto del sistema libre pero seguro (sin forward-auth)
+    - "traefik.http.routers.n8n_rest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/rest/`, `/webhook/`, `/api/`, `/executions/`, `/workflows/`, `/js/`, `/css/`, `/fonts/`)"
+    - "traefik.http.routers.n8n_rest.entrypoints=websecure"
+    - "traefik.http.routers.n8n_rest.tls=true"
+    - "traefik.http.routers.n8n_rest.tls.certresolver=le"
+    - "traefik.http.routers.n8n_rest.service=n8n_ui"
+    - "traefik.http.routers.n8n_rest.middlewares=n8n-secure@docker"
 
-      ############################################
-      # 🖼️ Router libre para íconos (/icons/)
-      ############################################
-      - "traefik.http.routers.n8n_icons.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/icons/`)"
-      - "traefik.http.routers.n8n_icons.entrypoints=websecure"
-      - "traefik.http.routers.n8n_icons.tls=true"
-      - "traefik.http.routers.n8n_icons.tls.certresolver=le"
-      - "traefik.http.routers.n8n_icons.service=n8n_ui"
+    # 🖼️ Icons sin forward-auth
+    - "traefik.http.routers.n8n_icons.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/icons/`)"
+    - "traefik.http.routers.n8n_icons.entrypoints=websecure"
+    - "traefik.http.routers.n8n_icons.tls=true"
+    - "traefik.http.routers.n8n_icons.tls.certresolver=le"
+    - "traefik.http.routers.n8n_icons.service=n8n_ui"
 
-      ############################################
-      # 🚀 Webhook público controlado (/webhook-test)
-      ############################################
-      - "traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)"
-      - "traefik.http.routers.n8n_webhooktest.entrypoints=websecure"
-      - "traefik.http.routers.n8n_webhooktest.tls=true"
-      - "traefik.http.routers.n8n_webhooktest.tls.certresolver=le"
-      - "traefik.http.routers.n8n_webhooktest.service=n8n_ui"
-      # 👇 Podés aplicar headers también si querés seguridad en el webhook
-      # - "traefik.http.routers.n8n_webhooktest.middlewares=n8n-secure@docker"
+    # 🚀 Webhook público
+    - "traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)"
+    - "traefik.http.routers.n8n_webhooktest.entrypoints=websecure"
+    - "traefik.http.routers.n8n_webhooktest.tls=true"
+    - "traefik.http.routers.n8n_webhooktest.tls.certresolver=le"
+    - "traefik.http.routers.n8n_webhooktest.service=n8n_ui"
+
 
   n8n_webhook_1:
     image: n8nio/n8n:latest
