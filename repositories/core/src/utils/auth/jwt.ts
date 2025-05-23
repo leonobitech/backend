@@ -22,7 +22,8 @@ import {
 
 import {
   fifteenMinutesFromNow,
-  oneHourFromNow,
+  fiveMinutesFromNow,
+  //oneHourFromNow,
   thirtyDaysFromNow,
   thirtyMinutesFromNow,
 } from "@utils/date/date";
@@ -278,9 +279,16 @@ export const signToken = async (
 // ⏳ Calcula fecha de expiración dinámica por rol y tipo de token
 // *******************************************************************************************
 export const getExpirationDate = (role: UserRole, audience: Audience): Date => {
-  if (role === UserRole.Admin) {
+  /* if (role === UserRole.Admin) {
     return audience === Audience.Access
       ? oneHourFromNow()
+      : thirtyDaysFromNow();
+  } */
+
+  //REVIEW: Expiracion Temporal para Debugging de Admin
+  if (role === UserRole.Admin) {
+    return audience === Audience.Access
+      ? fiveMinutesFromNow()
       : thirtyDaysFromNow();
   }
 
