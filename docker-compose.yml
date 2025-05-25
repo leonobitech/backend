@@ -200,7 +200,7 @@ services:
       - "traefik.http.routers.n8n_ui.entrypoints=websecure"
       - "traefik.http.routers.n8n_ui.tls=true"
       - "traefik.http.routers.n8n_ui.tls.certresolver=le"
-      - "traefik.http.routers.n8n_ui.service=n8n_main"
+      - "traefik.http.routers.n8n_ui.service=n8n_main@docker"
       - "traefik.http.routers.n8n_ui.middlewares=forward-auth-n8n@docker,n8n-secure@docker"
 
       ############################################
@@ -210,7 +210,7 @@ services:
       - "traefik.http.routers.n8n_rest.entrypoints=websecure"
       - "traefik.http.routers.n8n_rest.tls=true"
       - "traefik.http.routers.n8n_rest.tls.certresolver=le"
-      - "traefik.http.routers.n8n_rest.service=n8n_main"
+      - "traefik.http.routers.n8n_rest.service=n8n_main@docker"
       - "traefik.http.routers.n8n_rest.middlewares=n8n-secure@docker"
 
       ############################################
@@ -220,7 +220,7 @@ services:
       - "traefik.http.routers.n8n_icons.entrypoints=websecure"
       - "traefik.http.routers.n8n_icons.tls=true"
       - "traefik.http.routers.n8n_icons.tls.certresolver=le"
-      - "traefik.http.routers.n8n_icons.service=n8n_main"
+      - "traefik.http.routers.n8n_icons.service=n8n_main@docker"
 
       ############################################
       # 🚀 Webhook-test (public)
@@ -229,7 +229,7 @@ services:
       - "traefik.http.routers.n8n_webhooktest.entrypoints=websecure"
       - "traefik.http.routers.n8n_webhooktest.tls=true"
       - "traefik.http.routers.n8n_webhooktest.tls.certresolver=le"
-      - "traefik.http.routers.n8n_webhooktest.service=n8n_main"
+      - "traefik.http.routers.n8n_webhooktest.service=n8n_main@docker"
 
 
   n8n_webhook_1:
@@ -275,9 +275,8 @@ services:
       - "traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)"
       - "traefik.http.routers.n8n_webhook.entrypoints=websecure"
       - "traefik.http.routers.n8n_webhook.tls.certresolver=le"
-      - "traefik.http.routers.n8n_webhook.service=n8n_webhook_1"
+      - "traefik.http.routers.n8n_webhook.service=n8n_webhook_1@docker"
       - "traefik.http.routers.n8n_webhook.middlewares=n8n-webhook-secure@docker"
-
 
   n8n_worker_1:
     image: n8nio/n8n:latest
