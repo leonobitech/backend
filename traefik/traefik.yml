@@ -35,7 +35,7 @@ certificatesResolvers:
     block-trackers:
       headers:
         contentSecurityPolicy: |-
-          default-src 'self' https://n8n.leonobitech.com;
+          default-src 'self';
           script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com;
           connect-src 'self' https://core.leonobitech.com https://challenges.cloudflare.com https://static.cloudflareinsights.com;
           img-src 'self' data:;
