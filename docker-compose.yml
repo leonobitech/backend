@@ -231,7 +231,6 @@ services:
       - "traefik.http.routers.n8n_webhooktest.tls.certresolver=le"
       - "traefik.http.routers.n8n_webhooktest.service=n8n_main@docker"
 
-
   n8n_webhook_1:
     image: n8nio/n8n:latest
     container_name: n8n_webhook_1
@@ -299,7 +298,6 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-
 
   redis_n8n:
     image: redis:latest
