@@ -167,7 +167,7 @@ services:
       - "traefik.enable=true"
 
       ############################################
-      # 🔐 Middleware de autenticación via core
+      # 🔐 Authentication via core
       ############################################
       - "traefik.http.middlewares.forward-auth-n8n.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
       - "traefik.http.middlewares.forward-auth-n8n.forwardauth.trustForwardHeader=true"
@@ -175,7 +175,7 @@ services:
       - "traefik.http.middlewares.forward-auth-n8n.forwardauth.authRequestHeaders=Cookie"
 
       ############################################
-      # 🛡️ Middleware de seguridad (n8n-secure)
+      # 🛡 Security headers (n8n-secure)
       ############################################
       - "traefik.http.middlewares.n8n-secure.headers.STSSeconds=315360000"
       - "traefik.http.middlewares.n8n-secure.headers.forceSTSHeader=true"
@@ -189,12 +189,12 @@ services:
       - "traefik.http.middlewares.n8n-secure.headers.contentSecurityPolicy=script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io; style-src 'self' 'unsafe-inline'; img-src * data:; connect-src *; frame-ancestors 'self';"
 
       ############################################
-      # ✅ Service principal para todos los routers de n8n_main
+      # ✅ Core service port
       ############################################
       - "traefik.http.services.n8n_main.loadbalancer.server.port=5678"
 
       ############################################
-      # 🌟 Router principal: protege solo el ingreso
+      # 🌟 UI router (protected)
       ############################################
       - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)"
       - "traefik.http.routers.n8n_ui.entrypoints=websecure"
@@ -204,7 +204,7 @@ services:
       - "traefik.http.routers.n8n_ui.middlewares=forward-auth-n8n@docker,n8n-secure@docker"
 
       ############################################
-      # 🚪 Recursos del sistema (rest, js, webhook...) sin forward-auth
+      # 🚪 API/webhook/assets (no auth)
       ############################################
       - "traefik.http.routers.n8n_rest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && (PathPrefix(`/rest/`) || PathPrefix(`/webhook/`) || PathPrefix(`/api/`) || PathPrefix(`/executions/`) || PathPrefix(`/workflows/`) || PathPrefix(`/js/`) || PathPrefix(`/css/`) || PathPrefix(`/fonts/`))"
       - "traefik.http.routers.n8n_rest.entrypoints=websecure"
@@ -214,7 +214,7 @@ services:
       - "traefik.http.routers.n8n_rest.middlewares=n8n-secure@docker"
 
       ############################################
-      # 🖼️ Icons sin forward-auth
+      # 🖼️ Icons (static, no auth)
       ############################################
       - "traefik.http.routers.n8n_icons.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/icons/`)"
       - "traefik.http.routers.n8n_icons.entrypoints=websecure"
@@ -223,13 +223,14 @@ services:
       - "traefik.http.routers.n8n_icons.service=n8n_main"
 
       ############################################
-      # 🚀 Webhook de test
+      # 🚀 Webhook-test (public)
       ############################################
       - "traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)"
       - "traefik.http.routers.n8n_webhooktest.entrypoints=websecure"
       - "traefik.http.routers.n8n_webhooktest.tls=true"
       - "traefik.http.routers.n8n_webhooktest.tls.certresolver=le"
       - "traefik.http.routers.n8n_webhooktest.service=n8n_main"
+
 
   n8n_webhook_1:
     image: n8nio/n8n:latest
@@ -256,7 +257,7 @@ services:
       - "traefik.enable=true"
 
       ############################################
-      # 🛡️ Middleware: seguridad para webhooks
+      # 🛡️ Security headers for webhooks
       ############################################
       - "traefik.http.middlewares.n8n-webhook-secure.headers.STSSeconds=315360000"
       - "traefik.http.middlewares.n8n-webhook-secure.headers.forceSTSHeader=true"
@@ -268,8 +269,9 @@ services:
       - "traefik.http.middlewares.n8n-webhook-secure.headers.referrerPolicy=no-referrer"
 
       ############################################
-      # 🌐 Router para /webhook (n8n_webhook_1)
+      # 🌐 Webhook router (public)
       ############################################
+      - "traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678"
       - "traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)"
       - "traefik.http.routers.n8n_webhook.entrypoints=websecure"
       - "traefik.http.routers.n8n_webhook.tls.certresolver=le"
