@@ -155,7 +155,7 @@ services:
     container_name: n8n_main
     restart: unless-stopped
     env_file:
-      - ./repositories/n8n/.env
+      - ./repositories/n8n_main/.env
     volumes:
       - n8n_data_main:/home/node/.n8n
     networks:
