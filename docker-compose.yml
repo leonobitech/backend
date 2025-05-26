@@ -509,7 +509,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
+      test: ["CMD", "curl", "-f", "http://localhost/api/"]
       interval: 15s
       timeout: 5s
       retries: 5
