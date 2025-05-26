@@ -370,20 +370,20 @@ services:
     env_file:
       - ./repositories/odoo/.env
     volumes:
-      - odoo_data:/var/lib/odoo
+      - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
+      - ./repositories/odoo/addons:/mnt/extra-addons
+      - ./repositories/odoo/odoo_data:/var/lib/odoo
     networks:
       - leonobitech-net
     depends_on:
       postgres_odoo:
         condition: service_healthy
-      traefik:
-        condition: service_started
     read_only: true
     tmpfs:
       - /tmp
+      - /var/lib/odoo/sessions
     security_opt:
       - no-new-privileges:true
-    command: --no-database-list
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8069"]
       interval: 15s
@@ -556,7 +556,6 @@ volumes:
   redis_data:
   postgres_data:
   odoo_postgres_data:
-  odoo_data:
   qdrant_data:
   qdrant_snapshots:
   baserow_postgres_data:
