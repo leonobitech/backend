@@ -449,6 +449,65 @@ services:
     healthcheck:
       disable: true
 
+  baserow:
+    image: baserow/baserow:latest
+    container_name: baserow
+    restart: unless-stopped
+    env_file:
+      - ./repositories/baserow/.env
+    networks:
+      - leonobitech-net
+    volumes:
+      - baserow_data:/baserow/data
+      - baserow_media:/baserow/media
+    depends_on:
+      traefik:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      - "traefik.enable=true"
+
+      ############################################
+      # 🔐 Middleware que redirige autenticación a /security/verify-admin
+      ############################################
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie"
+
+      ############################################
+      # 🛡️ Security headers (baserow-secure)
+      ############################################
+      - "traefik.http.middlewares.baserow-secure.headers.STSSeconds=315360000"
+      - "traefik.http.middlewares.baserow-secure.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.baserow-secure.headers.STSIncludeSubdomains=true"
+      - "traefik.http.middlewares.baserow-secure.headers.STSPreload=true"
+      - "traefik.http.middlewares.baserow-secure.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.baserow-secure.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.baserow-secure.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.baserow-secure.headers.frameDeny=true"
+      - "traefik.http.middlewares.baserow-secure.headers.referrerPolicy=no-referrer"
+      - "traefik.http.middlewares.baserow-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'self';"
+
+      ############################################
+      # 🌐 Router principal de Baserow
+      ############################################
+      - "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`)"
+      - "traefik.http.routers.baserow.entrypoints=websecure"
+      - "traefik.http.routers.baserow.tls.certresolver=le"
+      - "traefik.http.routers.baserow.service=baserow"
+      - "traefik.http.services.baserow.loadbalancer.server.port=80"
+
+      ############################################
+      # 📦 Middlewares aplicados al router Baserow
+      ############################################
+      - "traefik.http.routers.baserow.middlewares=forward-auth-baserow@docker,baserow-secure@docker"
+
+
 
 volumes:
   redis_core_data:
@@ -461,6 +520,8 @@ volumes:
   odoo_data:
   qdrant_data:
   qdrant_snapshots:
+  baserow_data:
+  baserow_media:
 
 networks:
   leonobitech-net:
