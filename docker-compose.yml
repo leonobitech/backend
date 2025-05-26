@@ -498,6 +498,7 @@ services:
       - ./repositories/baserow/.env
     volumes:
       - baserow_data:/baserow/data
+      - baserow_media:/baserow/media
     networks:
       - leonobitech-net
     depends_on:
@@ -561,6 +562,7 @@ volumes:
   baserow_postgres_data:
   baserow_redis_data:
   baserow_data:
+  baserow_media:
 
 networks:
   leonobitech-net:
