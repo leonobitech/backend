@@ -509,7 +509,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/api/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -523,7 +523,7 @@ services:
       - "traefik.http.middlewares.forward-auth-baserow.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
       - "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie,X-Forwarded-For"
 
       ############################################
       # 🛡️ Security headers (baserow-secure)
