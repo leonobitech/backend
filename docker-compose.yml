@@ -370,7 +370,7 @@ services:
     env_file:
       - ./repositories/odoo/.env
     volumes:
-      - backend_odoo_data:/var/lib/odoo
+      - odoo_data:/var/lib/odoo
     networks:
       - leonobitech-net
     depends_on:
@@ -556,7 +556,7 @@ volumes:
   redis_data:
   postgres_data:
   odoo_postgres_data:
-  backend_odoo_data:
+  odoo_data:
   qdrant_data:
   qdrant_snapshots:
   baserow_postgres_data:
