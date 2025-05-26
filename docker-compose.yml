@@ -504,7 +504,7 @@ services:
     depends_on:
       postgres_baserow:
         condition: service_healthy
-      traefik:
+      redis_baserow:
         condition: service_started
     security_opt:
       - no-new-privileges:true
