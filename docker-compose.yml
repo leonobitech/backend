@@ -449,18 +449,41 @@ services:
     healthcheck:
       disable: true
 
+  postgres_baserow:
+    image: postgres:latest
+    container_name: postgres_baserow
+    restart: unless-stopped
+    env_file:
+      - ./repositories/baserow/.env
+    volumes:
+      - baserow_postgres_data:/var/lib/postgresql/data
+    networks:
+      - leonobitech-net
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_BASEROW}", "-d", "${POSTGRES_DB_BASEROW}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   baserow:
     image: baserow/baserow:latest
     container_name: baserow
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
-    networks:
-      - leonobitech-net
     volumes:
       - baserow_data:/baserow/data
       - baserow_media:/baserow/media
+    networks:
+      - leonobitech-net
     depends_on:
+      postgres_baserow:
+        condition: service_healthy
       traefik:
         condition: service_started
     read_only: true
@@ -468,6 +491,12 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     labels:
       - "traefik.enable=true"
 
@@ -508,7 +537,6 @@ services:
       - "traefik.http.routers.baserow.middlewares=forward-auth-baserow@docker,baserow-secure@docker"
 
 
-
 volumes:
   redis_core_data:
   n8n_data_main:
@@ -522,6 +550,7 @@ volumes:
   qdrant_snapshots:
   baserow_data:
   baserow_media:
+  baserow_postgres_data:
 
 networks:
   leonobitech-net:
