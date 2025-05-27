@@ -1,22 +1,16 @@
 #!/bin/bash
 
-echo "🚀 Iniciando Baserow custom con 0.0.0.0 en gunicorn"
+echo "🚀 Iniciando Baserow custom con bind 0.0.0.0"
 
-# Iniciar el backend (gunicorn) en 0.0.0.0
-echo "🔑 Iniciando backend (gunicorn) en 0.0.0.0:8000"
-gunicorn --bind 0.0.0.0:8000 baserow.wsgi:application &
+# Forzar gunicorn a escuchar en 0.0.0.0:8000
+export GUNICORN_CMD_ARGS="--bind=0.0.0.0:8000"
 
-# Iniciar el frontend
-echo "🌐 Iniciando frontend"
-cd /baserow/web-frontend
-npm run build
-npm run serve &
-
-# Iniciar el worker (celery)
-echo "⚙️ Iniciando worker"
-cd /baserow/backend
-celery -A baserow worker --loglevel=INFO &
-
-# Mantener el contenedor en ejecución
-echo "✅ Todos los servicios iniciados. Esperando..."
-tail -f /dev/null
+# Verificar si se pasa el comando `start` (flujo principal)
+if [[ "$1" == "start" ]]; then
+  echo "🔑 Ejecutando Baserow con comando: start"
+  exec /baserow/docker-entrypoint.sh start
+else
+  # Si no es start, pasar cualquier otro comando a docker-entrypoint
+  echo "🔧 Ejecutando Baserow con comando: $@"
+  exec /baserow/docker-entrypoint.sh "$@"
+fi

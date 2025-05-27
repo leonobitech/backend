@@ -5,5 +5,7 @@ FROM baserow/baserow:1.33.3
 # El comando original es: gunicorn --bind 127.0.0.1:8000 baserow.wsgi:application
 
 COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
-CMD ["/start.sh"]
+ENTRYPOINT ["/start.sh"]
+CMD ["start"]
