@@ -489,13 +489,13 @@ services:
         start_period: 10s
 
   baserow:
+    image: baserow/baserow:1.33.3
     container_name: baserow
-    build:
-      context: ./repositories/baserow
-    image: leonobitech/baserow:v1.33.3
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
+    environment:
+    - GUNICORN_CMD_ARGS=--bind=0.0.0.0:8000
     volumes:
       - baserow_data:/baserow/data
       - baserow_media:/baserow/media
