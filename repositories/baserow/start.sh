@@ -1,25 +1,18 @@
-#!/bin/bash
+FROM baserow/baserow:1.33.3
 
-echo "🚀 Iniciando Baserow custom con bind 0.0.0.0"
+# Instala las herramientas necesarias
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
 
-# Forzar gunicorn a escuchar en 0.0.0.0:8000
-export GUNICORN_CMD_ARGS="--bind=0.0.0.0:8000"
+# Instala gunicorn y celery
+RUN pip3 install gunicorn celery
 
-# Iniciar el backend
-echo "🔑 Iniciando backend (gunicorn) en 0.0.0.0:8000"
-gunicorn --bind 0.0.0.0:8000 baserow.wsgi:application &
+# Copia tu script de inicio personalizado
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
-# Iniciar el frontend
-echo "🌐 Iniciando frontend"
-cd /baserow/web-frontend
-npm run build
-npm run start &
-
-# Iniciar el worker
-echo "⚙️ Iniciando worker"
-cd /baserow/backend
-celery -A baserow worker --loglevel=INFO &
-
-# Mantener el contenedor vivo
-echo "✅ Todos los servicios iniciados. Esperando..."
-tail -f /dev/null
+ENTRYPOINT ["/start.sh"]
+CMD ["start"]
