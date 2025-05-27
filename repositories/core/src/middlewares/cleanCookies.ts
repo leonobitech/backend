@@ -11,7 +11,13 @@ const forwardAuthExtras = [
   "frontend_lang",
   "session_id",
   "cids",
+  "baserow_dashboard_alert_closed",
+  "baserow_group_id",
+  "defaultViewId",
+  "i18n-language",
+  "user_session",
 ];
+("jwt_token");
 
 export default function cleanCookies(
   req: Request,

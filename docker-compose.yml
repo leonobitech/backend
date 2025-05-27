@@ -494,8 +494,6 @@ services:
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
-    environment:
-    - GUNICORN_CMD_ARGS=--bind=0.0.0.0:8000
     volumes:
       - baserow_data:/baserow/data
       - baserow_media:/baserow/media
@@ -545,7 +543,7 @@ services:
       ############################################
       # 📦 Middlewares aplicados al router Baserow
       ############################################
-      - "traefik.http.routers.baserow.middlewares=baserow-secure@docker"
+      - "traefik.http.routers.baserow.middlewares=forward-auth-baserow,baserow-secure@docker"
 
 volumes:
   redis_core_data:
