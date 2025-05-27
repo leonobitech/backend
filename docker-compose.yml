@@ -543,7 +543,8 @@ services:
       ############################################
       # 📦 Middlewares aplicados al router Baserow
       ############################################
-      - "traefik.http.routers.baserow.middlewares=forward-auth-baserow,baserow-secure@docker"
+      #- "traefik.http.routers.baserow.middlewares=forward-auth-baserow,baserow-secure@docker"
+      - "traefik.http.routers.baserow.middlewares=baserow-secure@docker"
 
 volumes:
   redis_core_data:
