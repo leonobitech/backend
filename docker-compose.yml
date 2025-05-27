@@ -494,6 +494,7 @@ services:
       context: ./repositories/baserow
     image: leonobitech/baserow:v1.33.3
     restart: unless-stopped
+    command: start
     env_file:
       - ./repositories/baserow/.env
     volumes:

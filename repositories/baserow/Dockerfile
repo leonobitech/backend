@@ -6,4 +6,4 @@ FROM baserow/baserow:1.33.3
 
 COPY start.sh /start.sh
 
-CMD ["/start.sh", "start"]
+CMD ["/start.sh"]
