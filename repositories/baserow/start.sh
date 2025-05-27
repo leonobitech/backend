@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#init command
 echo "🚀 Iniciando Baserow custom con bind 0.0.0.0"
 
 # Forzar gunicorn a escuchar en 0.0.0.0:8000
