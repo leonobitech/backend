@@ -1,9 +1,18 @@
-#!/bin/bash
+FROM baserow/baserow:1.33.3
 
-echo "🚀 Iniciando Baserow custom con bind 0.0.0.0"
+# Instala las herramientas necesarias
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
 
-# Forzar gunicorn a escuchar en 0.0.0.0:8000
-export GUNICORN_CMD_ARGS="--bind=0.0.0.0:8000"
+# Instala gunicorn y celery
+RUN pip3 install gunicorn celery
 
-echo "🔑 Ejecutando comando oficial: start"
-exec /baserow/docker/docker-entrypoint.sh start
+# Copia tu script de inicio personalizado
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+ENTRYPOINT ["/start.sh"]
+CMD ["start"]
