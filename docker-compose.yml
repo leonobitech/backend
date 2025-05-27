@@ -362,7 +362,6 @@ services:
       retries: 5
       start_period: 10s
 
-
   odoo:
     image: odoo:latest
     container_name: odoo
@@ -414,7 +413,6 @@ services:
       # - "traefik.http.middlewares.odoo-secure.headers.frameDeny=true"
       - "traefik.http.middlewares.odoo-secure.headers.referrerPolicy=no-referrer"
       - "traefik.http.middlewares.odoo-secure.headers.contentSecurityPolicy=script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src * data:; connect-src *; frame-ancestors 'self';"
-
 
       ############################################
       # 🌐 Router principal de Odoo
@@ -546,7 +544,6 @@ services:
       # 📦 Middlewares aplicados al router Baserow
       ############################################
       - "traefik.http.routers.baserow.middlewares=forward-auth-baserow@docker,baserow-secure@docker"
-
 
 volumes:
   redis_core_data:
