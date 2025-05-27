@@ -15,4 +15,8 @@ adminRouter.post("/odoo", (req, res) => {
   res.json({ url: "https://odoo.leonobitech.com" });
 });
 
+adminRouter.post("/baserow", (req, res) => {
+  res.json({ url: "https://br.leonobitech.com" });
+});
+
 export default adminRouter;
