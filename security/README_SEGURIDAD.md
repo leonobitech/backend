@@ -35,6 +35,30 @@ Este documento describe las medidas de **seguridad activa** y **auditoría autom
   443/tcp       ALLOW IN   Anywhere       # HTTPS
   ```
 
+
+## 🛡️ Bloquear IP en el firewall (UFW) para todo el servidor
+```bash
+sudo ufw deny from 193.32.162.184
+
+```
+
+## 🔥 Revisar si la IP quedo Bloqueada
+```bash
+sudo ufw status | grep 193.32.162.184
+
+```
+
+## 🛡️Bloquear en el servicio SSH (Fail2Ban)
+```bash
+sudo fail2ban-client set sshd banip 193.32.162.184
+
+```
+## 🔥 Revisar si la IP quedo Bloqueada en Fail2Ban (Temporal con bantime = 10min )
+```bash
+ssudo fail2ban-client status sshd
+
+```
+
 ## 📋 Script de Auditoría `vps-monitor`
 
 Monitorea:
