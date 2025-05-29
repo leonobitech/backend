@@ -16,18 +16,22 @@ securityRoutes.get(
   "/verify-admin",
   // 🐞 Debug básico
   (req, res, next) => {
-    /* console.log("=== DEBUG /security/verify-admin ===");
-    console.log("Headers:", {
-      cookie: req.headers.cookie,
+    console.log("=== DEBUG HEADERS /security/verify-admin ===");
+    console.log({
+      method: req.method,
+      path: req.originalUrl,
+      cookies: req.headers.cookie,
       host: req.headers.host,
       "user-agent": req.headers["user-agent"],
-    }); */
+      "x-forwarded-for": req.headers["x-forwarded-for"],
+      ip: req.ip,
+    });
     next();
   },
   authenticate,
   authorize(UserRole.Admin),
   (req, res) => {
-    //console.log("→ DEBUG: Usuario autenticado y autorizado como admin ✅");
+    console.log("→ DEBUG: Usuario autenticado y autorizado como admin ✅");
     res.status(HTTP_CODE.OK).send("✅ OK");
   }
 );
