@@ -8,7 +8,7 @@ const adminRouter = Router();
 adminRouter.get("/info", getAdminInfo);
 
 adminRouter.post("/n8n", (req, res) => {
-  res.redirect(302, "https://n8n.leonobitech.com");
+  res.json({ url: "https://n8n.leonobitech.com" });
 });
 
 adminRouter.post("/odoo", (req, res) => {
