@@ -502,7 +502,7 @@ services:
       postgres_baserow:
         condition: service_healthy
       redis_baserow:
-        condition: service_started
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
     labels:
