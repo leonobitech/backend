@@ -380,7 +380,6 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /var/lib/odoo/sessions
     security_opt:
       - no-new-privileges:true
     healthcheck:

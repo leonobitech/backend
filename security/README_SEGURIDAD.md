@@ -55,7 +55,7 @@ sudo fail2ban-client set sshd banip 193.32.162.184
 ```
 ## 🔥 Revisar si la IP quedo Bloqueada en Fail2Ban (Temporal con bantime = 10min )
 ```bash
-ssudo fail2ban-client status sshd
+sudo fail2ban-client status sshd
 
 ```
 

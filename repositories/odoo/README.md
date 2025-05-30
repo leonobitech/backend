@@ -16,6 +16,7 @@ repositories/odoo/
 ├── odoo_data/                  # Persistencia de datos críticos de Odoo (bind mount)
 │   ├── filestore/              # Archivos binarios de Odoo (adjuntos, imágenes)
 │   ├── sessions/ (tmpfs)       # Sesiones en memoria (tmpfs, no persiste)
+│   ├── logs/
 │   └── ...                     # Otros datos de Odoo
 └── README.md                   # Este archivo
 ```
