@@ -173,7 +173,7 @@ services:
       - "traefik.http.middlewares.forward-auth-n8n.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.forward-auth-n8n.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
       - "traefik.http.middlewares.forward-auth-n8n.forwardauth.authRequestHeaders=Cookie"
-      - "traefik.http.middlewares.auth.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
+      - "traefik.http.middlewares.forward-auth-n8n.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
 
       ############################################
       # 🛡 Security headers (n8n-secure)
