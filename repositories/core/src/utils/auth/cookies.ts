@@ -7,10 +7,10 @@ export const AUTH_COOKIE_PATH = "/";
 
 // 🧱 Configuración base para todas las cookies de autenticación
 const baseCookieOptions: CookieOptions = {
-  sameSite: "none", // ← ahora None para compartir entre subdominios
+  sameSite: "strict", // ✅ ← Seguridad CSRF OK
   httpOnly: true,
   secure: true,
-  domain: ".leonobitech.com", // ← dominio de nivel superior para todos los subdominios
+  domain: ".leonobitech.com", //  ✅ ← dominio para compartir entre subdominios las cookies
   path: AUTH_COOKIE_PATH,
 };
 

@@ -7,6 +7,7 @@ import { getErrorMessage } from "@utils/request/getErrorMessage";
 import {
   getAccessKey,
   getClientKey,
+  getClientMeta,
 } from "@utils/auth/getAccessKeysFromRequest";
 import { verifyToken } from "@utils/auth/jwt";
 import { Audience } from "@constants/audience";
@@ -32,7 +33,16 @@ const authenticate: RequestHandler = catchErrors(
 
     const accessKey = getAccessKey(req);
     const clientKey = getClientKey(req);
-    const meta = req.meta!;
+
+    const isForwardAuth = req.originalUrl.includes("/security/verify-admin");
+
+    let meta: any;
+    if (!isForwardAuth) {
+      meta = req.meta!;
+    } else {
+      const rawMeta = getClientMeta(req);
+      meta = rawMeta ? JSON.parse(decodeURIComponent(rawMeta)) : undefined;
+    }
 
     if (!accessKey || !clientKey) {
       logger.warn("🛑 Acceso denegado: Faltan cookies de autenticación", {
@@ -159,9 +169,9 @@ const authenticate: RequestHandler = catchErrors(
       }
 
       // 💡 Saltear verificación de clientKey si es Traefik (forward-auth)
-      const isForwardAuth = req.originalUrl.includes("/security/verify-admin");
+      //const isForwardAuth = req.originalUrl.includes("/security/verify-admin");
 
-      if (!isForwardAuth) {
+      /* if (!isForwardAuth) {
         const expectedClientKey = await generateClientKeyFromMeta(
           meta,
           tokenPayload.userId,
@@ -191,6 +201,27 @@ const authenticate: RequestHandler = catchErrors(
             sessionId: tokenPayload.sessionId,
             reason: "Request desde /security/verify-admin",
           }
+        );
+      } */
+
+      const expectedClientKey = await generateClientKeyFromMeta(
+        meta,
+        tokenPayload.userId,
+        tokenPayload.sessionId
+      );
+
+      if (clientKey !== expectedClientKey) {
+        await loggerSecurityEvent({
+          meta,
+          type: "client_key_mismatch",
+          userId: tokenPayload.userId,
+          sessionId: tokenPayload.sessionId,
+        });
+
+        throw new HttpException(
+          HTTP_CODE.UNAUTHORIZED,
+          "This token was not generated from this device or IP address.",
+          ERROR_CODE.INVALID_CLIENT_KEY
         );
       }
 
