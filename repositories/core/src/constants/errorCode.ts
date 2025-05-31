@@ -6,6 +6,7 @@ export const ERROR_CODE = {
   ACCESS_DENIED: "AccessDenied",
   ACCESS_TOKEN_REQUIRED: "AccesToekenRequired",
   ACCESS_KEYS_REQUIRED: "AccesKeysRequired",
+  META_CLIENT_REQUIRED: "MetaClientRequired",
   INVALID_CLIENT_KEY: "InvalidClientKey",
   CLIENT_KEY_REQUIRED: "ClientKeyRequired",
   FINGERPRINT_MISMATCH: "FingerprintMismatch",

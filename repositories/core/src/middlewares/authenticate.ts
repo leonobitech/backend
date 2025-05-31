@@ -34,14 +34,33 @@ const authenticate: RequestHandler = catchErrors(
     const accessKey = getAccessKey(req);
     const clientKey = getClientKey(req);
 
+    // 📍 Determinar si esta es una request de ForwardAuth de Traefik
     const isForwardAuth = req.originalUrl.includes("/security/verify-admin");
 
     let meta: any;
+
     if (!isForwardAuth) {
+      // 🌐 Request "directa" (desde el frontend al backend)
+      // El middleware `extractMeta` ya procesó la metadata completa
       meta = req.meta!;
     } else {
+      // 🚀 Request indirecta (de Traefik via ForwardAuth)
+      // Recuperamos la metadata cruda del cliente desde la cookie
       const rawMeta = getClientMeta(req);
+
+      // Si la cookie existe, la decodificamos y parseamos
       meta = rawMeta ? JSON.parse(decodeURIComponent(rawMeta)) : undefined;
+      console.log("Meta desde Traefik:", meta);
+
+      // 📌 Considera hacer validaciones adicionales aquí, por ejemplo:
+      if (!meta) {
+        throw new HttpException(
+          HTTP_CODE.UNAUTHORIZED,
+          getErrorMessage("META_REQUIRED", lang),
+          ERROR_CODE.META_CLIENT_REQUIRED,
+          [" cookie clientMeta faltante"]
+        );
+      }
     }
 
     if (!accessKey || !clientKey) {

@@ -41,6 +41,10 @@ export const ERROR_MESSAGES = {
     en: "Access keys required.",
     es: "Claves de Acceso requerido.",
   },
+  META_CLIENT_REQUIRED: {
+    en: "Meta Client required.",
+    es: "Cliente Meta requerido.",
+  },
   ACCESS_DENIED: {
     en: "You do not have permission to access this resource.",
     es: "No tienes permiso para acceder a este recurso.",
