@@ -16,6 +16,7 @@ const forwardAuthExtras = [
   "defaultViewId",
   "i18n-language",
   "user_session",
+  "clientMeta",
 ];
 ("jwt_token");
 
