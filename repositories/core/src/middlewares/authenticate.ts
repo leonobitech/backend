@@ -61,6 +61,11 @@ const authenticate: RequestHandler = catchErrors(
           [" cookie clientMeta faltante"]
         );
       }
+
+      // 🔧 Completar datos faltantes en el meta
+      meta.host = req.hostname;
+      meta.method = req.method;
+      meta.path = req.originalUrl;
     }
 
     if (!accessKey || !clientKey) {
