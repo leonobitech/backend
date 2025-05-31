@@ -115,6 +115,11 @@ const authenticate: RequestHandler = catchErrors(
 
       const { payload } = await verifyToken(result.tokens.accessToken, lang);
 
+      console.log("🍪 setAuthCookies ejecutado. Cookies seteadas:", {
+        accessKey: result.tokens.accessTokenId,
+        clientKey: result.tokens.hashedPublicKey,
+      });
+      // Actualizar cookies con nuevos tokens
       setAuthCookies({
         res,
         accessKey: result.tokens.accessTokenId,
