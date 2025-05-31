@@ -112,27 +112,14 @@ const authenticate: RequestHandler = catchErrors(
     // 🔁 Si el token fue refrescado desde DB, forzar regeneración
     if (refreshed) {
       const result = await refreshAccessTokenService(clientKey, meta, lang);
+
       const { payload } = await verifyToken(result.tokens.accessToken, lang);
 
-      const isFromForwardAuth = req.originalUrl.includes(
-        "/security/verify-admin"
-      );
-
-      if (isFromForwardAuth) {
-        // 🏹 Request viene de Traefik (ForwardAuth) → Set-Cookie headers para el navegador
-        const cookieString = [
-          `accessKey=${result.tokens.accessTokenId}; Domain=.leonobitech.com; Path=/; HttpOnly; Secure; SameSite=Strict`,
-          `clientKey=${result.tokens.hashedPublicKey}; Domain=.leonobitech.com; Path=/; HttpOnly; Secure; SameSite=Strict`,
-        ];
-        res.setHeader("Set-Cookie", cookieString);
-      } else {
-        // 🌐 Request normal → Setea las cookies en el response directamente
-        setAuthCookies({
-          res,
-          accessKey: result.tokens.accessTokenId,
-          clientKey: result.tokens.hashedPublicKey,
-        });
-      }
+      setAuthCookies({
+        res,
+        accessKey: result.tokens.accessTokenId,
+        clientKey: result.tokens.hashedPublicKey,
+      });
 
       if (
         payload.aud !== Audience.Access ||
