@@ -16,8 +16,7 @@ securityRoutes.get(
   "/verify-admin",
   (req, res, next) => {
     // 🐞 Debug básico
-    console.log("=== DEBUG HEADERS /security/verify-admin ===");
-    console.log({ cookies: req.headers.cookie });
+    //console.log("=== DEBUG HEADERS /security/verify-admin ===");
     /* console.log({
       method: req.method,
       path: req.originalUrl,
