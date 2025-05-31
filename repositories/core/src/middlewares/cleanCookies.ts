@@ -2,7 +2,12 @@ import { Request, Response, NextFunction } from "express";
 import { loggerAudit } from "@utils/logging/loggerAudit";
 
 // 🔐 Cookies siempre permitidas
-const baseAllowedCookies = ["accessKey", "clientKey", "sidebar:state"];
+const baseAllowedCookies = [
+  "accessKey",
+  "clientKey",
+  "sidebar:state",
+  "clientMeta",
+];
 
 // 🍪 Cookies necesarias para Traefik ForwardAuth (n8n, Odoo)
 const forwardAuthExtras = [
