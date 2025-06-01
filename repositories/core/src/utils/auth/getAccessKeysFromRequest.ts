@@ -72,12 +72,7 @@ export const getClientKey = (req: Request): string | undefined => {
  */
 export const getClientMeta = (req: any): ClientMeta | null => {
   try {
-    const cookieHeader = req.headers?.cookie || "";
-    const cookies = Object.fromEntries(
-      cookieHeader.split("; ").map((c: string) => c.split("="))
-    );
-    const raw = cookies.clientMeta;
-
+    const raw = req.cookies?.clientMeta;
     if (!raw) return null;
 
     const secret = process.env.CLIENT_META_KEY!;
@@ -85,6 +80,11 @@ export const getClientMeta = (req: any): ClientMeta | null => {
 
     const key = Buffer.from(secret, "hex");
     const [ivB64, tagB64, dataB64] = raw.split(":");
+
+    if (!ivB64 || !tagB64 || !dataB64) {
+      throw new Error("Malformed clientMeta cookie");
+    }
+
     const iv = Buffer.from(ivB64, "base64");
     const tag = Buffer.from(tagB64, "base64");
     const encrypted = Buffer.from(dataB64, "base64");
@@ -92,8 +92,9 @@ export const getClientMeta = (req: any): ClientMeta | null => {
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
 
-    let decrypted = decipher.update(encrypted); // FIX ✅
-    decrypted = Buffer.concat([decrypted, decipher.final()]); // FIX ✅
+    let decrypted = decipher.update(encrypted);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+
     const meta = JSON.parse(decrypted.toString("utf8")) as ClientMeta;
 
     // 🔧 Completar datos faltantes
