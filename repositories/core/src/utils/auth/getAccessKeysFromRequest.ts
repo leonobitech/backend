@@ -1,4 +1,23 @@
 import { Request } from "express";
+import { createDecipheriv } from "crypto";
+
+export type ClientMeta = {
+  deviceInfo: {
+    device: string;
+    os: string;
+    browser: string;
+  };
+  userAgent: string;
+  language: string;
+  platform: string;
+  timezone: string;
+  screenResolution: string;
+  label: string;
+  ipAddress: string;
+  host?: string;
+  method?: string;
+  path?: string;
+};
 
 /**
  * 🔑 Extrae la cookie `accessKey` del request.
@@ -51,6 +70,40 @@ export const getClientKey = (req: Request): string | undefined => {
  * generada en el frontend y luego enviada en el request. Debería estar asociada al dominio raíz
  * `.leonobitech.com` para funcionar en todos los subdominios.
  */
-export const getClientMeta = (req: Request): string | undefined => {
-  return req.cookies?.clientMeta;
+export const getClientMeta = (req: any): ClientMeta | null => {
+  try {
+    const cookieHeader = req.headers?.cookie || "";
+    const cookies = Object.fromEntries(
+      cookieHeader.split("; ").map((c: string) => c.split("="))
+    );
+    const raw = cookies.clientMeta;
+
+    if (!raw) return null;
+
+    const secret = process.env.CLIENT_META_KEY!;
+    if (!secret) throw new Error("Missing CLIENT_META_KEY");
+
+    const key = Buffer.from(secret, "hex");
+    const [ivB64, tagB64, dataB64] = raw.split(":");
+    const iv = Buffer.from(ivB64, "base64");
+    const tag = Buffer.from(tagB64, "base64");
+    const encrypted = Buffer.from(dataB64, "base64");
+
+    const decipher = createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+
+    let decrypted = decipher.update(encrypted); // FIX ✅
+    decrypted = Buffer.concat([decrypted, decipher.final()]); // FIX ✅
+    const meta = JSON.parse(decrypted.toString("utf8")) as ClientMeta;
+
+    // 🔧 Completar datos faltantes
+    meta.host = req.hostname;
+    meta.method = req.method;
+    meta.path = req.originalUrl;
+
+    return meta;
+  } catch (err) {
+    console.error("❌ Error al descifrar clientMeta:", err);
+    return null;
+  }
 };
