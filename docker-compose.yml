@@ -399,6 +399,7 @@ services:
       - "traefik.http.middlewares.forward-auth-odoo.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.forward-auth-odoo.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
       - "traefik.http.middlewares.forward-auth-odoo.forwardauth.authRequestHeaders=Cookie"
+      - "traefik.http.middlewares.forward-auth-odoo.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
       
       ############################################
       # 🛡️ Middleware: headers de seguridad Odoo (CSP corregido)
@@ -516,6 +517,7 @@ services:
       - "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
       - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie,X-Forwarded-For"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
 
       ############################################
       # 🛡️ Security headers (baserow-secure)
