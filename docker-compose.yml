@@ -497,15 +497,7 @@ services:
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
-    command: >
-      bash -c "
-        python3 backend/src/baserow/manage.py migrate &&
-        gunicorn \
-          --bind 0.0.0.0:8000 \
-          --workers 3 \
-          --worker-class uvicorn.workers.UvicornWorker \
-          backend.src.baserow.asgi:application
-      "
+    command: backend-cmd run
     volumes:
       - baserow_data:/baserow/data
       - baserow_media:/baserow/media
