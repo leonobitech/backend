@@ -490,8 +490,10 @@ services:
         start_period: 10s
 
   baserow:
-    image: baserow/baserow:1.33.3
     container_name: baserow
+    build:
+      context: ./repositories/baserow
+    image: leonobitech/baserow:v1.0
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
