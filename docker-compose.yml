@@ -513,11 +513,11 @@ services:
       ############################################
       # 🔐 Middleware que redirige autenticación a /security/verify-admin
       ############################################
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie,X-Forwarded-For"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie,X-Forwarded-For"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
 
       ############################################
       # 🛡️ Security headers (baserow-secure)
