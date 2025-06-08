@@ -507,7 +507,10 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
-    command: start
+    command: >
+      bash -c "python3 /baserow/baserow/manage.py migrate --noinput &&
+               python3 /baserow/baserow/manage.py collectstatic --noinput &&
+               python3 /baserow/baserow/manage.py runserver 0.0.0.0:8000"
     labels:
       - "traefik.enable=true"
 
