@@ -507,7 +507,6 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
-    command: gunicorn
     labels:
       - "traefik.enable=true"
 
