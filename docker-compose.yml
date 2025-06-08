@@ -507,7 +507,7 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
-    command: backend-cmd python backend/src/baserow/manage.py runserver 0.0.0.0:8000
+    command: start
     labels:
       - "traefik.enable=true"
 
