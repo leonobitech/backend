@@ -507,6 +507,10 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    command: >
+      bash -c "
+        python3 backend/src/baserow/manage.py migrate &&
+        gunicorn --bind 0.0.0.0:8000 baserow.config.asgi:application"
     labels:
       - "traefik.enable=true"
 
