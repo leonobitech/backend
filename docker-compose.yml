@@ -541,6 +541,11 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "/baserow/backend/docker/docker-entrypoint.sh celery-worker-healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   baserow_celery_beat:
     image: baserow/backend:latest
@@ -556,6 +561,11 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "/baserow/backend/docker/docker-entrypoint.sh celery-beat-healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   baserow:
     image: baserow/web-frontend:latest
