@@ -569,7 +569,7 @@ services:
 
   baserow:
     image: baserow/web-frontend:latest
-    container_name: baserow_web
+    container_name: baserow
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
