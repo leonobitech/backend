@@ -516,11 +516,11 @@ services:
       ############################################
       # 🔐 Middleware que redirige autenticación a /security/verify-admin
       ############################################
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie,X-Forwarded-For"
-      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie,X-Forwarded-For"
+      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
 
       ############################################
       # 🛡️ Security headers (baserow-secure)
@@ -539,15 +539,15 @@ services:
       ############################################
       # 🌐 Router principal de Baserow
       ############################################
-      - "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`)"
-      - "traefik.http.routers.baserow.entrypoints=websecure"
-      - "traefik.http.routers.baserow.tls.certresolver=le"
-      - "traefik.http.routers.baserow.service=baserow"
+      #- "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`)"
+      #- "traefik.http.routers.baserow.entrypoints=websecure"
+      #- "traefik.http.routers.baserow.tls.certresolver=le"
+      #- "traefik.http.routers.baserow.service=baserow"
 
       ############################################
       # 📦 Middlewares aplicados al router Baserow
       ############################################
-      - "traefik.http.routers.baserow.middlewares=forward-auth-baserow@docker,baserow-secure@docker"
+      #- "traefik.http.routers.baserow.middlewares=forward-auth-baserow@docker,baserow-secure@docker"
 
       ############################################
       # ⚙️ Router interno (sin auth, para n8n)
@@ -557,6 +557,7 @@ services:
       - "traefik.http.routers.baserow-internal.service=baserow"
       - "traefik.http.routers.baserow-internal.tls=false"
       - "traefik.http.services.baserow.loadbalancer.server.port=80"
+      - "traefik.http.routers.baserow.middlewares=baserow-secure@docker"
 
 volumes:
   redis_core_data:
