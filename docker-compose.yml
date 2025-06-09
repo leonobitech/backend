@@ -557,7 +557,7 @@ services:
       - "traefik.http.routers.baserow-internal.service=baserow"
       - "traefik.http.routers.baserow-internal.tls=false"
       - "traefik.http.services.baserow.loadbalancer.server.port=80"
-      - "traefik.http.routers.baserow.middlewares=baserow-secure@docker"
+      #- "traefik.http.routers.baserow.middlewares=baserow-secure@docker"
 
 volumes:
   redis_core_data:
