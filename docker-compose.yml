@@ -535,17 +535,10 @@ services:
       - ./repositories/baserow/.env
     networks:
       - leonobitech-net
-    command: celery -A baserow worker --concurrency=2 -l INFO
+    command: celery-worker
     depends_on:
       baserow_backend:
         condition: service_healthy
-    volumes:
-      - baserow_media:/baserow/media
-    healthcheck:
-      test: ["CMD-SHELL", "/baserow/backend/docker/docker-entrypoint.sh celery-worker-healthcheck"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     security_opt:
       - no-new-privileges:true
 
@@ -557,17 +550,10 @@ services:
       - ./repositories/baserow/.env
     networks:
       - leonobitech-net
-    command: celery -A baserow beat -l INFO
+    command: celery-beat
     depends_on:
       baserow_backend:
         condition: service_healthy
-    volumes:
-      - baserow_media:/baserow/media
-    healthcheck:
-      test: ["CMD-SHELL", "/baserow/backend/docker/docker-entrypoint.sh celery-beat-healthcheck"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     security_opt:
       - no-new-privileges:true
 
