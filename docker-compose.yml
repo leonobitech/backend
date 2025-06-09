@@ -161,6 +161,8 @@ services:
       - n8n_data_main:/home/node/.n8n
     networks:
       - leonobitech-net
+    extra_hosts:
+      - "baserow-api.local:172.18.0.2"
     depends_on:
       postgres_n8n:
         condition: service_healthy
