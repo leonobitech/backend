@@ -541,6 +541,11 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep 'celery' | grep -v grep"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   baserow_celery_beat:
     image: baserow/backend:latest
@@ -556,6 +561,11 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep 'celery' | grep -v grep"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   baserow:
     image: baserow/web-frontend:latest
