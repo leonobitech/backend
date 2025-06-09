@@ -10,7 +10,7 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.internal.address=:3002" 
+      - "--entrypoints.internal.address=:3002"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
@@ -161,8 +161,6 @@ services:
       - n8n_data_main:/home/node/.n8n
     networks:
       - leonobitech-net
-    extra_hosts:
-      - "baserow-api.local:172.18.0.2"
     depends_on:
       postgres_n8n:
         condition: service_healthy
@@ -543,7 +541,6 @@ services:
       - "traefik.http.routers.baserow.entrypoints=websecure"
       - "traefik.http.routers.baserow.tls.certresolver=le"
       - "traefik.http.routers.baserow.service=baserow"
-      - "traefik.http.services.baserow.loadbalancer.server.port=8000"
 
       ############################################
       # 📦 Middlewares aplicados al router Baserow
@@ -554,9 +551,10 @@ services:
       # ⚙️ Router interno (sin auth, para n8n)
       ############################################
       - "traefik.http.routers.baserow-internal.rule=Host(`baserow-api.local`)"
-      - "traefik.http.routers.baserow-internal.entrypoints=internal"
+      - "traefik.http.routers.baserow-internal.entrypoints=web"
       - "traefik.http.routers.baserow-internal.service=baserow"
       - "traefik.http.routers.baserow-internal.tls=false"
+      - "traefik.http.services.baserow.loadbalancer.server.port=80"
 
 volumes:
   redis_core_data:
