@@ -10,7 +10,6 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.internal.address=:3002"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
@@ -161,8 +160,6 @@ services:
       - n8n_data_main:/home/node/.n8n
     networks:
       - leonobitech-net
-    extra_hosts:
-      - "baserow-api.local:172.18.0.8"
     depends_on:
       postgres_n8n:
         condition: service_healthy
@@ -511,7 +508,7 @@ services:
     security_opt:
       - no-new-privileges:true
     labels:
-      - "traefik.enable=true"
+      - "traefik.enable=false"
 
       ############################################
       # 🔐 Middleware que redirige autenticación a /security/verify-admin
@@ -525,16 +522,16 @@ services:
       ############################################
       # 🛡️ Security headers (baserow-secure)
       ############################################
-      - "traefik.http.middlewares.baserow-secure.headers.STSSeconds=315360000"
-      - "traefik.http.middlewares.baserow-secure.headers.forceSTSHeader=true"
-      - "traefik.http.middlewares.baserow-secure.headers.STSIncludeSubdomains=true"
-      - "traefik.http.middlewares.baserow-secure.headers.STSPreload=true"
-      - "traefik.http.middlewares.baserow-secure.headers.SSLHost=${DOMAIN_NAME}"
-      - "traefik.http.middlewares.baserow-secure.headers.browserXSSFilter=true"
-      - "traefik.http.middlewares.baserow-secure.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.baserow-secure.headers.frameDeny=true"
-      - "traefik.http.middlewares.baserow-secure.headers.referrerPolicy=no-referrer"
-      - "traefik.http.middlewares.baserow-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://sentry.com; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com; img-src * data:; worker-src 'self' blob:; frame-ancestors 'self';"
+      #- "traefik.http.middlewares.baserow-secure.headers.STSSeconds=315360000"
+      #- "traefik.http.middlewares.baserow-secure.headers.forceSTSHeader=true"
+      #- "traefik.http.middlewares.baserow-secure.headers.STSIncludeSubdomains=true"
+      #- "traefik.http.middlewares.baserow-secure.headers.STSPreload=true"
+      #- "traefik.http.middlewares.baserow-secure.headers.SSLHost=${DOMAIN_NAME}"
+      #- "traefik.http.middlewares.baserow-secure.headers.browserXSSFilter=true"
+      #- "traefik.http.middlewares.baserow-secure.headers.contentTypeNosniff=true"
+      #- "traefik.http.middlewares.baserow-secure.headers.frameDeny=true"
+      #- "traefik.http.middlewares.baserow-secure.headers.referrerPolicy=no-referrer"
+      #- "traefik.http.middlewares.baserow-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://sentry.com; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com; img-src * data:; worker-src 'self' blob:; frame-ancestors 'self';"
 
       ############################################
       # 🌐 Router principal de Baserow
@@ -552,11 +549,11 @@ services:
       ############################################
       # ⚙️ Router interno (sin auth, para n8n)
       ############################################
-      - "traefik.http.routers.baserow-internal.rule=Host(`baserow-api.local`)"
-      - "traefik.http.routers.baserow-internal.entrypoints=web"
-      - "traefik.http.routers.baserow-internal.service=baserow"
-      - "traefik.http.routers.baserow-internal.tls=false"
-      - "traefik.http.services.baserow.loadbalancer.server.port=80"
+      #- "traefik.http.routers.baserow-internal.rule=Host(`baserow-api.local`)"
+      #- "traefik.http.routers.baserow-internal.entrypoints=web"
+      #- "traefik.http.routers.baserow-internal.service=baserow"
+      #- "traefik.http.routers.baserow-internal.tls=false"
+      #- "traefik.http.services.baserow.loadbalancer.server.port=80"
       #- "traefik.http.routers.baserow.middlewares=baserow-secure@docker"
 
 volumes:
