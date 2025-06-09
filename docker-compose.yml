@@ -505,6 +505,8 @@ services:
         condition: service_healthy
       redis_baserow:
         condition: service_healthy
+    ports:
+      - "3005:80"
     security_opt:
       - no-new-privileges:true
     labels:
