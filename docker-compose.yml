@@ -489,15 +489,69 @@ services:
         retries: 5
         start_period: 10s
 
-  baserow:
-    image: baserow/baserow:1.33.4
-    container_name: baserow
+  ############################################
+  # ✅ Baserow nuevo modelo desacoplado
+  ############################################
+  baserow_backend:
+    image: baserow/backend:latest
+    container_name: baserow_backend
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
+    networks:
+      - leonobitech-net
     volumes:
-      - baserow_data:/baserow/data
       - baserow_media:/baserow/media
+    depends_on:
+      postgres_baserow:
+        condition: service_healthy
+      redis_baserow:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/_health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  baserow_celery:
+    image: baserow/backend:latest
+    container_name: baserow_celery
+    restart: unless-stopped
+    env_file:
+      - ./repositories/baserow/.env
+    networks:
+      - leonobitech-net
+    command: celery -A baserow worker --concurrency=2 -l INFO
+    depends_on:
+      baserow_backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  baserow_celery_beat:
+    image: baserow/backend:latest
+    container_name: baserow_celery_beat
+    restart: unless-stopped
+    env_file:
+      - ./repositories/baserow/.env
+    networks:
+      - leonobitech-net
+    command: celery -A baserow beat -l INFO
+    depends_on:
+      baserow_backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  baserow:
+    image: baserow/web-frontend:latest
+    container_name: baserow_web
+    restart: unless-stopped
+    env_file:
+      - ./repositories/baserow/.env
     networks:
       - leonobitech-net
     depends_on:
@@ -505,8 +559,6 @@ services:
         condition: service_healthy
       redis_baserow:
         condition: service_healthy
-    ports:
-      - "3005:80"
     security_opt:
       - no-new-privileges:true
     labels:
@@ -515,48 +567,39 @@ services:
       ############################################
       # 🔐 Middleware que redirige autenticación a /security/verify-admin
       ############################################
-      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
-      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
-      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
-      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie,X-Forwarded-For"
-      #- "traefik.http.middlewares.forward-auth-baserow.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.address=https://core.leonobitech.com/security/verify-admin"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.authRequestHeaders=Cookie,X-Forwarded-For"
+      - "traefik.http.middlewares.forward-auth-baserow.forwardauth.addAuthCookiesToResponse=accessKey,clientKey"
 
       ############################################
       # 🛡️ Security headers (baserow-secure)
       ############################################
-      #- "traefik.http.middlewares.baserow-secure.headers.STSSeconds=315360000"
-      #- "traefik.http.middlewares.baserow-secure.headers.forceSTSHeader=true"
-      #- "traefik.http.middlewares.baserow-secure.headers.STSIncludeSubdomains=true"
-      #- "traefik.http.middlewares.baserow-secure.headers.STSPreload=true"
-      #- "traefik.http.middlewares.baserow-secure.headers.SSLHost=${DOMAIN_NAME}"
-      #- "traefik.http.middlewares.baserow-secure.headers.browserXSSFilter=true"
-      #- "traefik.http.middlewares.baserow-secure.headers.contentTypeNosniff=true"
-      #- "traefik.http.middlewares.baserow-secure.headers.frameDeny=true"
-      #- "traefik.http.middlewares.baserow-secure.headers.referrerPolicy=no-referrer"
-      #- "traefik.http.middlewares.baserow-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://sentry.com; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com; img-src * data:; worker-src 'self' blob:; frame-ancestors 'self';"
+      - "traefik.http.middlewares.baserow-secure.headers.STSSeconds=315360000"
+      - "traefik.http.middlewares.baserow-secure.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.baserow-secure.headers.STSIncludeSubdomains=true"
+      - "traefik.http.middlewares.baserow-secure.headers.STSPreload=true"
+      - "traefik.http.middlewares.baserow-secure.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.baserow-secure.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.baserow-secure.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.baserow-secure.headers.frameDeny=true"
+      - "traefik.http.middlewares.baserow-secure.headers.referrerPolicy=no-referrer"
+      - "traefik.http.middlewares.baserow-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://sentry.com; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com; img-src * data:; worker-src 'self' blob:; frame-ancestors 'self';"
 
       ############################################
       # 🌐 Router principal de Baserow
       ############################################
-      #- "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`)"
-      #- "traefik.http.routers.baserow.entrypoints=websecure"
-      #- "traefik.http.routers.baserow.tls.certresolver=le"
-      #- "traefik.http.routers.baserow.service=baserow"
+      - "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`)"
+      - "traefik.http.routers.baserow.entrypoints=websecure"
+      - "traefik.http.routers.baserow.tls.certresolver=le"
+      - "traefik.http.routers.baserow.service=baserow"
+      - "traefik.http.services.baserow.loadbalancer.server.port=80"
 
       ############################################
       # 📦 Middlewares aplicados al router Baserow
       ############################################
-      #- "traefik.http.routers.baserow.middlewares=forward-auth-baserow@docker,baserow-secure@docker"
-
-      ############################################
-      # ⚙️ Router interno (sin auth, para n8n)
-      ############################################
-      #- "traefik.http.routers.baserow-internal.rule=Host(`baserow-api.local`)"
-      #- "traefik.http.routers.baserow-internal.entrypoints=web"
-      #- "traefik.http.routers.baserow-internal.service=baserow"
-      #- "traefik.http.routers.baserow-internal.tls=false"
-      #- "traefik.http.services.baserow.loadbalancer.server.port=80"
-      #- "traefik.http.routers.baserow.middlewares=baserow-secure@docker"
+      - "traefik.http.routers.baserow.middlewares=forward-auth-baserow@docker,baserow-secure@docker"
 
 volumes:
   redis_core_data:
@@ -570,7 +613,6 @@ volumes:
   qdrant_snapshots:
   baserow_postgres_data:
   baserow_redis_data:
-  baserow_data:
   baserow_media:
 
 networks:
