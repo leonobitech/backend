@@ -539,13 +539,15 @@ services:
     depends_on:
       baserow_backend:
         condition: service_healthy
-    security_opt:
-      - no-new-privileges:true
+    volumes:
+      - baserow_media:/baserow/media
     healthcheck:
       test: ["CMD-SHELL", "/baserow/backend/docker/docker-entrypoint.sh celery-worker-healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 5
+    security_opt:
+      - no-new-privileges:true
 
   baserow_celery_beat:
     image: baserow/backend:latest
@@ -559,13 +561,15 @@ services:
     depends_on:
       baserow_backend:
         condition: service_healthy
-    security_opt:
-      - no-new-privileges:true
+    volumes:
+      - baserow_media:/baserow/media
     healthcheck:
       test: ["CMD-SHELL", "/baserow/backend/docker/docker-entrypoint.sh celery-beat-healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 5
+    security_opt:
+      - no-new-privileges:true
 
   baserow:
     image: baserow/web-frontend:latest
