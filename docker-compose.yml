@@ -162,7 +162,7 @@ services:
     networks:
       - leonobitech-net
     extra_hosts:
-      - "baserow-api.local:172.18.0.2"
+      - "baserow-api.local:172.18.0.8"
     depends_on:
       postgres_n8n:
         condition: service_healthy
