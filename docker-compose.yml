@@ -648,7 +648,7 @@ services:
       ############################################
       # 🌐 Router principal de Baserow
       ############################################
-      - "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`)"
+      - "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`) && !PathPrefix(`/media`)"
       - "traefik.http.routers.baserow.entrypoints=websecure"
       - "traefik.http.routers.baserow.tls.certresolver=le"
       - "traefik.http.routers.baserow.service=baserow"
