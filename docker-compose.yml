@@ -549,7 +549,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
+  celery_export_worker:
+    image: baserow/backend:latest
+    container_name: baserow_export_worker
+    restart: unless-stopped
+    env_file:
+      - ./repositories/baserow/.env
+    command: celery-exportworker
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - baserow_media:/baserow/media
+    networks:
+      - leonobitech-net
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep 'celery-exportworker' | grep -v grep"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      
   baserow_celery_beat:
     image: baserow/backend:latest
     container_name: baserow_celery_beat
