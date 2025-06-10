@@ -533,6 +533,12 @@ services:
       - "traefik.http.routers.baserow-ws.tls.certresolver=le"
       - "traefik.http.routers.baserow-ws.service=baserow-ws"
       - "traefik.http.services.baserow-ws.loadbalancer.server.port=8000"
+      # Agregar a baserow_backend:
+      - "traefik.http.routers.baserow-media.rule=Host(`br.leonobitech.com`) && PathPrefix(`/media`)"
+      - "traefik.http.routers.baserow-media.entrypoints=websecure"
+      - "traefik.http.routers.baserow-media.tls.certresolver=le"
+      - "traefik.http.routers.baserow-media.service=baserow-media"
+      - "traefik.http.services.baserow-media.loadbalancer.server.port=8000"
 
   baserow_celery:
     image: baserow/backend:latest
