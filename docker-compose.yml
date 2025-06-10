@@ -492,7 +492,7 @@ services:
 ############################################
   # ✅ Baserow nuevo modelo desacoplado
   ############################################
-  baserow_backend:
+  backend:
     image: baserow/backend:latest
     container_name: baserow_backend
     restart: unless-stopped
