@@ -605,6 +605,8 @@ services:
       - ./repositories/baserow/.env
     networks:
       - leonobitech-net
+    volumes:
+      - baserow_media:/baserow/media
     depends_on:
       postgres_baserow:
         condition: service_healthy
