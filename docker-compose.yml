@@ -527,6 +527,12 @@ services:
       - "traefik.http.routers.baserow-api.tls.certresolver=le"
       - "traefik.http.routers.baserow-api.service=baserow-api"
       - "traefik.http.services.baserow-api.loadbalancer.server.port=8000"
+      # WebSocket router para /ws/ (WebSocket support)
+      - "traefik.http.routers.baserow-ws.rule=Host(`br.leonobitech.com`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.baserow-ws.entrypoints=websecure"
+      - "traefik.http.routers.baserow-ws.tls.certresolver=le"
+      - "traefik.http.routers.baserow-ws.service=baserow-ws"
+      - "traefik.http.services.baserow-ws.loadbalancer.server.port=8000"
 
   baserow_celery:
     image: baserow/backend:latest
