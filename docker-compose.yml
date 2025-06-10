@@ -501,6 +501,7 @@ services:
     networks:
       - leonobitech-net
     volumes:
+      - baserow_data:/baserow/data
       - baserow_media:/baserow/media
     depends_on:
       postgres_baserow:
@@ -635,6 +636,7 @@ volumes:
   qdrant_snapshots:
   baserow_postgres_data:
   baserow_redis_data:
+  baserow_data:
   baserow_media:
 
 networks:
