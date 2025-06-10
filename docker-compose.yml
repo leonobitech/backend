@@ -538,7 +538,7 @@ services:
       - leonobitech-net
     command: celery-worker
     depends_on:
-      baserow_backend:
+      backend:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
@@ -558,7 +558,7 @@ services:
       - leonobitech-net
     command: celery-beat
     depends_on:
-      baserow_backend:
+      backend:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
