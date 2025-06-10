@@ -539,6 +539,7 @@ services:
       - "traefik.http.routers.baserow-media.tls.certresolver=le"
       - "traefik.http.routers.baserow-media.service=baserow-media"
       - "traefik.http.services.baserow-media.loadbalancer.server.port=8000"
+      - "traefik.http.routers.baserow-media.priority=100"
 
   baserow_celery:
     image: baserow/backend:latest
