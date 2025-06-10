@@ -535,7 +535,6 @@ services:
     env_file:
       - ./repositories/baserow/.env
     volumes:
-      - baserow_data:/baserow/data
       - baserow_media:/baserow/media
     networks:
       - leonobitech-net
@@ -557,6 +556,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
+    volumes:
+      - baserow_media:/baserow/media
     networks:
       - leonobitech-net
     command: celery-beat
