@@ -9,7 +9,7 @@ This setup provides a modular and production-ready deployment of Baserow, levera
 
 ### 🧠 Backend Architecture
 
-![Backend Architecture](https://raw.githubusercontent.com/leonobitech/assets/main/baserow-backend-architecture.png)
+![Backend Architecture](https://raw.githubusercontent.com/leonobitech/backend/refs/heads/main/repositories/baserow/baserow_architecture.png?token=GHSAT0AAAAAADCSMXCDVQE4T7UF375YAH7M2CJWPAQ)
 
 **Services:**
 - **`backend`**: Main Django backend running on Gunicorn. Handles all business logic and API endpoints.
@@ -23,7 +23,7 @@ This setup provides a modular and production-ready deployment of Baserow, levera
 
 ### 🖼️ Frontend + Reverse Proxy Architecture
 
-![Frontend + Proxy Architecture](https://raw.githubusercontent.com/leonobitech/assets/main/baserow-frontend-architecture.png)
+![Frontend + Proxy Architecture](https://raw.githubusercontent.com/leonobitech/backend/refs/heads/main/repositories/baserow/baserow_frontend_architecture.png?token=GHSAT0AAAAAADCSMXCDFOBAWYLO2O5GYKTI2CJWNUQ)
 
 **Services:**
 - **`baserow`**: The Nuxt-based frontend that serves the Baserow dashboard on port 3000.
