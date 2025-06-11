@@ -23,6 +23,7 @@ http:
         authResponseHeaders:
           - "X-User-Id"
           - "X-User-Role"
+          - "Set-Cookie"
         addAuthCookiesToResponse:
           - "accessKey"
           - "clientKey"
@@ -35,14 +36,13 @@ http:
         forceSTSHeader: true
         STSIncludeSubdomains: true
         STSPreload: true
-        SSLHost: "{{ env \"DOMAIN_NAME\" }}"
         browserXSSFilter: true
         contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: "no-referrer"
         contentSecurityPolicy: >-
           default-src 'self';
-          connect-src 'self' https://www.leonobitech.com https://core.leonobitech.com;
+          connect-src 'self' https://core.leonobitech.com https://www.leonobitech.com;
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline';
           img-src * data:;
