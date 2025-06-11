@@ -495,6 +495,7 @@ services:
   backend:
     image: baserow/backend:latest
     container_name: baserow_backend
+    user: "9999:9999" 
     restart: unless-stopped
     env_file:
       - ./repositories/baserow/.env
@@ -672,6 +673,7 @@ services:
       - "traefik.http.routers.baserow-media.rule=Host(`br.leonobitech.com`) && PathPrefix(`/media`)"
       - "traefik.http.routers.baserow-media.entrypoints=websecure"
       - "traefik.http.routers.baserow-media.tls.certresolver=le"
+      - "traefik.http.routers.baserow-media.service=baserow-media"
       - "traefik.http.services.baserow-media.loadbalancer.server.port=80"
 
 
