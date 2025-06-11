@@ -645,8 +645,7 @@ services:
       - "traefik.http.middlewares.baserow-secure.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.baserow-secure.headers.frameDeny=true"
       - "traefik.http.middlewares.baserow-secure.headers.referrerPolicy=no-referrer"
-      - "traefik.http.middlewares.baserow-secure.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://sentry.com; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com; img-src * data:; worker-src 'self' blob:; frame-ancestors 'self';"
-
+      - "traefik.http.middlewares.baserow-secure.headers.contentSecurityPolicy=script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://sentry.com; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com; img-src * data:; media-src 'self'; worker-src 'self' blob:; frame-ancestors 'self';"
       ############################################
       # 🌐 Router principal de Baserow
       ############################################
