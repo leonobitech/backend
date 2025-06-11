@@ -567,6 +567,8 @@ services:
     container_name: baserow_export_worker
     restart: unless-stopped
     command: celery-exportworker
+    networks:
+      - leonobitech-net
     env_file:
       - ./repositories/baserow/.env
     depends_on:
