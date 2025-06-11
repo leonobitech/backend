@@ -21,7 +21,6 @@ import {
 
 import { loggerEvent } from "@utils/logging/loggerEvent";
 import { loggerAudit } from "@utils/logging/loggerAudit";
-import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
 
 //==============================================================================
 // 📌 Obtener sesiones activas
