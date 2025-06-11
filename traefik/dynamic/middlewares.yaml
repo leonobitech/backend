@@ -36,17 +36,26 @@ http:
         forceSTSHeader: true
         STSIncludeSubdomains: true
         STSPreload: true
+        SSLHost: "{{ env \"DOMAIN_NAME\" }}"
         browserXSSFilter: true
         contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: "no-referrer"
         contentSecurityPolicy: >-
           default-src 'self';
-          connect-src 'self' https://core.leonobitech.com https://leonobitech.com;
-          script-src 'self' 'unsafe-inline' 'unsafe-eval';
-          style-src 'self' 'unsafe-inline';
-          img-src * data:;
-          frame-ancestors 'self';
+          script-src 'self';
+          style-src 'self';
+          object-src 'none';
+          frame-ancestors 'none';
+
+    block-trackers:
+      headers:
+        customResponseHeaders:
+          X-Blocked-By: "Traefik"
+        contentSecurityPolicy: >-
+          default-src 'self';
+          script-src 'self';
+          connect-src 'self';
     # -------------------------------------------------------------------------
     # 🛡️ Strict headers – ideal for APIs or services without frontend
     # No inline JS, no external connections
