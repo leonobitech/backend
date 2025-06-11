@@ -40,7 +40,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/acme.json:/letsencrypt/acme.json:rw
-      - ./traefik/middlewares.yaml:/etc/traefik/dynamic/middlewares.yaml:ro
+      - ./traefik/dynamic/middlewares.yaml:/etc/traefik/dynamic/middlewares.yaml:ro
 
     networks:
       - leonobitech-net
