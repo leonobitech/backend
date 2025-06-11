@@ -1,10 +1,12 @@
 # ./traefik/traefik.yml
+# 🌐 Traefik static configuration
+
 log:
-  level: INFO
+  level: INFO  # Cambiar a DEBUG si necesitás depurar
 
 api:
   dashboard: true
-  insecure: false
+  insecure: false  # ✅ Siempre en false en producción
 
 entryPoints:
   web:
@@ -13,13 +15,18 @@ entryPoints:
       redirections:
         entryPoint:
           to: websecure
-          scheme: https
+          scheme: https  # 🔐 Redirecciona todo HTTP a HTTPS
+
   websecure:
     address: ":443"
 
 providers:
   docker:
-    exposedByDefault: false
+    exposedByDefault: false  # ✅ Solo servicios con traefik.enable=true
+
+  file:
+    filename: /etc/traefik/dynamic/middlewares.yaml  # 🔧 Middlewares dinámicos
+    watch: true  # 🔄 Recarga automática al editar el archivo
 
 certificatesResolvers:
   le:
@@ -27,28 +34,4 @@ certificatesResolvers:
       email: ${SSL_EMAIL}
       storage: /acme.json
       httpChallenge:
-        entryPoint: web
-
-# 🛡️ Middleware de Seguridad HTTP – Protege el navegador del cliente con políticas CSP y headers anti-XSS
-# (Este bloque es opcional si los defines por labels en docker-compose)
-  middlewares:
-    block-trackers:
-      headers:
-        contentSecurityPolicy: |-
-          default-src 'self';
-          script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com;
-          connect-src 'self' https://core.leonobitech.com https://challenges.cloudflare.com https://static.cloudflareinsights.com;
-          img-src 'self' data: blob: https://br.leonobitech.com;
-          media-src 'self' https://br.leonobitech.com;
-          style-src 'self' 'unsafe-inline';
-          font-src 'self';
-          frame-ancestors 'none';
-          base-uri 'self';
-          object-src 'none';
-        browserXssFilter: true
-        contentTypeNosniff: true
-        referrerPolicy: "strict-origin-when-cross-origin"
-        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
-        xFrameOptions: "DENY"
-        customResponseHeaders:
-          X-Blocked-By: "Traefik"
+        entryPoint: web  # 🌍 Realiza desafío HTTP en puerto 80
