@@ -38,7 +38,8 @@ certificatesResolvers:
           default-src 'self';
           script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com;
           connect-src 'self' https://core.leonobitech.com https://challenges.cloudflare.com https://static.cloudflareinsights.com;
-          img-src 'self' data:;
+          img-src 'self' data: blob: https://br.leonobitech.com;
+          media-src 'self' https://br.leonobitech.com;
           style-src 'self' 'unsafe-inline';
           font-src 'self';
           frame-ancestors 'none';
