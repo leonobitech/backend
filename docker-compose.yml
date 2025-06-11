@@ -563,7 +563,7 @@ services:
       timeout: 10s
       retries: 3
   celery_export_worker:
-    image: baserow/backend:1.33.4
+    image: baserow/backend:latest
     container_name: baserow_export_worker
     restart: unless-stopped
     command: celery-exportworker
