@@ -42,7 +42,7 @@ http:
         referrerPolicy: "no-referrer"
         contentSecurityPolicy: >-
           default-src 'self';
-          connect-src 'self' https://core.leonobitech.com https://www.leonobitech.com;
+          connect-src 'self' https://core.leonobitech.com https://leonobitech.com;
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline';
           img-src * data:;
