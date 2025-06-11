@@ -664,7 +664,7 @@ services:
     image: nginx:alpine
     container_name: baserow_media_server
     volumes:
-      - baserow_media:/media:ro
+      - baserow_media:/baserow/media:ro
       - ./nginx/media.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - leonobitech-net
@@ -675,6 +675,7 @@ services:
       - "traefik.http.routers.baserow-media.tls.certresolver=le"
       - "traefik.http.routers.baserow-media.service=baserow-media"
       - "traefik.http.services.baserow-media.loadbalancer.server.port=80"
+      - "traefik.docker.network=leonobitech-net"
 
 
 volumes:
