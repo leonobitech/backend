@@ -31,29 +31,29 @@ http:
     # 🔐 CSP personalizada para Core – permite credenciales desde frontend
     # -------------------------------------------------------------------------
     core-secure:
-  headers:
-    STSSeconds: 315360000                       # 10 años de HSTS
-    forceSTSHeader: true
-    STSIncludeSubdomains: true
-    STSPreload: true
-    SSLHost: "{{ env \"DOMAIN_NAME\" }}"        # Solo aplica si usás redirect host
-    browserXSSFilter: true
-    contentTypeNosniff: true
-    frameDeny: true
-    referrerPolicy: strict-origin-when-cross-origin
-    permissionsPolicy: >-
-      geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
-    customResponseHeaders:
-      X-Frame-Options: "DENY"
-      X-Content-Type-Options: "nosniff"
-      X-XSS-Protection: "1; mode=block"
-    contentSecurityPolicy: >-
-      default-src 'self';
-      script-src 'self';
-      style-src 'self';
-      connect-src 'self' https://core.leonobitech.com https://www.leonobitech.com;
-      img-src 'self' data:;
-      frame-ancestors 'none';
+      headers:
+        STSSeconds: 315360000                       # 10 años de HSTS
+        forceSTSHeader: true
+        STSIncludeSubdomains: true
+        STSPreload: true
+        SSLHost: "{{ env \"DOMAIN_NAME\" }}"        # Solo aplica si usás redirect host
+        browserXSSFilter: true
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: strict-origin-when-cross-origin
+        permissionsPolicy: >-
+          geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
+        customResponseHeaders:
+          X-Frame-Options: "DENY"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+        contentSecurityPolicy: >-
+          default-src 'self';
+          script-src 'self';
+          style-src 'self';
+          connect-src 'self' https://core.leonobitech.com https://www.leonobitech.com;
+          img-src 'self' data:;
+          frame-ancestors 'none';
     # -------------------------------------------------------------------------
     # 🛡️ Strict headers – ideal for APIs or services without frontend
     # No inline JS, no external connections
