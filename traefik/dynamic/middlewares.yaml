@@ -16,7 +16,6 @@ http:
         middlewares:
           - core-auth
           - core-secure
-          - block-trackers
 
     n8n-protected:
       chain:
