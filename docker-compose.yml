@@ -588,7 +588,7 @@ services:
       - "traefik.http.routers.baserow-api.entrypoints=websecure"
       - "traefik.http.routers.baserow-api.tls.certresolver=le"
       - "traefik.http.routers.baserow-api.service=baserow-api"
-      - "traefik.http.routers.baserow-api.middlewares=secure-strict@file"
+      - "traefik.http.routers.baserow-api.middlewares=secure-strict@file, block-trackers@file"
       - "traefik.http.services.baserow-api.loadbalancer.server.port=8000"
 
       #########################################
