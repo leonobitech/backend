@@ -67,7 +67,7 @@ http:
           style-src 'self' 'unsafe-inline';
           connect-src 'self' https://core.leonobitech.com https://www.leonobitech.com;
           img-src 'self' data:;
-          frame-ancestors 'none';
+          frame-ancestors 'self';
     # -------------------------------------------------------------------------
     # 🛡️ Strict headers – ideal for APIs or services without frontend
     # No inline JS, no external connections
