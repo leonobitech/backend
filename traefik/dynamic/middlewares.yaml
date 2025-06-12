@@ -10,23 +10,6 @@
 http:
   middlewares:
 
-    # 🔐 Encadenado para proteger servicios internos
-    core-protected:
-      chain:
-        middlewares:
-          - core-secure
-
-    n8n-protected:
-      chain:
-        middlewares:
-          - core-auth
-          - secure-relaxed
-
-    media-public:
-      chain:
-        middlewares:
-          - secure-basic
-          - block-trackers
     # -------------------------------------------------------------------------
     # 🔐 Shared ForwardAuth – delegates auth to Core microservice
     # -------------------------------------------------------------------------

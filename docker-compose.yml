@@ -147,7 +147,7 @@ services:
       #########################################
       # 🧩 Middlewares globales aplicados al router
       #########################################
-      - "traefik.http.routers.core.middlewares=core-protected@file"
+      - "traefik.http.routers.core.middlewares=core-secure@file, core-auth@file, block-trackers@file"
 
 
   n8n_main:
@@ -184,7 +184,7 @@ services:
       - "traefik.http.routers.n8n_ui.entrypoints=websecure"
       - "traefik.http.routers.n8n_ui.tls.certresolver=le"
       - "traefik.http.routers.n8n_ui.service=n8n_main@docker"
-      - "traefik.http.routers.n8n_ui.middlewares=n8n-protected@file"
+      - "traefik.http.routers.n8n_ui.middlewares=core-auth@file, secure-relaxed@file"
 
       #########################################
       # 🔧 API / Webhooks / Assets (públicos pero con headers seguros)
@@ -770,7 +770,7 @@ services:
       - "traefik.http.routers.baserow-media.entrypoints=websecure"
       - "traefik.http.routers.baserow-media.tls.certresolver=le"
       - "traefik.http.routers.baserow-media.service=baserow-media"
-      - "traefik.http.routers.baserow-media.middlewares=secure-basic@file"
+      - "traefik.http.routers.baserow-media.middlewares=secure-basic@file, block-trackers@file"
 
       #########################################
       # 🔁 Servicio expuesto en el puerto estándar de Nginx
