@@ -50,20 +50,27 @@ http:
     # -------------------------------------------------------------------------
     core-secure:
       headers:
-        STSSeconds: 315360000                       # 10 años de HSTS
+        STSSeconds: 315360000
         forceSTSHeader: true
         STSIncludeSubdomains: true
         STSPreload: true
-        SSLHost: "leonobitech.com"        # Solo aplica si usás redirect host
+        SSLHost: "leonobitech.com"
         browserXSSFilter: true
+        contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: strict-origin-when-cross-origin
+        permissionsPolicy: >-
+          geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
+        customResponseHeaders:
+          X-Frame-Options: "DENY"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
         contentSecurityPolicy: >-
           default-src 'self';
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline';
-          connect-src *;
-          img-src * data:;
+          connect-src 'self' https://*.leonobitech.com blob: data:;
+          img-src 'self' data:;
           frame-ancestors 'self';
     # -------------------------------------------------------------------------
     # 🛡️ Strict headers – ideal for APIs or services without frontend
