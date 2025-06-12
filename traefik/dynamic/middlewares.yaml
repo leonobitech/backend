@@ -54,7 +54,7 @@ http:
         forceSTSHeader: true
         STSIncludeSubdomains: true
         STSPreload: true
-        SSLHost: "{{ env \"DOMAIN_NAME\" }}"        # Solo aplica si usás redirect host
+        SSLHost: "leonobitech.com"        # Solo aplica si usás redirect host
         browserXSSFilter: true
         contentTypeNosniff: true
         frameDeny: true
@@ -82,7 +82,7 @@ http:
         forceSTSHeader: true
         STSIncludeSubdomains: true
         STSPreload: true
-        SSLHost: "{{ env \"DOMAIN_NAME\" }}"
+        SSLHost: "leonobitech.com"
         browserXSSFilter: true
         contentTypeNosniff: true
         frameDeny: true
@@ -99,7 +99,7 @@ http:
         forceSTSHeader: true
         STSIncludeSubdomains: true
         STSPreload: true
-        SSLHost: "{{ env \"DOMAIN_NAME\" }}"
+        SSLHost: "leonobitech.com"
         browserXSSFilter: true
         contentTypeNosniff: true
         frameDeny: true
@@ -120,7 +120,7 @@ http:
         forceSTSHeader: true
         STSIncludeSubdomains: true
         STSPreload: true
-        SSLHost: "{{ env \"DOMAIN_NAME\" }}"
+        SSLHost: "leonobitech.com"
         browserXSSFilter: true
         contentTypeNosniff: true
         frameDeny: true
