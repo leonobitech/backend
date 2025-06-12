@@ -67,8 +67,8 @@ http:
           X-XSS-Protection: "1; mode=block"
         contentSecurityPolicy: >-
           default-src 'self';
-          script-src 'self';
-          style-src 'self';
+          script-src 'self' 'unsafe-inline' 'unsafe-eval';
+          style-src 'self' 'unsafe-inline';
           connect-src 'self' https://core.leonobitech.com https://www.leonobitech.com;
           img-src 'self' data:;
           frame-ancestors 'none';
