@@ -58,8 +58,6 @@ http:
         browserXSSFilter: true
         frameDeny: true
         referrerPolicy: strict-origin-when-cross-origin
-        permissionsPolicy: >-
-          geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
         contentSecurityPolicy: >-
           default-src 'self';
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
