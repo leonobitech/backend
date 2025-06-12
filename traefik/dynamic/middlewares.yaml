@@ -56,7 +56,6 @@ http:
         STSPreload: true
         SSLHost: "leonobitech.com"        # Solo aplica si usás redirect host
         browserXSSFilter: true
-        contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: strict-origin-when-cross-origin
         permissionsPolicy: >-
