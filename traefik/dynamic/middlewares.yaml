@@ -61,10 +61,6 @@ http:
         referrerPolicy: strict-origin-when-cross-origin
         permissionsPolicy: >-
           geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
-        customResponseHeaders:
-          X-Frame-Options: "DENY"
-          X-Content-Type-Options: "nosniff"
-          X-XSS-Protection: "1; mode=block"
         contentSecurityPolicy: >-
           default-src 'self';
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
