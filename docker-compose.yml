@@ -147,7 +147,7 @@ services:
       #########################################
       # 🧩 Middlewares globales aplicados al router
       #########################################
-      - "traefik.http.routers.core.middlewares=core-secure@file"
+      - "traefik.http.routers.core.middlewares=core-secure@file, block-trackers@file"
 
 
   n8n_main:
