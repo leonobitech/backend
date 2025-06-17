@@ -395,6 +395,11 @@ services:
 
     env_file:
       - ./repositories/odoo/.env
+    
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER_ODOO}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_ODOO}
+      - POSTGRES_DB=${POSTGRES_DB_ODOO}
 
     volumes:
       - odoo_postgres_data:/var/lib/postgresql/data
@@ -507,6 +512,11 @@ services:
 
     env_file:
       - ./repositories/baserow/.env
+    
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER_BR}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_BR}
+      - POSTGRES_DB=${POSTGRES_DB_BR}
 
     volumes:
       - baserow_postgres_data:/var/lib/postgresql/data
@@ -833,6 +843,11 @@ services:
 
     env_file:
       - ./repositories/chatwoot/.env
+
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER_CW}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
+      - POSTGRES_DB=${POSTGRES_DB_CW}
 
     volumes:
       - chatwoot_postgres_data:/var/lib/postgresql/data
