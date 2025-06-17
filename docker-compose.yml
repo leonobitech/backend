@@ -364,7 +364,7 @@ services:
       - ./repositories/n8n/.env
 
     volumes:
-      - postgres_n8n_data:/var/lib/postgresql/data
+      - n8n_postgres_data:/var/lib/postgresql/data
 
     tmpfs:
       - /tmp
@@ -373,7 +373,7 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_N8N}", "-d", "${POSTGRES_DB_N8N}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -891,7 +891,7 @@ volumes:
   redis_chatwoot_data:     # Redis exclusivo para Chatwoot
 
   # 🟢 PostgreSQL
-  postgres_n8n_data:       # Base de datos de n8n
+  n8n_postgres_data:       # Base de datos de n8n
   odoo_postgres_data:      # Base de datos de Odoo
   baserow_postgres_data:   # Base de datos de Baserow
   chatwoot_postgres_data:  # Base de datos de Chatwoot
