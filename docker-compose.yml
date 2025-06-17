@@ -362,11 +362,6 @@ services:
 
     env_file:
       - ./repositories/n8n/.env
-    
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER_N8N}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_N8N}
-      - POSTGRES_DB=${POSTGRES_DB_N8N}
 
     volumes:
       - n8n_postgres_data:/var/lib/postgresql/data
