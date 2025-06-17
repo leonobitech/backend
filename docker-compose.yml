@@ -785,15 +785,116 @@ services:
       - "traefik.docker.network=leonobitech-net"
 
 
+  redis_chatwoot:
+    image: redis:latest
+    container_name: redis_chatwoot
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/chatwoot/.env
+
+    command: >
+      redis-server
+      --requirepass ${REDIS_CHATWOOT_PASSWORD}
+      --databases ${REDIS_CHATWOOT_DATABASES}
+
+    volumes:
+      - redis_chatwoot_data:/data
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_CHATWOOT_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+
+  postgres_chatwoot:
+    image: postgres:latest
+    container_name: postgres_chatwoot
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    tmpfs:
+      - /tmp
+
+    env_file:
+      - ./repositories/chatwoot/.env
+
+    volumes:
+      - chatwoot_postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_CHATWOOT_USER}", "-d", "${POSTGRES_CHATWOOT_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+
+  chatwoot:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/chatwoot/.env
+
+    command: >
+      sh -c "rm -f tmp/pids/server.pid &&
+            bundle exec rails db:chatwoot_prepare &&
+            bundle exec rails s -b 0.0.0.0 -p 3000"
+
+    volumes:
+      - chatwoot_data:/app/storage
+
+    depends_on:
+      - redis_chatwoot
+      - postgres_chatwoot
+
+    networks:
+      - leonobitech-net
+
+    labels:
+      - "traefik.enable=true"
+
+      # Ruteo principal
+      - "traefik.http.routers.chatwoot.rule=Host(`chat.leonobitech.com`)"
+      - "traefik.http.routers.chatwoot.entrypoints=websecure"
+      - "traefik.http.routers.chatwoot.tls.certresolver=le"
+
+      # Servicio interno
+      - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
+
+      # Middlewares aplicados
+      - "traefik.http.routers.chatwoot.middlewares=secure-relaxed@file,core-secure@file"
+
+
 volumes:
   # 🔴 Redis
   redis_core_data:         # Almacena los datos persistentes del Redis del Core
   redis_n8n_data:          # Redis exclusivo para el ecosistema de n8n
+  redis_chatwoot_data:     # Redis exclusivo para Chatwoot
 
   # 🟢 PostgreSQL
   postgres_n8n_data:       # Base de datos de n8n
   odoo_postgres_data:      # Base de datos de Odoo
   baserow_postgres_data:   # Base de datos de Baserow
+  chatwoot_postgres_data:  # Base de datos de Chatwoot
 
   # 🔵 Qdrant (vector search)
   qdrant_data:             # Almacenamiento principal de Qdrant
@@ -809,6 +910,9 @@ volumes:
   baserow_data:            # Datos internos de Baserow (keys, tokens, config)
   baserow_media:           # Archivos subidos por usuarios y exportaciones
   baserow_redis_data:      # Redis de Baserow (caching, async)
+
+  # 🟣 Chatwoot
+  chatwoot_data:           # Datos internos de Chatwoot (keys, tokens, config)
 
 
 networks:
