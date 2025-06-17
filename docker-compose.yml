@@ -836,7 +836,7 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_CHATWOOT_USER}", "-d", "${POSTGRES_CHATWOOT_DB}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
