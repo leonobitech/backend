@@ -510,7 +510,7 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_CW}", "-d", "${POSTGRES_DB_CW}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -836,7 +836,7 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_CW}", "-d", "${POSTGRES_DB_CW}"]
       interval: 10s
       timeout: 5s
       retries: 5
