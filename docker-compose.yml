@@ -439,6 +439,7 @@ services:
       - ./repositories/odoo/addons:/mnt/extra-addons
       - ./repositories/odoo/odoo_data:/var/lib/odoo
       - ./repositories/odoo/fonts:/tmp/odoo-fonts:rw
+      - ./repositories/odoo/fonts/urw-base35-fonts-master:/mnt/fonts
 
     networks:
       - leonobitech-net
