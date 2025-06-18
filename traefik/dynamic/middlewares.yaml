@@ -116,3 +116,68 @@ http:
         customResponseHeaders:
           X-Blocked-By: "Traefik"
         contentSecurityPolicy: "default-src 'self'; script-src 'self'; connect-src 'self';"
+
+    # -------------------------------------------------------------------------
+    # 🧩 secure-odoo – Middleware especial para frontend de Odoo
+    # -------------------------------------------------------------------------
+    # Diseñado para permitir el funcionamiento completo del frontend de Odoo:
+    # - Permite inline JS y eval por dependencias internas del core
+    # - Desbloquea fuentes personalizadas e íconos (font-src, img-src)
+    # - Habilita iframes internos necesarios para ciertas vistas
+    # - Aplica headers de seguridad avanzados sin romper UI
+    # - Pensado para trabajar junto a core-auth@file como protección principal
+    # -------------------------------------------------------------------------
+    secure-odoo:
+      headers:
+        STSSeconds: 315360000
+        forceSTSHeader: true
+        STSIncludeSubdomains: true
+        STSPreload: true
+        SSLHost: "leonobitech.com"
+        browserXSSFilter: true
+        contentTypeNosniff: true
+        frameDeny: false  # Odoo usa iframes internamente
+        referrerPolicy: strict-origin-when-cross-origin
+        permissionsPolicy: >-
+          geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"  # permite iframes desde el mismo dominio
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+        contentSecurityPolicy: >-
+          default-src 'self';
+          script-src 'self' 'unsafe-inline' 'unsafe-eval';
+          style-src 'self' 'unsafe-inline';
+          font-src 'self' data:;
+          img-src * data: blob:;
+          connect-src * blob:;
+          frame-ancestors 'self';
+
+    # -------------------------------------------------------------------------
+    # 🗂️ odoo-media – Headers para archivos y contenido estático/descargable
+    # -------------------------------------------------------------------------
+    # Pensado para rutas como:
+    # - /web/content
+    # - /web/image
+    # - /web/binary/*
+    # - /media (si se usa)
+    # Aplica headers de seguridad sin bloquear Content-Disposition,
+    # ni tipos de archivo, ni imágenes externas
+    # -------------------------------------------------------------------------
+    odoo-media:
+      headers:
+        STSSeconds: 315360000
+        forceSTSHeader: true
+        STSIncludeSubdomains: true
+        STSPreload: true
+        browserXSSFilter: true
+        contentTypeNosniff: false  # Deshabilitado para que descargas no se rompan
+        frameDeny: true
+        referrerPolicy: no-referrer
+        customResponseHeaders:
+          X-Content-Type-Options: "nosniff"
+        contentSecurityPolicy: >-
+          default-src 'self';
+          img-src * data: blob:;
+          media-src *;
+          frame-ancestors 'none';
