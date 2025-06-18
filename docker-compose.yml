@@ -437,7 +437,8 @@ services:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./repositories/odoo/odoo_data:/var/lib/odoo
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
-      - ./repositories/odoo/logs:/var/log/odoo:rw
+      - ./repositories/odoo/logs:/var/log/odoo_logs:rw
+      
 
     networks:
       - leonobitech-net
