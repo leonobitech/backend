@@ -857,9 +857,9 @@ services:
       - ./repositories/chatwoot/.env
 
     environment:
-      - POSTGRES_DB=${DATABASE_NAME}
-      - POSTGRES_USER=${DATABASE_USER}
-      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DATABASE}
+      - POSTGRES_USER=${POSTGRES_USERNAME}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
     volumes:
       - chatwoot_postgres_data:/var/lib/postgresql/data
@@ -868,7 +868,7 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${DATABASE_USER}", "-d", "${DATABASE_NAME}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USERNAME}", "-d", "${POSTGRES_DATABASE}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -887,11 +887,11 @@ services:
       - ./repositories/chatwoot/.env
     
     environment:
-      - POSTGRES_HOST=${DATABASE_HOST}
-      - POSTGRES_PORT=${DATABASE_PORT}
-      - POSTGRES_DATABASE=${DATABASE_NAME}
-      - POSTGRES_USERNAME=${DATABASE_USER}
-      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE}
+      - POSTGRES_USERNAME=${POSTGRES_USERNAME}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
     command: >
       sh -c "rm -f tmp/pids/server.pid &&
