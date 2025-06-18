@@ -432,16 +432,10 @@ services:
 
     env_file:
       - ./repositories/odoo/.env
-    
-    environment:
-      - T1PATH=/usr/share/fonts/type1/ghostscript
 
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:rw
       - ./repositories/odoo/odoo_data:/var/lib/odoo
-      - ./repositories/odoo/logs:/var/log/odoo:rw
-      - ./repositories/odoo/addons:/mnt/extra-addons
-      - ./repositories/odoo/fonts:/usr/share/fonts/type1/ghostscript:rw
 
     networks:
       - leonobitech-net
