@@ -397,9 +397,10 @@ services:
       - ./repositories/odoo/.env
     
     environment:
+      - POSTGRES_DB=${POSTGRES_DB_ODOO}
       - POSTGRES_USER=${POSTGRES_USER_ODOO}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_ODOO}
-      - POSTGRES_DB=${POSTGRES_DB_ODOO}
+      - PGDATA=/var/lib/postgresql/data/pgdata
 
     volumes:
       - odoo_postgres_data:/var/lib/postgresql/data
@@ -430,6 +431,9 @@ services:
     security_opt:
       - no-new-privileges:true
 
+    ports:
+      - "8069:8069"
+
     env_file:
       - ./repositories/odoo/.env
 
@@ -437,6 +441,8 @@ services:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./repositories/odoo/odoo_data:/var/lib/odoo
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
+
+    command: ["odoo", "--db-filter=^odoo$"]
 
     networks:
       - leonobitech-net
