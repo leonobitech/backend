@@ -438,7 +438,7 @@ services:
       - ./repositories/odoo/odoo_data:/var/lib/odoo
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
       - ./repositories/odoo/logs:/var/log/odoo:rw
-      - ./repositories/odoo/fonts:/usr/share/fonts/type1/ghostscript:ro
+      - ./repositories/odoo/fonts:/usr/share/fonts/type1/urw-base35:ro
 
     networks:
       - leonobitech-net
