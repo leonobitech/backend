@@ -436,6 +436,7 @@ services:
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:rw
       - ./repositories/odoo/odoo_data:/var/lib/odoo
+      - ./repositories/odoo/fonts:/usr/share/fonts/type1/ghostscript:ro
 
     networks:
       - leonobitech-net
