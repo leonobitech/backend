@@ -885,6 +885,9 @@ services:
 
     env_file:
       - ./repositories/chatwoot/.env
+    
+    environment:
+      - POSTGRES_HOST=${DATABASE_HOST}
 
     command: >
       sh -c "rm -f tmp/pids/server.pid &&
