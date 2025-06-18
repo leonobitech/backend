@@ -432,6 +432,9 @@ services:
 
     env_file:
       - ./repositories/odoo/.env
+    
+    environment:
+      - T1PATH=/usr/share/fonts/type1/ghostscript
 
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:rw
