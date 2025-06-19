@@ -440,6 +440,7 @@ services:
       - ./repositories/odoo/odoo_data:/var/lib/odoo
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
       - ./repositories/odoo/logs:/var/log/odoo_logs:rw
+      - ./repositories/odoo/fonts/Fontmap.local:/usr/share/ghostscript/10.02.1/Resource/Init/Fontmap.local:ro
 
     command:
       - "odoo"
