@@ -419,10 +419,8 @@ services:
 
 
   odoo:
+    image: odoo:latest
     container_name: odoo
-    build:
-      context: ./repositories/odoo
-    image: leonobitech/odoo:latest
     restart: unless-stopped
 
     read_only: true
@@ -435,15 +433,10 @@ services:
     env_file:
       - ./repositories/odoo/.env
 
-    environment:
-      - GS_FONTPATH=/usr/share/ghostscript/fonts
-      - GS_LIB=/usr/share/ghostscript/10.02.1/Resource/Init
-
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./repositories/odoo/odoo_data:/var/lib/odoo
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
-      - ./repositories/odoo/config/patch_fonts.py:/etc/odoo/patch_fonts.py:ro
 
     command:
       - "odoo"
