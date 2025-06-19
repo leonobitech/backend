@@ -419,8 +419,10 @@ services:
 
 
   odoo:
-    image: odoo:latest
     container_name: odoo
+    build:
+      context: ./repositories/odoo
+    image: leonobitech/odoo:latest
     restart: unless-stopped
 
     read_only: true
@@ -452,10 +454,10 @@ services:
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8069"]
-      interval: 15s
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 60s
 
     labels:
       - "traefik.enable=true"
