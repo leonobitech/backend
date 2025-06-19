@@ -433,13 +433,6 @@ services:
     env_file:
       - ./repositories/odoo/.env
 
-    environment:
-      - PGHOST=${POSTGRES_HOST_ODOO}
-      - PGPORT=${POSTGRES_PORT_ODOO}
-      - PGDATABASE=${POSTGRES_DB_ODOO}
-      - PGUSER=${POSTGRES_USER_ODOO}
-      - PGPASSWORD=${POSTGRES_PASSWORD_ODOO}
-
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./repositories/odoo/odoo_data:/var/lib/odoo
