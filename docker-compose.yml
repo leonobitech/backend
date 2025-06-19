@@ -435,6 +435,10 @@ services:
     env_file:
       - ./repositories/odoo/.env
 
+    environment:
+      - GS_FONTPATH=/usr/share/ghostscript/fonts
+      - GS_LIB=/usr/share/ghostscript/10.02.1/Resource/Init
+
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./repositories/odoo/odoo_data:/var/lib/odoo
