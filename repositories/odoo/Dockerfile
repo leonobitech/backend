@@ -1,25 +1,33 @@
 # Dockerfile
 FROM odoo:latest
+
 USER root
 
 RUN apt-get update \
  && apt-get install -y \
+      ca-certificates \
+      curl \
       ghostscript \
       gsfonts \
-      curl \
+      tar \
       unzip \
  && mkdir -p /usr/share/fonts/type1/gsfonts \
  \
- # 1) Descargá PFB + AFM de Courier
- && curl -Lo /usr/share/fonts/type1/gsfonts/cour.pfb \
-      https://github.com/ArtifexSoftware/ghostpdl-downloads/raw/master/fonts/cour.pfb \
- && curl -Lo /usr/share/fonts/type1/gsfonts/cour.afm \
-      https://github.com/ArtifexSoftware/ghostpdl-downloads/raw/master/fonts/cour.afm \
+ # 1) Descarga el tarball oficial de las PostScript Base 35 (Type 1)
+ && curl -fsSL -o /tmp/gs-fonts.tar.gz \
+      "https://downloads.sourceforge.net/project/gs-fonts/gs-fonts/8.11%20%28base%2035%2C%20GPL%29/ghostscript-fonts-std-8.11.tar.gz" \
  \
- # 2) Reconstruí la caché de fuentes
+ # 2) Extrae sólo Courier.afm y Courier.pfb
+ && tar -xzf /tmp/gs-fonts.tar.gz \
+       --strip-components=3 \
+       -C /usr/share/fonts/type1/gsfonts \
+       ghostscript-fonts-std-8.11/Resource/Font/Courier.afm \
+       ghostscript-fonts-std-8.11/Resource/Font/Courier.pfb \
+ \
+ # 3) Reconstruye la caché de fuentes
  && fc-cache -fv \
  \
- # 3) Limpieza
- && rm -rf /var/lib/apt/lists/*
+ # 4) Limpia temporales y APT
+ && rm -rf /tmp/gs-fonts.tar.gz /var/lib/apt/lists/*
 
 USER odoo
