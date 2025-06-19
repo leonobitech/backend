@@ -458,11 +458,11 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8069"]
+      test: ["CMD", "pgrep", "-f", "odoo"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 60s
+      retries: 5
+      start_period: 15s
 
     labels:
       - "traefik.enable=true"
