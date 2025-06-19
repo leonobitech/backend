@@ -843,7 +843,7 @@ services:
 
 
   postgres_chatwoot:
-    image: postgres:latest
+    image: ankane/pgvector:pg16
     container_name: postgres_chatwoot
     restart: unless-stopped
 
@@ -951,7 +951,7 @@ volumes:
   baserow_redis_data:      # Redis de Baserow (caching, async)
 
   # 🟣 Chatwoot
-  chatwoot_data:           # Datos internos de Chatwoot (keys, tokens, confg)
+  chatwoot_data:           # Datos internos de Chatwoot (keys, tokens, config)
 
 
 networks:
