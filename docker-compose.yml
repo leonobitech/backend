@@ -843,7 +843,7 @@ services:
 
 
   postgres_chatwoot:
-    image: ankane/pgvector:pg16
+    image: ankane/pgvector:0.5.1-pg16
     container_name: postgres_chatwoot
     restart: unless-stopped
 
