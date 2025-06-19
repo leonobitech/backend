@@ -4,7 +4,7 @@ USER root
 
 RUN apt-get update && apt-get install -y \
     gsfonts \
-    fonts-urw-base35 \
+    ghostscript \
     && rm -rf /var/lib/apt/lists/*
 
 USER odoo
