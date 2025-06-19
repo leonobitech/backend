@@ -1,16 +1,16 @@
+# Dockerfile (misma carpeta donde haces docker compose)
 FROM odoo:latest
 
 USER root
 
 RUN apt-get update \
  && apt-get install -y \
-      wget \
       ghostscript \
-      ca-certificates \
- && wget -qO /tmp/gsfonts.deb \
-      http://archive.ubuntu.com/ubuntu/pool/universe/g/gsfonts/gsfonts_8.11+urwcyr1.0.7~pre44-4.5_all.deb \
- && dpkg -i /tmp/gsfonts.deb \
- && rm /tmp/gsfonts.deb \
+      gsfonts \
+ && mkdir -p /usr/share/ghostscript/10.02.1/Resource/Font \
+ && cp /usr/share/fonts/type1/gsfonts/*.pfb \
+       /usr/share/fonts/type1/gsfonts/*.afm \
+       /usr/share/ghostscript/10.02.1/Resource/Font/ \
  && fc-cache -fv \
  && rm -rf /var/lib/apt/lists/*
 
