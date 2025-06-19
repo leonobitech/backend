@@ -20,4 +20,6 @@ RUN mkdir -p /usr/share/ghostscript/fonts \
  && ln -s /usr/share/fonts/X11/Type1/NimbusMonoPS-Italic.pfb /usr/share/ghostscript/fonts/Courier-Oblique.pfb \
  && ln -s /usr/share/fonts/X11/Type1/NimbusMonoPS-BoldItalic.pfb /usr/share/ghostscript/fonts/Courier-BoldOblique.pfb
 
+ENV GS_FONTPATH=/usr/share/fonts/X11/Type1
+
 USER odoo
