@@ -1,3 +1,4 @@
+from odoo import models
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import Type1Font, Type1Face
 import os
@@ -17,5 +18,10 @@ def _register_courier():
     else:
         print("⚠️ Archivos .afm o .pfb no encontrados para Courier")
 
-# Se ejecuta al cargar el módulo
+# Ejecutar en carga del módulo
 _register_courier()
+
+# Dummy model para que Odoo lo instale
+class FixFonts(models.AbstractModel):
+    _name = 'fix_fonts.hook'
+    _description = 'Hook para registrar Courier en ReportLab'
