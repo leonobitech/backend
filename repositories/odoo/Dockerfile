@@ -1,21 +1,18 @@
-# Dockerfile (misma carpeta que tu docker-compose.yml)
 FROM odoo:latest
 
 USER root
 
 RUN apt-get update \
- && apt-get install -y \
-      ghostscript \
-      gsfonts \
-      fonts-nimbus-mono \
+ && apt-get install -y ghostscript gsfonts \
+ \
+ # 1) Crea el init de Ghostscript para mapeos de font
  && mkdir -p /usr/share/ghostscript/10.02.1/Resource/Init \
  \
- # 1) Alias: mapea "Courier" al NimbusMono (que ya existe)
- && printf "/Courier /NimbusMonoPS-Regular\n/Courier-Bold /NimbusMonoPS-Bold\n" \
+ # 2) Mapea Courier -> Helvetica (ya está disponible)
+ && printf "/Courier /Helvetica\n/Courier-Bold /Helvetica-Bold\n" \
      > /usr/share/ghostscript/10.02.1/Resource/Init/Fontmap.local \
  \
- # 2) Limpia y reconstruye caché de fuentes
- && rm -rf /var/lib/apt/lists/* \
- && fc-cache -fv
+ # 3) Limpia listas APT
+ && rm -rf /var/lib/apt/lists/*
 
 USER odoo
