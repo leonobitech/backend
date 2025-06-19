@@ -436,7 +436,7 @@ services:
       - ./repositories/odoo/.env
 
     environment:
-      - GS_FONTPATH=/usr/share/ghostscript/fonts
+      - GS_FONTPATH=/usr/share/fonts/X11/Type1
       - GS_LIB=/usr/share/ghostscript/10.02.1/Resource/Init
 
     volumes:
