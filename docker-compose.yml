@@ -400,7 +400,6 @@ services:
       - POSTGRES_DB=${POSTGRES_DB_ODOO}
       - POSTGRES_USER=${POSTGRES_USER_ODOO}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_ODOO}
-      - PGDATA=/var/lib/postgresql/data/pgdata
 
     volumes:
       - odoo_postgres_data:/var/lib/postgresql/data
@@ -433,6 +432,13 @@ services:
 
     env_file:
       - ./repositories/odoo/.env
+
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST_ODOO}
+      - POSTGRES_PORT=${POSTGRES_PORT_ODOO}
+      - POSTGRES_DATABASE=${POSTGRES_DB_ODOO}
+      - POSTGRES_USERNAME=${POSTGRES_USER_ODOO}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_ODOO}
 
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
