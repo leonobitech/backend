@@ -19,4 +19,8 @@ adminRouter.post("/baserow", (req, res) => {
   res.json({ url: "https://br.leonobitech.com" });
 });
 
+adminRouter.post("/chatwoot", (req, res) => {
+  res.json({ url: "https://chat.leonobitech.com" });
+});
+
 export default adminRouter;
