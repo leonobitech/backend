@@ -1,7 +1,12 @@
-# __init__.py de fix_fonts
-
+# __init__.py
 import sys
 
-# Parchamos justo cuando el servidor arranca
-if '/etc/odoo/patch_fonts.py' not in sys.modules:
-    exec(open('/etc/odoo/patch_fonts.py').read())
+# Asegúrate que el patch está accesible
+PATCH_PATH = "/etc/odoo/patch_fonts.py"
+if PATCH_PATH not in sys.path:
+    sys.path.append("/etc/odoo")
+
+try:
+    import patch_fonts
+except Exception as e:
+    print(f"⚠️ Error al aplicar patch_fonts: {e}")
