@@ -1,6 +1,5 @@
 # patch_fonts.py
 
-import reportlab
 from reportlab.pdfbase import _fontdata
 
 # Forzamos la ruta completa a los .pfb reales
