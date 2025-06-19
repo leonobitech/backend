@@ -32,8 +32,9 @@ RUN apt-get update \
  # Limpieza
  && rm -rf /var/lib/apt/lists/*
 
-# Variables de entorno para ayudar a Ghostscript
+# 🔧 Variables de entorno para Ghostscript y preload fix para ReportLab
 ENV GS_FONTPATH=/usr/share/ghostscript/fonts
 ENV GS_LIB=/usr/share/ghostscript/10.02.1/Resource/Init
+ENV PYTHONSTARTUP=/etc/odoo/patch_fonts.py
 
 USER odoo
