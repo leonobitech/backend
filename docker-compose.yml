@@ -434,10 +434,10 @@ services:
       - ./repositories/odoo/.env
 
     environment:
-      - DB_HOST=${POSTGRES_HOST_ODOO}
-      - DB_PORT=${POSTGRES_PORT_ODOO}
-      - DB_USER=${POSTGRES_USER_ODOO}
-      - DB_PASSWORD=${POSTGRES_PASSWORD_ODOO}
+      - PGHOST=${POSTGRES_HOST_ODOO}
+      - PGPORT=${POSTGRES_PORT_ODOO}
+      - PGUSER=${POSTGRES_USER_ODOO}
+      - PGPASSWORD=${POSTGRES_PASSWORD_ODOO}
 
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
