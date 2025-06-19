@@ -17,6 +17,7 @@ http:
       forwardAuth:
         address: "https://core.leonobitech.com/security/verify-admin"
         trustForwardHeader: true
+        timeout: 5000
         authRequestHeaders:
           - "Cookie"
           - "X-Forwarded-For"
@@ -27,6 +28,7 @@ http:
         addAuthCookiesToResponse:
           - "accessKey"
           - "clientKey"
+
     # -------------------------------------------------------------------------
     # 🔐 CSP personalizada para Core – permite credenciales desde frontend
     # -------------------------------------------------------------------------
@@ -54,9 +56,9 @@ http:
           connect-src 'self' https://*.leonobitech.com blob: data:;
           img-src 'self' data:;
           frame-ancestors 'self';
+
     # -------------------------------------------------------------------------
-    # 🛡️ Strict headers – ideal for APIs or services without frontend
-    # No inline JS, no external connections
+    # 𞶑 Strict headers – ideal for APIs o servicios sin frontend
     # -------------------------------------------------------------------------
     secure-strict:
       headers:
@@ -72,7 +74,7 @@ http:
         contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none';"
 
     # -------------------------------------------------------------------------
-    # 🛡️ Relaxed headers – allow inline JS and wide connect/img support
+    # 𞶑 Relaxed headers – allow inline JS and wide connect/img support
     # Use for frontends like n8n, Odoo, Baserow UI
     # -------------------------------------------------------------------------
     secure-relaxed:
@@ -89,12 +91,12 @@ http:
         contentSecurityPolicy: >-
           script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io https://sentry.com;
           style-src 'self' 'unsafe-inline';
-          img-src * data:;
-          connect-src * blob: https://sentry.com https://static.cloudflareinsights.com;
+          img-src 'self' data: https://sentry.com https://static.cloudflareinsights.com;
+          connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com;
           frame-ancestors 'self';
 
     # -------------------------------------------------------------------------
-    # 🛡️ Basic headers – no CSP, for media or public assets
+    # 𞶑 Basic headers – no CSP, for media or public assets
     # -------------------------------------------------------------------------
     secure-basic:
       headers:
@@ -107,6 +109,8 @@ http:
         contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: "no-referrer"
+        customResponseHeaders:
+          X-Frame-Options: "DENY"
 
     # -------------------------------------------------------------------------
     # 📵 Anti-tracking policy – optional for public pages/assets
@@ -120,13 +124,6 @@ http:
     # -------------------------------------------------------------------------
     # 🧩 secure-odoo – Middleware especial para frontend de Odoo
     # -------------------------------------------------------------------------
-    # Diseñado para permitir el funcionamiento completo del frontend de Odoo:
-    # - Permite inline JS y eval por dependencias internas del core
-    # - Desbloquea fuentes personalizadas e íconos (font-src, img-src)
-    # - Habilita iframes internos necesarios para ciertas vistas
-    # - Aplica headers de seguridad avanzados sin romper UI
-    # - Pensado para trabajar junto a core-auth@file como protección principal
-    # -------------------------------------------------------------------------
     secure-odoo:
       headers:
         STSSeconds: 315360000
@@ -136,12 +133,12 @@ http:
         SSLHost: "leonobitech.com"
         browserXSSFilter: true
         contentTypeNosniff: true
-        frameDeny: false  # Odoo usa iframes internamente
+        frameDeny: false
         referrerPolicy: strict-origin-when-cross-origin
         permissionsPolicy: >-
           geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
         customResponseHeaders:
-          X-Frame-Options: "SAMEORIGIN"  # permite iframes desde el mismo dominio
+          X-Frame-Options: "SAMEORIGIN"
           X-Content-Type-Options: "nosniff"
           X-XSS-Protection: "1; mode=block"
         contentSecurityPolicy: >-
@@ -156,14 +153,6 @@ http:
     # -------------------------------------------------------------------------
     # 🗂️ odoo-media – Headers para archivos y contenido estático/descargable
     # -------------------------------------------------------------------------
-    # Pensado para rutas como:
-    # - /web/content
-    # - /web/image
-    # - /web/binary/*
-    # - /media (si se usa)
-    # Aplica headers de seguridad sin bloquear Content-Disposition,
-    # ni tipos de archivo, ni imágenes externas
-    # -------------------------------------------------------------------------
     odoo-media:
       headers:
         STSSeconds: 315360000
@@ -171,7 +160,7 @@ http:
         STSIncludeSubdomains: true
         STSPreload: true
         browserXSSFilter: true
-        contentTypeNosniff: false  # Deshabilitado para que descargas no se rompan
+        contentTypeNosniff: false
         frameDeny: true
         referrerPolicy: no-referrer
         customResponseHeaders:
@@ -180,4 +169,14 @@ http:
           default-src 'self';
           img-src * data: blob:;
           media-src *;
+          font-src 'self' data:;
           frame-ancestors 'none';
+
+    # -------------------------------------------------------------------------
+    # 🧬 Combinado: Autenticación + headers relajados para frontends
+    # -------------------------------------------------------------------------
+    combined-auth-relaxed:
+      chain:
+        middlewares:
+          - core-auth
+          - secure-relaxed

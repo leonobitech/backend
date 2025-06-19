@@ -857,9 +857,9 @@ services:
       - ./repositories/chatwoot/.env
 
     environment:
-      - POSTGRES_DB=${POSTGRES_DATABASE}
-      - POSTGRES_USER=${POSTGRES_USERNAME}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DATABASE_CW}
+      - POSTGRES_USER=${POSTGRES_USERNAME_CW}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
 
     volumes:
       - chatwoot_postgres_data:/var/lib/postgresql/data
@@ -868,7 +868,7 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USERNAME}", "-d", "${POSTGRES_DATABASE}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USERNAME_CW}", "-d", "${POSTGRES_DATABASE_CW}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -887,11 +887,11 @@ services:
       - ./repositories/chatwoot/.env
     
     environment:
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE}
-      - POSTGRES_USERNAME=${POSTGRES_USERNAME}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST_CW}
+      - POSTGRES_PORT=${POSTGRES_PORT_CW}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
+      - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
 
     command: >
       sh -c "rm -f tmp/pids/server.pid &&
@@ -911,16 +911,19 @@ services:
     labels:
       - "traefik.enable=true"
 
-      # Ruteo principal
+      #########################################
+      # 🌍 Router principal para el frontend
+      #########################################
       - "traefik.http.routers.chatwoot.rule=Host(`chat.leonobitech.com`)"
       - "traefik.http.routers.chatwoot.entrypoints=websecure"
       - "traefik.http.routers.chatwoot.tls.certresolver=le"
+      - "traefik.http.routers.chatwoot.service=chatwoot"
+      - "traefik.http.routers.chatwoot.middlewares=core-auth@file,secure-relaxed@file"
 
-      # Servicio interno
+      #########################################
+      # 🔁 Servicio expuesto en el puerto 3000
+      #########################################
       - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
-
-      # Middlewares aplicados
-      - "traefik.http.routers.chatwoot.middlewares=secure-relaxed@file,core-secure@file"
 
 
 volumes:
