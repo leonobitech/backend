@@ -1,5 +1,12 @@
-try:
-    import reportlab.pdfbase._fontdata as fd
-    fd.standardFonts.update({"Courier", "Courier-Bold", "Courier-Oblique", "Courier-BoldOblique"})
-except Exception as e:
-    print(f"[fix_fonts preload] {e}")
+# patch_fonts.py
+
+import reportlab
+from reportlab.pdfbase import _fontdata
+
+# Forzamos la ruta completa a los .pfb reales
+_fontdata.standardFonts['Courier'] = 'Courier'
+_fontdata.standardFonts['Courier-Bold'] = 'Courier-Bold'
+_fontdata.standardFonts['Courier-Oblique'] = 'Courier-Oblique'
+_fontdata.standardFonts['Courier-BoldOblique'] = 'Courier-BoldOblique'
+
+print("🔧 Font patch loaded: Courier mapped")
