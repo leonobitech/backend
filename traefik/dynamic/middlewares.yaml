@@ -175,6 +175,21 @@ http:
           font-src 'self' data:;
           frame-ancestors 'none';
 
+    #########################################
+    # 🟢 Webhook Meta (WhatsApp) - Open Access
+    # ---------------------------------------
+    # Middleware liviano para permitir que Meta
+    # valide el webhook sin errores de CSP,
+    # X-Frame, o Auth. Solo incluye headers
+    # mínimos para mantener seguridad básica
+    # sin bloquear POST externos.
+    #########################################
+
+    webhook-open:
+      headers:
+        contentTypeNosniff: true
+        referrerPolicy: "no-referrer"
+
     # -------------------------------------------------------------------------
     # 🧬 Combinado: Autenticación + headers relajados para frontends
     # -------------------------------------------------------------------------

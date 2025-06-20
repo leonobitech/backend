@@ -918,6 +918,15 @@ services:
       - "traefik.http.routers.chatwoot.service=chatwoot"
       - "traefik.http.routers.chatwoot.middlewares=core-auth@file,secure-relaxed@file"
 
+      # 🟢 RUTA EXCEPCIÓN PARA WEBHOOK DE WHATSAPP (sin auth)
+      - "traefik.http.routers.chatwoot-webhook.rule=Host(`chat.leonobitech.com`) && PathPrefix(`/webhooks/whatsapp`)"
+      - "traefik.http.routers.chatwoot-webhook.entrypoints=websecure"
+      - "traefik.http.routers.chatwoot-webhook.tls.certresolver=le"
+      - "traefik.http.routers.chatwoot-webhook.service=chatwoot"
+      - "traefik.http.routers.chatwoot-webhook.priority=100"
+      # ⚠️ sin middleware de auth, solo opcionalmente uno de seguridad básica
+      - "traefik.http.routers.chatwoot-webhook.middlewares=webhook-open@file"
+
       #########################################
       # 🆓 Archivos públicos (manifest, favicon, etc.)
       #########################################
