@@ -77,32 +77,26 @@ http:
     # Use for frontends like n8n, Odoo, Baserow UI
     # -------------------------------------------------------------------------
     secure-relaxed:
-  headers:
-    STSSeconds: 315360000
-    forceSTSHeader: true
-    STSIncludeSubdomains: true
-    STSPreload: true
-    SSLHost: "leonobitech.com"
-    browserXSSFilter: true
-    contentTypeNosniff: true
-    frameDeny: true
-    referrerPolicy: "no-referrer"
+      headers:
+        STSSeconds: 315360000
+        forceSTSHeader: true
+        STSIncludeSubdomains: true
+        STSPreload: true
+        SSLHost: "leonobitech.com"
+        browserXSSFilter: true
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: "no-referrer"
 
-    accessControlAllowHeaders:
-      - Origin
-      - Content-Type
-      - Accept
-      - Authorization
-      - X-CSRF-Token
-      - X-Requested-With
-      - Cookie
+        accessControlAllowHeaders: "Origin,Content-Type,Accept,Authorization,X-CSRF-Token,X-Requested-With,Cookie"
 
-    contentSecurityPolicy: >-
-      script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io https://sentry.com;
-      style-src 'self' 'unsafe-inline';
-      img-src 'self' data: https://sentry.com https://static.cloudflareinsights.com;
-      connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com;
-      frame-ancestors 'self';
+        contentSecurityPolicy: >-
+          script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io https://sentry.com;
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data: https://sentry.com https://static.cloudflareinsights.com;
+          connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com;
+          frame-ancestors 'self';
+
 
     # -------------------------------------------------------------------------
     # 𞶑 Basic headers – no CSP, for media or public assets
