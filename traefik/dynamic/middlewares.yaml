@@ -17,7 +17,6 @@ http:
       forwardAuth:
         address: "https://core.leonobitech.com/security/verify-admin"
         trustForwardHeader: true
-        timeout: 5000
         authRequestHeaders:
           - "Cookie"
           - "X-Forwarded-For"
