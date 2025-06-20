@@ -25,8 +25,9 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
 
-      # 📂 Middleware externo desde archivo YAML
-      - "--providers.file.filename=/etc/traefik/dynamic/middlewares.yaml"
+      # 📂 Middleware externo desde directorio
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
 
       # 🔐 Let's Encrypt (ACME)
       - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
