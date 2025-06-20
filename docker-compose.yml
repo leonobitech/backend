@@ -942,13 +942,10 @@ services:
       #########################################
       - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
 
-  chatwoot-worker:
+  chatwoot_worker_default:
     image: chatwoot/chatwoot:latest
-    container_name: chatwoot-worker
+    container_name: chatwoot_worker_default
     restart: unless-stopped
-    depends_on:
-      - postgres_chatwoot
-      - redis_chatwoot
     env_file:
       - ./repositories/chatwoot/.env
     environment:
@@ -957,11 +954,71 @@ services:
       - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
       - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
-    command: ["bundle", "exec", "sidekiq", "-q", "default", "-q", "mailers", "-q", "low"]
-    networks:
-      - leonobitech-net
+    command: ["bundle", "exec", "sidekiq", "-q", "default", "-q", "mailers"]
     volumes:
       - chatwoot_data:/app/storage
+    depends_on:
+      - redis_chatwoot
+      - postgres_chatwoot
+    networks:
+      - leonobitech-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  chatwoot_worker_low:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot_worker_low
+    restart: unless-stopped
+    env_file:
+      - ./repositories/chatwoot/.env
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST_CW}
+      - POSTGRES_PORT=${POSTGRES_PORT_CW}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
+      - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
+    command: ["bundle", "exec", "sidekiq", "-q", "low"]
+    volumes:
+      - chatwoot_data:/app/storage
+    depends_on:
+      - redis_chatwoot
+      - postgres_chatwoot
+    networks:
+      - leonobitech-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  chatwoot_worker_critical:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot_worker_critical
+    restart: unless-stopped
+    env_file:
+      - ./repositories/chatwoot/.env
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST_CW}
+      - POSTGRES_PORT=${POSTGRES_PORT_CW}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
+      - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
+    command: ["bundle", "exec", "sidekiq", "-q", "critical"]
+    volumes:
+      - chatwoot_data:/app/storage
+    depends_on:
+      - redis_chatwoot
+      - postgres_chatwoot
+    networks:
+      - leonobitech-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 
 volumes:
