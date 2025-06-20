@@ -774,7 +774,7 @@ services:
       - "traefik.http.services.baserow.loadbalancer.server.port=3000"
 
 
-  baserow-media:
+  baserow_media:
     image: nginx:alpine
     container_name: baserow_media_server
     restart: unless-stopped
