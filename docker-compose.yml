@@ -922,7 +922,7 @@ services:
       - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
       - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
-    command: ["bundle", "exec", "sidekiq"]
+    command: ["bundle", "exec", "sidekiq", "-q", "default", "-q", "mailers", "-q", "low"]
     networks:
       - leonobitech-net
     volumes:
