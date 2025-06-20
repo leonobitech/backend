@@ -477,7 +477,7 @@ services:
       #########################################
       # 📦 Media pública y binarios (descargas, imágenes)
       #########################################
-      - "traefik.http.routers.odoo-media.rule=Host(`odoo.${DOMAIN_NAME}`) && PathPrefix(`/web/content`, `/web/image`, `/web/binary`, `/media`)"
+      - traefik.http.routers.odoo-media.rule=Host(`odoo.leonobitech.com`) && (PathPrefix(`/web/content`) || PathPrefix(`/web/image`) || PathPrefix(`/web/binary`) || PathPrefix(`/media`))
       - "traefik.http.routers.odoo-media.entrypoints=websecure"
       - "traefik.http.routers.odoo-media.tls=true"
       - "traefik.http.routers.odoo-media.service=odoo@docker"
