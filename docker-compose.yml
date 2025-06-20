@@ -916,6 +916,12 @@ services:
       - redis_chatwoot
     env_file:
       - ./repositories/chatwoot/.env
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST_CW}
+      - POSTGRES_PORT=${POSTGRES_PORT_CW}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
+      - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
     command: ["bundle", "exec", "sidekiq"]
     networks:
       - leonobitech-net
