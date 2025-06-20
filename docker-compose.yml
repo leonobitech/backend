@@ -906,41 +906,21 @@ services:
     networks:
       - leonobitech-net
 
-    labels:
-      - "traefik.enable=true"
 
-      #########################################
-      # 🌍 Router principal para el frontend
-      #########################################
-      - "traefik.http.routers.chatwoot.rule=Host(`chat.leonobitech.com`)"
-      - "traefik.http.routers.chatwoot.entrypoints=websecure"
-      - "traefik.http.routers.chatwoot.tls.certresolver=le"
-      - "traefik.http.routers.chatwoot.service=chatwoot"
-      - "traefik.http.routers.chatwoot.middlewares=core-auth@file,secure-relaxed@file"
-
-      # 🟢 RUTA EXCEPCIÓN PARA WEBHOOK DE WHATSAPP (sin auth)
-      - "traefik.http.routers.chatwoot-webhook.rule=Host(`chat.leonobitech.com`) && PathPrefix(`/webhooks/whatsapp`)"
-      - "traefik.http.routers.chatwoot-webhook.entrypoints=websecure"
-      - "traefik.http.routers.chatwoot-webhook.tls.certresolver=le"
-      - "traefik.http.routers.chatwoot-webhook.service=chatwoot"
-      - "traefik.http.routers.chatwoot-webhook.priority=100"
-      # ⚠️ sin middleware de auth, solo opcionalmente uno de seguridad básica
-      - "traefik.http.routers.chatwoot-webhook.middlewares=webhook-open@file"
-
-      #########################################
-      # 🆓 Archivos públicos (manifest, favicon, etc.)
-      #########################################
-      - "traefik.http.routers.chatwoot-static.rule=Host(`chat.leonobitech.com`) && (Path(`/manifest.json`) || Path(`/favicon.ico`) || PathPrefix(`/assets`))"
-      - "traefik.http.routers.chatwoot-static.entrypoints=websecure"
-      - "traefik.http.routers.chatwoot-static.tls=true"
-      - "traefik.http.routers.chatwoot-static.tls.certresolver=le"
-      - "traefik.http.routers.chatwoot-static.service=chatwoot"
-      - "traefik.http.routers.chatwoot-static.middlewares=secure-basic@file"
-
-      #########################################
-      # 🔁 Servicio expuesto en el puerto 3000
-      #########################################
-      - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
+  chatwoot-worker:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot-worker
+    restart: unless-stopped
+    depends_on:
+      - postgres_chatwoot
+      - redis_chatwoot
+    env_file:
+      - ./repositories/chatwoot/.env
+    command: ["bundle", "exec", "sidekiq"]
+    networks:
+      - leonobitech-net
+    volumes:
+      - chatwoot_data:/app/storage
 
 
 volumes:
