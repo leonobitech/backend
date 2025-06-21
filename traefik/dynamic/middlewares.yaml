@@ -176,6 +176,26 @@ http:
           frame-ancestors 'none';
 
     #########################################
+    # 🔌 WebSocket headers para /cable
+    # ---------------------------------------
+    # Necesario para que ActionCable (Rails)
+    # funcione detrás de Traefik con wss://
+    #
+    # - Fuerza el proto https (evita handshake 301)
+    # - Permite origen cruzado para cliente web
+    # - Agrega STS y filtros anti-XSS
+    #########################################
+    ws-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        customResponseHeaders:
+          Access-Control-Allow-Origin: "*"
+        stsSeconds: 31536000
+        forceSTSHeader: true
+        browserXssFilter: true
+
+    #########################################
     # 🟢 Webhook Meta (WhatsApp) - Open Access
     # ---------------------------------------
     # Middleware liviano para permitir que Meta

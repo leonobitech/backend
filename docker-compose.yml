@@ -930,7 +930,19 @@ services:
       - "traefik.http.routers.chatwoot.service=chatwoot"
       - "traefik.http.routers.chatwoot.middlewares=core-auth@file,secure-relaxed@file"
 
-      # 🟢 RUTA EXCEPCIÓN PARA WEBHOOK DE WHATSAPP (sin auth)
+      #########################################
+      # 🔌 RUTA ESPECIAL PARA WebSocket /cable
+      #########################################
+      - "traefik.http.routers.chatwoot-cable.rule=Host(`chat.leonobitech.com`) && PathPrefix(`/cable`)"
+      - "traefik.http.routers.chatwoot-cable.entrypoints=websecure"
+      - "traefik.http.routers.chatwoot-cable.tls.certresolver=le"
+      - "traefik.http.routers.chatwoot-cable.service=chatwoot"
+      - "traefik.http.routers.chatwoot-cable.priority=110"
+      - "traefik.http.routers.chatwoot-cable.middlewares=ws-headers@file"
+
+      #########################################
+      # 🟢 RUTA EXCEPCIÓN PARA WEBHOOK DE WHATSAPP
+      #########################################
       - "traefik.http.routers.chatwoot-webhook.rule=Host(`chat.leonobitech.com`) && PathPrefix(`/webhooks/whatsapp`)"
       - "traefik.http.routers.chatwoot-webhook.entrypoints=websecure"
       - "traefik.http.routers.chatwoot-webhook.tls.certresolver=le"
