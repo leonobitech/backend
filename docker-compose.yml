@@ -928,7 +928,7 @@ services:
       - "traefik.http.routers.chatwoot.entrypoints=websecure"
       - "traefik.http.routers.chatwoot.tls.certresolver=le"
       - "traefik.http.routers.chatwoot.service=chatwoot"
-      - "traefik.http.routers.chatwoot.middlewares=core-auth@file,secure-relaxed@file"
+      - "traefik.http.routers.chatwoot.middlewares=secure-relaxed@file"
 
       #########################################
       # 🔌 RUTA ESPECIAL PARA WebSocket /cable
