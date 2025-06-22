@@ -680,11 +680,6 @@ services:
     env_file:
       - ./repositories/baserow/.env
 
-    environment:
-      - DJANGO_SETTINGS_MODULE=baserow.config.settings
-      - PYTHONUNBUFFERED=1
-      - CELERY_BROKER_URL=redis://redis:6379/0
-
     volumes:
       - baserow_media:/baserow/media
 
