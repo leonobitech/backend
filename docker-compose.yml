@@ -675,10 +675,14 @@ services:
     container_name: baserow_export_worker
     restart: unless-stopped
 
-    command: celery-exportworker
+    command: ["celery", "--app=baserow.config.celery_app", "worker", "--queues=export"]
 
     env_file:
       - ./repositories/baserow/.env
+
+    environment:
+      - DJANGO_SETTINGS_MODULE=baserow.config.settings
+      - PYTHONUNBUFFERED=1
 
     volumes:
       - baserow_media:/baserow/media
@@ -691,7 +695,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep 'celery-exportworker' | grep -v grep"]
+      test: ["CMD", "pgrep", "celery"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -928,7 +932,7 @@ services:
       - "traefik.http.routers.chatwoot.entrypoints=websecure"
       - "traefik.http.routers.chatwoot.tls.certresolver=le"
       - "traefik.http.routers.chatwoot.service=chatwoot"
-      - "traefik.http.routers.chatwoot.middlewares=secure-relaxed@file"
+      - "traefik.http.routers.chatwoot.middlewares=core-auth@file,secure-relaxed@file"
 
       #########################################
       # 🔌 RUTA ESPECIAL PARA WebSocket /cable
