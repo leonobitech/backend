@@ -683,7 +683,7 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=baserow.config.settings
       - PYTHONUNBUFFERED=1
-      - BASEROW_CELERY_BROKER_URL=redis://redis:6379/10
+      - CELERY_BROKER_URL=redis://redis:6379/10
 
     volumes:
       - baserow_media:/baserow/media
