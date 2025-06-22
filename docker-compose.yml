@@ -670,12 +670,12 @@ services:
       start_period: 10s
 
 
-  celery_export_worker:
+  baserow_celery_export_worker:
     image: baserow/backend:latest
-    container_name: baserow_export_worker
+    container_name: baserow_celery_export_worker
     restart: unless-stopped
 
-    command: ["celery", "--app=baserow.config.celery_app", "worker", "--queues=export"]
+    command: celery-exportworker --concurrency=1
 
     env_file:
       - ./repositories/baserow/.env
@@ -704,8 +704,8 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    mem_limit: 512m
-    cpus: 0.5
+    mem_limit: 256m
+    cpus: 0.25
 
 
   baserow_celery_beat:
