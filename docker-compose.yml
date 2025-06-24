@@ -930,6 +930,15 @@ services:
       - "traefik.http.routers.chatwoot.service=chatwoot"
       - "traefik.http.routers.chatwoot.middlewares=core-auth@file,secure-relaxed@file"
 
+      ########################################
+      # 🔓 Router solo para acceso interno/API
+      ########################################
+      - "traefik.http.routers.chatwoot-api.rule=Host(`chat-api.leonobitech.com`)"
+      - "traefik.http.routers.chatwoot-api.entrypoints=websecure"
+      - "traefik.http.routers.chatwoot-api.tls.certresolver=le"
+      - "traefik.http.routers.chatwoot-api.service=chatwoot"
+      # SIN MIDDLEWARES ACÁ (🚫 core-auth, 🚫 clientMeta)
+
       #########################################
       # 🔌 RUTA ESPECIAL PARA WebSocket /cable
       #########################################
