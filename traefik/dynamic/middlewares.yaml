@@ -9,6 +9,10 @@
 # -----------------------------------------------------------------------------
 http:
   middlewares:
+    chat-api-key:
+      headers:
+        customRequestHeaders:
+          X-Api-Key: "{{ env `N8N_API_KEY` }}"
 
     # -------------------------------------------------------------------------
     # 🔐 Shared ForwardAuth – delegates auth to Core microservice
