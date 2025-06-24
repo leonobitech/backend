@@ -9,10 +9,19 @@
 # -----------------------------------------------------------------------------
 http:
   middlewares:
+
+    # -------------------------------------------------------------------------
+    # 🔐 Protect endpoint chat-api.leonobitech.com
+    # -------------------------------------------------------------------------
     chat-api-key:
       headers:
         customRequestHeaders:
           X-Api-Key: "{{ env `N8N_API_KEY` }}"
+
+    restrict-to-docker:
+      ipWhiteList:
+        sourceRange:
+          - 172.18.0.0/16
 
     # -------------------------------------------------------------------------
     # 🔐 Shared ForwardAuth – delegates auth to Core microservice

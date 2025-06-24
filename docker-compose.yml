@@ -937,7 +937,7 @@ services:
       - "traefik.http.routers.chatwoot-api.entrypoints=websecure"
       - "traefik.http.routers.chatwoot-api.tls.certresolver=le"
       - "traefik.http.routers.chatwoot-api.service=chatwoot"
-      - "traefik.http.routers.chatwoot-api.middlewares=chat-api-key@file"
+      - "traefik.http.routers.chatwoot-api.middlewares=restrict-to-docker@file,chat-api-key@file"
 
       #########################################
       # 🔌 RUTA ESPECIAL PARA WebSocket /cable
