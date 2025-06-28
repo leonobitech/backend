@@ -70,7 +70,7 @@ export const getPasswordResetTemplate = (code: string) => {
 
 export const getVerifyEmailTemplate = (code: string) => {
   return {
-    subject: "Verifica tu cuenta en Leonobitech",
+    subject: "🚀 Bienvenido a Leonobitech - Verifica tu cuenta",
     text: `Tu código de verificación es: ${code}. Este código expirará en 15 minutos.`,
     html: `
       <!DOCTYPE html>
@@ -166,7 +166,7 @@ export const getTwoFactorAuthTemplate = (otpCode: string) => ({
 
 export const getDeviceValidationTemplate = (code: string) => {
   return {
-    subject: "Verifica tu nuevo dispositivo en Leonobitech",
+    subject: "⚠️ Nuevo dispositivo detectado en Leonobitech",
     text: `Recibimos un intento de inicio de sesión desde un nuevo dispositivo. Tu código de verificación es: ${code}. Este código expirará en 10 minutos.`,
     html: `
         <!DOCTYPE html>
