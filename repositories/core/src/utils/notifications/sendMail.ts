@@ -29,8 +29,8 @@ export const sendMail = async ({ to, subject, text, html }: Params) =>
     subject,
     text,
     html,
-    reply_to: ["noreply@leonobitech.com"],
-  } as any);
+    replyTo: "noreply@leonobitech.com",
+  });
 
 /**
  * Enviar el email de verificación de cuenta con código de activación.
