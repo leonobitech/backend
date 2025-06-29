@@ -440,6 +440,10 @@ services:
 
     command:
       - "odoo"
+      - "--db_host=${POSTGRES_HOST_ODOO}"
+      - "--db_port=${POSTGRES_PORT_ODOO}"
+      - "--db_user=${POSTGRES_USER_ODOO}"
+      - "--db_password=${POSTGRES_PASSWORD_ODOO}"
       - "--db-filter=^(leonobitech|odoo)$"
 
     networks:
