@@ -424,6 +424,9 @@ services:
     container_name: odoo
     restart: unless-stopped
 
+    expose:
+      - "8072"
+
     tmpfs:
       - /tmp
 
