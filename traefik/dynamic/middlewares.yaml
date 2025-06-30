@@ -189,6 +189,8 @@ http:
       headers:
         customRequestHeaders:
           X-Forwarded-Proto: "https"
+          Connection: "Upgrade"
+          Upgrade: "websocket"
         customResponseHeaders:
           Access-Control-Allow-Origin: "*"
         stsSeconds: 31536000

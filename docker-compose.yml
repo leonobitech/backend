@@ -461,6 +461,7 @@ services:
       # 📡 Servicio interno
       #########################################
       - "traefik.http.services.odoo.loadbalancer.server.port=8069"
+      - "traefik.http.services.odoo-ws.loadbalancer.server.port=8072"
 
       #########################################
       # 🌍 Router principal
@@ -470,6 +471,16 @@ services:
       - "traefik.http.routers.odoo.tls=true"
       - "traefik.http.routers.odoo.tls.certresolver=le"
       - "traefik.http.routers.odoo.middlewares=core-auth@file,secure-odoo@file"
+
+      #########################################
+      # 🔌 WebSocket (longpolling)
+      #########################################
+      - "traefik.http.routers.odoo-ws.rule=Host(`odoo.${DOMAIN_NAME}`) && Path(`/websocket`)"
+      - "traefik.http.routers.odoo-ws.entrypoints=websecure"
+      - "traefik.http.routers.odoo-ws.tls=true"
+      - "traefik.http.routers.odoo-ws.tls.certresolver=le"
+      - "traefik.http.routers.odoo-ws.service=odoo-ws"
+      - "traefik.http.routers.odoo-ws.middlewares=ws-headers@file"
 
       #########################################
       # 📦 Media pública y binarios (descargas, imágenes)
