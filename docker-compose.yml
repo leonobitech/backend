@@ -478,7 +478,7 @@ services:
       #########################################
       # 🔌 WebSocket (longpolling)
       #########################################
-      - "traefik.http.routers.odoo-ws.rule=Host(`odoo.${DOMAIN_NAME}`) && PathPrefix(`/websocket`)"
+      - "traefik.http.routers.odoo-ws.rule=Host(`odoo.${DOMAIN_NAME}`) && PathPrefix(`/longpolling`)"
       - "traefik.http.routers.odoo-ws.entrypoints=websecure"
       - "traefik.http.routers.odoo-ws.tls=true"
       - "traefik.http.routers.odoo-ws.tls.certresolver=le"
