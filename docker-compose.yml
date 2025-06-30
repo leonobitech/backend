@@ -432,6 +432,12 @@ services:
 
     env_file:
       - ./repositories/odoo/.env
+      
+    environment:
+      - db_host=${POSTGRES_HOST_ODOO}
+      - db_port=${POSTGRES_PORT_ODOO}
+      - db_user=${POSTGRES_USER_ODOO}
+      - db_password=${POSTGRES_PASSWORD_ODOO}
 
     volumes:
       - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
