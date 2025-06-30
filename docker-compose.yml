@@ -434,7 +434,6 @@ services:
       - ./repositories/odoo/.env
 
     volumes:
-      - ./repositories/odoo/config/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./repositories/odoo/odoo_data:/var/lib/odoo
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
 
