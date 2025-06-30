@@ -434,16 +434,11 @@ services:
       - ./repositories/odoo/.env
 
     volumes:
-      - ./repositories/odoo/odoo_data:/var/lib/odoo
+      - ./repositories/odoo/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
+      - odoo_data:/var/lib/odoo
 
-    command:
-      - "odoo"
-      - "--db_host=${POSTGRES_HOST_ODOO}"
-      - "--db_port=${POSTGRES_PORT_ODOO}"
-      - "--db_user=${POSTGRES_USER_ODOO}"
-      - "--db_password=${POSTGRES_PASSWORD_ODOO}"
-      - "--db-filter=^(leonobitech|odoo)$"
+    command: ["odoo", "-c", "/etc/odoo/odoo.conf"]
 
     networks:
       - leonobitech-net
@@ -1118,6 +1113,10 @@ volumes:
 
   # 🟣 Chatwoot
   chatwoot_data:           # Datos internos de Chatwoot (keys, tokens, config)
+
+  # 🟤 Odoo
+  odoo_data:
+    external: false
 
 
 networks:

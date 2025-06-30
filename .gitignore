@@ -36,4 +36,4 @@ Thumbs.db
 traefik/acme.json
 
 # Ignorar los datos de Odoo
-/repositories/odoo/odoo_data/
+/repositories/odoo/odoo.conf
