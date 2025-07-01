@@ -1,10 +1,6 @@
 // utils/http/forwardHeaders.ts
 import { Request, Response } from "express";
 
-/**
- * Aplica headers de reenvío (`X-Forwarded-For`, `X-Real-IP`, etc.) a la response,
- * basándose en lo recibido desde Traefik (req.headers) o en la IP del socket.
- */
 export function appendForwardedHeaders(req: Request, res: Response): void {
   const remote = req.socket.remoteAddress ?? "0.0.0.0";
 
@@ -23,4 +19,24 @@ export function appendForwardedHeaders(req: Request, res: Response): void {
   res.setHeader("X-Forwarded-For", forwardedFor);
   res.setHeader("X-Real-IP", realIp);
   res.setHeader("X-Forwarded-Proto", proto);
+
+  /**
+   * 🛡️ Seguridad
+   *Este header solo se inyecta en el backend core después de autenticar con authenticate, así que:
+   *No es manipulable por el cliente.
+   *Solo se agrega si el usuario está autenticado (req.userId ya seteado).
+   *No contiene información sensible como tokens.
+   *
+   */
+
+  // 🔐 Headers extendidos solo si el usuario está autenticado
+  if (req.userId) {
+    res.setHeader("X-User-Id", req.userId);
+  }
+  if (req.role) {
+    res.setHeader("X-User-Role", req.role);
+  }
+  if (req.sessionId) {
+    res.setHeader("X-Session-Id", req.sessionId);
+  }
 }
