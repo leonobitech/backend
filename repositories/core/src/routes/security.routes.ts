@@ -17,19 +17,19 @@ const securityRoutes = Router();
 securityRoutes.get(
   "/verify-admin",
   (req, res, next) => {
-    function extractClientIp(req: Request): string | null {
-      if (!req.headers["cf-ray"]) {
-        // Request no pasó por Cloudflare → es Traefik internamente
-        return "internal-request";
+    function extractClientIp(req: Request): string {
+      const isCloudflare = !!req.headers["cf-ray"];
+
+      if (isCloudflare) {
+        const cfIp = req.headers["cf-connecting-ip"];
+        if (typeof cfIp === "string") return cfIp.trim();
+
+        const xff = req.headers["x-forwarded-for"];
+        if (typeof xff === "string") return xff.split(",")[0].trim();
       }
 
-      const cfIp = req.headers["cf-connecting-ip"];
-      if (typeof cfIp === "string") return cfIp.trim();
-
-      const xff = req.headers["x-forwarded-for"];
-      if (typeof xff === "string") return xff.split(",")[0].trim();
-
-      return null;
+      // Request interna (Traefik → Core)
+      return "internal-request";
     }
     // 🐞 Debug básico 🐞
     console.log("=== DEBUG HEADERS /security/verify-admin ===");
