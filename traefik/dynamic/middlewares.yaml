@@ -27,6 +27,9 @@ http:
         addAuthCookiesToResponse:
           - "accessKey"
           - "clientKey"
+      headers:
+        customRequestHeaders:
+          X-Forwarded-For: "{CF-Connecting-IP}"  
 
     # -------------------------------------------------------------------------
     # 🔐 CSP personalizada para Core – permite credenciales desde frontend
