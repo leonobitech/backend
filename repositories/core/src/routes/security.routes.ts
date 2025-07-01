@@ -21,7 +21,6 @@ securityRoutes.get(
     console.log({
       method: req.method,
       path: req.originalUrl,
-      cookies: req.headers.cookie,
       host: req.headers.host,
       "user-agent": req.headers["user-agent"],
       "x-forwarded-for": req.headers["x-forwarded-for"],
