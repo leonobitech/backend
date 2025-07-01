@@ -56,20 +56,7 @@ const authenticate: RequestHandler = catchErrors(
         );
       }
 
-      meta.ipAddress = req.ip;
-
-      // 🧠 Logger para depurar fuentes de IP
-      logger.info("📡 IP Info", {
-        metaIP: meta.ipAddress,
-        expressIp: req.ip,
-        xForwardedFor: req.headers["x-forwarded-for"],
-        remoteAddress: req.socket.remoteAddress,
-      });
-
       console.log("Request from Traefik:", meta);
-
-      req.meta = meta;
-      return next();
     }
 
     if (!accessKey || !clientKey) {
