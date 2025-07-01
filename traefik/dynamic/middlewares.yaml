@@ -28,10 +28,11 @@ http:
           - "accessKey"
           - "clientKey"
     
-    inject-client-ip:
+    cf-real-ip:
       headers:
         customRequestHeaders:
           X-Real-IP: "{CF-Connecting-IP}"
+          CF-Connecting-IP: "{CF-Connecting-IP}"
 
     # -------------------------------------------------------------------------
     # 🔐 CSP personalizada para Core – permite credenciales desde frontend

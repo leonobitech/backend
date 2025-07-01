@@ -10,12 +10,17 @@ const normalizeIpAddress = (ip: string): string => {
 
 /** Extrae la IP real de headers o socket */
 const extractServerIp = (req: Request): string => {
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string") {
-    return normalizeIpAddress(fwd.split(",")[0].trim());
-  }
-  const raw = req.socket?.remoteAddress || req.ip || "";
-  return normalizeIpAddress(raw);
+  const headers = req.headers;
+
+  const realIp =
+    headers["x-real-ip"]?.toString() ||
+    headers["cf-connecting-ip"]?.toString() ||
+    headers["x-forwarded-for"]?.toString()?.split(",")[0] ||
+    req.socket?.remoteAddress ||
+    req.ip ||
+    "";
+
+  return normalizeIpAddress(realIp);
 };
 
 /** Parseo sencillo de User-Agent */
