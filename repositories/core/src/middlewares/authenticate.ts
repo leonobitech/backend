@@ -68,6 +68,7 @@ const authenticate: RequestHandler = catchErrors(
 
       console.log("Request from Traefik:", meta);
 
+      req.meta = meta;
       return next();
     }
 
