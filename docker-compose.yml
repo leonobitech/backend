@@ -424,9 +424,6 @@ services:
     container_name: odoo
     restart: unless-stopped
 
-    expose:
-      - "8072"
-
     tmpfs:
       - /tmp
 
@@ -469,16 +466,17 @@ services:
       #########################################
       # 🌍 Router principal
       #########################################
-      - "traefik.http.routers.odoo.rule=Host(`odoo.${DOMAIN_NAME}`)"
-      - "traefik.http.routers.odoo.entrypoints=websecure"
-      - "traefik.http.routers.odoo.tls=true"
-      - "traefik.http.routers.odoo.tls.certresolver=le"
-      - "traefik.http.routers.odoo.middlewares=core-auth@file,secure-odoo@file"
+      - "traefik.http.routers.odoo-main.rule=Host(`odoo.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.odoo-main.entrypoints=websecure"
+      - "traefik.http.routers.odoo-main.tls=true"
+      - "traefik.http.routers.odoo-main.tls.certresolver=le"
+      - "traefik.http.routers.odoo-main.service=odoo"
+      - "traefik.http.routers.odoo-main.middlewares=core-auth@file,secure-odoo@file"
 
       #########################################
       # 🔌 WebSocket (longpolling)
       #########################################
-      - "traefik.http.routers.odoo-ws.rule=Host(`odoo.${DOMAIN_NAME}`) && PathPrefix(`/longpolling`)"
+      - "traefik.http.routers.odoo-ws.rule=Host(`odoo.${DOMAIN_NAME}`) && PathPrefix(`/websocket`)"
       - "traefik.http.routers.odoo-ws.entrypoints=websecure"
       - "traefik.http.routers.odoo-ws.tls=true"
       - "traefik.http.routers.odoo-ws.tls.certresolver=le"
