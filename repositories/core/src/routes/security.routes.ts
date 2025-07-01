@@ -32,16 +32,6 @@ securityRoutes.get(
       "x-forwarded-proto": req.headers["x-forwarded-proto"],
       "x-forwarded-host": req.headers["x-forwarded-host"],
       "x-forwarded-port": req.headers["x-forwarded-port"],
-      "x-forwarded-scheme": req.headers["x-forwarded-scheme"],
-      "x-forwarded-client-cert": req.headers["x-forwarded-client-cert"],
-      "x-forwarded-for-raw": req.headers["x-forwarded-for-raw"],
-      "x-forwarded-client-ip": req.headers["x-forwarded-client-ip"],
-      "x-forwarded-user-id": req.headers["x-user-id"],
-      "x-forwarded-user-role": req.headers["x-user-role"],
-      "x-forwarded-session-id": req.headers["x-session-id"],
-      "x-forwarded-access-key": req.headers["x-access-key"],
-      "x-forwarded-client-key": req.headers["x-client-key"],
-      "x-forwarded-client-meta": req.headers["x-client-meta"],
     });
 
     next();
