@@ -67,6 +67,8 @@ const authenticate: RequestHandler = catchErrors(
       });
 
       console.log("Request from Traefik:", meta);
+
+      return next();
     }
 
     if (!accessKey || !clientKey) {
