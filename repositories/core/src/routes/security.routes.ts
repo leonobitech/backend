@@ -37,6 +37,7 @@ securityRoutes.get(
       host: req.headers.host,
       "user-agent": req.headers["user-agent"],
       "x-forwarded-for": req.headers["x-forwarded-for"],
+      "cf-connecting-ip": req.headers["cf-connecting-ip"],
       ip: getClientIp(req),
     });
 
