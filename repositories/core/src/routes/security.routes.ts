@@ -4,6 +4,7 @@ import authenticate from "@middlewares/authenticate";
 import authorize from "@middlewares/authorize";
 import { UserRole } from "@constants/userRole";
 import { HTTP_CODE } from "@constants/httpCode";
+import { appendForwardedHeaders } from "@utils/http/forwardHeaders";
 
 const securityRoutes = Router();
 
@@ -32,6 +33,9 @@ securityRoutes.get(
   authorize(UserRole.Admin),
   (req, res) => {
     //console.log("→ DEBUG: Usuario autenticado y autorizado como admin ✅");
+
+    // 🔁 Reinyectamos headers para Traefik
+    appendForwardedHeaders(req, res);
     res.status(HTTP_CODE.OK).send("✅ OK");
   }
 );

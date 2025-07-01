@@ -152,6 +152,10 @@ http:
           img-src * data: blob:;
           connect-src * blob:;
           frame-ancestors 'self';
+        customRequestHeaders:
+            X-Real-IP: "{remoteHost}"
+            X-Forwarded-For: "{remoteHost}"
+            X-Forwarded-Proto: "https"
 
     # -------------------------------------------------------------------------
     # 🗂️ odoo-media – Headers para archivos y contenido estático/descargable
