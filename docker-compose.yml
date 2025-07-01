@@ -148,7 +148,7 @@ services:
       #########################################
       # 🧩 Middlewares globales aplicados al router
       #########################################
-      - "traefik.http.routers.core.middlewares=cf-real-ip@file,core-secure@file, block-trackers@file"
+      - "traefik.http.routers.core.middlewares=core-secure@file, block-trackers@file"
 
 
   n8n_main:
@@ -471,7 +471,7 @@ services:
       - "traefik.http.routers.odoo-main.tls=true"
       - "traefik.http.routers.odoo-main.tls.certresolver=le"
       - "traefik.http.routers.odoo-main.service=odoo"
-      - "traefik.http.routers.odoo-main.middlewares=cf-real-ip@file,core-auth@file,secure-odoo@file"
+      - "traefik.http.routers.odoo-main.middlewares=core-auth@file,secure-odoo@file"
 
       #########################################
       # 🔌 WebSocket (longpolling)
