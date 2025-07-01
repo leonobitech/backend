@@ -92,7 +92,7 @@ const authenticate: RequestHandler = catchErrors(
     }
 
     // 🔍 Log: token recibido
-    const audience = getTokenAudience(accessToken);
+    const audience = await getTokenAudience(accessToken);
     logger.info("🔑 Token recibido", {
       ...meta,
       ttlSeconds: ttl,
