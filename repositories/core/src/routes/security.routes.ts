@@ -26,8 +26,8 @@ securityRoutes.get(
       "x-forwarded-for": req.headers["x-forwarded-for"],
       ip: req.ip,
     });
-     next(); 
      */
+    next();
   },
   authenticate,
   authorize(UserRole.Admin),
