@@ -19,6 +19,7 @@ http:
         trustForwardHeader: true
         authRequestHeaders:
           - "Cookie"
+          - "CF-Connecting-IP" 
           - "X-Forwarded-For"
         authResponseHeaders:
           - "X-User-Id"
