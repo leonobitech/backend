@@ -2,15 +2,17 @@ import { Request } from "express";
 
 export function resolveSource(req: Request): string {
   const forwardedHost = req.headers["x-forwarded-host"];
-  const host = req.headers.host;
-  const path = req.headers["x-forwarded-uri"] || req.url;
+  const host = req.headers.host || "";
+  const path = req.headers["x-forwarded-uri"] || req.url || "";
+  const userAgent = req.headers["user-agent"] || "";
 
-  const raw =
-    typeof forwardedHost === "string"
-      ? forwardedHost
-      : typeof host === "string"
-        ? host
-        : "";
+  const raw = typeof forwardedHost === "string" ? forwardedHost : host;
+
+  if (
+    userAgent.includes("Go-http-client") &&
+    path.includes("/security/verify-admin")
+  )
+    return "traefik";
 
   // 🔍 Dominio/subdominio
   if (raw.includes("odoo")) return "odoo";
