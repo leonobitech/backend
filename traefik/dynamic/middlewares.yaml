@@ -33,6 +33,7 @@ http:
         customRequestHeaders:
           X-Real-IP: "{CF-Connecting-IP}"
           CF-Connecting-IP: "{CF-Connecting-IP}"
+          X-Forwarded-For: "{CF-Connecting-IP}"
 
     # -------------------------------------------------------------------------
     # 🔐 CSP personalizada para Core – permite credenciales desde frontend

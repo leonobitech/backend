@@ -43,7 +43,7 @@ import securityRoutes from "@routes/security.routes";
 const app: Application = express();
 
 // 🔐 Necesario para Traefik o NGINX
-app.set("trust proxy", ["loopback", "linklocal", "uniquelocal"]);
+app.set("trust proxy", true);
 
 // parse application/json
 app.use(express.json());
