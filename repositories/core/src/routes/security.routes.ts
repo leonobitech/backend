@@ -17,7 +17,7 @@ securityRoutes.get(
   "/verify-admin",
   (req, res, next) => {
     // 🐞 Debug básico
-    console.log("=== DEBUG HEADERS /security/verify-admin ===");
+    /* console.log("=== DEBUG HEADERS /security/verify-admin ===");
     console.log({
       method: req.method,
       path: req.originalUrl,
@@ -26,7 +26,7 @@ securityRoutes.get(
       "user-agent": req.headers["user-agent"],
       "x-forwarded-for": req.headers["x-forwarded-for"],
       ip: req.ip,
-    });
+    }); */
 
     next();
   },
