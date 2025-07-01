@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "crypto";
+import { Request } from "express";
 import {
   jwtVerify,
   decodeJwt,
@@ -140,7 +141,8 @@ const verifyTokenAndParse = async <T>(
 // *******************************************************************************************
 export const verifyToken = async (
   jwe: string,
-  lang: SupportedLang
+  lang: SupportedLang,
+  req: Request
 ): Promise<
   ValidatedToken<AccessTokenValidatedPayload | RefreshTokenValidatedPayload>
 > => {
@@ -170,15 +172,19 @@ export const verifyToken = async (
     );
 
     const date = new Date(payload.exp * 1000).toISOString();
-    loggerEvent("token.access.verified", {
-      sessionId: payload.sessionId,
-      userId: payload.userId,
-      role: payload.role,
-      jti: payload.jti,
-      sub: payload.sub,
-      exp: date,
-      iss: payload.iss,
-    });
+    loggerEvent(
+      "token.access.verified",
+      {
+        sessionId: payload.sessionId,
+        userId: payload.userId,
+        role: payload.role,
+        jti: payload.jti,
+        sub: payload.sub,
+        exp: date,
+        iss: payload.iss,
+      },
+      req
+    );
 
     return { payload, jwt };
   }
@@ -193,13 +199,17 @@ export const verifyToken = async (
     );
 
     const date = new Date(payload.exp * 1000).toISOString();
-    loggerEvent("token.refresh.verified", {
-      sessionId: payload.sessionId,
-      jti: payload.jti,
-      sub: payload.sub,
-      exp: date,
-      iss: payload.iss,
-    });
+    loggerEvent(
+      "token.refresh.verified",
+      {
+        sessionId: payload.sessionId,
+        jti: payload.jti,
+        sub: payload.sub,
+        exp: date,
+        iss: payload.iss,
+      },
+      req
+    );
 
     return { payload, jwt };
   }

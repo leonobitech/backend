@@ -104,7 +104,11 @@ const authenticate: RequestHandler = catchErrors(
     if (refreshed) {
       const result = await refreshAccessTokenService(clientKey, meta, lang);
 
-      const { payload } = await verifyToken(result.tokens.accessToken, lang);
+      const { payload } = await verifyToken(
+        result.tokens.accessToken,
+        lang,
+        req
+      );
 
       console.log("🍪 setAuthCookies ejecutado. Cookies seteadas:", {
         accessKey: result.tokens.accessTokenId,
@@ -162,7 +166,11 @@ const authenticate: RequestHandler = catchErrors(
     // 🔐 Verificar token firmado y extraer payload
     let payload: AccessTokenPayload;
     try {
-      const { payload: tokenPayload } = await verifyToken(accessToken, lang);
+      const { payload: tokenPayload } = await verifyToken(
+        accessToken,
+        lang,
+        req
+      );
 
       if (
         tokenPayload.aud !== Audience.Access ||
