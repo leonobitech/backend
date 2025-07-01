@@ -1,20 +1,31 @@
-// src/utils/request/resolveSource.ts
 import { Request } from "express";
 
 export function resolveSource(req: Request): string {
-  const host =
-    typeof req.headers["x-forwarded-host"] === "string"
-      ? req.headers["x-forwarded-host"]
-      : typeof req.headers.host === "string"
-        ? req.headers.host
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = req.headers.host;
+  const path = req.headers["x-forwarded-uri"] || req.url;
+
+  const raw =
+    typeof forwardedHost === "string"
+      ? forwardedHost
+      : typeof host === "string"
+        ? host
         : "";
 
-  if (host.includes("odoo")) return "odoo";
-  if (host.includes("n8n")) return "n8n";
-  if (host.includes("chat")) return "chatwoot";
-  if (host.includes("br.")) return "baserow";
-  if (host.includes("app.") || host.includes("frontend")) return "frontend";
-  if (host.includes("core")) return "core";
+  // 🔍 Dominio/subdominio
+  if (raw.includes("odoo")) return "odoo";
+  if (raw.includes("n8n")) return "n8n";
+  if (raw.includes("chat")) return "chatwoot";
+  if (raw.includes("br.")) return "baserow";
+  if (raw.includes("frontend") || raw.includes("app.")) return "frontend";
+  if (raw.includes("core")) return "core";
+
+  // 🔁 Fallback por path
+  if (typeof path === "string") {
+    if (path.includes("/web") || path.includes("/web/login")) return "odoo";
+    if (path.includes("/n8n")) return "n8n";
+    if (path.includes("/cable")) return "chatwoot";
+  }
 
   return "unknown";
 }
