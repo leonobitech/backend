@@ -18,18 +18,7 @@ securityRoutes.get(
   "/verify-admin",
   (req, res, next) => {
     // 🐞 Debug básico 🐞
-
-    function getClientIp(req: Request): string | null {
-      const cfConnectingIp = req.headers["cf-connecting-ip"];
-      if (typeof cfConnectingIp === "string") return cfConnectingIp.trim();
-
-      const forwardedFor = req.headers["x-forwarded-for"];
-      if (typeof forwardedFor === "string") {
-        return forwardedFor.split(",")[0].trim();
-      }
-
-      return req.socket.remoteAddress || null;
-    }
+    appendForwardedHeaders(req, res);
     console.log("=== DEBUG HEADERS /security/verify-admin ===");
     console.log({
       method: req.method,
@@ -38,7 +27,21 @@ securityRoutes.get(
       "user-agent": req.headers["user-agent"],
       "x-forwarded-for": req.headers["x-forwarded-for"],
       "cf-connecting-ip": req.headers["cf-connecting-ip"],
-      ip: getClientIp(req),
+      ip: req.ip,
+      "x-real-ip": req.headers["x-real-ip"],
+      "x-forwarded-proto": req.headers["x-forwarded-proto"],
+      "x-forwarded-host": req.headers["x-forwarded-host"],
+      "x-forwarded-port": req.headers["x-forwarded-port"],
+      "x-forwarded-scheme": req.headers["x-forwarded-scheme"],
+      "x-forwarded-client-cert": req.headers["x-forwarded-client-cert"],
+      "x-forwarded-for-raw": req.headers["x-forwarded-for-raw"],
+      "x-forwarded-client-ip": req.headers["x-forwarded-client-ip"],
+      "x-forwarded-user-id": req.headers["x-user-id"],
+      "x-forwarded-user-role": req.headers["x-user-role"],
+      "x-forwarded-session-id": req.headers["x-session-id"],
+      "x-forwarded-access-key": req.headers["x-access-key"],
+      "x-forwarded-client-key": req.headers["x-client-key"],
+      "x-forwarded-client-meta": req.headers["x-client-meta"],
     });
 
     next();
