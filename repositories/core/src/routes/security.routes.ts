@@ -4,8 +4,6 @@ import authenticate from "@middlewares/authenticate";
 import authorize from "@middlewares/authorize";
 import { UserRole } from "@constants/userRole";
 import { HTTP_CODE } from "@constants/httpCode";
-import { appendForwardedHeaders } from "@utils/http/forwardHeaders";
-import { Request, Response } from "express";
 
 const securityRoutes = Router();
 
@@ -17,52 +15,8 @@ const securityRoutes = Router();
 securityRoutes.get(
   "/verify-admin",
   (req, res, next) => {
-    function extractClientIp(req: Request): string {
-      const isCloudflare = !!req.headers["cf-ray"];
-
-      if (isCloudflare) {
-        const cfIp = req.headers["cf-connecting-ip"];
-        if (typeof cfIp === "string") return cfIp.trim();
-
-        const xff = req.headers["x-forwarded-for"];
-        if (typeof xff === "string") return xff.split(",")[0].trim();
-      }
-
-      // Request interna (Traefik → Core)
-      return "internal-request";
-    }
-    // 🐞 Debug básico 🐞
-    console.log("=== DEBUG HEADERS /security/verify-admin ===");
-    console.log({
-      method: req.method,
-      path: req.originalUrl,
-      host: req.headers.host,
-      "user-agent": req.headers["user-agent"],
-      "x-forwarded-for": req.headers["x-forwarded-for"],
-      "cf-connecting-ip": req.headers["cf-connecting-ip"],
-      "ip:": extractClientIp(req),
-    });
-
-    next();
-  },
-  authenticate,
-  authorize(UserRole.Admin),
-  (req, res) => {
-    //console.log("→ DEBUG: Usuario autenticado y autorizado como admin ✅");
-
-    // 🔁 Reinyectamos headers para Traefik
-    appendForwardedHeaders(req, res);
-    res.status(HTTP_CODE.OK).send("✅ OK");
-  }
-);
-
-export default securityRoutes;
-
-/* securityRoutes.get(
-  "/verify-admin",
-  (req, res, next) => {
     // 🐞 Debug básico
-    console.log("=== DEBUG HEADERS /security/verify-admin ===");
+    /* console.log("=== DEBUG HEADERS /security/verify-admin ===");
     console.log({
       method: req.method,
       path: req.originalUrl,
@@ -72,18 +26,16 @@ export default securityRoutes;
       "x-forwarded-for": req.headers["x-forwarded-for"],
       ip: req.ip,
     });
-
-    next();
+     next(); 
+     */
   },
   authenticate,
   authorize(UserRole.Admin),
   (req, res) => {
-    console.log("→ DEBUG: Usuario autenticado y autorizado como admin ✅");
+    //console.log("→ DEBUG: Usuario autenticado y autorizado como admin ✅");
 
-    // 🔁 Reinyectamos headers para Traefik
-    appendForwardedHeaders(req, res);
     res.status(HTTP_CODE.OK).send("✅ OK");
   }
 );
 
-export default securityRoutes; */
+export default securityRoutes;
