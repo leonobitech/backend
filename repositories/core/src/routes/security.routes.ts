@@ -5,6 +5,7 @@ import authorize from "@middlewares/authorize";
 import { UserRole } from "@constants/userRole";
 import { HTTP_CODE } from "@constants/httpCode";
 import { appendForwardedHeaders } from "@utils/http/forwardHeaders";
+import { Request, Response } from "express";
 
 const securityRoutes = Router();
 
@@ -17,6 +18,18 @@ securityRoutes.get(
   "/verify-admin",
   (req, res, next) => {
     // 🐞 Debug básico 🐞
+
+    function getClientIp(req: Request): string | null {
+      const cfConnectingIp = req.headers["cf-connecting-ip"];
+      if (typeof cfConnectingIp === "string") return cfConnectingIp.trim();
+
+      const forwardedFor = req.headers["x-forwarded-for"];
+      if (typeof forwardedFor === "string") {
+        return forwardedFor.split(",")[0].trim();
+      }
+
+      return req.socket.remoteAddress || null;
+    }
     console.log("=== DEBUG HEADERS /security/verify-admin ===");
     console.log({
       method: req.method,
@@ -24,7 +37,7 @@ securityRoutes.get(
       host: req.headers.host,
       "user-agent": req.headers["user-agent"],
       "x-forwarded-for": req.headers["x-forwarded-for"],
-      ip: req.ip,
+      ip: getClientIp(req),
     });
 
     next();
