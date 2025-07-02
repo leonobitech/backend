@@ -5,11 +5,8 @@ export const getLogContext = (
   options = { includeHeaders: false }
 ) => {
   const base = {
-    path: req.originalUrl,
-    method: req.method,
-    host: req.headers.host,
-    userId: req.userId,
-    ...req.meta,
+    ...(req.meta || {}), // ✅ prioridad absoluta al meta inyectado
+    userId: req.userId || null,
   };
 
   if (options.includeHeaders) {
