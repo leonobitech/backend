@@ -27,7 +27,7 @@ export const requestMeta = (
   const isForwardAuth = req.path === "/security/verify-admin";
 
   req.meta = isForwardAuth
-    ? getClientMeta(req) || getRequestMeta(req) // fallback si la cookie está mal
+    ? (getClientMeta(req) ?? getRequestMeta(req))
     : getRequestMeta(req);
 
   next();
