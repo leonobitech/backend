@@ -73,7 +73,7 @@ WHITELIST=(
 ## 📁 Archivos clave
 
 - `/usr/local/bin/vps-monitor` → script principal
-- `/var/log/vps-monitor.log` → log diario (incluye detalle de procesos `node`)
+- `/var/log/msmtp-root.log` → log diario (incluye detalle de procesos `node`)
 
 ---
 
