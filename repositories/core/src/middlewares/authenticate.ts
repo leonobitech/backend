@@ -34,7 +34,9 @@ const authenticate: RequestHandler = catchErrors(
     const accessKey = getAccessKey(req);
     const clientKey = getClientKey(req);
 
-    // 📍 Determinar si esta es una request de ForwardAuth de Traefik
+    const meta = req.meta;
+
+    /* // 📍 Determinar si esta es una request de ForwardAuth de Traefik
     const isForwardAuth = req.originalUrl.includes("/security/verify-admin");
 
     let meta: any;
@@ -57,7 +59,7 @@ const authenticate: RequestHandler = catchErrors(
       }
 
       console.log("Request from Traefik:", meta);
-    }
+    } */
 
     if (!accessKey || !clientKey) {
       logger.warn("🛑 Acceso denegado: Faltan cookies de autenticación", {
