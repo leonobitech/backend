@@ -153,8 +153,8 @@ http:
           connect-src * blob:;
           frame-ancestors 'self';
         customRequestHeaders:
-            X-Forwarded-For: "{Header.X-Forwarded-For}"
-            X-Real-IP: "{Header.X-Forwarded-For}"
+            X-Real-IP: "{Header.CF-Connecting-IP}"
+            X-Forwarded-For: "{Header.CF-Connecting-IP}"
             X-Forwarded-Proto: "https"
 
     # -------------------------------------------------------------------------
