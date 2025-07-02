@@ -27,6 +27,7 @@ securityRoutes.get(
       ip: req.ip,
     });
      */
+
     next();
   },
   authenticate,
