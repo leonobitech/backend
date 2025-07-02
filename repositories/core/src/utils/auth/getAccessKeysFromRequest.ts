@@ -1,3 +1,5 @@
+// @utils/auth/getAccessKeysFromRequest
+
 import { Request } from "express";
 import { createDecipheriv } from "crypto";
 
@@ -70,7 +72,7 @@ export const getClientKey = (req: Request): string | undefined => {
  * generada en el frontend y luego enviada en el request. Debería estar asociada al dominio raíz
  * `.leonobitech.com` para funcionar en todos los subdominios.
  */
-export const getClientMeta = (req: any): ClientMeta | null => {
+export const getClientMeta = (req: Request): RequestMeta | null => {
   try {
     const raw = req.cookies?.clientMeta;
     if (!raw) return null;
@@ -95,12 +97,26 @@ export const getClientMeta = (req: any): ClientMeta | null => {
     let decrypted = decipher.update(encrypted);
     decrypted = Buffer.concat([decrypted, decipher.final()]);
 
-    const meta = JSON.parse(decrypted.toString("utf8")) as ClientMeta;
+    const partial = JSON.parse(decrypted.toString("utf8"));
 
-    // 🔧 Completar datos faltantes
-    meta.host = req.hostname;
-    meta.method = req.method;
-    meta.path = req.originalUrl;
+    // ✅ Aseguramos que todas las propiedades requeridas estén presentes
+    const meta: RequestMeta = {
+      ipAddress: partial.ipAddress || "0.0.0.0",
+      deviceInfo: partial.deviceInfo || {
+        device: "Desktop",
+        os: "Unknown",
+        browser: "Unknown",
+      },
+      userAgent: partial.userAgent || req.headers["user-agent"] || "",
+      language: partial.language || "en",
+      platform: partial.platform || "",
+      timezone: partial.timezone || "",
+      screenResolution: partial.screenResolution || "",
+      label: partial.label || "",
+      path: req.originalUrl || "/",
+      method: req.method || "GET",
+      host: req.hostname || "unknown",
+    };
 
     return meta;
   } catch (err) {
