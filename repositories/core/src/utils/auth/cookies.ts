@@ -10,7 +10,7 @@ const baseCookieOptions: CookieOptions = {
   sameSite: "strict", // ✅ ← Seguridad CSRF OK
   httpOnly: true,
   secure: true,
-  domain: "www.leonobitech.com", //  ✅ ← dominio para compartir entre subdominios las cookies
+  domain: "leonobitech.com", //  ✅ ← dominio para compartir entre subdominios las cookies
   path: AUTH_COOKIE_PATH,
 };
 
@@ -28,7 +28,7 @@ export const clientKeyCookieOptions = (): CookieOptions => ({
 
 // 🧼 Opciones para limpiar ambas cookies
 const clearCookieOptions: CookieOptions = {
-  domain: "www.leonobitech.com",
+  domain: "leonobitech.com",
   path: AUTH_COOKIE_PATH,
 };
 
