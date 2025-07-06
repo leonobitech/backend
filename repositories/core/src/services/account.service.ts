@@ -2,6 +2,7 @@
 
 import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
+import { Request } from "express";
 
 import { HTTP_CODE } from "@constants/httpCode";
 import { ERROR_CODE } from "@constants/errorCode";
@@ -610,7 +611,8 @@ export const refreshAccessTokenService = async (
 export const logoutService = async (
   clientKey: string,
   meta: RequestMeta,
-  lang: SupportedLang
+  lang: SupportedLang,
+  req: Request
 ): Promise<LogoutResponse> => {
   // 1️⃣ Buscar el refresh token por fingerprint (clientKey)
   const tokenRecord = await findRefreshTokenByClientKey(clientKey);
@@ -651,7 +653,7 @@ export const logoutService = async (
   }
 
   // 3️⃣ Verificar el refreshToken (Zod y claims)
-  const { payload } = await verifyToken(tokenRecord.token, lang);
+  const { payload } = await verifyToken(tokenRecord.token, lang, req);
 
   appAssert(
     payload.sessionId === tokenRecord.session.id,

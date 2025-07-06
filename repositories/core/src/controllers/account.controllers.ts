@@ -398,7 +398,7 @@ export const logoutController = catchErrors(
     }
 
     // 🧹 Cerrar sesión y revocar tokens
-    const result = await logoutService(clientKey, meta, lang);
+    const result = await logoutService(clientKey, meta, lang, req);
 
     // 🧼 Limpiar cookies de autenticación
     clearAuthCookies(res);

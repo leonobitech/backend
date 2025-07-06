@@ -59,4 +59,5 @@ export const setAuthCookies = ({
 export const clearAuthCookies = (res: Response): Response =>
   res
     .clearCookie("accessKey", clearCookieOptions)
-    .clearCookie("clientKey", clearCookieOptions);
+    .clearCookie("clientKey", clearCookieOptions)
+    .clearCookie("clientMeta", clearCookieOptions);
