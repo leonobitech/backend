@@ -12,11 +12,11 @@ Este archivo documenta las medidas de seguridad aplicadas en la infraestructura 
                                                   │
                                                   ▼
                                     ┌─────────────────────────────┐
-                                    │        Traefik Proxy        │
-                                    │   (traefik.leonobitech.com) ├──────────────┐
-                                    │  - auth-traefik             │              │
+                                    │        Traefik Proxy         │
+                                    │   (traefik.leonobitech.com)  ├──────────────┐
+                                    │  - auth-traefik              │              │
                                     │  - block-trackers           │              ▼
-                                    │  - traefik-secure (headers) │     ┌─────────────────────┐
+                                    │  - traefik-secure (headers)  │     ┌─────────────────────┐
                                     └─────────────────────────────┘     │  n8n_main (UI)      │
                                                                         │ n8n.leonobitech.com │
                                                                         │ Middlewares:        │
@@ -25,7 +25,7 @@ Este archivo documenta las medidas de seguridad aplicadas en la infraestructura 
                                                                         │ - block-trackers    │
                                                                         └───────┬─────────────┘
                                                                                 │
-                             ┌────[ UI Login, Configuración Workflows ]─────────┘
+                             ┌────[ UI Login, Configuración Workflows ]───────────┘
                              │
                              │
                              │
@@ -86,7 +86,7 @@ Este archivo documenta las medidas de seguridad aplicadas en la infraestructura 
 | `n8n_webhook_1`         | `n8n-webhook-secure@docker` | ❌                       | ❌ (No se aplica CSP)    |
 | `n8n_worker_1`          | ❌ No expuesto públicamente | ❌                       | ❌                       |
 | `odoo.leonobitech.com`  | `odoo-secure@docker`        | ✅ `auth-odoo@docker`    | ❌                       |
-| `traefik` dashboard     | `traefik-secure@docker`     | ✅ `auth-traefik@docker` | `block-trackers@docker`  |
+| `traefik` dashboard      | `traefik-secure@docker`      | ✅ `auth-traefik@docker`  | `block-trackers@docker`  |
 
 ---
 

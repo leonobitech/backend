@@ -30,6 +30,9 @@ export const clientKeyCookieOptions = (): CookieOptions => ({
 const clearCookieOptions: CookieOptions = {
   domain: "leonobitech.com",
   path: AUTH_COOKIE_PATH,
+  sameSite: "strict",
+  httpOnly: true,
+  secure: true,
 };
 
 // —— Funciones exportadas ——
@@ -42,7 +45,7 @@ type SetAuthCookiesParams = {
 
 /**
  * ✅ Setea las cookies de autenticación (accessKey + clientKey)
- *    con dominio compartido y SameSite=None para subdominios.
+ *    con dominio compartido y SameSite=Strict para subdominios.
  */
 export const setAuthCookies = ({
   res,
@@ -50,6 +53,21 @@ export const setAuthCookies = ({
   clientKey,
 }: SetAuthCookiesParams): Response =>
   res
+    .cookie("accessKey", accessKey, accessTokenCookieOptions())
+    .cookie("clientKey", clientKey, clientKeyCookieOptions());
+
+/**
+ * ✅ Refresca las cookies de autenticación (accessKey + clientKey)
+ *    con dominio compartido y SameSite=Strict para subdominios.
+ */
+export const refreshAuthCookies = ({
+  res,
+  accessKey,
+  clientKey,
+}: SetAuthCookiesParams): Response =>
+  res
+    .clearCookie("accessKey", clearCookieOptions)
+    .clearCookie("clientKey", clearCookieOptions)
     .cookie("accessKey", accessKey, accessTokenCookieOptions())
     .cookie("clientKey", clientKey, clientKeyCookieOptions());
 

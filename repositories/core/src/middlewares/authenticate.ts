@@ -7,7 +7,6 @@ import { getErrorMessage } from "@utils/request/getErrorMessage";
 import {
   getAccessKey,
   getClientKey,
-  getClientMeta,
 } from "@utils/auth/getAccessKeysFromRequest";
 import { verifyToken } from "@utils/auth/jwt";
 import { Audience } from "@constants/audience";
@@ -20,7 +19,7 @@ import { createHash } from "crypto";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
 import { refreshAccessTokenService } from "@services/account.service";
-import { setAuthCookies } from "@utils/auth/cookies";
+import { refreshAuthCookies } from "@utils/auth/cookies";
 import { loggerEvent } from "@utils/logging/loggerEvent";
 
 /**
@@ -117,7 +116,7 @@ const authenticate: RequestHandler = catchErrors(
         clientKey: result.tokens.hashedPublicKey,
       });
       // Actualizar cookies con nuevos tokens
-      setAuthCookies({
+      refreshAuthCookies({
         res,
         accessKey: result.tokens.accessTokenId,
         clientKey: result.tokens.hashedPublicKey,
