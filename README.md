@@ -115,7 +115,7 @@ Each service is mapped to a subdomain:
 
 ---
 
-## ✨ Maintained by
+## ✨ Maintained by:
 
 **Leonobitech Dev Team**  
 https://www.leonobitech.com  
