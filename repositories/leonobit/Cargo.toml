@@ -1,0 +1,18 @@
+[package]
+name = "agent-ai"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.8.4", features = ["json"] }
+tokio = { version = "1", features = ["rt-multi-thread","macros","time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tower-http = { version = "0.6.6", features = ["cors"] }
+anyhow = "1"
+chrono = "0.4"
+
+# WebRTC en Rust
+webrtc = "0.13"

@@ -1096,6 +1096,36 @@ services:
     cpus: 0.5
     mem_limit: 512m
 
+  leonobit:
+    container_name: leonobit
+    build:
+      context: ./repositories/leonobit
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - RUST_LOG=info
+      # SUGERENCIA: permite ambos orígenes o usa tu .env para fijar el correcto
+      - CORS_ORIGIN=${CORS_ORIGIN_LEONOBIT:-https://www.leonobitech.com}
+    networks:
+      - leonobitech-net
+    depends_on:
+      traefik:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=leonobitech-net"
+
+      # 🌐 Router para leonobit.<DOMAIN_NAME>
+      - "traefik.http.routers.leonobit.rule=Host(`leonobit.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.leonobit.entrypoints=websecure"
+      - "traefik.http.routers.leonobit.tls.certresolver=le"
+      - "traefik.http.routers.leonobit.middlewares=secure-relaxed@file,block-trackers@file"
+
+      # 🔁 Servicio expuesto internamente en 8000
+      - "traefik.http.services.leonobit.loadbalancer.server.port=8000"
+
+
 volumes:
   # 🔴 Redis
   redis_core_data:         # Almacena los datos persistentes del Redis del Core
