@@ -4,30 +4,19 @@ use std::{env, net::SocketAddr, time::Duration};
 use tokio::{signal, net::TcpListener};
 
 use http::HeaderValue;
-use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, Any, CorsLayer};
+use tower_http::cors::{AllowHeaders, AllowMethods, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 mod routes;
 
 fn build_cors_from_env() -> Result<CorsLayer, Box<dyn std::error::Error>> {
-    let origins = env::var("CORS_ORIGIN").unwrap_or_default().trim().to_string();
-
-    if origins.is_empty() {
-        return Ok(CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(AllowMethods::any())
-            .allow_headers(AllowHeaders::any())
-            .max_age(Duration::from_secs(600)));
-    }
-
-    let mut list = Vec::<HeaderValue>::new();
-    for o in origins.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
-        list.push(o.parse::<HeaderValue>()?);
-    }
-    let allow_origin = AllowOrigin::list(list);
+    // ÚNICO origen permitido, requerido en producción
+    let origin = env::var("CORS_ORIGIN")
+        .expect("CORS_ORIGIN env var must be set (e.g., https://www.leonobitech.com)");
+    let origin_value: HeaderValue = origin.parse()?; // valida formato header
 
     Ok(CorsLayer::new()
-        .allow_origin(allow_origin)
+        .allow_origin(origin_value)
         .allow_methods(AllowMethods::any())
         .allow_headers(AllowHeaders::any())
         .max_age(Duration::from_secs(600)))
