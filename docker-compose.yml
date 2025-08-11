@@ -1113,7 +1113,7 @@ services:
     networks:
       - leonobitech-net
     # (opcional) healthcheck local
-    command: ["/bin/sh", "-c", "/usr/local/bin/leonobit || echo 'BIN EXITED RC:$?'; sleep infinity"]
+    command: ["/bin/sh", "-c", "leonobit || echo 'BIN EXITED RC:$?'; sleep infinity"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
       interval: 15s
