@@ -1127,14 +1127,18 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=leonobitech-net"
-      # 🌐 Router para leonobit.<DOMAIN_NAME>
+
+     # 🌐 Router para leonobit.<DOMAIN_NAME>
       - "traefik.http.routers.leonobit.rule=Host(`leonobit.${DOMAIN_NAME}`)"
       - "traefik.http.routers.leonobit.entrypoints=websecure"
       - "traefik.http.routers.leonobit.tls.certresolver=le"
-      - "traefik.http.routers.leonobit.middlewares=secure-relaxed@file,block-trackers@file"
 
-      # 🔁 Servicio expuesto internamente en 8000
+     # 🔐 Middleware: autenticación Core + headers relajados
+      - "traefik.http.routers.leonobit.middlewares=combined-auth-relaxed@file"
+
+     # 🔁 Servicio expuesto internamente en 8000
       - "traefik.http.services.leonobit.loadbalancer.server.port=8000"
+
 
 volumes:
   # 🔴 Redis

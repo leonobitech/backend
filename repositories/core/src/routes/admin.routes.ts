@@ -23,4 +23,8 @@ adminRouter.post("/chatwoot", (req, res) => {
   res.json({ url: "https://chat.leonobitech.com" });
 });
 
+adminRouter.post("/", (req, res) => {
+  res.json({ url: "https://leonobit.leonobitech.com" });
+});
+
 export default adminRouter;
