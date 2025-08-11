@@ -12,4 +12,5 @@ pub fn hello_routes() -> Router {
         .route("/", get(hello_world))
         .route("/user", get(hello_user))
         .route("/hello", get(hello_params))
+        .route("/health", get(|| async { "ok" }))
 }
