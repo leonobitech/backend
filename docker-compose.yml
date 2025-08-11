@@ -1100,21 +1100,25 @@ services:
     container_name: leonobit
     build:
       context: ./repositories/leonobit
-    # image: leonobitech/leonobit:v1.0
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     environment:
       - RUST_LOG=info
-      # SUGERENCIA: permite ambos orígenes o usa tu .env para fijar el correcto
+      - RUST_BACKTRACE=1
+      # Este se usará luego cuando agreguemos CORS en el server:
       - CORS_ORIGIN=${CORS_ORIGIN_LEONOBIT:-https://www.leonobitech.com}
     ports:
       - "8000:8000"
     networks:
       - leonobitech-net
-    depends_on:
-      traefik:
-        condition: service_started
+    # (opcional) healthcheck local
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     labels: []
     #  - "traefik.enable=true"
     #  - "traefik.docker.network=leonobitech-net"
