@@ -1102,6 +1102,8 @@ services:
       context: ./repositories/leonobit
     image: leonobitech/leonobit:v1.0
     restart: unless-stopped
+    ports:
+      - "8000:8000"
     security_opt:
       - no-new-privileges:true
     environment:
