@@ -1096,7 +1096,7 @@ services:
     cpus: 0.5
     mem_limit: 512m
 
-leonobit:
+  leonobit:
     container_name: leonobit
     build:
       context: ./repositories/leonobit
