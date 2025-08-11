@@ -1,23 +1,27 @@
-# --- builder ---
-FROM rust:1.89.0-trixie AS builder
+# --- Build stage ---
+FROM rust:1.72-bookworm AS builder
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential pkg-config git ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# cache deps
+# Copiamos y compilamos dependencias primero (cache)
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir -p src && echo "fn main(){}" > src/main.rs && cargo build --release
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release
+RUN rm -rf src
 
-# build real
+# Copiamos el código real y compilamos
 COPY src ./src
-RUN cargo build --release && strip target/release/leonobit
+RUN cargo build --release
 
-# --- runtime ---
-FROM debian:trixie-slim
+# --- Runtime stage ---
+FROM debian:bookworm-slim
 WORKDIR /app
-ENV RUST_LOG=info
-RUN useradd -m appuser && apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
-USER appuser
+
+# Instala solo lo necesario para runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/target/release/leonobit /app/leonobit
+
 EXPOSE 8000
+ENV RUST_LOG=info
+
 ENTRYPOINT ["/app/leonobit"]
