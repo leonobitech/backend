@@ -7,7 +7,7 @@ mod routes;
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let routes_all = Router::new().merge(hello_routes());
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     println!("Server listening on http://{addr}\n");
 
     axum::Server::bind(&addr)
