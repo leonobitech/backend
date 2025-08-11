@@ -1100,6 +1100,7 @@ services:
     container_name: leonobit
     build:
       context: ./repositories/leonobit
+    image: leonobitech/leonobit:v1.0
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
