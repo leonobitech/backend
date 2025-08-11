@@ -37,3 +37,8 @@ traefik/acme.json
 
 # Ignorar los datos de Odoo
 /repositories/odoo/odoo.conf
+
+# Ignorar los datos de Rust
+**/target
+**/dist
+**/node_modules
