@@ -1096,24 +1096,22 @@ services:
     cpus: 0.5
     mem_limit: 512m
 
-  leonobit:
+leonobit:
     container_name: leonobit
     build:
       context: ./repositories/leonobit
+      dockerfile: Dockerfile
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     environment:
       - RUST_LOG=info
       - RUST_BACKTRACE=1
-      # Este se usará luego cuando agreguemos CORS en el server:
       - CORS_ORIGIN=${CORS_ORIGIN_LEONOBIT:-https://www.leonobitech.com}
     ports:
       - "8000:8000"
     networks:
       - leonobitech-net
-    # (opcional) healthcheck local
-    command: ["/bin/sh", "-c", "leonobit || echo 'BIN EXITED RC:$?'; sleep infinity"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
       interval: 15s
