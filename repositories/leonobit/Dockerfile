@@ -3,8 +3,12 @@ FROM rust:1.89-slim-bookworm AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config git ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY Cargo.toml Cargo.lock ./
+
+# cache deps SIN Cargo.lock
+COPY Cargo.toml ./
 RUN mkdir -p src && echo "fn main(){}" > src/main.rs && cargo build --release
+
+# build real
 COPY src ./src
 RUN cargo build --release && strip target/release/leonobit
 
