@@ -1,4 +1,4 @@
-# --- build (Debian Trixie, robusto) ---
+# --- builder ---
 FROM rust:1.89.0-trixie AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -12,14 +12,11 @@ RUN mkdir -p src && echo "fn main(){}" > src/main.rs && cargo build --release
 COPY src ./src
 RUN cargo build --release && strip target/release/leonobit
 
-# --- runtime (Debian Trixie slim) ---
+# --- runtime ---
 FROM debian:trixie-slim
 WORKDIR /app
 ENV RUST_LOG=info
-# usuario no-root
-RUN useradd -m -u 10001 appuser && \
-    apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+RUN useradd -m appuser && apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 USER appuser
 COPY --from=builder /app/target/release/leonobit /app/leonobit
 EXPOSE 8000
