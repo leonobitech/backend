@@ -1108,7 +1108,6 @@ services:
       - RUST_BACKTRACE=1
       # Este se usará luego cuando agreguemos CORS en el server:
       - CORS_ORIGIN=${CORS_ORIGIN_LEONOBIT:-https://www.leonobitech.com}
-    command: ["tail","-f","/dev/null"]
     ports:
       - "8000:8000"
     networks:

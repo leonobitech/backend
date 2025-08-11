@@ -1,27 +1,24 @@
-# --- Build stage ---
-FROM rust:1.89-bookworm AS builder
-WORKDIR /app
+FROM rust:1.81-bookworm AS builder
+WORKDIR /usr/src/app
 
-# Copiamos y compilamos dependencias primero (cache)
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-RUN rm -rf src
+# Copia todo el código
+COPY . .
 
-# Copiamos el código real y compilamos
-COPY src ./src
+# Dependencias necesarias para compilar crates nativos
+RUN apt-get update && apt-get install -y --no-install-recommends libssl-dev pkg-config
+
+# Compilar en modo release
 RUN cargo build --release
 
-# --- Runtime stage ---
+# --- Runtime Stage ---
 FROM debian:bookworm-slim
 WORKDIR /app
 
-# Instala solo lo necesario para runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/leonobit /app/leonobit
+# Copiar el binario final
+COPY --from=builder /usr/src/app/target/release/leonobit /usr/local/bin/leonobit
 
 EXPOSE 8000
 ENV RUST_LOG=info
-
-ENTRYPOINT ["/app/leonobit"]
+ENTRYPOINT ["leonobit"]
