@@ -23,7 +23,7 @@ adminRouter.post("/chatwoot", (req, res) => {
   res.json({ url: "https://chat.leonobitech.com" });
 });
 
-adminRouter.post("/", (req, res) => {
+adminRouter.post("/leonobit", (req, res) => {
   res.json({ url: "https://leonobit.leonobitech.com" });
 });
 
