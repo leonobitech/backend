@@ -5,8 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config git ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # cache deps
-#COPY Cargo.toml Cargo.lock ./
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src && echo "fn main(){}" > src/main.rs && cargo build --release
 
 # build real
