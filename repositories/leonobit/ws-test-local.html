@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prueba de WebSocket</title>
+</head>
+<body>
+  <h1>Prueba de WebSocket</h1>
+
+  <button id="connectBtn">Conectar</button>
+  <button id="sendBtn" disabled>Enviar mensaje</button>
+
+  <div id="log"></div>
+
+  <script>
+    let ws;
+
+    const log = (msg) => {
+      const div = document.getElementById("log");
+      div.innerHTML += msg + "<br>";
+    };
+
+    document.getElementById("connectBtn").onclick = () => {
+      const WS_URL = "ws://localhost:8000/ws/offer"; // Cambia a wss://... en producción
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        log("✅ Conectado a " + WS_URL);
+        document.getElementById("sendBtn").disabled = false;
+      };
+
+      ws.onmessage = (ev) => {
+        log("📩 " + ev.data);
+      };
+
+      ws.onclose = (ev) => {
+        log("❌ Conexión cerrada");
+        document.getElementById("sendBtn").disabled = true;
+      };
+
+      ws.onerror = (ev) => {
+        log("⚠️ Error: " + ev);
+      };
+    };
+
+    document.getElementById("sendBtn").onclick = () => {
+      ws.send("Hola desde el HTML");
+      log("📤 Enviado: Hola desde el HTML");
+    };
+  </script>
+</body>
+</html>

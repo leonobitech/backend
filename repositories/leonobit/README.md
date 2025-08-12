@@ -12,11 +12,15 @@ Actualmente incluye:
 
 ```
 src/
-├── main.rs               # Punto de entrada del binario
-├── lib.rs                # Configuración del servidor, CORS y rutas
-└── routes/
-    ├── mod.rs             # Registro de rutas
-    └── hello_routes.rs    # Handlers de ejemplo
+├── config/
+│   ├── cors.rs
+│   └── mod.rs
+├── routes/
+│   ├── mod.rs
+│   ├── hello_routes.rs
+│   └── webrtc_routes.rs
+├── lib.rs
+└── main.rs
 Cargo.toml
 Dockerfile
 docker-compose.yml
