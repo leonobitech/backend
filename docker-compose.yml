@@ -1128,23 +1128,24 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=leonobitech-net"
 
-     # 🌐 Router para leonobit.<DOMAIN_NAME>
+      # 🌐 Router HTTP general (con Core Auth)
       - "traefik.http.routers.leonobit.rule=Host(`leonobit.${DOMAIN_NAME}`)"
       - "traefik.http.routers.leonobit.entrypoints=websecure"
       - "traefik.http.routers.leonobit.tls.certresolver=le"
-
-     # 🔐 Middleware: autenticación Core + headers relajados
-      - "traefik.http.routers.leonobit.middlewares=combined-auth-relaxed@file"
-
-     # 🔁 Servicio expuesto internamente en 8000
+      - "traefik.http.routers.leonobit.middlewares=core-auth@file,secure-relaxed@file"
       - "traefik.http.services.leonobit.loadbalancer.server.port=8000"
-      
-      # ✅ Router WS dedicado sin middlewares
+
+      # 🔌 Router WS dedicado (sin middlewares)
       - "traefik.http.routers.leonobit-ws.rule=Host(`leonobit.${DOMAIN_NAME}`) && PathPrefix(`/ws/`)"
       - "traefik.http.routers.leonobit-ws.entrypoints=websecure"
       - "traefik.http.routers.leonobit-ws.tls.certresolver=le"
       - "traefik.http.routers.leonobit-ws.service=leonobit"
-      - "traefik.http.routers.leonobit-ws.priority=100"   # asegura que este router gane sobre el general
+      - "traefik.http.routers.leonobit-ws.priority=100"
+
+      # 🌊 Rate limit suave para /ws/ (handshake)
+      - "traefik.http.middlewares.ws-rl.ratelimit.average=50"
+      - "traefik.http.middlewares.ws-rl.ratelimit.burst=100"
+      - "traefik.http.routers.leonobit-ws.middlewares=ws-rl@docker"
 
 
 volumes:

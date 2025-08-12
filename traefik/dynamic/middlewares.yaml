@@ -52,7 +52,7 @@ http:
           default-src 'self';
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline';
-          connect-src 'self' https://*.leonobitech.com blob: data:;
+          connect-src 'self' https://*.leonobitech.com wss://leonobit.leonobitech.com blob: data:;
           img-src 'self' data:;
           frame-ancestors 'self';
 
@@ -94,8 +94,9 @@ http:
           script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io https://sentry.com;
           style-src 'self' 'unsafe-inline';
           img-src 'self' data: https://sentry.com https://static.cloudflareinsights.com;
-          connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com;
+          connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com wss://leonobit.leonobitech.com;
           frame-ancestors 'self';
+
 
 
     # -------------------------------------------------------------------------
