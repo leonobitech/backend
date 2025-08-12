@@ -1138,6 +1138,13 @@ services:
 
      # 🔁 Servicio expuesto internamente en 8000
       - "traefik.http.services.leonobit.loadbalancer.server.port=8000"
+      
+      # ✅ Router WS dedicado sin middlewares
+      - "traefik.http.routers.leonobit-ws.rule=Host(`leonobit.${DOMAIN_NAME}`) && PathPrefix(`/ws/`)"
+      - "traefik.http.routers.leonobit-ws.entrypoints=websecure"
+      - "traefik.http.routers.leonobit-ws.tls.certresolver=le"
+      - "traefik.http.routers.leonobit-ws.service=leonobit"
+      - "traefik.http.routers.leonobit-ws.priority=100"   # asegura que este router gane sobre el general
 
 
 volumes:
