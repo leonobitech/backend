@@ -1,69 +1,130 @@
-# Leonobit WebRTC Server
+# Leonobit WebRTC / WebSocket Server
 
-Este proyecto es una instancia inicial en **Rust** usando [Axum](https://github.com/tokio-rs/axum), lista para evolucionar hacia un servidor WebRTC de baja latencia.
+Este proyecto es una instancia inicial en **Rust** usando [Axum](https://github.com/tokio-rs/axum), preparada para evolucionar hacia un servidor **WebRTC** de baja latencia.  
+Actualmente incluye soporte **WebSocket** para pruebas de señalización en tiempo real.
 
-Actualmente incluye:
-- Servidor HTTP con Axum
+## ✨ Características actuales
+- Servidor HTTP con **Axum**
 - Endpoints de ejemplo (`/`, `/user`, `/hello`, `/health`)
-- Configuración de **CORS** a través de `tower-http`
-- Contenedor Docker seguro con Traefik como proxy inverso
+- **Endpoint WebSocket** (`/ws/offer`) con:
+  - Recepción y eco de mensajes
+  - Mensajes automáticos periódicos
+  - Manejo de `Ping/Pong` (keep-alive)
+- Configuración **CORS** vía `tower-http`
+- Contenedor Docker seguro con **Traefik** como proxy inverso
+
+---
 
 ## 📂 Estructura del proyecto
-
 ```
 src/
 ├── config/
-│   ├── cors.rs
+│   ├── cors.rs          # Configuración de CORS
 │   └── mod.rs
 ├── routes/
 │   ├── mod.rs
 │   ├── hello_routes.rs
-│   └── webrtc_routes.rs
+│   └── webrtc_routes.rs # Lógica de WebSocket
 ├── lib.rs
 └── main.rs
 Cargo.toml
 Dockerfile
 docker-compose.yml
+ws-test-local.html
 ```
+
+---
 
 ## 🚀 Ejecución local
 
-### Requisitos previos
+### Requisitos
 - [Rust](https://www.rust-lang.org/) (1.80+ recomendado)
 - [Cargo](https://doc.rust-lang.org/cargo/)
-- [Docker](https://www.docker.com/)
+- [Docker](https://www.docker.com/) (opcional para contenedor)
 
-### Ejecutar directamente en local
+### 🔹 Ejecutar en local (modo desarrollo)
+
+> **Nota:** El servidor exige que la variable `CORS_ORIGIN` esté definida.  
+> En local puedes usar el mismo dominio de producción para evitar errores CORS.
+
 ```bash
+export CORS_ORIGIN="https://www.leonobitech.com"
 cargo run
 ```
-Servidor disponible en: [http://localhost:8000](http://localhost:8000)
+Servidor disponible en: <http://localhost:8000>
 
-### Construir y correr con Docker
+---
+
+### 🔹 Probar WebSocket en local
+
+Incluimos **`ws-test-local.html`** para verificar la conexión WebSocket sin instalar nada:
+
+1. Abrir `ws-test-local.html` en el navegador.
+2. Pulsar **Conectar** (se conecta a `ws://localhost:8000/ws/offer`).
+3. Pulsar **Enviar mensaje** y ver las respuestas del servidor.
+
+Resultado esperado:
+- ✅ Conexión establecida
+- 📩 Eco de mensajes enviados
+- 🤖 Mensajes automáticos del servidor cada 30s
+
+---
+
+### 🔹 Ejecutar con Docker
+
 ```bash
 docker-compose up --build
 ```
-Esto levantará el contenedor con la configuración de seguridad incluida y Traefik como proxy.
+
+Esto levanta el contenedor con:
+- Usuario no root
+- Sistema de archivos de solo lectura
+- `tmpfs` para `/tmp` y `/run`
+- `cap_drop: ALL` y `no-new-privileges: true`
+
+> **Traefik** actúa como proxy inverso y maneja TLS. Asegúrate de exponer el servicio en el puerto interno `8000` del contenedor.
+
+---
 
 ## 🧩 Endpoints actuales
-- `GET /` → HTML: "Hello World"
+- `GET /` → HTML: *Hello World*
 - `GET /user` → JSON con datos de ejemplo
 - `GET /hello?name=tu_nombre` → HTML con saludo personalizado
 - `GET /health` → Estado del servidor (`ok`)
+- `WS /ws/offer` → Canal WebSocket (eco + mensajes automáticos)
+
+---
 
 ## 📦 Variables de entorno
-- `CORS_ORIGIN` → Lista de orígenes permitidos para CORS (separados por coma).  
-  Ejemplo:
-  ```env
-  CORS_ORIGIN=https://www.leonobitech.com,https://app.leonobitech.com
-  ```
+
+| Variable      | Descripción                                           | Ejemplo                                                   |
+|---------------|-------------------------------------------------------|-----------------------------------------------------------|
+| `CORS_ORIGIN` | Lista de orígenes permitidos (separados por coma)     | `https://www.leonobitech.com,https://app.leonobitech.com` |
+
+En **producción** esta variable se define en el contenedor (Compose/Systemd).  
+En **local** puedes exportarla antes de ejecutar el binario.
+
+---
+
+## 📡 Flujo actual de WebSocket
+```
++-------------------+      WSS/WS        +--------------------+
+|   Cliente Web     | <----------------> |  Servidor Leonobit |
+| (HTML/Browser)    |     /ws/offer      | (Axum + WebSocket) |
++-------------------+                    +--------------------+
+```
+
+---
 
 ## 🔜 Roadmap
-- [ ] Implementar servidor de señalización WebRTC
-- [ ] Integrar STUN/TURN
-- [ ] Añadir autenticación y gestión de sesiones
-- [ ] Soporte para streaming de audio/video en tiempo real
-- [ ] Integración con cliente frontend WebRTC
+- [ ] Usar el canal WebSocket como señalización WebRTC (SDP/ICE)
+- [ ] Integración con crate `webrtc` (Pion) para `offer/answer` reales
+- [ ] Añadir STUN/TURN
+- [ ] Autenticación y control de sesiones
+- [ ] Streaming de audio/video en tiempo real
+- [ ] Integración con frontend WebRTC
+
+---
 
 ## 🛡️ Seguridad del contenedor
 La configuración de Docker aplica:
@@ -75,30 +136,4 @@ La configuración de Docker aplica:
 
 ---
 
-## 📡 Diagrama preliminar del flujo WebRTC
-
-```
-+-------------------+         HTTPS/WSS          +-------------------+
-|   Cliente Web     |  <--------------------->  |  Servidor Leonobit |
-| (Navegador/APP)   |     Señalización Axum      | (Axum + WebRTC)    |
-+---------+---------+                           +---------+---------+
-          |                                              |
-          |                                              |
-          |             Conexión P2P WebRTC              |
-          | (SDP Offer/Answer + ICE Candidates vía Axum) |
-          v                                              v
-   +------+------ +
-   |  STUN/TURN  |   <--- UDP/TCP --->
-   |   Servidor  |
-   +-------------+
-```
-
-Este diagrama muestra la arquitectura prevista:
-1. **Señalización** entre cliente y servidor Axum vía HTTPS/WSS.
-2. **Intercambio de SDP/ICE** para establecer la conexión WebRTC.
-3. **STUN/TURN** para resolver NATs y asegurar conectividad.
-4. Comunicación directa P2P para audio, video y datos.
-
----
-
-> **Nota**: Este README es preliminar y se actualizará a medida que avance el desarrollo del módulo WebRTC.
+> **Nota:** Este README es preliminar y se actualizará a medida que avance el módulo de WebRTC (señalización SDP + media).
