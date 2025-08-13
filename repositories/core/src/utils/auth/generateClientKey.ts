@@ -29,7 +29,7 @@ export const generateClientKeyFromMeta = async (
     platform: meta.platform,
     timezone: meta.timezone,
     screenResolution: meta.screenResolution,
-    label: meta.label,
+    //label: meta.label,
     host: meta.host,
   };
 
