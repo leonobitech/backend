@@ -5,6 +5,7 @@ use tower_http::trace::TraceLayer;
 
 mod config;
 mod routes;
+pub mod auth;
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cors = config::build_cors_from_env()?;
