@@ -1,14 +1,14 @@
 use serde::{Deserialize, Serialize};
 
-// WebSocket JWT claims
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WsClaims {
     pub sub: String,
     pub tid: String,
-    pub aud: String,
+    pub aud: String,     // "ws"
+    pub iss: String,     // "leonobit"
+    pub jti: String,
+    pub exp: u64,        // portable
     pub role: Option<String>,
     pub email: Option<String>,
-    pub exp: usize,
-    pub iss: String,
-    pub jti: String,
+    pub iat: Option<u64>,
 }

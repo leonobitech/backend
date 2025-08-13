@@ -2,14 +2,16 @@
 use leonobit::run;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // RUST_LOG=info cargo run
+async fn main() -> anyhow::Result<()> {
+    // RUST_LOG=info,tower_http=info cargo run
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,tower_http=info".into()),
+        )
         .init();
 
-    run().await?;
-    Ok(())
+    run().await
 }
 
 // ----------------------------------------------------------------------------------------

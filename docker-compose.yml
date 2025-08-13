@@ -1103,6 +1103,8 @@ services:
       dockerfile: Dockerfile
     image: leonobitech/leonobit:v1.0
     restart: unless-stopped
+
+    # Seguridad y FS inmutable
     user: "10001:10001"
     read_only: true
     tmpfs:
@@ -1113,18 +1115,24 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+
     environment:
-      - RUST_LOG=info
+      - RUST_LOG=info,tower_http=info
+      - PORT=8000
       - CORS_ORIGIN=${CORS_ORIGIN}
       - WS_JWT_SECRET=${WS_JWT_SECRET}
+      - ALLOWED_WS_ORIGINS=${ALLOWED_WS_ORIGINS}
+
     networks:
       - leonobitech-net
+
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 60s
+
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=leonobitech-net"

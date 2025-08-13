@@ -1,9 +1,10 @@
 // src/routes/hello_routes.rs
+use crate::routes::AppState;
 use axum::{
     extract::Query,
     response::{Html, IntoResponse},
     routing::get,
-    Router,
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 
@@ -12,8 +13,9 @@ struct User {
     name: String,
     age: u32,
 }
+
 #[derive(Debug, Serialize)]
-struct Response {
+struct Resp {
     user: User,
 }
 
@@ -26,7 +28,7 @@ pub async fn hello_user() -> impl IntoResponse {
         name: "John Doe".into(),
         age: 30,
     };
-    axum::Json(Response { user })
+    Json(Resp { user })
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,8 +41,8 @@ pub async fn hello_params(Query(params): Query<HelloParams>) -> impl IntoRespons
     Html(format!("<strong>Hello {name}!</strong>"))
 }
 
-// 👉 expone un Router desde este módulo
-pub fn router() -> Router {
+/// 👉 Router tipado con AppState para que pueda mergearse con el principal
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(hello_world))
         .route("/user", get(hello_user))
