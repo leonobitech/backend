@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 // NOTA PARA DESARROLLO LOCAL:
 // Este backend requiere la variable de entorno CORS_ORIGIN para permitir
 // solicitudes desde el frontend. En producción, este valor se establece en Docker.
-// 
+//
 // Para pruebas locales, exporta el CORS_ORIGIN apuntando a tu dominio en producción
 // (o a la URL desde la que harás la prueba) y ejecuta el servidor:
 //

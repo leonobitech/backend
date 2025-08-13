@@ -1,11 +1,15 @@
+use crate::auth::types::WsClaims;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Extension, // 👈 usamos Extension en vez de State
+        Query,
     },
+    http::StatusCode,
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -34,10 +38,30 @@ struct Answer {
 }
 
 pub async fn ws_handler(
-    Extension(peers): Extension<PeerSet>, // 👈 recibe PeerSet desde Extension
+    Extension(peers): Extension<PeerSet>,
     ws: WebSocketUpgrade,
+    Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, peers))
+    let Some(token) = params.get("token") else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let secret = std::env::var("WS_JWT_SECRET").expect("WS_JWT_SECRET not set");
+    let key = DecodingKey::from_secret(secret.as_bytes());
+
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.set_audience(&["ws"]);
+    validation.set_issuer(&["leonobit"]);
+
+    let decoded = match decode::<WsClaims>(token, &key, &validation) {
+        Ok(data) => data.claims,
+        Err(_) => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    // 👇 Aquí podrías loguear los claims, si querés debug
+    tracing::info!("✅ Token validado para user {}", decoded.sub);
+
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, peers)))
 }
 
 async fn handle_socket(socket: WebSocket, peers: PeerSet) {
