@@ -1,6 +1,8 @@
 // File: src/utils/request/getRequestMeta.ts
+
 import { Request } from "express";
 import * as UAParser from "ua-parser-js";
+import { z } from "zod";
 
 /** Normaliza IPv6-mapped IPv4 (::ffff:…) → 192.168.0.1 */
 const normalizeIpAddress = (ip: string): string => {
@@ -34,19 +36,12 @@ const parseUA = (ua: string) => {
   let browser = browserRaw.name || "Unknown";
 
   // 🔍 Correcciones manuales para navegadores mal detectados
-  if (ua.includes("EdgA")) {
-    browser = "Edge Mobile";
-  } else if (ua.includes("EdgiOS")) {
-    browser = "Edge iOS";
-  } else if (ua.includes("Edg/")) {
-    browser = "Edge";
-  } else if (ua.includes("Brave")) {
-    browser = "Brave";
-  } else if (ua.includes("Vivaldi")) {
-    browser = "Vivaldi";
-  } else if (ua.includes("OPR/")) {
-    browser = "Opera";
-  }
+  if (ua.includes("EdgA")) browser = "Edge Mobile";
+  else if (ua.includes("EdgiOS")) browser = "Edge iOS";
+  else if (ua.includes("Edg/")) browser = "Edge";
+  else if (ua.includes("Brave")) browser = "Brave";
+  else if (ua.includes("Vivaldi")) browser = "Vivaldi";
+  else if (ua.includes("OPR/")) browser = "Opera";
 
   const os =
     osRaw.name && osRaw.version
@@ -74,19 +69,32 @@ export interface RequestMeta {
   host: string;
 }
 
+const MetaSchema = z.object({
+  ipAddress: z.string().min(3),
+  deviceInfo: z.object({
+    browser: z.string().min(1),
+    os: z.string().min(1),
+    device: z.string().min(1),
+  }),
+  userAgent: z.string().min(1),
+  language: z.string().min(1),
+  platform: z.string().min(1),
+  timezone: z.string().min(1),
+  screenResolution: z.string().min(1),
+  label: z.string().min(1),
+});
+
 export const getRequestMeta = (req: Request): RequestMeta => {
-  // 1️⃣ Si el cliente envió un meta completo, lo usamos como base
   const clientMeta = (req.body as any)?.meta as
     | Partial<RequestMeta>
     | undefined;
 
-  // 2️⃣ Construimos el meta “servidor” real
   const serverUa = String(req.headers["user-agent"] || "unknown");
   const serverDevice = parseUA(serverUa);
   const serverIp = extractServerIp(req);
   const extra = (req.body as any)?.deviceExtra || {};
 
-  const serverMeta: RequestMeta = {
+  const fallbackMeta: RequestMeta = {
     ipAddress: serverIp,
     deviceInfo: serverDevice,
     userAgent: serverUa,
@@ -100,25 +108,20 @@ export const getRequestMeta = (req: Request): RequestMeta => {
     host: req.hostname,
   };
 
-  if (!clientMeta) {
-    return serverMeta;
+  // 🔒 Si el cliente envió un meta, validamos todo estrictamente
+  if (clientMeta) {
+    const parsed = MetaSchema.safeParse(clientMeta);
+    if (!parsed.success) {
+      throw new Error("❌ Metadatos del cliente incompletos o inválidos");
+    }
+
+    return {
+      ...parsed.data,
+      path: fallbackMeta.path,
+      method: fallbackMeta.method,
+      host: fallbackMeta.host,
+    };
   }
 
-  // 3️⃣ Mezclamos: tomamos del cliente todo salvo la IP (si está vacía)
-  return {
-    ipAddress: clientMeta.ipAddress?.trim()
-      ? clientMeta.ipAddress!
-      : serverMeta.ipAddress,
-    deviceInfo: clientMeta.deviceInfo || serverMeta.deviceInfo,
-    userAgent: clientMeta.userAgent || serverMeta.userAgent,
-    language: clientMeta.language || serverMeta.language,
-    platform: clientMeta.platform || serverMeta.platform,
-    timezone: clientMeta.timezone || serverMeta.timezone,
-    screenResolution:
-      clientMeta.screenResolution || serverMeta.screenResolution,
-    label: clientMeta.label || serverMeta.label,
-    path: serverMeta.path,
-    method: serverMeta.method,
-    host: serverMeta.host,
-  };
+  return fallbackMeta;
 };
