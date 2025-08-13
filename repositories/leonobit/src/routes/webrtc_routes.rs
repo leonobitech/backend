@@ -1,41 +1,4 @@
-use crate::auth::types::WsClaims;
-use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        Extension,
-        Query,
-    },
-    http::StatusCode,
-    response::IntoResponse,
-};
-use futures_util::{SinkExt, StreamExt};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-};
-use tokio::{
-    sync::mpsc,
-    time::{sleep, Duration},
-};
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
-
-pub type PeerSet = Arc<Mutex<HashSet<String>>>;
-
-#[derive(Debug, Deserialize)]
-struct Offer {
-    sdp: String,
-    #[allow(dead_code)]
-    r#type: String,
-}
-
-#[derive(Debug, Serialize)]
-struct Answer {
-    sdp: String,
-    r#type: String,
-}
+use jsonwebtoken::{decode, dangerous_insecure_decode, Algorithm, DecodingKey, Validation};
 
 pub async fn ws_handler(
     Extension(peers): Extension<PeerSet>,
@@ -48,6 +11,15 @@ pub async fn ws_handler(
         warn!("⚠️ WS rechazado: falta token en query params");
         return Err(StatusCode::UNAUTHORIZED);
     };
+
+    // 🔍 Log completo del token recibido
+    info!("🔍 Token recibido (sin validar): {}", token);
+
+    // Decodificar sin validar firma para inspeccionar claims
+    match dangerous_insecure_decode::<serde_json::Value>(token) {
+        Ok(data) => info!("📜 Claims decodificados sin validar: {:?}", data.claims),
+        Err(e) => warn!("⚠️ No se pudo decodificar sin validar: {:?}", e),
+    }
 
     let secret = match std::env::var("WS_JWT_SECRET") {
         Ok(v) => v,
@@ -73,94 +45,4 @@ pub async fn ws_handler(
             Err(StatusCode::UNAUTHORIZED)
         }
     }
-}
-
-async fn handle_socket(socket: WebSocket, peers: PeerSet) {
-    let peer_id = Uuid::new_v4().to_string();
-
-    {
-        let mut p = peers.lock().unwrap();
-        p.insert(peer_id.clone());
-    }
-    info!("🔗 Nueva conexión WebSocket: {}", &peer_id);
-
-    let (mut sender, mut receiver) = socket.split();
-
-    // Canal para mensajes automáticos
-    let (pm_tx, mut pm_rx) = mpsc::unbounded_channel::<String>();
-    let peer_for_task = peer_id.clone();
-
-    tokio::spawn(async move {
-        let mut count = 1;
-        loop {
-            sleep(Duration::from_secs(30)).await;
-            let msg = format!("🤖 Mensaje automático #{count} desde el servidor - {peer_for_task}");
-            if pm_tx.send(msg).is_err() {
-                debug!("📴 No se pudo enviar mensaje automático, canal cerrado");
-                break;
-            }
-            count += 1;
-        }
-    });
-
-    loop {
-        tokio::select! {
-            Some(text) = pm_rx.recv() => {
-                debug!("📤 Enviando mensaje automático a {}: {}", peer_id, text);
-                if sender.send(Message::Text(text)).await.is_err() {
-                    warn!("⚠️ No se pudo enviar mensaje automático a {}", peer_id);
-                    break;
-                }
-            }
-            maybe_msg = receiver.next() => {
-                match maybe_msg {
-                    Some(Ok(Message::Text(text))) => {
-                        debug!("📥 Texto recibido de {}: {}", peer_id, text);
-                        if let Ok(offer) = serde_json::from_str::<Offer>(&text) {
-                            info!("📩 Oferta SDP recibida de {}: {}", peer_id, offer.sdp);
-                            let answer = Answer {
-                                sdp: format!("Respuesta SDP simulada para {}", peer_id),
-                                r#type: "answer".into()
-                            };
-                            let payload = serde_json::to_string(&answer).unwrap();
-                            if sender.send(Message::Text(payload)).await.is_err() {
-                                warn!("⚠️ Falló envío de Answer a {}", peer_id);
-                                break;
-                            }
-                        } else {
-                            info!("📢 Mensaje eco desde {}: {}", peer_id, text);
-                            if sender.send(Message::Text(format!("📢 Eco: {}", text))).await.is_err() {
-                                warn!("⚠️ Falló envío de eco a {}", peer_id);
-                                break;
-                            }
-                        }
-                    }
-                    Some(Ok(Message::Binary(_))) => debug!("📦 Binary recibido de {}", peer_id),
-                    Some(Ok(Message::Ping(payload))) => {
-                        debug!("📡 Ping recibido de {}", peer_id);
-                        if sender.send(Message::Pong(payload)).await.is_err() { break; }
-                    }
-                    Some(Ok(Message::Pong(_))) => debug!("📡 Pong recibido de {}", peer_id),
-                    Some(Ok(Message::Close(_))) => {
-                        info!("🔻 Cliente cerró conexión: {}", peer_id);
-                        break;
-                    }
-                    Some(Err(e)) => {
-                        error!("⚠️ Error en WebSocket {}: {:?}", peer_id, e);
-                        break;
-                    }
-                    None => {
-                        debug!("⏹️ WS cerrado por el cliente {}", peer_id);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    {
-        let mut p = peers.lock().unwrap();
-        p.remove(&peer_id);
-    }
-    info!("❌ Conexión eliminada: {}", peer_id);
 }
