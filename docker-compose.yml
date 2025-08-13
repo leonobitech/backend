@@ -1115,7 +1115,8 @@ services:
       - no-new-privileges:true
     environment:
       - RUST_LOG=info
-      - CORS_ORIGIN=https://www.leonobitech.com
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      - WS_JWT_SECRET=${WS_JWT_SECRET}
     networks:
       - leonobitech-net
     healthcheck:
