@@ -40,19 +40,19 @@ pub async fn ws_handler(
 
     // 2) Validar JWT SOLO contra el perfil del lab-02
     let lab02_profile = [TokenProfile {
-        iss: "lab-02",
-        aud: "lab-ws-02-metrics",
+        iss: "lab-01",
+        aud: "lab-ws-01-auth",
     }];
     let claims: WsClaims =
         match validate_ws_token_multi(&params.token, &state.ws_secret, &lab02_profile) {
             Ok(c) => c,
             Err(e) => {
-                warn!("WS token inválido (lab-02): {e}");
+                warn!("WS token inválido (lab-01): {e}");
                 return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
             }
         };
     info!(
-        "✅ lab-02 autorizado: sub={} role={:?}",
+        "✅ lab-01 autorizado: sub={} role={:?}",
         claims.sub, claims.role
     );
 
@@ -64,7 +64,7 @@ pub async fn ws_handler(
 async fn handle_socket(socket: WebSocket, state: AppState) {
     let peer_id = Uuid::new_v4().to_string();
     state.peers.insert(peer_id.clone());
-    info!("🔗 [lab-02] Nueva conexión: {}", &peer_id);
+    info!("🔗 [lab-01] Nueva conexión: {}", &peer_id);
 
     let (mut tx, mut rx) = socket.split();
 
@@ -149,17 +149,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             }
 
             Ok(Message::Close(frame)) => {
-                info!("🔻 [lab-02] Close {:?} {}", frame, peer_id);
+                info!("🔻 [lab-01] Close {:?} {}", frame, peer_id);
                 break;
             }
 
             Err(e) => {
-                warn!("⚠️ [lab-02] WS error {}: {:?}", peer_id, e);
+                warn!("⚠️ [lab-01] WS error {}: {:?}", peer_id, e);
                 break;
             }
         }
     }
 
     state.peers.remove(&peer_id);
-    info!("❌ [lab-02] Conexión cerrada: {}", peer_id);
+    info!("❌ [lab-01] Conexión cerrada: {}", peer_id);
 }
