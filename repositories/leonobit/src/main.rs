@@ -11,8 +11,11 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    tracing::info!("🚀 leonobit backend starting…");
+
     run().await
 }
+
 
 // ----------------------------------------------------------------------------------------
 // NOTA PARA DESARROLLO LOCAL:

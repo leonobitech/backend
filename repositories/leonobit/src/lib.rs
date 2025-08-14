@@ -11,8 +11,11 @@ pub async fn run() -> anyhow::Result<()> {
     let settings = config::settings::Settings::from_env()?;
     let cors = config::cors::build_cors_from_env()?;
 
-    // Estado global
-    let state = routes::AppState::new(settings.ws_jwt_secret, settings.allowed_ws_origins);
+    // Estado global (inyecta ws_secret, allowed_ws_origins y perfiles iss/aud)
+    let state = routes::AppState::new(
+        settings.ws_jwt_secret.clone(),
+        settings.allowed_ws_origins.clone(),
+    );
 
     // Router principal
     let app = routes::router(state.clone())
@@ -22,6 +25,9 @@ pub async fn run() -> anyhow::Result<()> {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], settings.port));
     info!("🚀 Server listening on http://{addr}");
+    // 👇 logs opcionales de observabilidad
+    info!("🔐 JWT profiles enabled: leonobit/leonobit, lab-01/lab-ws-01-auth");
+    info!("🌐 Allowed WS origins: {:?}", settings.allowed_ws_origins);
 
     let listener = TcpListener::bind(addr).await?;
     axum::serve(listener, app)
@@ -32,7 +38,9 @@ pub async fn run() -> anyhow::Result<()> {
 }
 
 async fn shutdown_signal() {
-    let ctrl_c = async { let _ = signal::ctrl_c().await; };
+    let ctrl_c = async {
+        let _ = signal::ctrl_c().await;
+    };
 
     #[cfg(unix)]
     let term = async {

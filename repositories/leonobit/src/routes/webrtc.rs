@@ -1,3 +1,4 @@
+// src/routes/webrtc.rs
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
@@ -9,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::auth::{types::WsClaims, validate::validate_ws_token};
+use crate::auth::{WsClaims, validate_ws_token_multi}; // ⬅️ cambio de import
 use super::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -45,8 +46,12 @@ pub async fn ws_handler(
         }
     }
 
-    // 2) Validar JWT HS256 (aud=ws, iss=leonobit, TTL corto)
-    let claims: WsClaims = match validate_ws_token(&params.token, &state.ws_secret) {
+    // 2) Validar JWT HS256 contra cualquiera de los perfiles permitidos (iss/aud)
+    let claims: WsClaims = match validate_ws_token_multi(
+        &params.token,
+        &state.ws_secret,
+        &state.profiles, // ⬅️ perfiles inyectados en AppState
+    ) {
         Ok(c) => c,
         Err(e) => {
             warn!("WS token inválido: {e}");
