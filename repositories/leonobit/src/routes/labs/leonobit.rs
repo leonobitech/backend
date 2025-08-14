@@ -1,20 +1,22 @@
 // src/routes/webrtc.rs
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use axum::extract::ws::{WebSocketUpgrade, WebSocket, Message};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::auth::{WsClaims, validate_ws_token_multi}; // ⬅️ cambio de import
-use super::AppState;
+use crate::auth::{validate_ws_token_multi, WsClaims}; // ⬅️ cambio de import
+use crate::routes::AppState;
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct WsParams { token: String }
+pub(crate) struct WsParams {
+    token: String,
+}
 
 #[derive(Debug, Deserialize)]
 struct Offer {
@@ -24,7 +26,10 @@ struct Offer {
 }
 
 #[derive(Debug, Serialize)]
-struct Answer { sdp: String, r#type: String }
+struct Answer {
+    sdp: String,
+    r#type: String,
+}
 
 pub async fn ws_handler(
     State(state): State<AppState>,
@@ -58,10 +63,14 @@ pub async fn ws_handler(
             return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
         }
     };
-    info!("✅ WS autorizado: sub={} role={:?}", claims.sub, claims.role);
+    info!(
+        "✅ WS autorizado: sub={} role={:?}",
+        claims.sub, claims.role
+    );
 
     // 3) Upgrade y manejo de socket
-    ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response()
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+        .into_response()
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
@@ -77,7 +86,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             Some(Ok(Message::Text(t))) => {
                 // ⚡️ RTT: eco 1:1 para "PING::<timestamp>"
                 if t.starts_with("PING::") {
-                    if tx.send(Message::Text(t)).await.is_err() { break; }
+                    if tx.send(Message::Text(t)).await.is_err() {
+                        break;
+                    }
                     continue;
                 }
 
@@ -88,17 +99,29 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         sdp: format!("Respuesta SDP simulada para {}", peer_id),
                         r#type: "answer".into(),
                     };
-                    if tx.send(Message::Text(serde_json::to_string(&ans).unwrap())).await.is_err() { break; }
+                    if tx
+                        .send(Message::Text(serde_json::to_string(&ans).unwrap()))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
                 } else {
                     // Eco normal
-                    if tx.send(Message::Text(t)).await.is_err() { break; }
+                    if tx.send(Message::Text(t)).await.is_err() {
+                        break;
+                    }
                 }
             }
             Some(Ok(Message::Binary(b))) => {
-                if tx.send(Message::Binary(b)).await.is_err() { break; }
+                if tx.send(Message::Binary(b)).await.is_err() {
+                    break;
+                }
             }
             Some(Ok(Message::Ping(p))) => {
-                if tx.send(Message::Pong(p)).await.is_err() { break; }
+                if tx.send(Message::Pong(p)).await.is_err() {
+                    break;
+                }
             }
             Some(Ok(Message::Pong(_))) => { /* noop */ }
             Some(Ok(Message::Close(frame))) => {

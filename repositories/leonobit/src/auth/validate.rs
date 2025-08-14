@@ -1,6 +1,6 @@
 // src/auth/validate.rs
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 use crate::auth::types::WsClaims;
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 /// Perfil permitido (issuer + audience)
 #[derive(Clone, Copy, Debug)]
@@ -27,15 +27,19 @@ pub fn validate_ws_token_multi(
         validation.set_issuer(&[p.iss]); // jsonwebtoken >= 9
         validation.leeway = 5;
 
-        match decode::<WsClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation) {
+        match decode::<WsClaims>(
+            token,
+            &DecodingKey::from_secret(secret.as_bytes()),
+            &validation,
+        ) {
             Ok(data) => return Ok(data.claims),
             Err(e) => {
                 use jsonwebtoken::errors::ErrorKind::*;
                 let msg = match e.kind() {
                     ExpiredSignature => "JWT expirado".into(),
-                    InvalidAudience  => format!("Audience inválido (esperado: {})", p.aud),
-                    InvalidIssuer    => format!("Issuer inválido (esperado: {})", p.iss),
-                    _                => format!("JWT inválido: {e}"),
+                    InvalidAudience => format!("Audience inválido (esperado: {})", p.aud),
+                    InvalidIssuer => format!("Issuer inválido (esperado: {})", p.iss),
+                    _ => format!("JWT inválido: {e}"),
                 };
                 last_err = Some(msg);
             }

@@ -9,9 +9,9 @@ pub struct WsClaims {
     pub jti: Option<String>,
 
     // custom (opcionales según el token)
-    pub tid: Option<String>,    // "leonobit" | "lab"
-    pub label: Option<String>,  // "leonobit" | "lab-01-ws-auth"
-    pub path: Option<String>,   // "/leonobit" | "/lab/01-ws-auth"
+    pub tid: Option<String>,   // "leonobit" | "lab"
+    pub label: Option<String>, // "leonobit" | "lab-01-ws-auth"
+    pub path: Option<String>,  // "/leonobit" | "/lab/01-ws-auth"
     pub role: Option<String>,
     pub email: Option<String>,
 }

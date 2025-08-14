@@ -14,8 +14,7 @@ impl Settings {
             .and_then(|v| v.parse::<u16>().ok())
             .unwrap_or(8000);
 
-        let ws_jwt_secret = std::env::var("WS_JWT_SECRET")
-            .context("WS_JWT_SECRET is required")?;
+        let ws_jwt_secret = std::env::var("WS_JWT_SECRET").context("WS_JWT_SECRET is required")?;
 
         // Para validar Origin en WS (no es CORS; aplica al upgrade)
         // Ej: "https://www.leonobitech.com,https://leonobitech.com"
@@ -30,6 +29,10 @@ impl Settings {
             tracing::warn!("ALLOWED_WS_ORIGINS empty → WS origin check will be permissive");
         }
 
-        Ok(Self { port, ws_jwt_secret, allowed_ws_origins })
+        Ok(Self {
+            port,
+            ws_jwt_secret,
+            allowed_ws_origins,
+        })
     }
 }

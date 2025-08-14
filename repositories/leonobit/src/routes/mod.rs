@@ -21,9 +21,18 @@ impl AppState {
     pub fn new(ws_secret: String, allowed_ws_origins: Vec<String>) -> Self {
         // Agregá aquí todos los perfiles que quieras habilitar
         let profiles = vec![
-            TokenProfile { iss: "leonobit", aud: "leonobit" },         // circuito Leonobit
-            TokenProfile { iss: "lab-01",   aud: "lab-ws-01-auth" },
-            TokenProfile { iss: "lab-02",   aud: "lab-ws-02-metrics" },   // Lab 01 — WS Auth
+            TokenProfile {
+                iss: "leonobit",
+                aud: "leonobit",
+            }, // circuito Leonobit
+            TokenProfile {
+                iss: "lab-01",
+                aud: "lab-ws-01-auth",
+            },
+            TokenProfile {
+                iss: "lab-02",
+                aud: "lab-ws-02-metrics",
+            }, // Lab 01 — WS Auth
         ];
 
         Self {
@@ -43,8 +52,8 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(|| async { "ok" }))
         // 🔒 Endpoints WS por laboratorio
         .route("/ws/leonobit/offer", get(labs::leonobit::ws_handler))
-        .route("/ws/lab/01/offer",   get(labs::lab01::ws_handler))
-        .route("/ws/lab/02/offer",   get(labs::lab02::ws_handler))
+        .route("/ws/lab/01/offer", get(labs::lab01::ws_handler))
+        .route("/ws/lab/02/offer", get(labs::lab02::ws_handler))
         // Estado global
         .with_state(state)
 }

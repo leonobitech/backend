@@ -2,9 +2,9 @@ use std::net::SocketAddr;
 use tokio::{net::TcpListener, signal};
 use tracing::info;
 
+pub mod auth;
 mod config;
 mod routes;
-pub mod auth;
 
 pub async fn run() -> anyhow::Result<()> {
     // Carga settings (vars de entorno saneadas)

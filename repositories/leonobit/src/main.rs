@@ -16,7 +16,6 @@ async fn main() -> anyhow::Result<()> {
     run().await
 }
 
-
 // ----------------------------------------------------------------------------------------
 // NOTA PARA DESARROLLO LOCAL:
 // Este backend requiere la variable de entorno CORS_ORIGIN para permitir
