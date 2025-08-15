@@ -1156,6 +1156,17 @@ services:
       - "traefik.http.middlewares.ws-rl.ratelimit.burst=100"
       - "traefik.http.routers.leonobit-ws.middlewares=ws-rl@docker"
 
+      # Router HTTP para /webrtc/ sin core-auth (tiene su propia auth en Axum)
+      - "traefik.http.routers.leonobit-webrtc.rule=Host(`leonobit.${DOMAIN_NAME}`) && PathPrefix(`/webrtc/`)"
+      - "traefik.http.routers.leonobit-webrtc.entrypoints=websecure"
+      - "traefik.http.routers.leonobit-webrtc.tls.certresolver=le"
+      - "traefik.http.routers.leonobit-webrtc.service=leonobit"
+      - "traefik.http.routers.leonobit-webrtc.priority=110"
+      # opcional
+      - "traefik.http.middlewares.webrtc-rl.ratelimit.average=30"
+      - "traefik.http.middlewares.webrtc-rl.ratelimit.burst=60"
+      - "traefik.http.routers.leonobit-webrtc.middlewares=webrtc-rl@docker"
+
 
 volumes:
   # 🔴 Redis
