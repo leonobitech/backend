@@ -33,21 +33,22 @@ pub async fn ws_handler(
                 .iter()
                 .any(|o| o.eq_ignore_ascii_case(origin))
         {
-            warn!("WS origin bloqueado: {}", origin);
+            warn!("[lab-02] WS origin bloqueado: {}", origin);
             return (StatusCode::FORBIDDEN, "invalid websocket origin").into_response();
         }
     }
 
-    // 2) Validar JWT contra perfil de lab-02 (aud/iss específicos)
+    // 2) Validar JWT contra el perfil de lab-02 (aud/iss específicos)
     let lab02_profile = [TokenProfile {
         iss: "lab-02",
         aud: "lab-ws-02-metrics",
     }];
+
     let claims: WsClaims =
         match validate_ws_token_multi(&params.token, &state.ws_secret, &lab02_profile) {
             Ok(c) => c,
             Err(e) => {
-                warn!("WS token inválido (lab-02): {e}");
+                warn!("[lab-02] token inválido: {e}");
                 return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
             }
         };
@@ -58,8 +59,7 @@ pub async fn ws_handler(
     );
 
     // 3) Upgrade y manejo del socket
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
-        .into_response()
+    ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response()
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
@@ -69,27 +69,27 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     let (mut tx, mut rx) = socket.split();
 
-    // Seguimiento simple de secuencia para detectar pérdidas
+    // Seguimiento de pérdidas por secuencia
     let mut expected_seq: Option<u64> = None;
     let mut lost_total: u64 = 0;
+
+    // (Opcional) counters simples en server
+    let mut pong_count: u64 = 0;
 
     while let Some(msg) = rx.next().await {
         match msg {
             Ok(Message::Text(t)) => {
-                // Formato ping esperado: PING::<ts_cli_ms>::<seq>
+                // Esperamos: PING::<ts_cli_ms>::<seq>  (también soporta PING::<ts_cli_ms>)
                 if let Some(rest) = t.strip_prefix("PING::") {
-                    let mut it = rest.splitn(3, "::");
-                    let ts_cli_s = it.next();
-                    let seq_s = it.next();
-
-                    match (ts_cli_s, seq_s) {
-                        (Some(ts_cli_s), Some(seq_s)) => {
-                            // Parse de secuencia
+                    let parts: Vec<_> = rest.splitn(3, "::").collect();
+                    match parts.as_slice() {
+                        // Forma canónica con secuencia
+                        [ts_cli_s, seq_s] => {
                             let seq: u64 = match seq_s.parse() {
                                 Ok(v) => v,
                                 Err(_) => {
-                                    warn!("[{}] seq inválido en '{}'", peer_id, t);
-                                    // Responder eco para que el cliente lo vea en el log
+                                    warn!("[lab-02:{}] seq inválido en '{}'", peer_id, t);
+                                    // eco como fallback
                                     if tx.send(Message::Text(t)).await.is_err() {
                                         break;
                                     }
@@ -97,31 +97,40 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                 }
                             };
 
-                            // Detección de pérdidas (si ya teníamos una expectativa)
+                            // Pérdidas (si había expectativa)
                             if let Some(exp) = expected_seq {
                                 if seq > exp {
                                     let lost_here = seq.saturating_sub(exp);
                                     lost_total = lost_total.saturating_add(lost_here);
                                     warn!(
-                                        "[{}] pérdida detectada: llegó seq={}, esperado >= {} (perdidos en este salto: {}, total: {})",
+                                        "[lab-02:{}] pérdida: llegó seq={}, esperado>={}. perdidos_en_salto={}, total={}",
                                         peer_id, seq, exp, lost_here, lost_total
                                     );
                                 }
                             }
-                            // Actualizar expectativa para el próximo paquete
                             expected_seq = Some(seq + 1);
 
-                            // Responder PONG con ts_srv incluido
                             let ts_srv = Utc::now().timestamp_millis();
                             let pong = format!("PONG::{}::{}::{}", ts_cli_s, seq, ts_srv);
+                            pong_count += 1;
+                            if tx.send(Message::Text(pong)).await.is_err() {
+                                break;
+                            }
+                            continue;
+                        }
+                        // Forma simple sin seq (usamos seq=0)
+                        [ts_cli_s] => {
+                            let ts_srv = Utc::now().timestamp_millis();
+                            let pong = format!("PONG::{}::{}::{}", ts_cli_s, 0, ts_srv);
+                            pong_count += 1;
                             if tx.send(Message::Text(pong)).await.is_err() {
                                 break;
                             }
                             continue;
                         }
                         _ => {
-                            warn!("[{}] formato PING inválido en '{}'", peer_id, t);
-                            // Eco como fallback para que el cliente vea el problema
+                            warn!("[lab-02:{}] formato PING inválido en '{}'", peer_id, t);
+                            // eco como fallback
                             if tx.send(Message::Text(t)).await.is_err() {
                                 break;
                             }
@@ -144,14 +153,14 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             }
 
             Ok(Message::Ping(p)) => {
-                // Responder PONG nativo del protocolo (independiente de PING::... de app)
+                // PONG nativo del protocolo (independiente del PING::... de app)
                 if tx.send(Message::Pong(p)).await.is_err() {
                     break;
                 }
             }
 
             Ok(Message::Pong(_)) => {
-                // noop
+                // noop (podrías actualizar un heartbeat aquí)
             }
 
             Ok(Message::Close(frame)) => {
@@ -168,7 +177,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     state.peers.remove(&peer_id);
     info!(
-        "❌ [lab-02] Conexión cerrada: {} | pérdidas totales detectadas: {}",
-        peer_id, lost_total
+        "❌ [lab-02] Conexión cerrada: {} | pérdidas totales: {} | pongs_enviados: {}",
+        peer_id, lost_total, pong_count
     );
 }
