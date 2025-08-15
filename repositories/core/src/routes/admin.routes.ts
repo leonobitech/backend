@@ -27,4 +27,8 @@ adminRouter.post("/leonobit", (req, res) => {
   res.json({ url: "https://leonobit.leonobitech.com" });
 });
 
+adminRouter.post("/webrtc/lab/03/offer", (req, res) => {
+  res.json({ url: "https://leonobit.leonobitech.com" });
+});
+
 export default adminRouter;
