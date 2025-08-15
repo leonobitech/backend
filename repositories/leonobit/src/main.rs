@@ -3,12 +3,12 @@ use leonobit::run;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // 📦 Cargar .env si existe (solo en desarrollo normalmente)
+    dotenvy::dotenv().ok();
+
     // RUST_LOG=info,tower_http=info cargo run
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,tower_http=info".into()),
-        )
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,tower_http=info".into()))
         .init();
 
     tracing::info!("🚀 leonobit backend starting…");

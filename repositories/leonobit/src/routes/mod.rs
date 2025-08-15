@@ -1,5 +1,6 @@
 // src/routes/mod.rs
 use axum::{routing::get, Router};
+use axum::routing::post;
 use dashmap::DashSet;
 use std::sync::Arc;
 
@@ -7,6 +8,8 @@ pub mod hello_routes;
 pub mod labs;
 
 use crate::auth::TokenProfile;
+use tokio::sync::mpsc;            // ← canal
+use crate::metrics::MetricEvent;  // ← tipo del canal 
 
 #[derive(Clone)]
 pub struct AppState {
@@ -15,10 +18,12 @@ pub struct AppState {
     pub allowed_ws_origins: Arc<Vec<String>>,
     /// Perfiles de validación JWT permitidos (iss/aud)
     pub profiles: Arc<Vec<TokenProfile>>,
+    /// Canal para enviar eventos de métricas
+    pub metrics_tx: mpsc::Sender<MetricEvent>,
 }
 
 impl AppState {
-    pub fn new(ws_secret: String, allowed_ws_origins: Vec<String>) -> Self {
+    pub fn new(ws_secret: String, allowed_ws_origins: Vec<String>, metrics_tx: mpsc::Sender<MetricEvent>) -> Self {
         // Agregá aquí todos los perfiles que quieras habilitar
         let profiles = vec![
             TokenProfile {
@@ -32,7 +37,11 @@ impl AppState {
             TokenProfile {
                 iss: "lab-02",
                 aud: "lab-ws-02-metrics",
-            }, // Lab 01 — WS Auth
+            },
+            TokenProfile {
+                iss: "lab-03",
+                aud: "lab-webrtc-03-metrics",
+            },
         ];
 
         Self {
@@ -40,6 +49,7 @@ impl AppState {
             ws_secret: Arc::new(ws_secret),
             allowed_ws_origins: Arc::new(allowed_ws_origins),
             profiles: Arc::new(profiles),
+            metrics_tx,
         }
     }
 }
@@ -54,6 +64,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ws/leonobit/offer", get(labs::leonobit::ws_handler))
         .route("/ws/lab/01/offer", get(labs::lab01::ws_handler))
         .route("/ws/lab/02/offer", get(labs::lab02::ws_handler))
+        .route("/webrtc/lab/03/offer", post(labs::lab03::webrtc_offer))
         // Estado global
         .with_state(state)
 }

@@ -5,17 +5,25 @@ use tracing::info;
 pub mod auth;
 mod config;
 mod routes;
+pub mod metrics;
 
 pub async fn run() -> anyhow::Result<()> {
     // Carga settings (vars de entorno saneadas)
     let settings = config::settings::Settings::from_env()?;
     let cors = config::cors::build_cors_from_env()?;
 
+    // Arranca el agregador y obtené el sender
+    let metrics_tx = metrics::start_metrics_aggregator();
+
     // Estado global (inyecta ws_secret, allowed_ws_origins y perfiles iss/aud)
-    let state = routes::AppState::new(
-        settings.ws_jwt_secret.clone(),
-        settings.allowed_ws_origins.clone(),
-    );
+    let state = routes::AppState::new(settings.ws_jwt_secret.clone(), settings.allowed_ws_origins.clone(),  metrics_tx.clone());
+
+let enabled = state.profiles.iter()
+    .map(|p| format!("{}/{}", p.iss, p.aud))
+    .collect::<Vec<_>>()
+    .join(", ");
+info!("🔐 JWT profiles enabled: {enabled}");
+info!("🌐 Allowed WS origins: {:?}", settings.allowed_ws_origins);
 
     // Router principal
     let app = routes::router(state.clone())
@@ -25,14 +33,9 @@ pub async fn run() -> anyhow::Result<()> {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], settings.port));
     info!("🚀 Server listening on http://{addr}");
-    // 👇 logs opcionales de observabilidad
-    info!("🔐 JWT profiles enabled: leonobit/leonobit, lab-01/lab-ws-01-auth");
-    info!("🌐 Allowed WS origins: {:?}", settings.allowed_ws_origins);
-
+    
     let listener = TcpListener::bind(addr).await?;
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
 
     Ok(())
 }

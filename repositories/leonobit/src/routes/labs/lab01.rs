@@ -19,20 +19,10 @@ pub(crate) struct WsParams {
     token: String,
 }
 
-pub async fn ws_handler(
-    State(state): State<AppState>,
-    ws: WebSocketUpgrade,
-    Query(params): Query<WsParams>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade, Query(params): Query<WsParams>, headers: HeaderMap) -> Response {
     // 1) Validar Origin (upgrade WS != CORS)
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
-        if !state.allowed_ws_origins.is_empty()
-            && !state
-                .allowed_ws_origins
-                .iter()
-                .any(|o| o.eq_ignore_ascii_case(origin))
-        {
+        if !state.allowed_ws_origins.is_empty() && !state.allowed_ws_origins.iter().any(|o| o.eq_ignore_ascii_case(origin)) {
             warn!("[lab-01] WS origin bloqueado: {}", origin);
             return (StatusCode::FORBIDDEN, "invalid websocket origin").into_response();
         }
@@ -43,23 +33,18 @@ pub async fn ws_handler(
         iss: "lab-01",
         aud: "lab-ws-01-auth",
     }];
-    let claims: WsClaims =
-        match validate_ws_token_multi(&params.token, &state.ws_secret, &lab01_profile) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("[lab-01] WS token inválido: {e}");
-                return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
-            }
-        };
+    let claims: WsClaims = match validate_ws_token_multi(&params.token, &state.ws_secret, &lab01_profile) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("[lab-01] WS token inválido: {e}");
+            return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+        }
+    };
 
-    info!(
-        "✅ [lab-01] autorizado: sub={} role={:?}",
-        claims.sub, claims.role
-    );
+    info!("✅ [lab-01] autorizado: sub={} role={:?}", claims.sub, claims.role);
 
     // 3) Upgrade WS
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
-        .into_response()
+    ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response()
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
@@ -94,7 +79,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                 Err(_) => {
                                     warn!("[lab-01][{}] seq inválido en '{}'", peer_id, t);
                                     // No ensuciamos: eco y seguimos
-                                    if tx.send(Message::Text(t)).await.is_err() { break; }
+                                    if tx.send(Message::Text(t)).await.is_err() {
+                                        break;
+                                    }
                                     continue;
                                 }
                             };
@@ -113,38 +100,50 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
                             let ts_srv = Utc::now().timestamp_millis();
                             let pong = format!("PONG::{}::{}::{}", ts_cli_s, seq, ts_srv);
-                            if tx.send(Message::Text(pong)).await.is_err() { break; }
+                            if tx.send(Message::Text(pong)).await.is_err() {
+                                break;
+                            }
                             continue;
                         }
 
                         // Caso 2: formato simple sin seq → eco 1:1 (RTT lado cliente)
                         (Some(_ts_cli_s), _) => {
                             // No es error: es el modo “simple” del lab-01
-                            if tx.send(Message::Text(t)).await.is_err() { break; }
+                            if tx.send(Message::Text(t)).await.is_err() {
+                                break;
+                            }
                             continue;
                         }
 
                         _ => {
                             // Si no hay ni siquiera ts_cli, ahí sí avisamos
                             warn!("[lab-01][{}] PING sin timestamp en '{}'", peer_id, t);
-                            if tx.send(Message::Text(t)).await.is_err() { break; }
+                            if tx.send(Message::Text(t)).await.is_err() {
+                                break;
+                            }
                             continue;
                         }
                     }
                 }
 
                 // Mensaje normal → eco
-                if tx.send(Message::Text(t)).await.is_err() { break; }
+                if tx.send(Message::Text(t)).await.is_err() {
+                    break;
+                }
             }
 
             Ok(Message::Binary(b)) => {
                 // eco binario
-                if tx.send(Message::Binary(b)).await.is_err() { break; }
+                if tx.send(Message::Binary(b)).await.is_err() {
+                    break;
+                }
             }
 
             Ok(Message::Ping(p)) => {
                 // PONG nativo del protocolo
-                if tx.send(Message::Pong(p)).await.is_err() { break; }
+                if tx.send(Message::Pong(p)).await.is_err() {
+                    break;
+                }
             }
 
             Ok(Message::Pong(_)) => {
