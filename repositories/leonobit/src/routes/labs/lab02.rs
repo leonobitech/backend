@@ -39,18 +39,23 @@ pub async fn ws_handler(
     }
 
     // 2) Validar JWT contra perfil de lab-02 (aud/iss específicos)
-    let profiles = [TokenProfile {
+    let lab02_profile = [TokenProfile {
         iss: "lab-02",
         aud: "lab-ws-02-metrics",
     }];
-    let _claims: WsClaims =
-        match validate_ws_token_multi(&params.token, &state.ws_secret, &profiles) {
+    let claims: WsClaims =
+        match validate_ws_token_multi(&params.token, &state.ws_secret, &lab02_profile) {
             Ok(c) => c,
             Err(e) => {
                 warn!("WS token inválido (lab-02): {e}");
                 return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
             }
         };
+
+    info!(
+        "✅ [lab-02] autorizado: sub={} role={:?}",
+        claims.sub, claims.role
+    );
 
     // 3) Upgrade y manejo del socket
     ws.on_upgrade(move |socket| handle_socket(socket, state))
@@ -132,12 +137,14 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             }
 
             Ok(Message::Binary(b)) => {
+                // eco binario
                 if tx.send(Message::Binary(b)).await.is_err() {
                     break;
                 }
             }
 
             Ok(Message::Ping(p)) => {
+                // Responder PONG nativo del protocolo (independiente de PING::... de app)
                 if tx.send(Message::Pong(p)).await.is_err() {
                     break;
                 }
