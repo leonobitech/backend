@@ -152,7 +152,6 @@ async fn attach_dc_handlers(
     // Clones para cada callback (evita mover `dc`/`label_log` múltiples veces)
     let dc_for_open = dc.clone();
     let dc_for_msg = dc.clone();
-    //let dc_for_close = dc.clone();
 
     let label_for_open = label_log.clone();
     let label_for_close = label_log.clone();
