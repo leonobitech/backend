@@ -19,7 +19,7 @@ uuid = { version = "1", features = ["v4"] }
 futures-util = "0.3"
 dashmap = "5"
 chrono = { version = "0.4.41", features = ["clock"] }
-webrtc = "0.13.0"
 hdrhistogram = "7.5.4"
 axum-macros = "0.5.0"
 dotenvy = "0.15.7"
+webrtc = "0.13.0"
