@@ -65,6 +65,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ws/lab/01/offer", get(labs::lab01::ws_handler))
         .route("/ws/lab/02/offer", get(labs::lab02::ws_handler))
         .route("/webrtc/lab/03/offer", post(labs::lab03::webrtc_offer))
+        .route("/webrtc/lab/04/offer", post(labs::lab04::webrtc_offer_lab04))
         // Estado global
         .with_state(state)
 }
