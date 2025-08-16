@@ -42,6 +42,10 @@ impl AppState {
                 iss: "lab-03",
                 aud: "lab-webrtc-03-metrics",
             },
+            TokenProfile {
+                iss: "lab-04",
+                aud: "lab-webrtc-04-audio",
+            },
         ];
 
         Self {
