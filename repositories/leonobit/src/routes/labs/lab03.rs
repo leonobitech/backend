@@ -33,22 +33,37 @@ pub struct SdpResponse {
     pub r#type: String,
 }
 
+/**
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ /webrtc_offer: Señalización HTTP → Responder SDP Answer                   │
+ * ├──────────────────────────────────────────────────────────────────────────┤
+ * │ Flujo (server-side):                                                      │
+ * │  1) Seguridad: valida Origin permitido y Bearer JWT perfil lab-03.       │
+ * │  2) Construye API WebRTC (MediaEngine con codecs por defecto).           │
+ * │  3) Crea RTCPeerConnection con STUN público.                              │
+ * │  4) Observabilidad: log de estados ICE/PC y candidates locales.           │
+ * │  5) Acepta DataChannels creados por el cliente y les ‘adjunta’ handlers. │
+ * │  6) set_remote_description(Offer) → create_answer() → set_local_desc.    │
+ * │  7) Espera ICE gathering complete → devuelve SDP Answer final.            │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
 #[axum::debug_handler]
 pub async fn webrtc_offer(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(offer_sdp): Json<RTCSessionDescription>,
 ) -> Result<Json<SdpResponse>, (StatusCode, String)> {
-    // Seguridad: Origin + Bearer (perfil específico lab-03)
+    // (1) Seguridad: Origin + Bearer (perfil específico lab-03)
     validate_origin(&headers, &state)?;
     let claims = validate_bearer_lab03(&headers, &state)?;
     info!("✅ [lab-03] autorizado: sub={} role={:?}", claims.sub, claims.role);
 
-    // API WebRTC
+    // (2) API WebRTC (MediaEngine + APIBuilder)
     let mut m = MediaEngine::default();
     m.register_default_codecs().map_err(internal)?;
     let api = APIBuilder::new().with_media_engine(m).build();
 
+    // (3) Configuración del PeerConnection: STUN para descubrimiento de ruta
     let config = RTCConfiguration {
         ice_servers: vec![RTCIceServer {
             urls: vec!["stun:stun.l.google.com:19302".to_string()],
@@ -59,7 +74,7 @@ pub async fn webrtc_offer(
 
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
-    // Observabilidad de estados y candidatos
+    // (4) Observabilidad: loguea estados y candidatos (útil para depurar conectividad)
     {
         pc.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
             info!("ICE state = {:?}", st);
@@ -75,9 +90,9 @@ pub async fn webrtc_offer(
             if let Some(c) = c {
                 match c.to_json() {
                     Ok(parsed) => {
-                        // parsed es RTCIceCandidateInit: solo tiene candidate/sdp_mid/sdp_mline_index/ufrag
+                        // Nota: RTCIceCandidateInit trae la línea 'candidate' en formato SDP.
+                        // Como extra, intentamos extraer el tipo (host/srflx/relay) desde el string.
                         let cand = parsed.candidate;
-                        // Extra pequeño: intenta extraer el tipo (host/srflx/relay) del string
                         let cand_typ = cand
                             .split_whitespace()
                             .collect::<Vec<_>>()
@@ -95,7 +110,7 @@ pub async fn webrtc_offer(
         }));
     }
 
-    // --- SOLO recibir DataChannels creados por el cliente ---
+    // (5) Solo recibimos DataChannels iniciados por el cliente (no-negociados)
     {
         let tx = state.metrics_tx.clone();
         pc.on_data_channel(Box::new(move |dc: Arc<RTCDataChannel>| {
@@ -108,16 +123,16 @@ pub async fn webrtc_offer(
         }));
     }
 
-    // 1) SDP remoto (offer) → set_remote_description
+    // (6) Señalización: aplicar Offer remoto → generar Answer → set_local_description
     pc.set_remote_description(offer_sdp).await.map_err(internal)?;
-
-    // 2) Crear answer y esperar a que termine el ICE gathering
     let answer = pc.create_answer(None).await.map_err(internal)?;
+
+    // Espera explícita a "gathering complete" para que el SDP incluya candidates
     let mut gather_rx = pc.gathering_complete_promise().await;
     pc.set_local_description(answer).await.map_err(internal)?;
     let _ = gather_rx.recv().await;
 
-    // 3) Tomar el SDP final (con candidates) desde local_description
+    // (7) Tomar SDP final y responder al cliente
     let local = pc
         .local_description()
         .await
@@ -130,20 +145,35 @@ pub async fn webrtc_offer(
     }))
 }
 
-/// Adjunta handlers de open/message/close a un datachannel concreto
+/**
+ * ┌───────────────────────────────────────────────────────────────┐
+ * │ attach_dc_handlers: vida del DataChannel en el servidor       │
+ * ├───────────────────────────────────────────────────────────────┤
+ * │ - on_open: envía PING cada 1s (keepalive/medición).           │
+ * │ - on_message: si recibe {kind,PING/ECHO,t} calcula RTT,       │
+ * │               reporta métrica y responde ECHO.                │
+ * │ - on_close: log cierra canal.                                 │
+ * │                                                               │
+ * │ Idea clave del lab:                                           │
+ * │  • El servidor genera PINGs periódicos; el cliente responde   │
+ * │    ECHO silencioso.                                           │
+ * │  • El cliente guarda 't' de PINGs *manuales* para mostrar RTT │
+ * │    solo de esos (evita ruido de keepalive).                   │
+ * └───────────────────────────────────────────────────────────────┘
+ */
 async fn attach_dc_handlers(
     dc: Arc<RTCDataChannel>,
     tx: tokio::sync::mpsc::Sender<crate::metrics::MetricEvent>,
     label_log: Arc<String>,
 ) {
-    // Clones para cada callback (evita mover `dc`/`label_log` múltiples veces)
+    // Clones para callbacks (evita mover 'dc'/'label_log' varias veces)
     let dc_for_open = dc.clone();
     let dc_for_msg = dc.clone();
 
     let label_for_open = label_log.clone();
     let label_for_close = label_log.clone();
 
-    // on_open → PING 1s (cortar si deja de estar Open)
+    // on_open → bucle PING (1s). Se corta si el canal deja de estar Open.
     dc.on_open(Box::new(move || {
         let dc = dc_for_open.clone();
         let label = label_for_open.clone();
@@ -152,12 +182,16 @@ async fn attach_dc_handlers(
             let mut tick = interval(Duration::from_millis(1000));
             loop {
                 tick.tick().await;
+
                 if dc.ready_state() != RTCDataChannelState::Open {
                     info!("'{}' ya no está Open → detenemos PING", label);
                     break;
                 }
+
+                // PING: {"kind":"PING","t":<epoch_ms>}
                 let now_ms = now_millis();
                 let payload = format!(r#"{{"kind":"PING","t":{now_ms}}}"#);
+
                 if let Err(e) = dc.send_text(payload).await {
                     warn!("Error enviando PING: {e:?} → stop PING");
                     break;
@@ -166,7 +200,7 @@ async fn attach_dc_handlers(
         })
     }));
 
-    // on_message → calcula RTT y responde ECHO
+    // on_message → calcula RTT (si viene {kind,PING/ECHO,t}) y responde ECHO
     {
         let tx_msg = tx.clone();
         dc.on_message(Box::new(move |msg| {
@@ -177,19 +211,22 @@ async fn attach_dc_handlers(
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(txt) {
                         let kind = val.get("kind").and_then(|v| v.as_str()).unwrap_or("");
                         let t0 = val.get("t").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+                        // Solo procesamos PING/ECHO con timestamp válido
                         if (kind.eq_ignore_ascii_case("PING") || kind.eq_ignore_ascii_case("ECHO")) && t0 > 0.0 {
+                            // RTT en microsegundos (para más resolución en métricas)
                             let rtt_ms = (now_millis() - t0).abs();
                             let us = (rtt_ms * 1000.0).round() as u64;
                             let _ = tx.send(MetricEvent::RttMicros(us)).await;
 
-                            // ECHO back para que el cliente mida
+                            // Responder ECHO al mismo 't' (permite que el cliente mida su RTT)
                             let echo = format!(r#"{{"kind":"ECHO","t":{}}}"#, t0);
                             let _ = dc.send_text(echo).await;
                             return;
                         }
                     }
                 }
-                // Si no es JSON válido, podrías loguear raw si te interesa:
+                // Si no es JSON válido, puedes loguear RAW si querés:
                 // info!("DC raw msg: {:?}", String::from_utf8_lossy(msg.data.as_ref()));
             })
         }));
@@ -202,8 +239,12 @@ async fn attach_dc_handlers(
     }));
 }
 
-// ---------- Seguridad y util ----------
+// ───────────────────────────── Seguridad & Utilidades ─────────────────────────────
 
+/**
+ * Valida el encabezado Origin contra la lista blanca del AppState.
+ * Sencillo pero efectivo para evitar abuso cross-site en señalización.
+ */
 fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusCode, String)> {
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         let ok = state.allowed_ws_origins.iter().any(|o| o == origin);
@@ -214,6 +255,10 @@ fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusC
     Err((StatusCode::FORBIDDEN, "invalid origin".into()))
 }
 
+/**
+ * Extrae y valida Bearer JWT para el perfil **lab-03** (audience/issuer).
+ * Usa `validate_ws_token_multi` con la secret del servidor.
+ */
 fn validate_bearer_lab03(
     headers: &HeaderMap,
     state: &AppState,
@@ -246,11 +291,16 @@ fn validate_bearer_lab03(
     })
 }
 
+/** Normaliza errores internos a (500, "internal error") y loguea detalle. */
 fn internal<E: std::fmt::Debug>(e: E) -> (StatusCode, String) {
     error!("Internal error: {e:?}");
     (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())
 }
 
+/**
+ * now_millis: tiempo epoch en milisegundos como f64.
+ * (Se usa tanto para PING/ECHO como para calcular RTT.)
+ */
 fn now_millis() -> f64 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
