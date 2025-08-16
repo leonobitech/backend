@@ -35,7 +35,7 @@ pub async fn webrtc_offer(
     headers: HeaderMap,
     Json(offer_sdp): Json<RTCSessionDescription>, // { type: "offer", sdp: "..." }
 ) -> Result<Json<SdpResponse>, (StatusCode, String)> {
-    // 1) Seguridad: Origin + Bearer (perfil específico de lab-03)
+    // 1) Seguridad
     validate_origin(&headers, &state)?;
     let claims = validate_bearer_lab03(&headers, &state)?;
     info!("✅ [lab-03] autorizado: sub={} role={:?}", claims.sub, claims.role);
@@ -54,6 +54,30 @@ pub async fn webrtc_offer(
     };
 
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
+
+    // Logs de estado/ICE
+    {
+        let pc_cl = pc.clone();
+        pc.on_ice_connection_state_change(Box::new(move |st| {
+            Box::pin(async move {
+                info!("ICE state = {:?}", st);
+            })
+        }));
+        pc_cl.on_peer_connection_state_change(Box::new(move |st| {
+            Box::pin(async move {
+                info!("PC state = {:?}", st);
+            })
+        }));
+        pc.on_ice_candidate(Box::new(move |cand| {
+            Box::pin(async move {
+                if let Some(c) = cand {
+                    info!("🧊 local ICE candidate: {}", c.to_string());
+                } else {
+                    info!("🧊 ICE gathering complete (server)");
+                }
+            })
+        }));
+    }
 
     // 3) DataChannel para RTT
     let dc = pc
@@ -95,7 +119,6 @@ pub async fn webrtc_offer(
                             let us = (rtt_ms * 1000.0).round() as u64;
                             let _ = tx.send(MetricEvent::RttMicros(us)).await;
 
-                            // Eco para que el cliente también mida
                             let echo = format!(r#"{{"kind":"ECHO","t":{}}}"#, t0);
                             let _ = dc.send_text(echo).await;
                         }
@@ -111,18 +134,27 @@ pub async fn webrtc_offer(
     // 5) Crear answer
     let answer = pc.create_answer(None).await.map_err(internal)?;
 
-    // 6) (Opcional) Esperar gather ICE (API vieja usa 'promise' → Receiver<()>)
-    // Si preferís trickle ICE, podés comentar estas dos líneas.
+    // ⛏️ **IMPORTANTE**: primero set_local_description (esto dispara ICE gathering)
+    pc.set_local_description(answer.clone()).await.map_err(internal)?;
+
+    // 6) Esperar a que termine el ICE gathering del servidor
     let mut gather_rx = pc.gathering_complete_promise().await;
     let _ = gather_rx.recv().await;
 
-    pc.set_local_description(answer.clone()).await.map_err(internal)?;
+    // 7) Tomar el SDP final (con candidates) desde local_description
+    let local = pc
+        .local_description()
+        .await
+        .ok_or_else(|| internal("missing local_description"))?;
+
+    info!("📜 Enviando SDP answer (len={} chars)", local.sdp.len());
 
     Ok(Json(SdpResponse {
-        sdp: answer.sdp,
+        sdp: local.sdp,            // usa el SDP final con candidates
         r#type: "answer".into(),
     }))
 }
+
 
 // ---------- Seguridad ----------
 
@@ -137,31 +169,28 @@ fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusC
 }
 
 // Igual que en lab-02 pero con perfil de lab-03 (iss/aud)
-fn validate_bearer_lab03(headers: &HeaderMap, state: &AppState)
-    -> Result<WsClaims, (StatusCode, String)>
-{
-    let auth = headers.get("authorization")
+fn validate_bearer_lab03(headers: &HeaderMap, state: &AppState) -> Result<WsClaims, (StatusCode, String)> {
+    let auth = headers
+        .get("authorization")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    let token = auth.strip_prefix("Bearer ")
+
+    let token = auth
+        .strip_prefix("Bearer ")
         .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing bearer".to_string()))?;
 
-    // Filtrar el perfil desde AppState (fuente de verdad)
-    let allow: Vec<TokenProfile> = state.profiles
-        .iter()
-        .cloned() // TokenProfile es Copy, esto es barato
-        .filter(|p| p.iss == "lab-03" && p.aud == "lab-webrtc-03-metrics")
-        .collect();
+    let lab03_profile = [TokenProfile {
+        iss: "lab-03",
+        aud: "lab-webrtc-03-metrics",
+    }];
 
-    if allow.is_empty() {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, "lab-03 profile not configured".into()));
-    }
-
-    validate_ws_token_multi(token, &state.ws_secret, &allow)
-        .map_err(|e| {
+    match validate_ws_token_multi(token, &state.ws_secret, &lab03_profile) {
+        Ok(claims) => Ok(claims),
+        Err(e) => {
             warn!("JWT inválido (lab-03): {e}");
-            (StatusCode::UNAUTHORIZED, "unauthorized".into())
-        })
+            Err((StatusCode::UNAUTHORIZED, "unauthorized".into()))
+        }
+    }
 }
 
 // ---------- Util ----------
