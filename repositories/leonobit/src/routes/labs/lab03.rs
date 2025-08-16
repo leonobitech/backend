@@ -18,9 +18,12 @@ use crate::routes::AppState;
 
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
-use webrtc::data_channel::data_channel_message::DataChannelMessage;
+use webrtc::data_channel::RTCDataChannel;
+use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
+use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::peer_connection::configuration::RTCConfiguration;
+use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 #[derive(Serialize)]
@@ -33,14 +36,14 @@ pub struct SdpResponse {
 pub async fn webrtc_offer(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(offer_sdp): Json<RTCSessionDescription>, // { type: "offer", sdp: "..." }
+    Json(offer_sdp): Json<RTCSessionDescription>,
 ) -> Result<Json<SdpResponse>, (StatusCode, String)> {
-    // 1) Seguridad
+    // Seguridad: Origin + Bearer (perfil específico lab-03)
     validate_origin(&headers, &state)?;
     let claims = validate_bearer_lab03(&headers, &state)?;
     info!("✅ [lab-03] autorizado: sub={} role={:?}", claims.sub, claims.role);
 
-    // 2) Construir API WebRTC
+    // API WebRTC
     let mut m = MediaEngine::default();
     m.register_default_codecs().map_err(internal)?;
     let api = APIBuilder::new().with_media_engine(m).build();
@@ -55,59 +58,129 @@ pub async fn webrtc_offer(
 
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
-    // Logs de estado/ICE
+    // Observabilidad de estados y candidatos
     {
-        let pc_cl = pc.clone();
-        pc.on_ice_connection_state_change(Box::new(move |st| {
-            Box::pin(async move {
-                info!("ICE state = {:?}", st);
-            })
+        pc.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
+            info!("ICE state = {:?}", st);
+            Box::pin(async {})
         }));
-        pc_cl.on_peer_connection_state_change(Box::new(move |st| {
-            Box::pin(async move {
-                info!("PC state = {:?}", st);
-            })
+
+        pc.on_peer_connection_state_change(Box::new(move |st: RTCPeerConnectionState| {
+            info!("PC state = {:?}", st);
+            Box::pin(async {})
         }));
-        pc.on_ice_candidate(Box::new(move |cand| {
-            Box::pin(async move {
-                if let Some(c) = cand {
-                    info!("🧊 local ICE candidate: {}", c.to_string());
-                } else {
-                    info!("🧊 ICE gathering complete (server)");
+
+        pc.on_ice_candidate(Box::new(move |c: Option<RTCIceCandidate>| {
+            if let Some(c) = c {
+                match c.to_json() {
+                    Ok(parsed) => {
+                        // parsed es RTCIceCandidateInit: solo tiene candidate/sdp_mid/sdp_mline_index/ufrag
+                        let cand = parsed.candidate;
+                        // Extra pequeño: intenta extraer el tipo (host/srflx/relay) del string
+                        let cand_typ = cand
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .windows(2)
+                            .find_map(|w| if w[0] == "typ" { Some(w[1]) } else { None })
+                            .unwrap_or("?");
+                        info!("🧊 local ICE candidate: [{}] {}", cand_typ, cand);
+                    }
+                    Err(e) => warn!("No se pudo serializar ICE candidate: {e:?}"),
                 }
+            } else {
+                info!("🧊 ICE gathering complete (server)");
+            }
+            Box::pin(async {})
+        }));
+    }
+
+    // --- DataChannel creado por el servidor ---
+    let dc_server = pc
+        .create_data_channel("rt-metrics", None)
+        .await
+        .map_err(internal)?;
+
+    // Handlers para el canal del servidor
+    attach_dc_handlers(
+        dc_server.clone(),
+        state.metrics_tx.clone(),
+        Arc::new("rt-metrics(srv)".to_string()),
+    )
+    .await;
+
+    // --- Extra: si el cliente crea un canal, también lo atendemos ---
+    {
+        let tx = state.metrics_tx.clone();
+        pc.on_data_channel(Box::new(move |dc: Arc<RTCDataChannel>| {
+            let tx = tx.clone();
+            Box::pin(async move {
+                let label = Arc::new(dc.label().to_owned());
+                info!("🔔 on_data_channel (server) ← '{}'", label);
+                attach_dc_handlers(dc.clone(), tx.clone(), label.clone()).await;
             })
         }));
     }
 
-    // 3) DataChannel para RTT
-    let dc = pc
-        .create_data_channel("rt-metrics", None)
+    // 1) SDP remoto (offer) → set_remote_description
+    pc.set_remote_description(offer_sdp).await.map_err(internal)?;
+
+    // 2) Crear answer y esperar a que termine el ICE gathering
+    let answer = pc.create_answer(None).await.map_err(internal)?;
+    let mut gather_rx = pc.gathering_complete_promise().await;
+    pc.set_local_description(answer).await.map_err(internal)?;
+    let _ = gather_rx.recv().await;
+
+    // 3) Tomar el SDP final (con candidates) desde local_description
+    let local = pc
+        .local_description()
         .await
-        .map_err(internal)?;
-    {
-        let tx = state.metrics_tx.clone();
-        let dc_for_open = dc.clone();
-        let dc_for_msg = dc.clone();
+        .ok_or_else(|| internal("missing local_description"))?;
+    info!("📜 Enviando SDP answer (len={} chars)", local.sdp.len());
 
-        dc.on_open(Box::new(move || {
-            let dc = dc_for_open.clone();
-            Box::pin(async move {
-                info!("DataChannel 'rt-metrics' abierto (server-side)");
-                let mut tick = interval(Duration::from_millis(1000));
-                loop {
-                    tick.tick().await;
-                    let now_ms = now_millis();
-                    let payload = format!(r#"{{"kind":"PING","t":{now_ms}}}"#);
-                    if let Err(e) = dc.send_text(payload).await {
-                        warn!("Error enviando PING: {e:?}");
-                        break;
-                    }
+    Ok(Json(SdpResponse {
+        sdp: local.sdp,
+        r#type: "answer".into(),
+    }))
+}
+
+/// Adjunta handlers de open/message/close a un datachannel concreto
+async fn attach_dc_handlers(
+    dc: Arc<RTCDataChannel>,
+    tx: tokio::sync::mpsc::Sender<crate::metrics::MetricEvent>,
+    label_log: Arc<String>,
+) {
+    // Clones para cada callback (evita mover `dc`/`label_log` múltiples veces)
+    let dc_for_open = dc.clone();
+    let dc_for_msg = dc.clone();
+    //let dc_for_close = dc.clone();
+
+    let label_for_open = label_log.clone();
+    let label_for_close = label_log.clone();
+
+    // on_open → PING 1s
+    dc.on_open(Box::new(move || {
+        let dc = dc_for_open.clone();
+        let label = label_for_open.clone();
+        Box::pin(async move {
+            info!("DataChannel '{}' abierto (server-side)", label);
+            let mut tick = interval(Duration::from_millis(1000));
+            loop {
+                tick.tick().await;
+                let now_ms = now_millis();
+                let payload = format!(r#"{{"kind":"PING","t":{now_ms}}}"#);
+                if let Err(e) = dc.send_text(payload).await {
+                    warn!("Error enviando PING: {e:?}");
+                    break;
                 }
-            })
-        }));
+            }
+        })
+    }));
 
-        dc.on_message(Box::new(move |msg: DataChannelMessage| {
-            let tx = tx.clone();
+    // on_message → calcula RTT y responde ECHO
+    {
+        let tx_msg = tx.clone();
+        dc.on_message(Box::new(move |msg| {
+            let tx = tx_msg.clone();
             let dc = dc_for_msg.clone();
             Box::pin(async move {
                 if let Ok(txt) = std::str::from_utf8(msg.data.as_ref()) {
@@ -119,44 +192,27 @@ pub async fn webrtc_offer(
                             let us = (rtt_ms * 1000.0).round() as u64;
                             let _ = tx.send(MetricEvent::RttMicros(us)).await;
 
+                            // ECHO back para que el cliente mida
                             let echo = format!(r#"{{"kind":"ECHO","t":{}}}"#, t0);
                             let _ = dc.send_text(echo).await;
+                            return;
                         }
                     }
                 }
+                // Si no es JSON válido, podrías loguear raw si te interesa
+                // info!("DC raw msg: {:?}", String::from_utf8_lossy(msg.data.as_ref()));
             })
         }));
     }
 
-    // 4) SDP remoto → set_remote
-    pc.set_remote_description(offer_sdp).await.map_err(internal)?;
-
-    // 5) Crear answer
-    let answer = pc.create_answer(None).await.map_err(internal)?;
-
-    // ⛏️ **IMPORTANTE**: primero set_local_description (esto dispara ICE gathering)
-    pc.set_local_description(answer.clone()).await.map_err(internal)?;
-
-    // 6) Esperar a que termine el ICE gathering del servidor
-    let mut gather_rx = pc.gathering_complete_promise().await;
-    let _ = gather_rx.recv().await;
-
-    // 7) Tomar el SDP final (con candidates) desde local_description
-    let local = pc
-        .local_description()
-        .await
-        .ok_or_else(|| internal("missing local_description"))?;
-
-    info!("📜 Enviando SDP answer (len={} chars)", local.sdp.len());
-
-    Ok(Json(SdpResponse {
-        sdp: local.sdp,            // usa el SDP final con candidates
-        r#type: "answer".into(),
-    }))
+    dc.on_close(Box::new(move || {
+        let label = label_for_close.clone();
+        info!("DataChannel '{}' cerrado (server-side)", label);
+        Box::pin(async {})
+    }));
 }
 
-
-// ---------- Seguridad ----------
+// ---------- Seguridad y util ----------
 
 fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusCode, String)> {
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
@@ -168,32 +224,37 @@ fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusC
     Err((StatusCode::FORBIDDEN, "invalid origin".into()))
 }
 
-// Igual que en lab-02 pero con perfil de lab-03 (iss/aud)
-fn validate_bearer_lab03(headers: &HeaderMap, state: &AppState) -> Result<WsClaims, (StatusCode, String)> {
+fn validate_bearer_lab03(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<WsClaims, (StatusCode, String)> {
     let auth = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-
     let token = auth
         .strip_prefix("Bearer ")
         .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing bearer".to_string()))?;
 
-    let lab03_profile = [TokenProfile {
-        iss: "lab-03",
-        aud: "lab-webrtc-03-metrics",
-    }];
+    let allow: Vec<TokenProfile> = state
+        .profiles
+        .iter()
+        .cloned()
+        .filter(|p| p.iss == "lab-03" && p.aud == "lab-webrtc-03-metrics")
+        .collect();
 
-    match validate_ws_token_multi(token, &state.ws_secret, &lab03_profile) {
-        Ok(claims) => Ok(claims),
-        Err(e) => {
-            warn!("JWT inválido (lab-03): {e}");
-            Err((StatusCode::UNAUTHORIZED, "unauthorized".into()))
-        }
+    if allow.is_empty() {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "lab-03 profile not configured".into(),
+        ));
     }
-}
 
-// ---------- Util ----------
+    validate_ws_token_multi(token, &state.ws_secret, &allow).map_err(|e| {
+        warn!("JWT inválido (lab-03): {e}");
+        (StatusCode::UNAUTHORIZED, "unauthorized".into())
+    })
+}
 
 fn internal<E: std::fmt::Debug>(e: E) -> (StatusCode, String) {
     error!("Internal error: {e:?}");
