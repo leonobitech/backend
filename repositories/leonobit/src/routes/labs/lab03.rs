@@ -19,6 +19,7 @@ use crate::routes::AppState;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::RTCDataChannel;
+use webrtc::data_channel::data_channel_state::RTCDataChannelState;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
@@ -94,21 +95,7 @@ pub async fn webrtc_offer(
         }));
     }
 
-    // --- DataChannel creado por el servidor ---
-    let dc_server = pc
-        .create_data_channel("rt-metrics", None)
-        .await
-        .map_err(internal)?;
-
-    // Handlers para el canal del servidor
-    attach_dc_handlers(
-        dc_server.clone(),
-        state.metrics_tx.clone(),
-        Arc::new("rt-metrics(srv)".to_string()),
-    )
-    .await;
-
-    // --- Extra: si el cliente crea un canal, también lo atendemos ---
+    // --- SOLO recibir DataChannels creados por el cliente ---
     {
         let tx = state.metrics_tx.clone();
         pc.on_data_channel(Box::new(move |dc: Arc<RTCDataChannel>| {
@@ -156,7 +143,7 @@ async fn attach_dc_handlers(
     let label_for_open = label_log.clone();
     let label_for_close = label_log.clone();
 
-    // on_open → PING 1s
+    // on_open → PING 1s (cortar si deja de estar Open)
     dc.on_open(Box::new(move || {
         let dc = dc_for_open.clone();
         let label = label_for_open.clone();
@@ -165,10 +152,14 @@ async fn attach_dc_handlers(
             let mut tick = interval(Duration::from_millis(1000));
             loop {
                 tick.tick().await;
+                if dc.ready_state() != RTCDataChannelState::Open {
+                    info!("'{}' ya no está Open → detenemos PING", label);
+                    break;
+                }
                 let now_ms = now_millis();
                 let payload = format!(r#"{{"kind":"PING","t":{now_ms}}}"#);
                 if let Err(e) = dc.send_text(payload).await {
-                    warn!("Error enviando PING: {e:?}");
+                    warn!("Error enviando PING: {e:?} → stop PING");
                     break;
                 }
             }
@@ -198,7 +189,7 @@ async fn attach_dc_handlers(
                         }
                     }
                 }
-                // Si no es JSON válido, podrías loguear raw si te interesa
+                // Si no es JSON válido, podrías loguear raw si te interesa:
                 // info!("DC raw msg: {:?}", String::from_utf8_lossy(msg.data.as_ref()));
             })
         }));
