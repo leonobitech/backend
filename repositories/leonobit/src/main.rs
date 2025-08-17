@@ -10,10 +10,11 @@ async fn main() -> anyhow::Result<()> {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "info,tower_http=info".into())
         // ↓ Silenciar ruido de teardown:
+        .add_directive("webrtc_ice::agent::agent_gather=error".parse().unwrap())
         .add_directive("webrtc_ice::agent::agent_internal=error".parse().unwrap())
-        .add_directive("webrtc_mdns::conn=error".parse().unwrap());
-        // Si también te molestan los SRTP cerrados:
-        // .add_directive("webrtc::peer_connection::peer_connection_internal=error".parse().unwrap())
+        .add_directive("webrtc::peer_connection::peer_connection_internal=error".parse().unwrap())
+        .add_directive("webrtc::mux=error".parse().unwrap())
+        .add_directive("webrtc_mdns::conn=error".parse().unwrap()); // ← acá sí va ;
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
