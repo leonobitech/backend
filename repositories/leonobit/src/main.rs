@@ -7,12 +7,19 @@ async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     // RUST_LOG=info,tower_http=info cargo run
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info,tower_http=info".into())
+        // ↓ Silenciar ruido de teardown:
+        .add_directive("webrtc_ice::agent::agent_internal=error".parse().unwrap())
+        .add_directive("webrtc_mdns::conn=error".parse().unwrap());
+        // Si también te molestan los SRTP cerrados:
+        // .add_directive("webrtc::peer_connection::peer_connection_internal=error".parse().unwrap())
+
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,tower_http=info".into()))
+        .with_env_filter(filter)
         .init();
 
     tracing::info!("🚀 leonobit backend starting…");
-
     run().await
 }
 
