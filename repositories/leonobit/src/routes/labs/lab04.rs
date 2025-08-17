@@ -31,6 +31,9 @@ use webrtc::track::track_local::{TrackLocal, TrackLocalWriter}; // <- para write
 use crate::routes::AppState;
 use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
 
+use std::time::{Duration, Instant};
+use tokio::time::{interval, MissedTickBehavior};
+
 use super::stats_helper::install_selected_pair_logger;
 
 #[derive(Serialize)]
@@ -164,25 +167,77 @@ pub async fn webrtc_offer_lab04(
                 //      lo que hace que el servidor reenvíe ese audio al cliente como pista remota.
                 //
                 //    En otras palabras: mic (cliente) → RTP → servidor → `write_rtp(pkt)` → RTP de vuelta → cliente (eco).
-                tokio::spawn(async move {
-                    loop {
-                        match track_remote.read_rtp().await {
-                            // Ignoramos `attrs` (metadatos internos); nos basta con el `Packet`.
-                            Ok((pkt, _attrs)) => {
-                                // Si falla el write (por cierre del peer o error de transporte), salimos.
-                                if let Err(e) = local_track.write_rtp(&pkt).await {
-                                    warn!("write_rtp error: {e:?}");
-                                    break;
+                tokio::spawn({
+                    // Contadores y timers para métricas de throughput
+                    let mut pkt_count: u64 = 0;
+                    let mut byte_bucket: u64 = 0; // bytes desde el último log
+                    let mut last_log = Instant::now();
+                    let mut last_pkt_at = Instant::now();
+                    let mut first_ssrc: Option<u32> = None;
+
+                    // Watchdog: si no llegan RTP por X seg, avisamos
+                    let mut watchdog = interval(Duration::from_secs(3));
+                    watchdog.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+                    // Clon para escribir RTP
+                    let local_track = Arc::clone(&local_track);
+
+                    async move {
+                        loop {
+                            tokio::select! {
+                                res = track_remote.read_rtp() => {
+                                    match res {
+                                        Ok((pkt, _attrs)) => {
+                                            let ssrc = pkt.header.ssrc;
+                                            let seq  = pkt.header.sequence_number;
+                                            let ts   = pkt.header.timestamp;
+                                            let payload_len = pkt.payload.len();
+
+                                            if first_ssrc.is_none() {
+                                                first_ssrc = Some(ssrc);
+                                                info!("🎙️ [lab04] inbound RTP started: SSRC={ssrc}");
+                                            }
+
+                                            pkt_count += 1;
+                                            byte_bucket += payload_len as u64;
+                                            last_pkt_at = Instant::now();
+
+                                            // Log rate-limited (≈1s): pkts y bitrate aprox
+                                            if last_log.elapsed() >= Duration::from_secs(1) {
+                                                let secs = last_log.elapsed().as_secs_f64().max(1e-3);
+                                                let kbps = (byte_bucket as f64 * 8.0 / 1000.0) / secs;
+                                                info!(
+                                                    "🎧 [lab04] RTP in: pkts_total={} ~{:.1} kbps | last seq={} ts={} payload={}B",
+                                                    pkt_count, kbps, seq, ts, payload_len
+                                                );
+                                                byte_bucket = 0;
+                                                last_log = Instant::now();
+                                            }
+
+                                            // Loopback: reenviar el mismo paquete al track local
+                                            if let Err(e) = local_track.write_rtp(&pkt).await {
+                                                warn!("write_rtp error: {e:?}");
+                                                break;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            warn!("read_rtp ended: {e:?}");
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                // Watchdog: si pasan 3s sin paquetes, lo avisamos
+                                _ = watchdog.tick() => {
+                                    let idle = last_pkt_at.elapsed();
+                                    if idle >= Duration::from_secs(3) {
+                                        warn!("⏳ [lab04] no inbound RTP for {:?} (waiting audio...)", idle);
+                                    }
                                 }
                             }
-                            // Si `read_rtp()` falla es porque se cerró la pista, hubo timeout, o el PC murió.
-                            Err(e) => {
-                                warn!("read_rtp ended: {e:?}");
-                                break;
-                            }
                         }
+                        info!("🛑 loopback finalizado");
                     }
-                    info!("🛑 loopback finalizado");
                 });
 
                 // Hasta aquí:
