@@ -17,7 +17,6 @@ use webrtc::api::APIBuilder;
 
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
-use webrtc::stats::StatsReportType;// 👈 importante
 
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
@@ -31,6 +30,8 @@ use webrtc::track::track_local::{TrackLocal, TrackLocalWriter}; // <- para write
 
 use crate::routes::AppState;
 use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
+
+use super::stats_helper::install_selected_pair_logger;
 
 #[derive(Serialize)]
 pub struct SdpResponse { pub sdp: String, pub r#type: String }
@@ -74,35 +75,8 @@ pub async fn webrtc_offer_lab04(
             Box::pin(async {})
         }));
 
-        let pc_stats= Arc::clone(&pc);
-        pc.on_ice_connection_state_change(Box::new(move |st| {
-            let pc_in = Arc::clone(&pc_stats);
-            Box::pin(async move {
-                if st == RTCIceConnectionState::Connected {
-                    
-                    let report = pc_in.get_stats().await; // StatsReport (0.13)
-                    // 1) Dump de TODO: para ver qué variantes vienen realmente
-                    for (id, item) in &report.reports {
-                        info!("📊 stats item id={} kind={:?}", id, item);
-                    }
-                    // 2) Par seleccionado (nominated)
-                    for (_id, item) in report.reports {
-                        if let StatsReportType::CandidatePair(pair) = item {
-                            if pair.nominated {
-                                info!(
-                                    "🔗 selected pair: local_id={} remote_id={} state={:?} sent={} recv={}",
-                                    pair.local_candidate_id,
-                                    pair.remote_candidate_id,
-                                    pair.state,
-                                    pair.bytes_sent,
-                                    pair.bytes_received
-                                );
-                            }
-                        }
-                    }
-                }
-            })
-        }));
+        // stats selected pair connection
+        install_selected_pair_logger(&pc);
     }
 
     // 3) Transceiver AUDIO sendrecv

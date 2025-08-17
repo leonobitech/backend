@@ -4,3 +4,4 @@ pub mod lab02;
 pub mod lab03;
 pub mod lab04;
 pub mod leonobit;
+pub mod stats_helper;
