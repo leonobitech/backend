@@ -87,61 +87,95 @@ pub async fn webrtc_offer_lab04(
 
     // 4) on_track: loopback RTP (eco)
     {
+        // Clonamos el Arc del PeerConnection porque lo vamos a mover dentro del closure de on_track.
+        // (Arc = contador de referencias thread-safe; cada clon comparte el mismo PC subyacente)
         let pc2 = Arc::clone(&pc);
 
-        // ⬇️ Recibimos directamente Arc<TrackRemote>, más los otros dos args que no usamos.
+        // Registramos el callback que se dispara cuando el servidor recibe *una pista remota* (del cliente).
+        // Firma en webrtc 0.13: |track_remote, _receiver, _transceiver| (los dos últimos no los usamos aquí).
         pc.on_track(Box::new(move |track_remote, _receiver, _transceiver| {
+            // Necesitamos otro clon dentro del closure movido al async.
             let pc2 = Arc::clone(&pc2);
+
             Box::pin(async move {
-                // Solo procesamos audio
+                // 1) Aceptamos sólo AUDIO. Si llegara una pista de video u otra cosa, salimos.
                 if track_remote.kind() != RTPCodecType::Audio {
                     return;
                 }
 
-                // En 0.13 codec() no es async
+                // 2) Logueamos el códec de la pista remota. En 0.13 `codec()` es síncrono.
+                //    (Suele ser Opus 48kHz/2ch para audio WebRTC.)
                 info!("🛰️ [lab04] track AUDIO remota: codec={:?}", track_remote.codec());
 
-                // Track local Opus (48kHz, 2 ch)
+                // 3) Creamos una *pista local RTP* (TrackLocalStaticRTP) con capacidad Opus.
+                //    Esta pista es la que el SERVIDOR va a "inyectar" de vuelta hacia el cliente,
+                //    para que el navegador la reciba como *pista remota* (eco/loopback).
+                //
+                //    NOTA: Debe coincidir el códec "mime_type" con lo que negociaste (Opus).
                 let local_track = Arc::new(TrackLocalStaticRTP::new(
                     RTCRtpCodecCapability {
                         mime_type: "audio/opus".into(),
-                        clock_rate: 48000,
-                        channels: 2,
-                        sdp_fmtp_line: "".into(),
-                        rtcp_feedback: vec![],
+                        clock_rate: 48000,       // WebRTC-Opus típico
+                        channels: 2,             // 2 canales; si quisieras mono, podrías usar 1
+                        sdp_fmtp_line: "".into(),// sin parámetros extra (minptime/fec ya los verá SDP del peer)
+                        rtcp_feedback: vec![],   // feedback RTCP (transport-cc, etc.) no es necesario aquí
                     },
-                    "audio".to_string(),
-                    "lab04".to_string(),
+                    "audio".to_string(),        // track id (etiqueta local)
+                    "lab04".to_string(),        // stream id (agrupa tracks)
                 ));
 
-                // add_track requiere Arc<dyn TrackLocal + Send + Sync>
+                // 4) Enlazamos esa pista local al PeerConnection del servidor.
+                //    `add_track` espera `Arc<dyn TrackLocal + Send + Sync>`, por eso el cast.
+                //
+                //    IMPORTANTE: ya creaste un transceiver AUDIO (SendRecv) antes de responder la SDP.
+                //    Por eso al hacer `add_track` aquí, el sender se "cuelga" del transceiver existente
+                //    y NO fuerza renegociación (se adjunta a la sección m=audio ya creada).
                 let sender_res = pc2
                     .add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>)
                     .await;
 
+                // Manejo de errores al añadir el track (si PC ya cerró, etc.).
                 let rtp_sender = match sender_res {
                     Ok(s) => s,
-                    Err(e) => { warn!("add_track error: {e:?}"); return; }
+                    Err(e) => { 
+                        warn!("add_track error: {e:?}"); 
+                        return; 
+                    }
                 };
 
-                // Mantener vivo el sender leyendo RTCP
+                // 5) Mantenemos vivo el sender leyendo RTCP en un task aparte.
+                //    - Algunos stacks esperan que leas RTCP periódicamente; además aquí
+                //      capturás feedback/estimaciones si las necesitás en el futuro.
+                //    - Cuando el peer se cierre, `read()` fallará y el task saldrá solo.
                 tokio::spawn({
                     let mut rtcp_buf = vec![0u8; 1500];
                     async move {
-                        while let Ok(_) = rtp_sender.read(&mut rtcp_buf).await {}
+                        while let Ok(_) = rtp_sender.read(&mut rtcp_buf).await {
+                            // Podrías parsear/usar RTCP aquí si quisieras métricas extra.
+                        }
+                        // Al salir de este bucle, el sender ya no está activo.
                     }
                 });
 
-                // Loop RTP: read_rtp() → (Packet, attrs). Enviamos solo el Packet.
+                // 6) Bucle principal de *eco RTP*:
+                //    - Leemos paquetes RTP entrantes de la pista remota (tu mic del navegador)
+                //      con `track_remote.read_rtp()`, que devuelve `(Packet, attrs)`.
+                //    - Escribimos **el mismo Packet** en `local_track.write_rtp(&pkt)`,
+                //      lo que hace que el servidor reenvíe ese audio al cliente como pista remota.
+                //
+                //    En otras palabras: mic (cliente) → RTP → servidor → `write_rtp(pkt)` → RTP de vuelta → cliente (eco).
                 tokio::spawn(async move {
                     loop {
                         match track_remote.read_rtp().await {
+                            // Ignoramos `attrs` (metadatos internos); nos basta con el `Packet`.
                             Ok((pkt, _attrs)) => {
+                                // Si falla el write (por cierre del peer o error de transporte), salimos.
                                 if let Err(e) = local_track.write_rtp(&pkt).await {
                                     warn!("write_rtp error: {e:?}");
                                     break;
                                 }
                             }
+                            // Si `read_rtp()` falla es porque se cerró la pista, hubo timeout, o el PC murió.
                             Err(e) => {
                                 warn!("read_rtp ended: {e:?}");
                                 break;
@@ -150,9 +184,16 @@ pub async fn webrtc_offer_lab04(
                     }
                     info!("🛑 loopback finalizado");
                 });
+
+                // Hasta aquí:
+                // - Quedan dos tasks corriendo:
+                //   (a) lector RTCP del sender
+                //   (b) puente RTP remota→local (eco)
+                // - Ambos saldrán naturalmente cuando el peer cierre/desconecte.
             })
         }));
     }
+
 
     // 5) Señalización: Offer → Answer
     // → have-remote-offer
