@@ -17,6 +17,7 @@ use webrtc::api::APIBuilder;
 
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
+use webrtc::stats::StatsReportType;// 👈 importante
 
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
@@ -57,19 +58,50 @@ pub async fn webrtc_offer_lab04(
         ..Default::default()
     };
 
+    // PeerConnection
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
     // Logs útiles de estado (opcional)
     {
-        let pc_ref = Arc::clone(&pc);
+        let pc_ref = Arc::clone(&pc); // Logs: ICE state = Checking → ICE state = Connected
         pc_ref.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
             info!("ICE state = {:?}", st);
             Box::pin(async {})
         }));
-        let pc_ref = Arc::clone(&pc);
+        let pc_ref = Arc::clone(&pc); // Logs: PC state = Connecting → PC state = Connected
         pc_ref.on_peer_connection_state_change(Box::new(move |st: RTCPeerConnectionState| {
             info!("PC state = {:?}", st);
             Box::pin(async {})
+        }));
+
+        let pc_stats= Arc::clone(&pc);
+        pc.on_ice_connection_state_change(Box::new(move |st| {
+            let pc_in = Arc::clone(&pc_stats);
+            Box::pin(async move {
+                if st == RTCIceConnectionState::Connected {
+                    
+                    let report = pc_in.get_stats().await; // StatsReport (0.13)
+                    // 1) Dump de TODO: para ver qué variantes vienen realmente
+                    for (id, item) in &report.reports {
+                        info!("📊 stats item id={} kind={:?}", id, item);
+                    }
+                    // 2) Par seleccionado (nominated)
+                    for (_id, item) in report.reports {
+                        if let StatsReportType::CandidatePair(pair) = item {
+                            if pair.nominated {
+                                info!(
+                                    "🔗 selected pair: local_id={} remote_id={} state={:?} sent={} recv={}",
+                                    pair.local_candidate_id,
+                                    pair.remote_candidate_id,
+                                    pair.state,
+                                    pair.bytes_sent,
+                                    pair.bytes_received
+                                );
+                            }
+                        }
+                    }
+                }
+            })
         }));
     }
 
@@ -149,11 +181,13 @@ pub async fn webrtc_offer_lab04(
     }
 
     // 5) Señalización: Offer → Answer
+    // → have-remote-offer
     pc.set_remote_description(offer_sdp).await.map_err(internal)?;
     let answer = pc.create_answer(None).await.map_err(internal)?;
 
     // Esperar ICE gathering para incluir candidatos en la Answer
     let mut gather_rx = pc.gathering_complete_promise().await;
+    // → stable
     pc.set_local_description(answer).await.map_err(internal)?;
     let _ = gather_rx.recv().await;
 
