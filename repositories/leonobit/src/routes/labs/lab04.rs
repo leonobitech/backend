@@ -219,10 +219,18 @@ pub async fn webrtc_offer_lab04(
                 //
                 //    En otras palabras: mic (cliente) → RTP → servidor → `write_rtp(pkt)` → RTP de vuelta → cliente (eco).
                 tokio::spawn({
-                    // --- métricas ---
+                    // --- métricas (IN) ---
                     let mut pkt_count: u64 = 0;
                     let mut byte_bucket: u64 = 0;
+
+                    // --- métricas (OUT) ---
+                    // 🔊 contadores para el tráfico que sale hacia el cliente (eco).
+                    let mut out_pkt_count: u64 = 0;
+                    let mut out_byte_bucket: u64 = 0;
+
+                    // Un solo temporizador para ambos logs (in/out) rate-limited
                     let mut last_log = Instant::now();
+
                     let mut last_pkt_at = Instant::now();
                     let mut first_ssrc: Option<u32> = None;
 
@@ -263,26 +271,40 @@ pub async fn webrtc_offer_lab04(
                                                 info!("🎙️ [lab04] inbound RTP started: SSRC={ssrc}");
                                             }
 
+                                            // ===== INBOUND =====
                                             pkt_count += 1;
                                             byte_bucket += payload_len as u64;
                                             last_pkt_at = Instant::now();
 
-                                            // Log rate-limited (~1s)
-                                            if last_log.elapsed() >= Duration::from_secs(1) {
-                                                let secs = last_log.elapsed().as_secs_f64().max(1e-3);
-                                                let kbps = (byte_bucket as f64 * 8.0 / 1000.0) / secs;
-                                                info!(
-                                                    "🎧 [lab04] RTP in: pkts_total={} ~{:.1} kbps | last seq={} ts={} payload={}B",
-                                                    pkt_count, kbps, seq, ts, payload_len
-                                                );
-                                                byte_bucket = 0;
-                                                last_log = Instant::now();
+                                            // Loopback (OUTBOUND): reescribir el **mismo** RTP hacia el cliente
+                                            match local_track.write_rtp(&pkt).await {
+                                                Ok(_) => {
+                                                    // ===== OUTBOUND =====
+                                                    out_pkt_count += 1;
+                                                    out_byte_bucket += payload_len as u64;
+                                                }
+                                                Err(e) => {
+                                                    warn!("write_rtp error: {e:?}");
+                                                    break;
+                                                }
                                             }
 
-                                            // Loopback
-                                            if let Err(e) = local_track.write_rtp(&pkt).await {
-                                                warn!("write_rtp error: {e:?}");
-                                                break;
+                                            // Log rate-limited (~1s) para IN/OUT en una sola línea
+                                            if last_log.elapsed() >= Duration::from_secs(1) {
+                                                let secs = last_log.elapsed().as_secs_f64().max(1e-3);
+                                                let kbps_in = (byte_bucket as f64 * 8.0 / 1000.0) / secs;
+                                                let kbps_out = (out_byte_bucket as f64 * 8.0 / 1000.0) / secs;
+
+                                                info!(
+                                                    "🎧 [lab04] RTP in: pkts_total={} ~{:.1} kbps | last seq={} ts={} payload={}B  |  🔊 out: pkts_total={} ~{:.1} kbps",
+                                                    pkt_count, kbps_in, seq, ts, payload_len,
+                                                    out_pkt_count, kbps_out
+                                                );
+
+                                                // reset buckets para próxima ventana
+                                                byte_bucket = 0;
+                                                out_byte_bucket = 0;
+                                                last_log = Instant::now();
                                             }
                                         }
                                         Err(e) => {
