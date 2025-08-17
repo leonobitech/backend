@@ -1,5 +1,5 @@
 //! Lab 04 — WebRTC Audio (loopback) — Handler Axum (webrtc = "0.13.0")
-//!
+//
 //! Flujo:
 //! 1) Valida Origin + Bearer (iss/aud de lab-04).
 //! 2) Crea API WebRTC y PeerConnection con STUN públicos.
@@ -66,16 +66,48 @@ pub async fn webrtc_offer_lab04(
     // PeerConnection
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
+    // 🔧 Token de cancelación por PC (lo compartimos entre handlers y el loop RTP)
+    let cancel_pc = CancellationToken::new();
+
     // Logs útiles de estado (opcional)
     {
         let pc_ref = Arc::clone(&pc); // Logs: ICE state = Checking → ICE state = Connected
+        // 🔧 si ICE entra en Disconnected/Failed/Closed → cancel + close
+        let cancel_for_ice = cancel_pc.clone();
+        let pc_for_ice_close = Arc::clone(&pc);
         pc_ref.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
             info!("ICE state = {:?}", st);
+            if matches!(st, RTCIceConnectionState::Disconnected | RTCIceConnectionState::Failed | RTCIceConnectionState::Closed) {
+                cancel_for_ice.cancel();
+                let pc_to_close = Arc::clone(&pc_for_ice_close);
+                tokio::spawn(async move {
+                    if let Err(e) = pc_to_close.close().await {
+                        warn!("pc.close() error (ICE cb): {e:?}");
+                    } else {
+                        info!("PC closed (server-side, ICE cb)");
+                    }
+                });
+            }
             Box::pin(async {})
         }));
+
         let pc_ref = Arc::clone(&pc); // Logs: PC state = Connecting → PC state = Connected
+        // 🔧 si PC entra en Disconnected/Failed/Closed → cancel + close
+        let cancel_for_pc = cancel_pc.clone();
+        let pc_for_pc_close = Arc::clone(&pc);
         pc_ref.on_peer_connection_state_change(Box::new(move |st: RTCPeerConnectionState| {
             info!("PC state = {:?}", st);
+            if matches!(st, RTCPeerConnectionState::Disconnected | RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed) {
+                cancel_for_pc.cancel();
+                let pc_to_close = Arc::clone(&pc_for_pc_close);
+                tokio::spawn(async move {
+                    if let Err(e) = pc_to_close.close().await {
+                        warn!("pc.close() error (PC cb): {e:?}");
+                    } else {
+                        info!("PC closed (server-side, PC cb)");
+                    }
+                });
+            }
             Box::pin(async {})
         }));
 
@@ -95,11 +127,18 @@ pub async fn webrtc_offer_lab04(
         // (Arc = contador de referencias thread-safe; cada clon comparte el mismo PC subyacente)
         let pc2 = Arc::clone(&pc);
 
+        // 🔧 clonamos el token para este callback (NO lo movemos): lo clonaremos por invocación
+        let cancel_for_ontrack = cancel_pc.clone();
+
         // Registramos el callback que se dispara cuando el servidor recibe *una pista remota* (del cliente).
         // Firma en webrtc 0.13: |track_remote, _receiver, _transceiver| (los dos últimos no los usamos aquí).
         pc.on_track(Box::new(move |track_remote, _receiver, _transceiver| {
             // Necesitamos otro clon dentro del closure movido al async.
             let pc2 = Arc::clone(&pc2);
+
+            // 🔧 CLAVE CONTRA E0507:
+            // Hacemos un clone del token *por invocación* y movemos ese clone al async.
+            let cancel_for_async = cancel_for_ontrack.clone();
 
             Box::pin(async move {
                 // 1) Aceptamos sólo AUDIO. Si llegara una pista de video u otra cosa, salimos.
@@ -141,9 +180,9 @@ pub async fn webrtc_offer_lab04(
                 // Manejo de errores al añadir el track (si PC ya cerró, etc.).
                 let rtp_sender = match sender_res {
                     Ok(s) => s,
-                    Err(e) => { 
-                        warn!("add_track error: {e:?}"); 
-                        return; 
+                    Err(e) => {
+                        warn!("add_track error: {e:?}");
+                        return;
                     }
                 };
 
@@ -169,100 +208,99 @@ pub async fn webrtc_offer_lab04(
                 //
                 //    En otras palabras: mic (cliente) → RTP → servidor → `write_rtp(pkt)` → RTP de vuelta → cliente (eco).
                 tokio::spawn({
-                // --- métricas ---
-                let mut pkt_count: u64 = 0;
-                let mut byte_bucket: u64 = 0;
-                let mut last_log = Instant::now();
-                let mut last_pkt_at = Instant::now();
-                let mut first_ssrc: Option<u32> = None;
+                    // --- métricas ---
+                    let mut pkt_count: u64 = 0;
+                    let mut byte_bucket: u64 = 0;
+                    let mut last_log = Instant::now();
+                    let mut last_pkt_at = Instant::now();
+                    let mut first_ssrc: Option<u32> = None;
 
-                // --- watchdog ---
-                let mut watchdog = interval(Duration::from_secs(3));
-                watchdog.set_missed_tick_behavior(MissedTickBehavior::Skip);
+                    // --- watchdog ---
+                    let mut watchdog = interval(Duration::from_secs(3));
+                    watchdog.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-                // --- cancelación controlada ---
-                let cancel = CancellationToken::new();
+                    // --- cancelación controlada ---
+                    // 🔧 usamos el token CLONADO para este async (no el capturado por el FnMut)
+                    let cancel = cancel_for_async.clone();
 
-                
+                    // Clon del track local para escribir
+                    let local_track = Arc::clone(&local_track);
+                    // Clon del PC para consultar estado en el watchdog
+                    let pc_for_watch = Arc::clone(&pc2);
 
-                // Clon del track local para escribir
-                let local_track = Arc::clone(&local_track);
-                // Clon del PC para consultar estado en el watchdog
-                let pc_for_watch = Arc::clone(&pc2);
+                    async move {
+                        loop {
+                            tokio::select! {
+                                // 1) Señal de cancelación (PC cerrado/fallido) → salir YA
+                                _ = cancel.cancelled() => {
+                                    let st = pc_for_watch.connection_state();
+                                    warn!("🔚 [lab04] cancel received (pc state = {:?}) → stopping RTP loop", st);
+                                    break;
+                                }
 
-                async move {
-                    loop {
-                        tokio::select! {
-                            // 1) Datos RTP entrantes
-                            res = track_remote.read_rtp() => {
-                                match res {
-                                    Ok((pkt, _attrs)) => {
-                                        let ssrc = pkt.header.ssrc;
-                                        let seq  = pkt.header.sequence_number;
-                                        let ts   = pkt.header.timestamp;
-                                        let payload_len = pkt.payload.len();
+                                // 2) Datos RTP entrantes
+                                res = track_remote.read_rtp() => {
+                                    match res {
+                                        Ok((pkt, _attrs)) => {
+                                            let ssrc = pkt.header.ssrc;
+                                            let seq  = pkt.header.sequence_number;
+                                            let ts   = pkt.header.timestamp;
+                                            let payload_len = pkt.payload.len();
 
-                                        if first_ssrc.is_none() {
-                                            first_ssrc = Some(ssrc);
-                                            info!("🎙️ [lab04] inbound RTP started: SSRC={ssrc}");
+                                            if first_ssrc.is_none() {
+                                                first_ssrc = Some(ssrc);
+                                                info!("🎙️ [lab04] inbound RTP started: SSRC={ssrc}");
+                                            }
+
+                                            pkt_count += 1;
+                                            byte_bucket += payload_len as u64;
+                                            last_pkt_at = Instant::now();
+
+                                            // Log rate-limited (~1s)
+                                            if last_log.elapsed() >= Duration::from_secs(1) {
+                                                let secs = last_log.elapsed().as_secs_f64().max(1e-3);
+                                                let kbps = (byte_bucket as f64 * 8.0 / 1000.0) / secs;
+                                                info!(
+                                                    "🎧 [lab04] RTP in: pkts_total={} ~{:.1} kbps | last seq={} ts={} payload={}B",
+                                                    pkt_count, kbps, seq, ts, payload_len
+                                                );
+                                                byte_bucket = 0;
+                                                last_log = Instant::now();
+                                            }
+
+                                            // Loopback
+                                            if let Err(e) = local_track.write_rtp(&pkt).await {
+                                                warn!("write_rtp error: {e:?}");
+                                                break;
+                                            }
                                         }
-
-                                        pkt_count += 1;
-                                        byte_bucket += payload_len as u64;
-                                        last_pkt_at = Instant::now();
-
-                                        // Log rate-limited (~1s)
-                                        if last_log.elapsed() >= Duration::from_secs(1) {
-                                            let secs = last_log.elapsed().as_secs_f64().max(1e-3);
-                                            let kbps = (byte_bucket as f64 * 8.0 / 1000.0) / secs;
-                                            info!(
-                                                "🎧 [lab04] RTP in: pkts_total={} ~{:.1} kbps | last seq={} ts={} payload={}B",
-                                                pkt_count, kbps, seq, ts, payload_len
-                                            );
-                                            byte_bucket = 0;
-                                            last_log = Instant::now();
-                                        }
-
-                                        // Loopback
-                                        if let Err(e) = local_track.write_rtp(&pkt).await {
-                                            warn!("write_rtp error: {e:?}");
+                                        Err(e) => {
+                                            // Si read_rtp() falla, salimos
+                                            warn!("read_rtp ended: {e:?}");
                                             break;
                                         }
                                     }
-                                    Err(e) => {
-                                        // Si read_rtp() falla, salimos
-                                        warn!("read_rtp ended: {e:?}");
+                                }
+
+                                // 3) Watchdog: si no llegan paquetes y el PC no está conectado → salir
+                                _ = watchdog.tick() => {
+                                    let idle = last_pkt_at.elapsed();
+                                    let st = pc_for_watch.connection_state();
+                                    if idle >= Duration::from_secs(5) && st != RTCPeerConnectionState::Connected {
+                                        warn!("⏳ [lab04] idle {:?} and pc state {:?} → stopping RTP loop", idle, st);
                                         break;
+                                    }
+                                    if idle >= Duration::from_secs(10) {
+                                        // Si prefieres no salir aquí, baja este branch a un simple warn!
+                                        warn!("⏳ [lab04] no inbound RTP for {:?} (state={:?})", idle, st);
                                     }
                                 }
                             }
-
-                            // 2) Señal de cancelación (PC cerrado/fallido)
-                            _ = cancel.cancelled() => {
-                                let st = pc_for_watch.connection_state();
-                                warn!("🔚 [lab04] cancel received (pc state = {:?}) → stopping RTP loop", st);
-                                break;
-                            }
-
-                            // 3) Watchdog: si no llegan paquetes y el PC no está conectado → salir
-                            _ = watchdog.tick() => {
-                                let idle = last_pkt_at.elapsed();
-                                let st = pc_for_watch.connection_state();
-                                if idle >= Duration::from_secs(5) && st != RTCPeerConnectionState::Connected {
-                                    warn!("⏳ [lab04] idle {:?} and pc state {:?} → stopping RTP loop", idle, st);
-                                    break;
-                                }
-                                if idle >= Duration::from_secs(10) {
-                                    // Si prefieres no salir aquí, baja este branch a un simple warn!
-                                    warn!("⏳ [lab04] no inbound RTP for {:?} (state={:?})", idle, st);
-                                }
-                            }
                         }
-                    }
 
-                    info!("🛑 loopback finalizado");
-                }
-            });
+                        info!("🛑 loopback finalizado");
+                    }
+                });
 
                 // Hasta aquí:
                 // - Quedan dos tasks corriendo:
