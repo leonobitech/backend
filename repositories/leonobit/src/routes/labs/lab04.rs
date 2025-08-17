@@ -168,6 +168,22 @@ pub async fn webrtc_offer_lab04(
                 //      lo que hace que el servidor reenvíe ese audio al cliente como pista remota.
                 //
                 //    En otras palabras: mic (cliente) → RTP → servidor → `write_rtp(pkt)` → RTP de vuelta → cliente (eco).
+                let cancel = CancellationToken::new();
+                {
+                    let cancel_cb = cancel.clone();
+                    pc2.on_peer_connection_state_change(Box::new(move |st| {
+                        if matches!(
+                            st,
+                            RTCPeerConnectionState::Closed
+                                | RTCPeerConnectionState::Disconnected
+                                | RTCPeerConnectionState::Failed
+                        ) {
+                            cancel_cb.cancel();
+                        }
+                        Box::pin(async {})
+                    }));
+                }
+
                 tokio::spawn({
                 // --- métricas ---
                 let mut pkt_count: u64 = 0;
@@ -181,7 +197,7 @@ pub async fn webrtc_offer_lab04(
                 watchdog.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
                 // --- cancelación controlada ---
-                let cancel = CancellationToken::new();
+                 let cancel = cancel.clone();
 
                 // Clon del track local para escribir
                 let local_track = Arc::clone(&local_track);
