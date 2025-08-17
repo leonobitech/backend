@@ -8,6 +8,7 @@
 //! 5) Señalización Offer → Answer, espera ICE gathering y responde SDP final.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use axum::{extract::State, http::{HeaderMap, StatusCode}, Json};
 use serde::Serialize;
 use tracing::{info, warn, error};
@@ -66,47 +67,57 @@ pub async fn webrtc_offer_lab04(
     // PeerConnection
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
+    let pc_closed_flag = Arc::new(AtomicBool::new(false)); // 🔧
+
     // 🔧 Token de cancelación por PC (lo compartimos entre handlers y el loop RTP)
     let cancel_pc = CancellationToken::new();
 
-    // Logs útiles de estado (opcional)
+     // Logs útiles de estado (opcional)
     {
         let pc_ref = Arc::clone(&pc); // Logs: ICE state = Checking → ICE state = Connected
-        // 🔧 si ICE entra en Disconnected/Failed/Closed → cancel + close
+        // 🔧 si ICE entra en Disconnected/Failed/Closed → cancel + close (idempotente)
         let cancel_for_ice = cancel_pc.clone();
         let pc_for_ice_close = Arc::clone(&pc);
+        let closed_flag_ice = Arc::clone(&pc_closed_flag); // 🔧 guarda de cierre
         pc_ref.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
             info!("ICE state = {:?}", st);
             if matches!(st, RTCIceConnectionState::Disconnected | RTCIceConnectionState::Failed | RTCIceConnectionState::Closed) {
                 cancel_for_ice.cancel();
-                let pc_to_close = Arc::clone(&pc_for_ice_close);
-                tokio::spawn(async move {
-                    if let Err(e) = pc_to_close.close().await {
-                        warn!("pc.close() error (ICE cb): {e:?}");
-                    } else {
-                        info!("PC closed (server-side, ICE cb)");
-                    }
-                });
+                // 🔧 cerrar una sola vez
+                if !closed_flag_ice.swap(true, Ordering::SeqCst) {
+                    let pc_to_close = Arc::clone(&pc_for_ice_close);
+                    tokio::spawn(async move {
+                        if let Err(e) = pc_to_close.close().await {
+                            warn!("pc.close() error (ICE cb): {e:?}");
+                        } else {
+                            info!("PC closed (server-side)");
+                        }
+                    });
+                }
             }
             Box::pin(async {})
         }));
 
         let pc_ref = Arc::clone(&pc); // Logs: PC state = Connecting → PC state = Connected
-        // 🔧 si PC entra en Disconnected/Failed/Closed → cancel + close
+        // 🔧 si PC entra en Disconnected/Failed/Closed → cancel + close (idempotente)
         let cancel_for_pc = cancel_pc.clone();
         let pc_for_pc_close = Arc::clone(&pc);
+        let closed_flag_pc = Arc::clone(&pc_closed_flag); // 🔧 guarda de cierre
         pc_ref.on_peer_connection_state_change(Box::new(move |st: RTCPeerConnectionState| {
             info!("PC state = {:?}", st);
             if matches!(st, RTCPeerConnectionState::Disconnected | RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed) {
                 cancel_for_pc.cancel();
-                let pc_to_close = Arc::clone(&pc_for_pc_close);
-                tokio::spawn(async move {
-                    if let Err(e) = pc_to_close.close().await {
-                        warn!("pc.close() error (PC cb): {e:?}");
-                    } else {
-                        info!("PC closed (server-side, PC cb)");
-                    }
-                });
+                // 🔧 cerrar una sola vez
+                if !closed_flag_pc.swap(true, Ordering::SeqCst) {
+                    let pc_to_close = Arc::clone(&pc_for_pc_close);
+                    tokio::spawn(async move {
+                        if let Err(e) = pc_to_close.close().await {
+                            warn!("pc.close() error (PC cb): {e:?}");
+                        } else {
+                            info!("PC closed (server-side)");
+                        }
+                    });
+                }
             }
             Box::pin(async {})
         }));
