@@ -168,6 +168,8 @@ pub async fn webrtc_offer_lab04(
                 //      lo que hace que el servidor reenvíe ese audio al cliente como pista remota.
                 //
                 //    En otras palabras: mic (cliente) → RTP → servidor → `write_rtp(pkt)` → RTP de vuelta → cliente (eco).
+
+                // Mini-patch (corte inmediato)
                 let cancel = CancellationToken::new();
                 {
                     let cancel_cb = cancel.clone();
