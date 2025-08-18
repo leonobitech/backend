@@ -9,6 +9,10 @@
 //!    ❗ No borramos extensiones RTP (MID/transport-cc), necesarias para demultiplexación.
 //! 5) Señalización Offer → Answer, espera ICE gathering y responde SDP final.
 
+//==============================\\
+//********  IMPORTS  ***********\\
+//==============================\\
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use axum::{extract::State, http::{HeaderMap, StatusCode}, Json};
@@ -38,20 +42,32 @@ use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
 use super::stats_helper::install_selected_pair_logger;
-
+//=====================================\\
+//********  TIPOS / RESPUESTAS  *******\\
+//=====================================\\
 #[derive(Serialize)]
 pub struct SdpResponse { pub sdp: String, pub r#type: String }
 
+//=====================================\\
+//*****  HANDLER PRINCIPAL HTTP  ******\\
+//=====================================\\
 #[axum::debug_handler]
 pub async fn webrtc_offer_lab04(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(offer_sdp): Json<RTCSessionDescription>,
 ) -> Result<Json<SdpResponse>, (StatusCode, String)> {
+
+    //=========================================\\
+    //*****  (1) SEGURIDAD: ORIGIN + JWT  *****\\
+    //=========================================\\
     // 1) Seguridad: Origin + Bearer JWT (perfil lab-04)
     validate_origin(&headers, &state)?;
     let _claims = validate_bearer_lab04(&headers, &state)?;
 
+    //=========================================\\
+    //*****  (2) API WEBRTC + PEERCONN     ****\\
+    //=========================================\\
     // 2) API WebRTC y PeerConnection con STUN
     let mut m = MediaEngine::default();
     m.register_default_codecs().map_err(internal)?;
@@ -68,13 +84,17 @@ pub async fn webrtc_offer_lab04(
     // PeerConnection
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
+    // Señalización y cierre ordenado
     let pc_closed_flag = Arc::new(AtomicBool::new(false));
-
     // Token de cancelación por PC
     let cancel_pc = CancellationToken::new();
 
+    //=========================================\\
+    //*****  (2.1) LOGS / WATCHDOG STATES  ****\\
+    //=========================================\\
     // Logs útiles de estado
-    {
+    {   
+        // ICE
         let pc_ref = Arc::clone(&pc);
         let cancel_for_ice = cancel_pc.clone();
         let pc_for_ice_close = Arc::clone(&pc);
@@ -97,6 +117,7 @@ pub async fn webrtc_offer_lab04(
             Box::pin(async {})
         }));
 
+        // PC
         let pc_ref = Arc::clone(&pc);
         let cancel_for_pc = cancel_pc.clone();
         let pc_for_pc_close = Arc::clone(&pc);
@@ -119,16 +140,21 @@ pub async fn webrtc_offer_lab04(
             Box::pin(async {})
         }));
 
-        // stats selected pair connection
+        // Pares ICE seleccionados (debug)
+        // helper: stats selected pair connection 
         install_selected_pair_logger(&pc);
     }
 
-    // 3) Transceiver AUDIO sendrecv (crea m-line de audio)
+    //================================================\\
+    //*****  (3) AUDIO: TRANSCEIVER + TRACK LOCAL  ****\\
+    //================================================\\
+
+    // 3.1) Transceiver AUDIO sendrecv (crea m-line de audio)
     pc.add_transceiver_from_kind(RTPCodecType::Audio, None)
         .await
         .map_err(internal)?;
 
-    // 3.1) **Crear y adjuntar TrackLocal RTP (Opus) ANTES de la señalización**
+    // 3.2) **Crear y adjuntar TrackLocal RTP (Opus) ANTES de la señalización**
     //      Esto asegura que la SDP local contenga SSRC/MSID del flujo que enviaremos.
     let local_track = Arc::new(TrackLocalStaticRTP::new(
         RTCRtpCodecCapability {
@@ -142,7 +168,7 @@ pub async fn webrtc_offer_lab04(
         "lab04".to_string(), // stream id
     ));
 
-    // 3.2) Enganchar el track al **transceiver de audio existente** con replace_track()
+    // 3.3) Enganchar el track al **transceiver de audio existente** con replace_track()
     //      (esto garantiza que el RTP salga por la misma m-line/MID que negocia el browser).
     let mut audio_sender_opt = None;
     for (i, t) in pc.get_transceivers().await.iter().enumerate() {
@@ -166,7 +192,7 @@ pub async fn webrtc_offer_lab04(
         None => return Err(internal("no audio transceiver found")),
     };
 
-    // Mantener vivo el sender leyendo RTCP
+    // 3.4) Mantener vivo el sender leyendo RTCP
     {
         let rtp_sender = rtp_sender.clone();
         tokio::spawn(async move {
@@ -176,7 +202,7 @@ pub async fn webrtc_offer_lab04(
         });
     }
 
-   // Obtener SSRC/PT locales negociados del sender (webrtc 0.13)
+   // 3.5) Obtener SSRC/PT locales negociados del sender (webrtc 0.13)
     let params = rtp_sender.get_parameters().await;
     let local_ssrc: Option<u32> = params.encodings.get(0).map(|e| e.ssrc);
     let local_pt:   Option<u8>  = params.rtp_parameters.codecs.get(0).map(|c| c.payload_type);
@@ -186,6 +212,9 @@ pub async fn webrtc_offer_lab04(
         local_ssrc, local_pt
     );
 
+    //==================================================\\
+    //*****  (4) on_track: LOOPBACK RTP (eco)       *****\\
+    //==================================================\\
     // 4) on_track: loopback RTP (eco) — leer remoto y escribir al local_track ya anunciado
     {
         let pc2 = Arc::clone(&pc);
@@ -200,15 +229,15 @@ pub async fn webrtc_offer_lab04(
             let local_track = local_track_for_cb.clone();
 
             Box::pin(async move {
-                // 1) Aceptamos sólo AUDIO.
+                // 4.1) Aceptamos sólo AUDIO.
                 if track_remote.kind() != RTPCodecType::Audio {
                     return;
                 }
 
-                // 2) Log códec remoto
+                // 4.2) Log códec remoto
                 info!("🛰️ [lab04] track AUDIO remota: codec={:?}", track_remote.codec());
 
-                // 3) Bucle principal de eco RTP
+                // 4.3) Bucle principal de eco RTP
                 tokio::spawn({
                     let mut pkt_count: u64 = 0;
                     let mut byte_bucket: u64 = 0;
@@ -242,16 +271,18 @@ pub async fn webrtc_offer_lab04(
                                             let payload_len = pkt.payload.len();
 
                                             if first_ssrc.is_none() {
-            first_ssrc = Some(ssrc_in);
-            info!("🎙️ [lab04] inbound RTP started: SSRC={ssrc_in}");
+                                                first_ssrc = Some(ssrc_in);
+                                                info!("🎙️ [lab04] inbound RTP started: SSRC={ssrc_in}");
                                             }
 
                                             // ===== INBOUND =====
+                                            // Contadores IN
                                             pkt_count += 1;
                                             byte_bucket += payload_len as u64;
                                             last_pkt_at = Instant::now();
 
                                             // 🔁 REESCRITURA CLAVE: usar SSRC/PT locales del sender
+                                            // Reescritura clave → SSRC / PT locales
                                             if let Some(ssrc_local) = local_ssrc_for_cb { pkt.header.ssrc = ssrc_local; }
                                             if let Some(pt_local)  = local_pt_for_cb   { pkt.header.payload_type = pt_local; }
 
@@ -259,6 +290,7 @@ pub async fn webrtc_offer_lab04(
                                             //    Mantenerlas permite al navegador demultiplexar correctamente.
 
                                             // Loopback (OUTBOUND)
+                                            // Salida (eco)
                                             match local_track.write_rtp(&pkt).await {
                                                 Ok(_) => {
                                                     { /* contadores */ }
@@ -313,20 +345,26 @@ pub async fn webrtc_offer_lab04(
         }));
     }
 
-    // 5) Señalización: Offer → Answer
+    //=============================================\\
+    //*****  (5) SEÑALIZACIÓN (OFFER → ANSWER)  ****\\
+    //=============================================\\
+    // 5.1) Señalización: Offer → Answer
     pc.set_remote_description(offer_sdp).await.map_err(internal)?;
     let answer = pc.create_answer(None).await.map_err(internal)?;
 
-    // Esperar ICE gathering para incluir candidatos en la Answer
+    // 5.2) Esperar ICE gathering para incluir candidatos en la Answer
     let mut gather_rx = pc.gathering_complete_promise().await;
     pc.set_local_description(answer).await.map_err(internal)?;
     let _ = gather_rx.recv().await;
 
-    // 6) Responder SDP final
+    // 5.3) Responder SDP final
     let local = pc.local_description().await.ok_or_else(|| internal("missing local_description"))?;
     Ok(Json(SdpResponse { sdp: local.sdp, r#type: "answer".into() }))
 }
 
+//=====================================\\
+//*******  HELPERS DE SEGURIDAD  ******\\
+//=====================================\\
 /* ───────────── Seguridad & Util ───────────── */
 
 fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusCode, String)> {
@@ -358,6 +396,9 @@ fn validate_bearer_lab04(headers: &HeaderMap, state: &AppState) -> Result<WsClai
     })
 }
 
+//=====================================\\
+//***********  ERRORES  ***************\\
+//=====================================\\
 fn internal<E: std::fmt::Debug>(e: E) -> (StatusCode, String) {
     error!("Internal error: {e:?}");
     (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())
