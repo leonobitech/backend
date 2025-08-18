@@ -255,8 +255,9 @@ pub async fn webrtc_offer_lab04(
                                             // 🔧 MUY IMPORTANTE: limpiar extensiones RTP que el sender local NO negoció
                                             pkt.header.extension = false;
                                             pkt.header.extensions.clear();
-
-                                            // (opcional pero sano) evita marcadores heredados
+                                            pkt.header.csrc = vec![];
+                                            pkt.header.padding = false;
+                                            // (opcional) neutralizar marker heredado
                                             pkt.header.marker = false;
 
                                             // Loopback (OUTBOUND)
