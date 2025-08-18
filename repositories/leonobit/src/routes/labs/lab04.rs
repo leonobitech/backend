@@ -150,6 +150,9 @@ pub async fn webrtc_offer_lab04(
         let cur = t.current_direction();
         info!("xcev[{i}] dir={:?} current={:?}", dir, cur);
         if t.kind() == RTPCodecType::Audio {
+            if let Ok(mid) = t.mid().await {
+                info!("xcev[{i}] MID={:?}", mid);
+            }
             let s = t.sender().await;
             audio_sender_opt = Some(s);
             break;
