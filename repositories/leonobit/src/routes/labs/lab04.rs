@@ -252,9 +252,17 @@ pub async fn webrtc_offer_lab04(
                                             if let Some(ssrc_local) = local_ssrc { pkt.header.ssrc = ssrc_local; }
                                             if let Some(pt_local)  = local_pt   { pkt.header.payload_type = pt_local; }
 
+                                            // 🔧 MUY IMPORTANTE: limpiar extensiones RTP que el sender local NO negoció
+                                            pkt.header.extension = false;
+                                            pkt.header.extensions.clear();
+
+                                            // (opcional pero sano) evita marcadores heredados
+                                            pkt.header.marker = false;
+
                                             // Loopback (OUTBOUND)
                                             match local_track.write_rtp(&pkt).await {
                                                 Ok(_) => {
+                                                    { /* contadores… */ }
                                                     out_pkt_count += 1;
                                                     out_byte_bucket += payload_len as u64;
                                                 }
