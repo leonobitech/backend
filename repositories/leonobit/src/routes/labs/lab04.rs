@@ -72,7 +72,7 @@ pub async fn webrtc_offer_lab04(
     // 🔧 Token de cancelación por PC (lo compartimos entre handlers y el loop RTP)
     let cancel_pc = CancellationToken::new();
 
-     // Logs útiles de estado (opcional)
+    // Logs útiles de estado (opcional)
     {
         let pc_ref = Arc::clone(&pc); // Logs: ICE state = Checking → ICE state = Connected
         // 🔧 si ICE entra en Disconnected/Failed/Closed → cancel + close (idempotente)
@@ -170,7 +170,7 @@ pub async fn webrtc_offer_lab04(
                     RTCRtpCodecCapability {
                         mime_type: "audio/opus".into(),
                         clock_rate: 48000,       // WebRTC-Opus típico
-                        channels: 2,             // 2 canales; si quisieras mono, podrías usar 1
+                        channels: 1,             // ← MONO mejora compatibilidad de negociación
                         sdp_fmtp_line: "".into(),// sin parámetros extra (minptime/fec ya los verá SDP del peer)
                         rtcp_feedback: vec![],   // feedback RTCP (transport-cc, etc.) no es necesario aquí
                     },
@@ -190,7 +190,10 @@ pub async fn webrtc_offer_lab04(
 
                 // Manejo de errores al añadir el track (si PC ya cerró, etc.).
                 let rtp_sender = match sender_res {
-                    Ok(s) => s,
+                    Ok(s) => {
+                        info!("✅ [lab04] sender attached to audio transceiver");
+                        s
+                    }
                     Err(e) => {
                         warn!("add_track error: {e:?}");
                         return;
@@ -208,6 +211,7 @@ pub async fn webrtc_offer_lab04(
                             // Podrías parsear/usar RTCP aquí si quisieras métricas extra.
                         }
                         // Al salir de este bucle, el sender ya no está activo.
+                        info!("RTCP reader ended");
                     }
                 });
 
@@ -247,6 +251,9 @@ pub async fn webrtc_offer_lab04(
                     // Clon del PC para consultar estado en el watchdog
                     let pc_for_watch = Arc::clone(&pc2);
 
+                    // --- debug de salida cada 50 paquetes ---
+                    let mut out_debug: usize = 0;
+
                     async move {
                         loop {
                             tokio::select! {
@@ -282,6 +289,12 @@ pub async fn webrtc_offer_lab04(
                                                     // ===== OUTBOUND =====
                                                     out_pkt_count += 1;
                                                     out_byte_bucket += payload_len as u64;
+
+                                                    // debug cada 50 paquetes
+                                                    out_debug += 1;
+                                                    if out_debug % 50 == 0 {
+                                                        info!("🔊 [lab04] wrote 50 RTP packets to local_track (seq={} ts={})", seq, ts);
+                                                    }
                                                 }
                                                 Err(e) => {
                                                     warn!("write_rtp error: {e:?}");
@@ -355,6 +368,13 @@ pub async fn webrtc_offer_lab04(
     // → stable
     pc.set_local_description(answer).await.map_err(internal)?;
     let _ = gather_rx.recv().await;
+
+    // 🔎 DEBUG: inspeccionar transceivers (direction/current_direction) tras señalización
+    let xcevs = pc.get_transceivers().await;   // ← await aquí
+    for (i, t) in xcevs.iter().enumerate() {
+        info!("xcev[{i}] dir={:?} current={:?}", t.direction(), t.current_direction());
+    }
+
 
     // 6) Responder SDP final
     let local = pc.local_description().await.ok_or_else(|| internal("missing local_description"))?;
