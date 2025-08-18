@@ -142,10 +142,29 @@ pub async fn webrtc_offer_lab04(
         "lab04".to_string(), // stream id
     ));
 
-    let rtp_sender = pc
-        .add_track(local_track.clone() as Arc<dyn TrackLocal + Send + Sync>)
-        .await
-        .map_err(internal)?;
+    // 3.2) Enganchar el track al **transceiver de audio existente** con replace_track()
+    //      (esto garantiza que el RTP salga por la misma m-line/MID que negocia el browser).
+    let mut audio_sender_opt = None;
+    for (i, t) in pc.get_transceivers().await.iter().enumerate() {
+        let dir = t.direction();
+        let cur = t.current_direction();
+        info!("xcev[{i}] dir={:?} current={:?}", dir, cur);
+        if t.kind() == RTPCodecType::Audio {
+            let s = t.sender().await;
+            audio_sender_opt = Some(s);
+            break;
+        }
+    }
+
+    let rtp_sender = match audio_sender_opt {
+        Some(s) => {
+            s.replace_track(Some(local_track.clone() as Arc<dyn TrackLocal + Send + Sync>))
+                .await
+                .map_err(internal)?;
+            s
+        }
+        None => return Err(internal("no audio transceiver found")),
+    };
 
     // Mantener vivo el sender leyendo RTCP
     {
@@ -157,7 +176,7 @@ pub async fn webrtc_offer_lab04(
         });
     }
 
-    // Obtener SSRC/PT locales negociados del sender (webrtc 0.13)
+   // Obtener SSRC/PT locales negociados del sender (webrtc 0.13)
     let params = rtp_sender.get_parameters().await;
     let local_ssrc: Option<u32> = params.encodings.get(0).map(|e| e.ssrc);
     let local_pt:   Option<u8>  = params.rtp_parameters.codecs.get(0).map(|c| c.payload_type);
@@ -242,6 +261,7 @@ pub async fn webrtc_offer_lab04(
                                             // Loopback (OUTBOUND)
                                             match local_track.write_rtp(&pkt).await {
                                                 Ok(_) => {
+                                                    { /* contadores */ }
                                                     out_pkt_count += 1;
                                                     out_byte_bucket += payload_len as u64;
                                                 }
