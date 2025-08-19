@@ -23,13 +23,19 @@ pub fn install_selected_pair_logger(pc: &Arc<RTCPeerConnection>) {
 async fn log_selected_pair(pc: Arc<RTCPeerConnection>) -> Result<(), String> {
     let report = pc.get_stats().await;
 
-    // Mapear candidates por id → (ip, port, tipo, net)
+    // id -> (ip, port, candidate_type, network_type)
     let mut locals:  HashMap<String, (String, u16, String, String)> = HashMap::new();
     let mut remotes: HashMap<String, (String, u16, String, String)> = HashMap::new();
 
     let mut selected_local_id: Option<String> = None;
     let mut selected_remote_id: Option<String> = None;
-    let mut selected_info: Option<(String, u64, u64)> = None; // (state, bytes_sent, bytes_recv)
+
+    // Extras útiles del par (si el crate los expone)
+    let mut nominated_state: Option<String> = None;
+    let mut bytes_sent: Option<u64> = None;
+    let mut bytes_recv: Option<u64> = None;
+    // Nota: algunas versiones del crate exponen `current_round_trip_time` en segundos (f64).
+    let rtt_ms: Option<u32> = None;
 
     for (_id, item) in &report.reports {
         match item {
@@ -48,28 +54,63 @@ async fn log_selected_pair(pc: Arc<RTCPeerConnection>) -> Result<(), String> {
             StatsReportType::CandidatePair(p) if p.nominated => {
                 selected_local_id  = Some(p.local_candidate_id.clone());
                 selected_remote_id = Some(p.remote_candidate_id.clone());
-                selected_info      = Some((format!("{:?}", p.state), p.bytes_sent, p.bytes_received));
+                nominated_state    = Some(format!("{:?}", p.state));
+                bytes_sent         = Some(p.bytes_sent);
+                bytes_recv         = Some(p.bytes_received);
+
+                // si existe en tu versión del crate:
+                #[allow(unused_variables)]
+                {
+                    // p.current_round_trip_time (f64, segundos) en webrtc-rs recientes
+                    // Si tu versión no lo tiene, este bloque no compilará: simplemente bórralo.
+                    // rtt_ms = Some((p.current_round_trip_time * 1000.0).round() as u32);
+                }
             }
             _ => {}
         }
     }
 
-    if let (Some(lid), Some(rid), Some((state, sent, recv))) =
-        (selected_local_id, selected_remote_id, selected_info)
-    {
-        match (locals.get(&lid), remotes.get(&rid)) {
-            (Some((lip, lport, ltyp, lnet)), Some((rip, rport, rtyp, rnet))) => {
-                info!("🔗 Selected ICE Pair:");
-                info!("   local  = {}:{} ({}/{})", lip, lport, ltyp, lnet);
-                info!("   remote = {}:{} ({}/{})", rip, rport, rtyp, rnet);
-                info!("   state  = {}  nominated=true  traffic: sent={}B recv={}B", state, sent, recv);
-            }
-            _ => {
-                info!("🔗 Selected ICE Pair (ids): local_id={} remote_id={} state={} nominated=true", lid, rid, state);
-            }
+    if let (Some(lid), Some(rid)) = (selected_local_id, selected_remote_id) {
+        let (l, r) = (locals.get(&lid), remotes.get(&rid));
+        let (lip, lport, ltyp, lnet) = l.cloned().unwrap_or_default();
+        let (rip, rport, rtyp, rnet) = r.cloned().unwrap_or_default();
+
+        // Protocolo: de network_type se puede inferir udp/tcp (Udp4/Udp6/Tcp4/Tcp6)
+        let proto = lnet.to_lowercase();
+        let proto = if proto.contains("udp") { "udp" } else if proto.contains("tcp") { "tcp" } else { "?" };
+
+        // Resumen legible del camino
+        let path = format!("{proto} / {}→{}", short_typ(&ltyp), short_typ(&rtyp));
+
+        info!("🔗 Selected ICE Pair:");
+        if l.is_some() && r.is_some() {
+            info!("   local  = {}:{} ({}/{})", lip, lport, ltyp, lnet);
+            info!("   remote = {}:{} ({}/{})", rip, rport, rtyp, rnet);
+        } else {
+            info!("   local_id = {lid}, remote_id = {rid}");
         }
+        if let Some(st) = nominated_state.as_deref() {
+            info!("   state  = {}  nominated=true", st);
+        }
+        if let (Some(s), Some(rv)) = (bytes_sent, bytes_recv) {
+            info!("   traffic: sent={}B recv={}B", s, rv);
+        }
+        if let Some(ms) = rtt_ms {
+            info!("   rtt    = {} ms", ms);
+        }
+        info!("   path   = {}", path);
+
         Ok(())
     } else {
         Err("no nominated pair found (todavía)".into())
     }
+}
+
+fn short_typ(s: &str) -> &str {
+    // recorta "ServerReflexive" -> "srflx", "Relay" -> "relay", "Host" -> "host"
+    let ls = s.to_lowercase();
+    if ls.contains("reflexive") { "srflx" }
+    else if ls.contains("relay") { "relay" }
+    else if ls.contains("host") { "host" }
+    else { "?" }
 }
