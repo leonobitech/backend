@@ -46,6 +46,10 @@ impl AppState {
                 iss: "lab-04",
                 aud: "lab-webrtc-04-audio",
             },
+            TokenProfile {
+                iss: "lab-05",
+                aud: "lab-webrtc-05-audio",
+            },
         ];
 
         Self {
@@ -70,6 +74,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ws/lab/02/offer", get(labs::lab02::ws_handler))
         .route("/webrtc/lab/03/offer", post(labs::lab03::webrtc_offer))
         .route("/webrtc/lab/04/offer", post(labs::lab04::webrtc_offer_lab04))
+        .route("/webrtc/lab/05/offer", post(labs::lab05::handle_lab05))
         // Estado global
         .with_state(state)
 }
