@@ -2,17 +2,26 @@
 FROM rust:1.89-bookworm AS builder
 WORKDIR /usr/src/app
 
-# Opt: caché de deps
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir -p src && echo 'fn main(){}' > src/main.rs && cargo build --release
-# Copia el código real
-COPY src ./src
-
-# Dependencias nativas
-RUN apt-get update && apt-get install -y --no-install-recommends libssl-dev pkg-config \
+# 🔧 Dependencias de build necesarias para whisper.cpp y friends
+# (cmake para whisper.cpp, clang/libclang para bindgen, build-essential para toolchain C/C++)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    clang \
+    libclang-dev \
+    pkg-config \
+    libssl-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Compilar release
+# 🧱 Caché de deps de Rust (ahora sí, con toolchains ya instaladas)
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir -p src && echo 'fn main() {}' > src/main.rs
+# Prefetch y build ligera para calentar caché (si falla por no tener código real, ignoramos)
+RUN cargo fetch
+RUN cargo build --release || true
+
+# 📦 Copiamos el código real y compilamos
+COPY src ./src
 RUN cargo build --release
 
 # --- Runtime (mínimo y seguro) ---
@@ -20,7 +29,11 @@ FROM debian:bookworm-slim
 WORKDIR /app
 
 # Certs + utilidades mínimas para healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+# 💡 Añadimos libstdc++6 por si el binario linkea C++ en runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    libstdc++6 \
  && rm -rf /var/lib/apt/lists/*
 
 # Copiar binario
