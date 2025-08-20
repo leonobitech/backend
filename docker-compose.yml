@@ -1116,12 +1116,22 @@ services:
     security_opt:
       - no-new-privileges:true
 
+    # Montamos los modelos Whisper en modo lectura
+    volumes:
+      - whisper-models:/app/models:ro
+
+    env_file:
+      - ./repositories/leonobit/.env
     environment:
       - RUST_LOG=info,tower_http=info
       - PORT=8000
       - CORS_ORIGIN=${CORS_ORIGIN}
-      - WS_JWT_SECRET=${WS_JWT_SECRET}
       - ALLOWED_WS_ORIGINS=${ALLOWED_WS_ORIGINS}
+      - WS_JWT_SECRET=${WS_JWT_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}
+      - WHISPER_MODEL_PATH=${WHISPER_MODEL_PATH}
 
     networks:
       - leonobitech-net
@@ -1202,6 +1212,9 @@ volumes:
   odoo_data:
     external: false
 
+  # 🔴 Whisper
+  whisper-models:
+    driver: local
 
 networks:
   leonobitech-net:
