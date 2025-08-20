@@ -41,12 +41,14 @@ use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
 use webrtc::data_channel::RTCDataChannel;
 
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::routes::AppState;
 use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
 
 use super::stats_helper::install_selected_pair_logger;
+use crate::routes::labs::ai_pipeline::AiPipeline;
 
 // Respuesta HTTP con la SDP answer final
 #[derive(Serialize)]
@@ -91,12 +93,58 @@ pub async fn handle_lab05(
     // PeerConnection del servidor.
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
+    // ---------------- Pipeline AI ----------------
+    let ai_pipeline = Arc::new(
+        AiPipeline::new(
+            "models/ggml-base.en.bin",
+            std::env::var("ELEVENLABS_API_KEY").unwrap(),
+        ).map_err(internal)?
+    );
+
+    // Canal interno para enviar chunks PCM hacia la pipeline AI
+    let (tx_audio, mut rx_audio) = mpsc::channel::<Vec<f32>>(32);
+
+    // Hook: procesar audio entrante (STT -> GPT -> TTS)
+    tokio::spawn({
+        let ai_pipeline = ai_pipeline.clone();
+        async move {
+            while let Some(pcm_chunk) = rx_audio.recv().await {
+                // 1) Whisper STT (detección básica: asumimos 48k estéreo aquí)
+                let transcript = match ai_pipeline.transcribe_audio(&pcm_chunk, 48_000, 2) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        tracing::error!("Error en STT: {:?}", e);
+                        continue;
+                    }
+                };
+
+                // 2) GPT-4o
+                let gpt_reply = match ai_pipeline.generate_response(&transcript).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::error!("Error GPT: {:?}", e);
+                        continue;
+                    }
+                };
+
+                // 3) ElevenLabs TTS (PCM 16k mono bytes)
+                match ai_pipeline.synthesize_audio(&gpt_reply).await {
+                    Ok(tts_pcm_16k) => {
+                        tracing::info!("🔊 TTS generado ({} bytes, pcm_16000)", tts_pcm_16k.len());
+                        // TODO: convertir PCM 16k → Opus RTP y enviar por `local_track`
+                    }
+                    Err(e) => tracing::error!("Error ElevenLabs: {:?}", e),
+                }
+            }
+        }
+    });
+
+    // ---------------- (2.1) Observabilidad: logs de estados ICE/PC + pair seleccionado ----
+
     // Señalización y cierre ordenado: flags/CancelToken para terminar tareas asíncronas cuando
     // el PC se desconecta/falla/cierra.
     let pc_closed_flag = Arc::new(AtomicBool::new(false));
     let cancel_pc = CancellationToken::new();
-
-    // ---------------- (2.1) Observabilidad: logs de estados ICE/PC + pair seleccionado ----
     {
         // a) Estado ICE (Disconnected/Failed/Closed → cancelamos tareas y cerramos PC)
         let pc_ref = Arc::clone(&pc);

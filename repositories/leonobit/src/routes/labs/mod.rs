@@ -5,4 +5,5 @@ pub mod lab03;
 pub mod lab04;
 pub mod lab05;
 pub mod leonobit;
+pub mod ai_pipeline;
 pub mod stats_helper;
