@@ -102,7 +102,7 @@ pub async fn handle_lab05(
     );
 
     // Canal interno para enviar chunks PCM hacia la pipeline AI
-    let (tx_audio, mut rx_audio) = mpsc::channel::<Vec<f32>>(32);
+    let (_tx_audio, mut rx_audio) = mpsc::channel::<Vec<f32>>(32);
 
     // Hook: procesar audio entrante (STT -> GPT -> TTS)
     tokio::spawn({

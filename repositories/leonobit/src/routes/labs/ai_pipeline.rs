@@ -1,62 +1,76 @@
 //! ai_pipeline.rs
+//! -------------------------------------------------------------
+//! Pipeline:  STT (Whisper)  →  LLM (OpenAI Chat)  →  TTS (ElevenLabs)
 //!
-//! Pipeline de AI para Lab-05:
-//!   - STT: Whisper (whisper-rs) sobre PCM 16k mono (f32).
-//!   - LLM: OpenAI GPT-4o (async-openai).
-//!   - TTS: ElevenLabs (reqwest), salida PCM 16k mono (bytes).
+//! Versiones compatibles:
+//!   - whisper-rs = "0.15.0"
+//!   - async-openai = "0.29.1"
 //!
-//! Notas importantes:
-//! - WebRTC nos entrega audio a 48 kHz estéreo (Opus). Para Whisper necesitamos PCM mono 16 kHz.
-//! - En esta etapa proveemos utilidades mínimas para downmix + re-muestreo simple.
-//!   (⚠️ Suficiente para pruebas; para producción usa un resampler de calidad.)
-//! - La conversión Opus→PCM no se hace aquí (recomendado usar `audiopus` en otra etapa).
-//! - Este módulo asume que ya recibís `Vec<f32>` en 48 kHz estéreo o 16 kHz mono según tu hook.
+//! Notas de API (whisper-rs 0.15):
+//!   - Para obtener el texto, usar `state.get_segment(i)` (-> Option<WhisperSegment>)
+//!     y luego `seg.to_str()` / `seg.to_str_lossy()`.
+//!   - `full_n_segments()` devuelve i32 (no Result).
+//!
+//! Notas de API (async-openai 0.29):
+//!   - Chat completions con `CreateChatCompletionRequestArgs`.
+//!   - Los mensajes se construyen con el enum
+//!     `ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessageArgs{..}.build()?)`.
+//!
+//! Esta pieza no toca WebRTC directamente: se puede llamar desde lab05
+//! para STT, generar la respuesta con GPT y sintetizar audio TTS.
 
 use std::sync::Arc;
-use tracing::{info, warn};
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperState};
 
-use async_openai::types::{
-    ChatCompletionResponse, CreateChatCompletionRequestArgs,
-    ChatCompletionRequestMessageArgs, Role,
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
 };
-use async_openai::Client as OpenAIClient;
+
+use async_openai::{Client as OpenAIClient, config::OpenAIConfig};
+use async_openai::types::{
+    CreateChatCompletionRequestArgs,
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestUserMessageArgs,
+};
 
 use reqwest::Client as HttpClient;
 
-/// Alias de error genérico sin dependencias extra.
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-/// Estructura principal del pipeline.
 pub struct AiPipeline {
+    // Modelo whisper.cpp cargado en memoria y compartido (thread-safe por estado).
     whisper_ctx: Arc<WhisperContext>,
-    openai: OpenAIClient,
+    // Cliente OpenAI (chat).
+    openai: OpenAIClient<OpenAIConfig>,
+    // Cliente HTTP para ElevenLabs (y utilidades).
     http: HttpClient,
+    // Credenciales/TTS
     elevenlabs_api_key: String,
     elevenlabs_voice_id: String,
 }
 
 impl AiPipeline {
-    /// Crea una nueva instancia.
-    ///
-    /// - `whisper_model_path`: ruta local al modelo ggml (ej: "models/ggml-base.en.bin")
-    /// - `elevenlabs_api_key`: API key (env: ELEVENLABS_API_KEY)
-    /// - `elevenlabs_voice_id`: Voice ID (env: ELEVENLABS_VOICE_ID, por defecto "Rachel")
-    pub fn new(
-        whisper_model_path: &str,
-        elevenlabs_api_key: String,
-    ) -> Result<Self, BoxError> {
+    /// Crea la pipeline con:
+    /// - `whisper_model_path`: ruta al modelo ggml (ej: /models/whisper/ggml-base.en.bin).
+    /// - `elevenlabs_api_key`: API key de ElevenLabs (obligatoria).
+    ///   (El voice_id se toma de ELEVENLABS_VOICE_ID o usa uno por defecto).
+    pub fn new(whisper_model_path: &str, elevenlabs_api_key: String) -> Result<Self, BoxError> {
+        // Cargar contexto Whisper con parámetros por defecto.
         let whisper_ctx = Arc::new(
-            WhisperContext::new(whisper_model_path)
-                .map_err(|e| format!("Error cargando modelo Whisper: {:?}", e))?,
+            WhisperContext::new_with_params(
+                whisper_model_path,
+                WhisperContextParameters::default(),
+            ).map_err(|e| format!("WhisperContext init: {:?}", e))?,
         );
 
+        // Cliente OpenAI (toma OPENAI_API_KEY del entorno).
         let openai = OpenAIClient::new();
+
+        // Cliente HTTP para TTS.
         let http = HttpClient::new();
 
-        // Voice por defecto si no hay env
+        // Voz por defecto si no está seteada ELEVENLABS_VOICE_ID.
         let elevenlabs_voice_id = std::env::var("ELEVENLABS_VOICE_ID")
-            .unwrap_or_else(|_| "Rachel".to_string());
+            .unwrap_or_else(|_| "EXAVITQu4vr4xnSDxMaL".to_string()); // "Rachel" común
 
         Ok(Self {
             whisper_ctx,
@@ -67,33 +81,29 @@ impl AiPipeline {
         })
     }
 
-    // ------------------------------------------------------------------------
-    // STT (Whisper)
-    // ------------------------------------------------------------------------
-
-    /// Transcribe un buffer PCM (f32).
+    /// Transcribe un buffer **PCM f32** a texto.
     ///
-    /// Entradas esperadas:
-    /// - Si `sample_rate_hz == 48000` y `channels == 2`: haremos downmix a mono y
-    ///   remuestreo tosco a 16k para Whisper.
-    /// - Si ya viene `16 kHz mono`: lo pasamos directo.
+    /// - `pcm`: samples en f32 normalized [-1.0, 1.0].
+    /// - `sample_rate_hz`: sample rate del buffer de entrada.
+    /// - `channels`: 1 (mono) o 2 (stereo).
     ///
-    /// `pcm` debe estar normalizado en [-1.0, 1.0].
+    /// Whisper espera 16 kHz mono, así que aquí **normalizamos**:
+    ///  - downmix stereo → mono
+    ///  - resample → 16k (métodos "naive" para prototipado)
     pub fn transcribe_audio(
         &self,
         pcm: &[f32],
         sample_rate_hz: u32,
         channels: u16,
     ) -> Result<String, BoxError> {
-        // 1) Normalizar a 16 kHz mono
-        let mono_16k = match (sample_rate_hz, channels) {
+        // 1) Normalización a 16k mono (simple; suficiente para demo).
+        let mono_16k: Vec<f32> = match (sample_rate_hz, channels) {
             (16000, 1) => pcm.to_vec(),
             (48000, 2) => {
                 let mono_48k = downmix_stereo_to_mono(pcm);
                 naive_resample_48k_to_16k(&mono_48k)
             }
             (sr, ch) => {
-                warn!("STT: ruta no optimizada sr={sr} ch={ch}, aplicando fallback simple");
                 if ch == 2 {
                     let mono = downmix_stereo_to_mono(pcm);
                     naive_resample_to_16k(&mono, sr)
@@ -103,58 +113,68 @@ impl AiPipeline {
             }
         };
 
-        // 2) Correr whisper full (bloqueante, pero rápido en modelos pequeños)
-        let mut state = self.new_whisper_state()?;
+        // 2) Crear estado por invocación (thread-safe).
+        let mut state: WhisperState = self.whisper_ctx
+            .create_state()
+            .map_err(|e| format!("Whisper create_state: {:?}", e))?;
+
+        // 3) Parámetros de inferencia.
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_n_threads(4);
-        params.set_translate(false);
-        params.set_language(Some("es")); // ajustá a "auto" o "en" según casos
+        params.set_n_threads(4);             // ajustar según CPU
+        params.set_translate(false);         // no traducir, solo transcribir
+        params.set_language(Some("es"));     // forzamos español (o "auto" si querés autodetección)
         params.set_no_context(true);
-        params.set_single_segment(false); // permitir múltiples segmentos
+        params.set_single_segment(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);
         params.set_print_special(false);
 
-        // IMPORTANT: whisper-rs espera f32 a 16 kHz
+        // 4) Ejecutar transcripción "full".
         state.full(params, &mono_16k)
-            .map_err(|e| format!("Whisper full() error: {:?}", e))?;
+            .map_err(|e| format!("Whisper full(): {:?}", e))?;
 
-        // 3) Armar el texto resultante a partir de segments
-        let num_segments = state.full_n_segments().unwrap_or(0);
+        // 5) Leer segmentos y concatenar texto.
+        let num_segments = state.full_n_segments().max(0) as usize;
         let mut out = String::new();
+
         for i in 0..num_segments {
-            if let Ok(seg) = state.full_get_segment_text(i) {
-                if !out.is_empty() { out.push(' '); }
-                out.push_str(seg.trim());
+            if let Some(seg) = state.get_segment(i as i32) {
+                // En 0.15.0 el texto del segmento se obtiene así:
+                //   - `to_str()` (Result<&str, _>) o
+                //   - `to_str_lossy()` (Result<Cow<str>, _>) → más tolerante.
+                let seg_txt = match seg.to_str() {
+                    Ok(s) => s.trim().to_owned(),
+                    Err(_) => seg
+                        .to_str_lossy()
+                        .map(|cow| cow.trim().to_owned())
+                        .unwrap_or_default(),
+                };
+
+                if !seg_txt.is_empty() {
+                    if !out.is_empty() { out.push(' '); }
+                    out.push_str(&seg_txt);
+                }
             }
         }
 
         Ok(out)
     }
 
-    fn new_whisper_state(&self) -> Result<WhisperState, BoxError> {
-        self.whisper_ctx
-            .create_state()
-            .map_err(|e| format!("Error creando estado de Whisper: {:?}", e).into())
-    }
-
-    // ------------------------------------------------------------------------
-    // LLM (OpenAI GPT-4o)
-    // ------------------------------------------------------------------------
-
-    /// Genera una respuesta de chat con GPT-4o.
+    /// Genera una respuesta breve con GPT-4o a partir de `input_text`.
     pub async fn generate_response(&self, input_text: &str) -> Result<String, BoxError> {
-        let user_msg = ChatCompletionRequestMessageArgs::default()
-            .role(Role::User)
-            .content(input_text)
-            .build()?;
+        // En 0.29.x, ChatCompletionRequestMessage es un enum; construimos el "User".
+        let user_msg: ChatCompletionRequestMessage = ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessageArgs::default()
+                .content(input_text)
+                .build()?
+        );
 
         let req = CreateChatCompletionRequestArgs::default()
             .model("gpt-4o")
             .messages(vec![user_msg])
             .build()?;
 
-        let resp: ChatCompletionResponse = self.openai.chat().create(req).await?;
+        let resp = self.openai.chat().create(req).await?;
         let out = resp
             .choices
             .first()
@@ -164,17 +184,10 @@ impl AiPipeline {
         Ok(out)
     }
 
-    // ------------------------------------------------------------------------
-    // TTS (ElevenLabs)
-    // ------------------------------------------------------------------------
-
-    /// Sintetiza voz con ElevenLabs y devuelve **PCM 16 kHz mono** (bytes crudos).
+    /// Sintetiza `text` con ElevenLabs y devuelve bytes PCM 16 kHz mono.
     ///
-    /// Configurable por ENV:
-    /// - ELEVENLABS_API_KEY (obligatoria)
-    /// - ELEVENLABS_VOICE_ID (opcional, default "Rachel")
-    ///
-    /// Para otros formatos (`mp3_44100_128`, `pcm_22050` ...) ajustar "output_format".
+    /// ⚠️ En este ejemplo pedimos `output_format = "pcm_16000"`.
+    ///    Si preferís WAV completo, cambiá `accept` y `output_format`.
     pub async fn synthesize_audio(&self, text: &str) -> Result<Vec<u8>, BoxError> {
         let url = format!(
             "https://api.elevenlabs.io/v1/text-to-speech/{}",
@@ -201,10 +214,9 @@ impl AiPipeline {
             use_speaker_boost: Option<bool>,
         }
 
-        // Formato PCM 16k mono (little-endian). Ajustable según tu pipeline.
         let body = TtsBody {
             text,
-            model_id: Some("eleven_multilingual_v2"), // opcional; podés cambiar a otro
+            model_id: Some("eleven_multilingual_v2"),
             voice_settings: Some(VoiceSettings {
                 stability: 0.5,
                 similarity_boost: 0.75,
@@ -217,43 +229,39 @@ impl AiPipeline {
         let resp = self.http
             .post(&url)
             .header("xi-api-key", &self.elevenlabs_api_key)
-            .header("accept", "audio/wav") // ElevenLabs ignora esto si setean output_format
+            .header("accept", "application/octet-stream") // raw PCM
             .json(&body)
             .send()
             .await?;
 
         if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(format!("ElevenLabs TTS error {status}: {text}").into());
+            let code = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("ElevenLabs TTS error {code}: {body}").into());
         }
 
-        let bytes = resp.bytes().await?.to_vec();
-        Ok(bytes)
+        Ok(resp.bytes().await?.to_vec())
     }
 }
 
-// ============================================================================
-// Utilidades de audio (mínimas) para pruebas
-// ============================================================================
+/* ================== Utils de audio mínimas (prototipo) ==================
+ * Estas rutinas son simples y suficientes para la POC.
+ * Para producción, preferí un resampler de calidad (speexdsp, rubato, etc).
+ */
 
-/// Downmix estéreo a mono (promedio simple de L y R).
-pub fn downmix_stereo_to_mono(stereo_48k: &[f32]) -> Vec<f32> {
-    let mut out = Vec::with_capacity(stereo_48k.len() / 2);
+// Mezcla L/R → mono (promedio simple)
+pub fn downmix_stereo_to_mono(stereo: &[f32]) -> Vec<f32> {
+    let mut out = Vec::with_capacity(stereo.len() / 2);
     let mut i = 0;
-    while i + 1 < stereo_48k.len() {
-        let l = stereo_48k[i];
-        let r = stereo_48k[i + 1];
-        out.push(0.5 * (l + r));
+    while i + 1 < stereo.len() {
+        out.push(0.5 * (stereo[i] + stereo[i + 1]));
         i += 2;
     }
     out
 }
 
-/// Re-muestreo tosco 48 kHz → 16 kHz (factor 3), por decimación.
-/// ⚠️ Sólo para pruebas. Para producción usa un resampler FIR/bandlimited.
+// Diezmado 48k → 16k (toma 1 de cada 3 muestras)
 pub fn naive_resample_48k_to_16k(mono_48k: &[f32]) -> Vec<f32> {
-    // Tomar 1 de cada 3 muestras (decimate). Sin anti-aliasing.
     let mut out = Vec::with_capacity(mono_48k.len() / 3);
     let mut i = 0usize;
     while i < mono_48k.len() {
@@ -263,8 +271,7 @@ pub fn naive_resample_48k_to_16k(mono_48k: &[f32]) -> Vec<f32> {
     out
 }
 
-/// Re-muestreo tosco a 16 kHz desde cualquier SR (nearest-neighbor).
-/// ⚠️ Para producción, reemplazar por un resampler serio (e.g., rubato, speexdsp).
+// Re-muestreo “a lo bruto” a 16k para cualquier SR (nearest neighbor)
 pub fn naive_resample_to_16k(input: &[f32], sr_in: u32) -> Vec<f32> {
     if sr_in == 16000 {
         return input.to_vec();

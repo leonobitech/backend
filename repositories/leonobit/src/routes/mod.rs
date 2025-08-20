@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 pub mod hello_routes;
 pub mod labs;
+pub mod ai_health;
 
 use crate::auth::TokenProfile;
 use tokio::sync::mpsc;            // ← canal
@@ -66,9 +67,13 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         // 👇 Rutas "hello" en la raíz (/, /user, /hello, /health)
         .merge(hello_routes::router())
-        // 👇 Rutas WebSocket
         .route("/healthz", get(|| async { "ok" }))
-        // 🔒 Endpoints WS por laboratorio
+        // ---- NUEVOS health endpoints (OpenAI, ElevenLabs y Whisper) ----
+        .route("/health/ai/openai", get(ai_health::health_openai))
+        .route("/health/ai/elevenlabs", get(ai_health::health_elevenlabs))
+        .route("/health/ai/whisper", get(ai_health::health_whisper))
+        .route("/health/ai", get(ai_health::health_ai))
+        // ---- WS/WEBRTC existentes ----
         .route("/ws/leonobit/offer", get(labs::leonobit::ws_handler))
         .route("/ws/lab/01/offer", get(labs::lab01::ws_handler))
         .route("/ws/lab/02/offer", get(labs::lab02::ws_handler))
