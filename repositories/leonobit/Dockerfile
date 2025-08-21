@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libclang-dev \
     pkg-config \
     libssl-dev \
+    git \
  && rm -rf /var/lib/apt/lists/*
 
 # 🧱 Caché de deps de Rust (ahora sí, con toolchains ya instaladas)
