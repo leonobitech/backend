@@ -1,31 +1,26 @@
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    Json,
-};
+use axum::extract::State;
+use axum::http::{HeaderMap, StatusCode};
+use axum::Json;
 use serde::Serialize;
 use tokio::time::interval;
 use tracing::{error, info, warn};
-
-use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
-use crate::metrics::MetricEvent;
-use crate::routes::AppState;
-
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
-use webrtc::data_channel::RTCDataChannel;
 use webrtc::data_channel::data_channel_state::RTCDataChannelState;
+use webrtc::data_channel::RTCDataChannel;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
+
+use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
+use crate::metrics::rtt::MetricEvent;
+use crate::routes::AppState;
 
 #[derive(Serialize)]
 pub struct SdpResponse {
@@ -47,7 +42,7 @@ pub struct SdpResponse {
  * │  7) Espera ICE gathering complete → devuelve SDP Answer final.            │
  * └──────────────────────────────────────────────────────────────────────────┘
  */
-#[axum::debug_handler]
+#[cfg_attr(debug_assertions, axum::debug_handler)]
 pub async fn webrtc_offer(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -56,7 +51,10 @@ pub async fn webrtc_offer(
     // (1) Seguridad: Origin + Bearer (perfil específico lab-03)
     validate_origin(&headers, &state)?;
     let claims = validate_bearer_lab03(&headers, &state)?;
-    info!("✅ [lab-03] autorizado: sub={} role={:?}", claims.sub, claims.role);
+    info!(
+        "✅ [lab-03] autorizado: sub={} role={:?}",
+        claims.sub, claims.role
+    );
 
     // (2) API WebRTC (MediaEngine + APIBuilder)
     let mut m = MediaEngine::default();
@@ -124,7 +122,9 @@ pub async fn webrtc_offer(
     }
 
     // (6) Señalización: aplicar Offer remoto → generar Answer → set_local_description
-    pc.set_remote_description(offer_sdp).await.map_err(internal)?;
+    pc.set_remote_description(offer_sdp)
+        .await
+        .map_err(internal)?;
     let answer = pc.create_answer(None).await.map_err(internal)?;
 
     // Espera explícita a "gathering complete" para que el SDP incluya candidates
@@ -163,7 +163,7 @@ pub async fn webrtc_offer(
  */
 async fn attach_dc_handlers(
     dc: Arc<RTCDataChannel>,
-    tx: tokio::sync::mpsc::Sender<crate::metrics::MetricEvent>,
+    tx: tokio::sync::mpsc::Sender<MetricEvent>,
     label_log: Arc<String>,
 ) {
     // Clones para callbacks (evita mover 'dc'/'label_log' varias veces)
@@ -213,7 +213,9 @@ async fn attach_dc_handlers(
                         let t0 = val.get("t").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
                         // Solo procesamos PING/ECHO con timestamp válido
-                        if (kind.eq_ignore_ascii_case("PING") || kind.eq_ignore_ascii_case("ECHO")) && t0 > 0.0 {
+                        if (kind.eq_ignore_ascii_case("PING") || kind.eq_ignore_ascii_case("ECHO"))
+                            && t0 > 0.0
+                        {
                             // RTT en microsegundos (para más resolución en métricas)
                             let rtt_ms = (now_millis() - t0).abs();
                             let us = (rtt_ms * 1000.0).round() as u64;
@@ -222,7 +224,6 @@ async fn attach_dc_handlers(
                             // Responder ECHO al mismo 't' (permite que el cliente mida su RTT)
                             let echo = format!(r#"{{"kind":"ECHO","t":{}}}"#, t0);
                             let _ = dc.send_text(echo).await;
-                            return;
                         }
                     }
                 }

@@ -1,17 +1,26 @@
+use std::env;
+use std::time::Duration;
+
 use axum::http::HeaderValue;
-use std::{env, time::Duration};
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
 pub fn build_cors_from_env() -> anyhow::Result<CorsLayer> {
     let allow_origin = match env::var("CORS_ORIGIN") {
         Ok(val) => {
             // Soporta lista coma-separada. Si incluye "*", usar any().
-            let raw_items: Vec<String> = val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let raw_items: Vec<String> = val
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
 
             if raw_items.is_empty() || raw_items.iter().any(|s| s == "*") {
                 AllowOrigin::any()
             } else {
-                let items: Vec<HeaderValue> = raw_items.into_iter().map(|s| s.parse::<HeaderValue>()).collect::<Result<Vec<_>, _>>()?;
+                let items: Vec<HeaderValue> = raw_items
+                    .into_iter()
+                    .map(|s| s.parse::<HeaderValue>())
+                    .collect::<Result<Vec<_>, _>>()?;
                 AllowOrigin::list(items)
             }
         }

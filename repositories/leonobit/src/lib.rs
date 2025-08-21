@@ -1,11 +1,13 @@
 use std::net::SocketAddr;
-use tokio::{net::TcpListener, signal};
+
+use tokio::net::TcpListener;
+use tokio::signal;
 use tracing::info;
 
 pub mod auth;
 mod config;
+mod metrics;
 mod routes;
-pub mod metrics;
 
 pub async fn run() -> anyhow::Result<()> {
     // Carga settings (vars de entorno saneadas)
@@ -13,17 +15,23 @@ pub async fn run() -> anyhow::Result<()> {
     let cors = config::cors::build_cors_from_env()?;
 
     // Arranca el agregador y obtené el sender
-    let metrics_tx = metrics::start_metrics_aggregator();
+    let metrics_tx = metrics::rtt::start_metrics_aggregator();
 
     // Estado global (inyecta ws_secret, allowed_ws_origins y perfiles iss/aud)
-    let state = routes::AppState::new(settings.ws_jwt_secret.clone(), settings.allowed_ws_origins.clone(),  metrics_tx.clone());
+    let state = routes::AppState::new(
+        settings.ws_jwt_secret.clone(),
+        settings.allowed_ws_origins.clone(),
+        metrics_tx.clone(),
+    );
 
-let enabled = state.profiles.iter()
-    .map(|p| format!("{}/{}", p.iss, p.aud))
-    .collect::<Vec<_>>()
-    .join(", ");
-info!("🔐 JWT profiles enabled: {enabled}");
-info!("🌐 Allowed WS origins: {:?}", settings.allowed_ws_origins);
+    let enabled = state
+        .profiles
+        .iter()
+        .map(|p| format!("{}/{}", p.iss, p.aud))
+        .collect::<Vec<_>>()
+        .join(", ");
+    info!("🔐 JWT profiles enabled: {enabled}");
+    info!("🌐 Allowed WS origins: {:?}", settings.allowed_ws_origins);
 
     // Router principal
     let app = routes::router(state.clone())
@@ -33,9 +41,11 @@ info!("🌐 Allowed WS origins: {:?}", settings.allowed_ws_origins);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], settings.port));
     info!("🚀 Server listening on http://{addr}");
-    
+
     let listener = TcpListener::bind(addr).await?;
-    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
 }

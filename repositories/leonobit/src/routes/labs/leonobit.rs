@@ -1,10 +1,8 @@
 // src/routes/webrtc.rs
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::{
-    extract::{Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-};
+use axum::extract::{Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
@@ -31,11 +29,20 @@ struct Answer {
     r#type: String,
 }
 
-pub async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade, Query(params): Query<WsParams>, headers: HeaderMap) -> Response {
+#[cfg_attr(debug_assertions, axum::debug_handler)]
+pub async fn ws_handler(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+    Query(params): Query<WsParams>,
+    headers: HeaderMap,
+) -> Response {
     // 1) Validar Origin del upgrade WS (no es CORS)
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         if !state.allowed_ws_origins.is_empty() {
-            let ok = state.allowed_ws_origins.iter().any(|o| o.eq_ignore_ascii_case(origin));
+            let ok = state
+                .allowed_ws_origins
+                .iter()
+                .any(|o| o.eq_ignore_ascii_case(origin));
             if !ok {
                 warn!("WS origin bloqueado: {}", origin);
                 return (StatusCode::FORBIDDEN, "invalid websocket origin").into_response();
@@ -55,10 +62,14 @@ pub async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade, Que
             return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
         }
     };
-    info!("✅ WS autorizado: sub={} role={:?}", claims.sub, claims.role);
+    info!(
+        "✅ WS autorizado: sub={} role={:?}",
+        claims.sub, claims.role
+    );
 
     // 3) Upgrade y manejo de socket
-    ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response()
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+        .into_response()
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
@@ -87,7 +98,11 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         sdp: format!("Respuesta SDP simulada para {}", peer_id),
                         r#type: "answer".into(),
                     };
-                    if tx.send(Message::Text(serde_json::to_string(&ans).unwrap())).await.is_err() {
+                    if tx
+                        .send(Message::Text(serde_json::to_string(&ans).unwrap()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 } else {

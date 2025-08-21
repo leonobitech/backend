@@ -1,16 +1,18 @@
 // src/routes/mod.rs
-use axum::{routing::get, Router};
-use axum::routing::post;
-use dashmap::DashSet;
 use std::sync::Arc;
 
+use axum::routing::{get, post};
+use axum::Router;
+use dashmap::DashSet;
+
+pub mod ai_health;
 pub mod hello_routes;
 pub mod labs;
-pub mod ai_health;
+
+use tokio::sync::mpsc;
 
 use crate::auth::TokenProfile;
-use tokio::sync::mpsc;            // ← canal
-use crate::metrics::MetricEvent;  // ← tipo del canal 
+use crate::metrics::rtt::MetricEvent; // ← canal // ← tipo del canal
 
 #[derive(Clone)]
 pub struct AppState {
@@ -24,7 +26,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(ws_secret: String, allowed_ws_origins: Vec<String>, metrics_tx: mpsc::Sender<MetricEvent>) -> Self {
+    pub fn new(
+        ws_secret: String,
+        allowed_ws_origins: Vec<String>,
+        metrics_tx: mpsc::Sender<MetricEvent>,
+    ) -> Self {
         // Agregá aquí todos los perfiles que quieras habilitar
         let profiles = vec![
             TokenProfile {
@@ -78,7 +84,10 @@ pub fn router(state: AppState) -> Router {
         .route("/ws/lab/01/offer", get(labs::lab01::ws_handler))
         .route("/ws/lab/02/offer", get(labs::lab02::ws_handler))
         .route("/webrtc/lab/03/offer", post(labs::lab03::webrtc_offer))
-        .route("/webrtc/lab/04/offer", post(labs::lab04::webrtc_offer_lab04))
+        .route(
+            "/webrtc/lab/04/offer",
+            post(labs::lab04::webrtc_offer_lab04),
+        )
         .route("/webrtc/lab/05/offer", post(labs::lab05::handle_lab05))
         // Estado global
         .with_state(state)

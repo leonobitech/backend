@@ -1,15 +1,14 @@
-use axum::{response::IntoResponse, http::StatusCode};
-use tracing::{info, error};
-
-// OpenAI
-use async_openai::{Client as OpenAIClient, config::OpenAIConfig};
-
-// ElevenLabs
-use reqwest::Client as HttpClient;
-
 // Whisper
 use std::env;
 use std::path::Path;
+
+// OpenAI
+use async_openai::{config::OpenAIConfig, Client as OpenAIClient};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+// ElevenLabs
+use reqwest::Client as HttpClient;
+use tracing::{error, info};
 use whisper_rs::{WhisperContext, WhisperContextParameters};
 
 /* ---------- /health/ai/openai ---------- */
@@ -22,7 +21,10 @@ pub async fn health_openai() -> impl IntoResponse {
         }
         Err(e) => {
             error!("openai error: {e}");
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("openai error: {e}"))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("openai error: {e}"),
+            )
         }
     }
 }
@@ -31,7 +33,12 @@ pub async fn health_openai() -> impl IntoResponse {
 pub async fn health_elevenlabs() -> impl IntoResponse {
     let api_key = match env::var("ELEVENLABS_API_KEY") {
         Ok(v) if !v.is_empty() => v,
-        _ => return (StatusCode::BAD_REQUEST, "elevenlabs: missing ELEVENLABS_API_KEY".to_string()),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "elevenlabs: missing ELEVENLABS_API_KEY".to_string(),
+            )
+        }
     };
 
     let http = HttpClient::new();
@@ -50,11 +57,17 @@ pub async fn health_elevenlabs() -> impl IntoResponse {
             let code = resp.status();
             let body = resp.text().await.unwrap_or_default();
             error!("elevenlabs error {code}: {body}");
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("elevenlabs error {code}: {body}"))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("elevenlabs error {code}: {body}"),
+            )
         }
         Err(e) => {
             error!("elevenlabs request error: {e}");
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("elevenlabs request error: {e}"))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("elevenlabs request error: {e}"),
+            )
         }
     }
 }
@@ -63,12 +76,20 @@ pub async fn health_elevenlabs() -> impl IntoResponse {
 pub async fn health_whisper() -> impl IntoResponse {
     let model_path = match env::var("WHISPER_MODEL_PATH") {
         Ok(p) if !p.is_empty() => p,
-        _ => return (StatusCode::BAD_REQUEST, "whisper: missing WHISPER_MODEL_PATH".to_string()),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "whisper: missing WHISPER_MODEL_PATH".to_string(),
+            )
+        }
     };
 
     let p = Path::new(&model_path);
     if !p.exists() {
-        return (StatusCode::NOT_FOUND, format!("whisper: model not found at {model_path}"));
+        return (
+            StatusCode::NOT_FOUND,
+            format!("whisper: model not found at {model_path}"),
+        );
     }
 
     match WhisperContext::new_with_params(&model_path, WhisperContextParameters::default()) {
@@ -78,7 +99,10 @@ pub async fn health_whisper() -> impl IntoResponse {
         }
         Err(e) => {
             error!("whisper error: {e:?}");
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("whisper error: {e:?}"))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("whisper error: {e:?}"),
+            )
         }
     }
 }
@@ -99,14 +123,23 @@ pub async fn health_ai() -> impl IntoResponse {
 
 async fn one_openai() -> Result<(), String> {
     let client: OpenAIClient<OpenAIConfig> = OpenAIClient::new();
-    client.models().list().await.map_err(|e| format!("openai: {e}"))?;
+    client
+        .models()
+        .list()
+        .await
+        .map_err(|e| format!("openai: {e}"))?;
     Ok(())
 }
 
 async fn one_elevenlabs() -> Result<(), String> {
-    let api_key = std::env::var("ELEVENLABS_API_KEY").map_err(|_| "missing ELEVENLABS_API_KEY".to_string())?;
+    let api_key = std::env::var("ELEVENLABS_API_KEY")
+        .map_err(|_| "missing ELEVENLABS_API_KEY".to_string())?;
     let http = HttpClient::new();
-    let r = http.get("https://api.elevenlabs.io/v1/voices").header("xi-api-key", api_key).send().await
+    let r = http
+        .get("https://api.elevenlabs.io/v1/voices")
+        .header("xi-api-key", api_key)
+        .send()
+        .await
         .map_err(|e| format!("elevenlabs req: {e}"))?;
     if !r.status().is_success() {
         return Err(format!("elevenlabs status: {}", r.status()));
@@ -115,7 +148,8 @@ async fn one_elevenlabs() -> Result<(), String> {
 }
 
 async fn one_whisper() -> Result<(), String> {
-    let path = std::env::var("WHISPER_MODEL_PATH").map_err(|_| "missing WHISPER_MODEL_PATH".to_string())?;
+    let path = std::env::var("WHISPER_MODEL_PATH")
+        .map_err(|_| "missing WHISPER_MODEL_PATH".to_string())?;
     if !std::path::Path::new(&path).exists() {
         return Err(format!("model not found: {path}"));
     }

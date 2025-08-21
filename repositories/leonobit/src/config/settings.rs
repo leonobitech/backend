@@ -9,7 +9,10 @@ pub struct Settings {
 
 impl Settings {
     pub fn from_env() -> anyhow::Result<Self> {
-        let port = std::env::var("PORT").ok().and_then(|v| v.parse::<u16>().ok()).unwrap_or(8000);
+        let port = std::env::var("PORT")
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(8000);
 
         let ws_jwt_secret = std::env::var("WS_JWT_SECRET").context("WS_JWT_SECRET is required")?;
 

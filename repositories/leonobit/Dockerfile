@@ -1,5 +1,5 @@
 # --- Build stage (estable) ---
-FROM rust:1.89-bookworm AS builder
+FROM rust:latest AS builder
 WORKDIR /usr/src/app
 
 # 🔧 Dependencias de build necesarias para whisper.cpp y friends
@@ -17,12 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src && echo 'fn main() {}' > src/main.rs
 # Prefetch y build ligera para calentar caché (si falla por no tener código real, ignoramos)
-RUN cargo fetch
-RUN cargo build --release || true
+RUN cargo fetch --locked
+RUN cargo build --release --locked || true
 
 # 📦 Copiamos el código real y compilamos
 COPY src ./src
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # --- Runtime (mínimo y seguro) ---
 FROM debian:bookworm-slim

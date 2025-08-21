@@ -1,12 +1,11 @@
 // src/routes/hello_routes.rs
-use crate::routes::AppState;
-use axum::{
-    extract::Query,
-    response::{Html, IntoResponse},
-    routing::get,
-    Json, Router,
-};
+use axum::extract::Query;
+use axum::response::{Html, IntoResponse};
+use axum::routing::get;
+use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
+
+use crate::routes::AppState;
 
 #[derive(Debug, Serialize)]
 struct User {

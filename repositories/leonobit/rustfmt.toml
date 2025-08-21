@@ -1,24 +1,30 @@
-# Maximum line width
+# ===========================
+#   rustfmt.toml (nightly)
+# ===========================
+
+# Máximo ancho de línea
 max_width = 100
 comment_width = 100
 
-# How to reorder modules, functions, etc
+# Reordenar módulos y métodos automáticamente
 reorder_modules = true
 reorder_impl_items = true
 
-# Merge imports
-imports_granularity = "Crate"
+# Agrupar imports por crate, orden alfabético, limpio y compacto
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"
 
-# Use a trailing comma for multiline function arguments and struct fields
+# Usar comas finales en listas multilínea → diffs más limpios
 trailing_comma = "Vertical"
-# Indentation configuration
-tab_spaces = 4
 
-# Control flow brace style
+# Estilo de llaves para bloques de control flow
 control_brace_style = "AlwaysSameLine"
 
-# Function parameters layout
-fn_params_layout = "Compressed"
+# Indentación estándar Rust
+tab_spaces = 4
 
-# Remove spaces inside parentheses
+# Parámetros de funciones largas en columnas para mayor legibilidad
+fn_params_layout = "Tall"
+
+# Quita paréntesis anidados innecesarios
 remove_nested_parens = true

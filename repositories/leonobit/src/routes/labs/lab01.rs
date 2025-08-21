@@ -1,10 +1,8 @@
 // src/routes/labs/lab01.rs
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::{
-    extract::{Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-};
+use axum::extract::{Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
@@ -19,10 +17,21 @@ pub(crate) struct WsParams {
     token: String,
 }
 
-pub async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade, Query(params): Query<WsParams>, headers: HeaderMap) -> Response {
+#[cfg_attr(debug_assertions, axum::debug_handler)]
+pub async fn ws_handler(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+    Query(params): Query<WsParams>,
+    headers: HeaderMap,
+) -> Response {
     // 1) Validar Origin (upgrade WS != CORS)
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
-        if !state.allowed_ws_origins.is_empty() && !state.allowed_ws_origins.iter().any(|o| o.eq_ignore_ascii_case(origin)) {
+        if !state.allowed_ws_origins.is_empty()
+            && !state
+                .allowed_ws_origins
+                .iter()
+                .any(|o| o.eq_ignore_ascii_case(origin))
+        {
             warn!("[lab-01] WS origin bloqueado: {}", origin);
             return (StatusCode::FORBIDDEN, "invalid websocket origin").into_response();
         }
@@ -33,18 +42,23 @@ pub async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade, Que
         iss: "lab-01",
         aud: "lab-ws-01-auth",
     }];
-    let claims: WsClaims = match validate_ws_token_multi(&params.token, &state.ws_secret, &lab01_profile) {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("[lab-01] WS token inválido: {e}");
-            return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
-        }
-    };
+    let claims: WsClaims =
+        match validate_ws_token_multi(&params.token, &state.ws_secret, &lab01_profile) {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("[lab-01] WS token inválido: {e}");
+                return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+            }
+        };
 
-    info!("✅ [lab-01] autorizado: sub={} role={:?}", claims.sub, claims.role);
+    info!(
+        "✅ [lab-01] autorizado: sub={} role={:?}",
+        claims.sub, claims.role
+    );
 
     // 3) Upgrade WS
-    ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response()
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+        .into_response()
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {

@@ -1,9 +1,7 @@
 // src/metrics.rs
 use hdrhistogram::Histogram;
-use tokio::{
-    sync::{mpsc, watch},
-    time::{interval, Duration},
-};
+use tokio::sync::{mpsc, watch};
+use tokio::time::{interval, Duration};
 use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
@@ -29,8 +27,7 @@ pub fn start_metrics_aggregator_with(
     let max_us = max_rtt_ms.saturating_mul(1_000);
 
     tokio::spawn(async move {
-        let mut hist = Histogram::<u64>::new_with_max(max_us, 3)
-            .expect("histogram with max");
+        let mut hist = Histogram::<u64>::new_with_max(max_us, 3).expect("histogram with max");
         let mut tick = interval(window);
         let mut count: u64 = 0;
         let mut sum_us: u128 = 0; // para media
@@ -38,7 +35,7 @@ pub fn start_metrics_aggregator_with(
         loop {
             tokio::select! {
                 _ = tick.tick() => {
-                    if hist.len() > 0 {
+                    if !hist.is_empty() {
                         let min = hist.min() as f64 / 1000.0;
                         let p50 = hist.value_at_quantile(0.50) as f64 / 1000.0;
                         let p90 = hist.value_at_quantile(0.90) as f64 / 1000.0;

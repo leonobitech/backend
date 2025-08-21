@@ -1,10 +1,8 @@
 // src/routes/labs/lab02.rs
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::{
-    extract::{Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-};
+use axum::extract::{Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
@@ -19,10 +17,21 @@ pub(crate) struct WsParams {
     token: String,
 }
 
-pub async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade, Query(params): Query<WsParams>, headers: HeaderMap) -> Response {
+#[cfg_attr(debug_assertions, axum::debug_handler)]
+pub async fn ws_handler(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+    Query(params): Query<WsParams>,
+    headers: HeaderMap,
+) -> Response {
     // 1) Validar Origin (upgrade WS != CORS)
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
-        if !state.allowed_ws_origins.is_empty() && !state.allowed_ws_origins.iter().any(|o| o.eq_ignore_ascii_case(origin)) {
+        if !state.allowed_ws_origins.is_empty()
+            && !state
+                .allowed_ws_origins
+                .iter()
+                .any(|o| o.eq_ignore_ascii_case(origin))
+        {
             warn!("WS origin bloqueado: {}", origin);
             return (StatusCode::FORBIDDEN, "invalid websocket origin").into_response();
         }
@@ -33,18 +42,23 @@ pub async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade, Que
         iss: "lab-02",
         aud: "lab-ws-02-metrics",
     }];
-    let claims: WsClaims = match validate_ws_token_multi(&params.token, &state.ws_secret, &lab02_profile) {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("WS token inválido (lab-02): {e}");
-            return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
-        }
-    };
+    let claims: WsClaims =
+        match validate_ws_token_multi(&params.token, &state.ws_secret, &lab02_profile) {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("WS token inválido (lab-02): {e}");
+                return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+            }
+        };
 
-    info!("✅ [lab-02] autorizado: sub={} role={:?}", claims.sub, claims.role);
+    info!(
+        "✅ [lab-02] autorizado: sub={} role={:?}",
+        claims.sub, claims.role
+    );
 
     // 3) Upgrade y manejo del socket
-    ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response()
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+        .into_response()
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
@@ -103,7 +117,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             // timestamp justo antes de enviar el PONG
                             let ts_srv_send = Utc::now().timestamp_millis();
                             // Nuevo formato con 2 timestamps de servidor
-                            let pong = format!("PONG::{}::{}::{}::{}", ts_cli_s, seq, ts_srv_recv, ts_srv_send);
+                            let pong = format!(
+                                "PONG::{}::{}::{}::{}",
+                                ts_cli_s, seq, ts_srv_recv, ts_srv_send
+                            );
                             if tx.send(Message::Text(pong)).await.is_err() {
                                 break;
                             }
@@ -157,5 +174,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     }
 
     state.peers.remove(&peer_id);
-    info!("❌ [lab-02] Conexión cerrada: {} | pérdidas totales detectadas: {}", peer_id, lost_total);
+    info!(
+        "❌ [lab-02] Conexión cerrada: {} | pérdidas totales detectadas: {}",
+        peer_id, lost_total
+    );
 }

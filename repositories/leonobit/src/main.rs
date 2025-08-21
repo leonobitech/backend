@@ -12,13 +12,15 @@ async fn main() -> anyhow::Result<()> {
         // ↓ Silenciar ruido de teardown:
         .add_directive("webrtc_ice::agent::agent_gather=error".parse().unwrap())
         .add_directive("webrtc_ice::agent::agent_internal=error".parse().unwrap())
-        .add_directive("webrtc::peer_connection::peer_connection_internal=error".parse().unwrap())
+        .add_directive(
+            "webrtc::peer_connection::peer_connection_internal=error"
+                .parse()
+                .unwrap(),
+        )
         .add_directive("webrtc::mux=error".parse().unwrap())
         .add_directive("webrtc_mdns::conn=error".parse().unwrap()); // ← acá sí va ;
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 
     tracing::info!("🚀 leonobit backend starting…");
     run().await

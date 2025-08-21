@@ -13,51 +13,49 @@
 //********  IMPORTS  ***********\\
 //==============================\\
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use axum::{extract::State, http::{HeaderMap, StatusCode}, Json};
-use serde::Serialize;
-use tracing::{info, warn, error};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
+use axum::extract::State;
+use axum::http::{HeaderMap, StatusCode};
+use axum::Json;
+use serde::Serialize;
+use tokio::time::{interval, MissedTickBehavior};
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
-
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
-
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-
 use webrtc::rtp_transceiver::rtp_codec::{RTCRtpCodecCapability, RTPCodecType};
-
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 
-use crate::routes::AppState;
-use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
-
-use std::time::{Duration, Instant};
-use tokio::time::{interval, MissedTickBehavior};
-use tokio_util::sync::CancellationToken;
-
 use super::stats_helper::install_selected_pair_logger;
+use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
+use crate::routes::AppState;
 //=====================================\\
 //********  TIPOS / RESPUESTAS  *******\\
 //=====================================\\
 #[derive(Serialize)]
-pub struct SdpResponse { pub sdp: String, pub r#type: String }
+pub struct SdpResponse {
+    pub sdp: String,
+    pub r#type: String,
+}
 
 //=====================================\\
 //*****  HANDLER PRINCIPAL HTTP  ******\\
 //=====================================\\
-#[axum::debug_handler]
+#[cfg_attr(debug_assertions, axum::debug_handler)]
 pub async fn webrtc_offer_lab04(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(offer_sdp): Json<RTCSessionDescription>,
 ) -> Result<Json<SdpResponse>, (StatusCode, String)> {
-
     //=========================================\\
     //*****  (1) SEGURIDAD: ORIGIN + JWT  *****\\
     //=========================================\\
@@ -75,8 +73,14 @@ pub async fn webrtc_offer_lab04(
 
     let config = RTCConfiguration {
         ice_servers: vec![
-            RTCIceServer { urls: vec!["stun:stun.l.google.com:19302".into()], ..Default::default() },
-            RTCIceServer { urls: vec!["stun:stun.cloudflare.com:3478".into()], ..Default::default() },
+            RTCIceServer {
+                urls: vec!["stun:stun.l.google.com:19302".into()],
+                ..Default::default()
+            },
+            RTCIceServer {
+                urls: vec!["stun:stun.cloudflare.com:3478".into()],
+                ..Default::default()
+            },
         ],
         ..Default::default()
     };
@@ -93,7 +97,7 @@ pub async fn webrtc_offer_lab04(
     //*****  (2.1) LOGS / WATCHDOG STATES  ****\\
     //=========================================\\
     // Logs útiles de estado
-    {   
+    {
         // ICE
         let pc_ref = Arc::clone(&pc);
         let cancel_for_ice = cancel_pc.clone();
@@ -101,7 +105,12 @@ pub async fn webrtc_offer_lab04(
         let closed_flag_ice = Arc::clone(&pc_closed_flag);
         pc_ref.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
             info!("ICE state = {:?}", st);
-            if matches!(st, RTCIceConnectionState::Disconnected | RTCIceConnectionState::Failed | RTCIceConnectionState::Closed) {
+            if matches!(
+                st,
+                RTCIceConnectionState::Disconnected
+                    | RTCIceConnectionState::Failed
+                    | RTCIceConnectionState::Closed
+            ) {
                 cancel_for_ice.cancel();
                 if !closed_flag_ice.swap(true, Ordering::SeqCst) {
                     let pc_to_close = Arc::clone(&pc_for_ice_close);
@@ -124,7 +133,12 @@ pub async fn webrtc_offer_lab04(
         let closed_flag_pc = Arc::clone(&pc_closed_flag);
         pc_ref.on_peer_connection_state_change(Box::new(move |st: RTCPeerConnectionState| {
             info!("PC state = {:?}", st);
-            if matches!(st, RTCPeerConnectionState::Disconnected | RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed) {
+            if matches!(
+                st,
+                RTCPeerConnectionState::Disconnected
+                    | RTCPeerConnectionState::Failed
+                    | RTCPeerConnectionState::Closed
+            ) {
                 cancel_for_pc.cancel();
                 if !closed_flag_pc.swap(true, Ordering::SeqCst) {
                     let pc_to_close = Arc::clone(&pc_for_pc_close);
@@ -141,7 +155,7 @@ pub async fn webrtc_offer_lab04(
         }));
 
         // Pares ICE seleccionados (debug)
-        // helper: stats selected pair connection 
+        // helper: stats selected pair connection
         install_selected_pair_logger(&pc);
     }
 
@@ -184,9 +198,11 @@ pub async fn webrtc_offer_lab04(
 
     let rtp_sender = match audio_sender_opt {
         Some(s) => {
-            s.replace_track(Some(local_track.clone() as Arc<dyn TrackLocal + Send + Sync>))
-                .await
-                .map_err(internal)?;
+            s.replace_track(Some(
+                local_track.clone() as Arc<dyn TrackLocal + Send + Sync>
+            ))
+            .await
+            .map_err(internal)?;
             s
         }
         None => return Err(internal("no audio transceiver found")),
@@ -197,15 +213,15 @@ pub async fn webrtc_offer_lab04(
         let rtp_sender = rtp_sender.clone();
         tokio::spawn(async move {
             let mut rtcp_buf = vec![0u8; 1500];
-            while let Ok(_) = rtp_sender.read(&mut rtcp_buf).await {}
+            while rtp_sender.read(&mut rtcp_buf).await.is_ok() {}
             info!("RTCP reader ended");
         });
     }
 
-   // 3.5) Obtener SSRC/PT locales negociados del sender (webrtc 0.13)
+    // 3.5) Obtener SSRC/PT locales negociados del sender (webrtc 0.13)
     let params = rtp_sender.get_parameters().await;
-    let local_ssrc: Option<u32> = params.encodings.get(0).map(|e| e.ssrc);
-    let local_pt:   Option<u8>  = params.rtp_parameters.codecs.get(0).map(|c| c.payload_type);
+    let local_ssrc: Option<u32> = params.encodings.first().map(|e| e.ssrc);
+    let local_pt: Option<u8> = params.rtp_parameters.codecs.first().map(|c| c.payload_type);
 
     info!(
         "✅ [lab04] sender attached to audio transceiver (local_ssrc={:?} local_pt={:?})",
@@ -221,7 +237,7 @@ pub async fn webrtc_offer_lab04(
         let cancel_for_ontrack = cancel_pc.clone();
         let local_track_for_cb = local_track.clone();
         let local_ssrc_for_cb = local_ssrc;
-        let local_pt_for_cb   = local_pt;
+        let local_pt_for_cb = local_pt;
 
         pc.on_track(Box::new(move |track_remote, _receiver, _transceiver| {
             let pc2 = Arc::clone(&pc2);
@@ -349,7 +365,9 @@ pub async fn webrtc_offer_lab04(
     //*****  (5) SEÑALIZACIÓN (OFFER → ANSWER)  ****\\
     //=============================================\\
     // 5.1) Señalización: Offer → Answer
-    pc.set_remote_description(offer_sdp).await.map_err(internal)?;
+    pc.set_remote_description(offer_sdp)
+        .await
+        .map_err(internal)?;
     let answer = pc.create_answer(None).await.map_err(internal)?;
 
     // 5.2) Esperar ICE gathering para incluir candidatos en la Answer
@@ -358,8 +376,14 @@ pub async fn webrtc_offer_lab04(
     let _ = gather_rx.recv().await;
 
     // 5.3) Responder SDP final
-    let local = pc.local_description().await.ok_or_else(|| internal("missing local_description"))?;
-    Ok(Json(SdpResponse { sdp: local.sdp, r#type: "answer".into() }))
+    let local = pc
+        .local_description()
+        .await
+        .ok_or_else(|| internal("missing local_description"))?;
+    Ok(Json(SdpResponse {
+        sdp: local.sdp,
+        r#type: "answer".into(),
+    }))
 }
 
 //=====================================\\
@@ -370,14 +394,24 @@ pub async fn webrtc_offer_lab04(
 fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusCode, String)> {
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         let ok = state.allowed_ws_origins.iter().any(|o| o == origin);
-        if ok { return Ok(()); }
+        if ok {
+            return Ok(());
+        }
     }
     Err((StatusCode::FORBIDDEN, "invalid origin".into()))
 }
 
-fn validate_bearer_lab04(headers: &HeaderMap, state: &AppState) -> Result<WsClaims, (StatusCode, String)> {
-    let auth = headers.get("authorization").and_then(|v| v.to_str().ok()).unwrap_or("");
-    let token = auth.strip_prefix("Bearer ").ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing bearer".to_string()))?;
+fn validate_bearer_lab04(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<WsClaims, (StatusCode, String)> {
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let token = auth
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing bearer".to_string()))?;
 
     let allow: Vec<TokenProfile> = state
         .profiles
@@ -387,7 +421,10 @@ fn validate_bearer_lab04(headers: &HeaderMap, state: &AppState) -> Result<WsClai
         .collect();
 
     if allow.is_empty() {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, "lab-04 profile not configured".into()));
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "lab-04 profile not configured".into(),
+        ));
     }
 
     validate_ws_token_multi(token, &state.ws_secret, &allow).map_err(|e| {

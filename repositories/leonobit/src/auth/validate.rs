@@ -1,6 +1,7 @@
 // src/auth/validate.rs
-use crate::auth::types::WsClaims;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+
+use crate::auth::types::WsClaims;
 
 /// Perfil permitido (issuer + audience)
 #[derive(Clone, Copy, Debug)]
@@ -11,7 +12,11 @@ pub struct TokenProfile {
 
 /// Valida el JWT contra cualquiera de los perfiles permitidos usando HS256.
 /// Un único secreto (WS_JWT_SECRET) y devuelve WsClaims.
-pub fn validate_ws_token_multi(token: &str, secret: &str, profiles: &[TokenProfile]) -> Result<WsClaims, String> {
+pub fn validate_ws_token_multi(
+    token: &str,
+    secret: &str,
+    profiles: &[TokenProfile],
+) -> Result<WsClaims, String> {
     if token.trim().is_empty() {
         return Err("JWT ausente".into());
     }
@@ -23,7 +28,11 @@ pub fn validate_ws_token_multi(token: &str, secret: &str, profiles: &[TokenProfi
         validation.set_issuer(&[p.iss]); // jsonwebtoken >= 9
         validation.leeway = 5;
 
-        match decode::<WsClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation) {
+        match decode::<WsClaims>(
+            token,
+            &DecodingKey::from_secret(secret.as_bytes()),
+            &validation,
+        ) {
             Ok(data) => return Ok(data.claims),
             Err(e) => {
                 use jsonwebtoken::errors::ErrorKind::*;

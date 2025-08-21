@@ -21,18 +21,16 @@
 
 use std::sync::Arc;
 
+use async_openai::config::OpenAIConfig;
+use async_openai::types::{
+    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use async_openai::Client as OpenAIClient;
+use reqwest::Client as HttpClient;
 use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
 };
-
-use async_openai::{Client as OpenAIClient, config::OpenAIConfig};
-use async_openai::types::{
-    CreateChatCompletionRequestArgs,
-    ChatCompletionRequestMessage,
-    ChatCompletionRequestUserMessageArgs,
-};
-
-use reqwest::Client as HttpClient;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -59,7 +57,8 @@ impl AiPipeline {
             WhisperContext::new_with_params(
                 whisper_model_path,
                 WhisperContextParameters::default(),
-            ).map_err(|e| format!("WhisperContext init: {:?}", e))?,
+            )
+            .map_err(|e| format!("WhisperContext init: {:?}", e))?,
         );
 
         // Cliente OpenAI (toma OPENAI_API_KEY del entorno).
@@ -114,15 +113,16 @@ impl AiPipeline {
         };
 
         // 2) Crear estado por invocación (thread-safe).
-        let mut state: WhisperState = self.whisper_ctx
+        let mut state: WhisperState = self
+            .whisper_ctx
             .create_state()
             .map_err(|e| format!("Whisper create_state: {:?}", e))?;
 
         // 3) Parámetros de inferencia.
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_n_threads(4);             // ajustar según CPU
-        params.set_translate(false);         // no traducir, solo transcribir
-        params.set_language(Some("es"));     // forzamos español (o "auto" si querés autodetección)
+        params.set_n_threads(4); // ajustar según CPU
+        params.set_translate(false); // no traducir, solo transcribir
+        params.set_language(Some("es")); // forzamos español (o "auto" si querés autodetección)
         params.set_no_context(true);
         params.set_single_segment(false);
         params.set_print_progress(false);
@@ -130,7 +130,8 @@ impl AiPipeline {
         params.set_print_special(false);
 
         // 4) Ejecutar transcripción "full".
-        state.full(params, &mono_16k)
+        state
+            .full(params, &mono_16k)
             .map_err(|e| format!("Whisper full(): {:?}", e))?;
 
         // 5) Leer segmentos y concatenar texto.
@@ -151,7 +152,9 @@ impl AiPipeline {
                 };
 
                 if !seg_txt.is_empty() {
-                    if !out.is_empty() { out.push(' '); }
+                    if !out.is_empty() {
+                        out.push(' ');
+                    }
                     out.push_str(&seg_txt);
                 }
             }
@@ -166,7 +169,7 @@ impl AiPipeline {
         let user_msg: ChatCompletionRequestMessage = ChatCompletionRequestMessage::User(
             ChatCompletionRequestUserMessageArgs::default()
                 .content(input_text)
-                .build()?
+                .build()?,
         );
 
         let req = CreateChatCompletionRequestArgs::default()
@@ -226,7 +229,8 @@ impl AiPipeline {
             output_format: "pcm_16000",
         };
 
-        let resp = self.http
+        let resp = self
+            .http
             .post(&url)
             .header("xi-api-key", &self.elevenlabs_api_key)
             .header("accept", "application/octet-stream") // raw PCM
@@ -281,7 +285,11 @@ pub fn naive_resample_to_16k(input: &[f32], sr_in: u32) -> Vec<f32> {
     let mut out = Vec::with_capacity(out_len);
     for n in 0..out_len {
         let src_idx = ((n as f32) / ratio).round() as usize;
-        out.push(*input.get(src_idx.min(input.len().saturating_sub(1))).unwrap_or(&0.0));
+        out.push(
+            *input
+                .get(src_idx.min(input.len().saturating_sub(1)))
+                .unwrap_or(&0.0),
+        );
     }
     out
 }

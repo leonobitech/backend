@@ -11,48 +11,41 @@
 
 // ============= Imports base y tipos del proyecto =============
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    Json,
-};
+use axum::extract::State;
+use axum::http::{HeaderMap, StatusCode};
+use axum::Json;
 use serde::Serialize;
-use tracing::{info, warn, error};
-
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
-
+use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
+use webrtc::data_channel::data_channel_message::DataChannelMessage;
+use webrtc::data_channel::RTCDataChannel;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
-
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-
 use webrtc::rtp_transceiver::rtp_codec::{RTCRtpCodecCapability, RTPCodecType};
-
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::TrackLocal;
 
-use webrtc::data_channel::data_channel_message::DataChannelMessage;
-use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
-use webrtc::data_channel::RTCDataChannel;
-
-use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
-
-use crate::routes::AppState;
-use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
-
 use super::stats_helper::install_selected_pair_logger;
+use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
 use crate::routes::labs::ai_pipeline::AiPipeline;
+use crate::routes::AppState;
 
 // Respuesta HTTP con la SDP answer final
 #[derive(Serialize)]
-pub struct SdpResponse { pub sdp: String, pub r#type: String }
+pub struct SdpResponse {
+    pub sdp: String,
+    pub r#type: String,
+}
 
 // ============= Handler principal HTTP =============
 //
@@ -63,7 +56,7 @@ pub struct SdpResponse { pub sdp: String, pub r#type: String }
 // Media:      Loopback RTP (eco) manteniendo extensiones RTP (MID/transport-cc).
 // Señalización: Offer → Answer + espera a ICE gathering.
 //
-#[axum::debug_handler]
+#[cfg_attr(debug_assertions, axum::debug_handler)]
 pub async fn handle_lab05(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -84,8 +77,14 @@ pub async fn handle_lab05(
     // Servidores STUN: necesarios para obtener candidatos públicos (ICE).
     let config = RTCConfiguration {
         ice_servers: vec![
-            RTCIceServer { urls: vec!["stun:stun.l.google.com:19302".into()], ..Default::default() },
-            RTCIceServer { urls: vec!["stun:stun.cloudflare.com:3478".into()], ..Default::default() },
+            RTCIceServer {
+                urls: vec!["stun:stun.l.google.com:19302".into()],
+                ..Default::default()
+            },
+            RTCIceServer {
+                urls: vec!["stun:stun.cloudflare.com:3478".into()],
+                ..Default::default()
+            },
         ],
         ..Default::default()
     };
@@ -98,7 +97,8 @@ pub async fn handle_lab05(
         AiPipeline::new(
             "models/ggml-base.en.bin",
             std::env::var("ELEVENLABS_API_KEY").unwrap(),
-        ).map_err(internal)?
+        )
+        .map_err(internal)?,
     );
 
     // Canal interno para enviar chunks PCM hacia la pipeline AI
@@ -153,7 +153,12 @@ pub async fn handle_lab05(
         let closed_flag_ice = Arc::clone(&pc_closed_flag);
         pc_ref.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
             info!("(lab05) ICE state = {:?}", st);
-            if matches!(st, RTCIceConnectionState::Disconnected | RTCIceConnectionState::Failed | RTCIceConnectionState::Closed) {
+            if matches!(
+                st,
+                RTCIceConnectionState::Disconnected
+                    | RTCIceConnectionState::Failed
+                    | RTCIceConnectionState::Closed
+            ) {
                 cancel_for_ice.cancel();
                 if !closed_flag_ice.swap(true, Ordering::SeqCst) {
                     let pc_to_close = Arc::clone(&pc_for_ice_close);
@@ -176,7 +181,12 @@ pub async fn handle_lab05(
         let closed_flag_pc = Arc::clone(&pc_closed_flag);
         pc_ref.on_peer_connection_state_change(Box::new(move |st: RTCPeerConnectionState| {
             info!("(lab05) PC state = {:?}", st);
-            if matches!(st, RTCPeerConnectionState::Disconnected | RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed) {
+            if matches!(
+                st,
+                RTCPeerConnectionState::Disconnected
+                    | RTCPeerConnectionState::Failed
+                    | RTCPeerConnectionState::Closed
+            ) {
                 cancel_for_pc.cancel();
                 if !closed_flag_pc.swap(true, Ordering::SeqCst) {
                     let pc_to_close = Arc::clone(&pc_for_pc_close);
@@ -231,9 +241,11 @@ pub async fn handle_lab05(
 
     let rtp_sender = match audio_sender_opt {
         Some(s) => {
-            s.replace_track(Some(local_track.clone() as Arc<dyn TrackLocal + Send + Sync>))
-                .await
-                .map_err(internal)?;
+            s.replace_track(Some(
+                local_track.clone() as Arc<dyn TrackLocal + Send + Sync>
+            ))
+            .await
+            .map_err(internal)?;
             s
         }
         None => return Err(internal("no audio transceiver found")),
@@ -244,16 +256,19 @@ pub async fn handle_lab05(
         let rtp_sender = rtp_sender.clone();
         tokio::spawn(async move {
             let mut rtcp_buf = vec![0u8; 1500];
-            while let Ok(_) = rtp_sender.read(&mut rtcp_buf).await {}
+            while rtp_sender.read(&mut rtcp_buf).await.is_ok() {}
             info!("(lab05) RTCP reader ended");
         });
     }
 
     // Obtenemos SSRC/PT locales → los usaremos para reescribir INBOUND y que el browser acepte el eco.
     let params = rtp_sender.get_parameters().await;
-    let local_ssrc: Option<u32> = params.encodings.get(0).map(|e| e.ssrc);
-    let local_pt:   Option<u8>  = params.rtp_parameters.codecs.get(0).map(|c| c.payload_type);
-    info!("✅ [lab05] sender attached (local_ssrc={:?} local_pt={:?})", local_ssrc, local_pt);
+    let local_ssrc: Option<u32> = params.encodings.first().map(|e| e.ssrc);
+    let local_pt: Option<u8> = params.rtp_parameters.codecs.first().map(|c| c.payload_type);
+    info!(
+        "✅ [lab05] sender attached (local_ssrc={:?} local_pt={:?})",
+        local_ssrc, local_pt
+    );
 
     // ---------------- (4) DataChannel "chat": bus de control (ping/barge_in/eco) ----------
     // Nota: negotiated=None → in-band (puede abrirlo server o client).
@@ -266,15 +281,23 @@ pub async fn handle_lab05(
     // 3) gathering_complete_promise()
     // 4) set_local_description(answer)
     // 5) esperar a gather complete y devolver la SDP
-    pc.set_remote_description(offer_sdp).await.map_err(internal)?;
+    pc.set_remote_description(offer_sdp)
+        .await
+        .map_err(internal)?;
     let answer = pc.create_answer(None).await.map_err(internal)?;
     let mut gather_rx = pc.gathering_complete_promise().await;
     pc.set_local_description(answer).await.map_err(internal)?;
     let _ = gather_rx.recv().await;
 
     // Extraemos la SDP local final (ya con candidatos ICE) y respondemos al cliente.
-    let local = pc.local_description().await.ok_or_else(|| internal("missing local_description"))?;
-    Ok(Json(SdpResponse { sdp: local.sdp, r#type: "answer".into() }))
+    let local = pc
+        .local_description()
+        .await
+        .ok_or_else(|| internal("missing local_description"))?;
+    Ok(Json(SdpResponse {
+        sdp: local.sdp,
+        r#type: "answer".into(),
+    }))
 }
 
 // ============= DataChannel (chat/control) =============
@@ -286,7 +309,10 @@ pub async fn handle_lab05(
 //   - on_message: ping/pong, barge_in (stub), eco de texto, log binario.
 //   - on_close: log.
 //
-async fn setup_data_channels(pc: &Arc<webrtc::peer_connection::RTCPeerConnection>, cancel_pc: &CancellationToken) {
+async fn setup_data_channels(
+    pc: &Arc<webrtc::peer_connection::RTCPeerConnection>,
+    cancel_pc: &CancellationToken,
+) {
     // 1) Crear DC "chat" (in-band). negotiated=None indica que NO es pre-negociado.
     let dc_init = RTCDataChannelInit {
         negotiated: None,
@@ -302,7 +328,11 @@ async fn setup_data_channels(pc: &Arc<webrtc::peer_connection::RTCPeerConnection
     // 2) Si el cliente abre uno, instalamos handlers también.
     let cancel_clone = cancel_pc.clone();
     pc.on_data_channel(Box::new(move |dc: Arc<RTCDataChannel>| {
-        info!("(lab05) on_data_channel: label='{}' id={:?}", dc.label(), dc.id());
+        info!(
+            "(lab05) on_data_channel: label='{}' id={:?}",
+            dc.label(),
+            dc.id()
+        );
         install_chat_handlers(dc, &cancel_clone);
         Box::pin(async {})
     }));
@@ -316,7 +346,9 @@ fn install_chat_handlers(dc: Arc<RTCDataChannel>, cancel_pc: &CancellationToken)
         let dc = Arc::clone(&dc_open);
         info!("(lab05) DataChannel 'chat' open");
         Box::pin(async move {
-            let _ = dc.send_text(r#"{"type":"ready","lab":"lab-05","role":"server"}"#).await;
+            let _ = dc
+                .send_text(r#"{"type":"ready","lab":"lab-05","role":"server"}"#)
+                .await;
         })
     }));
 
@@ -375,14 +407,24 @@ fn install_chat_handlers(dc: Arc<RTCDataChannel>, cancel_pc: &CancellationToken)
 fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusCode, String)> {
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         let ok = state.allowed_ws_origins.iter().any(|o| o == origin);
-        if ok { return Ok(()); }
+        if ok {
+            return Ok(());
+        }
     }
     Err((StatusCode::FORBIDDEN, "invalid origin".into()))
 }
 
-fn validate_bearer_lab05(headers: &HeaderMap, state: &AppState) -> Result<WsClaims, (StatusCode, String)> {
-    let auth = headers.get("authorization").and_then(|v| v.to_str().ok()).unwrap_or("");
-    let token = auth.strip_prefix("Bearer ").ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing bearer".to_string()))?;
+fn validate_bearer_lab05(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<WsClaims, (StatusCode, String)> {
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let token = auth
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing bearer".to_string()))?;
 
     // Filtramos los perfiles que se admiten para este lab.
     let allow: Vec<TokenProfile> = state
@@ -393,7 +435,10 @@ fn validate_bearer_lab05(headers: &HeaderMap, state: &AppState) -> Result<WsClai
         .collect();
 
     if allow.is_empty() {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, "lab-05 profile not configured".into()));
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "lab-05 profile not configured".into(),
+        ));
     }
 
     // Valida firma, expiración y que iss/aud pertenezcan a los perfiles permitidos.
