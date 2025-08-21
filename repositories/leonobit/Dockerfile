@@ -1,5 +1,5 @@
 # --- Build stage (estable) ---
-FROM rust:latest AS builder
+FROM rust:slim-bookworm AS builder
 WORKDIR /usr/src/app
 
 # 🔧 Dependencias de build necesarias para whisper.cpp y friends
