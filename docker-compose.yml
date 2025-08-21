@@ -1116,7 +1116,7 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    # Montamos los modelos Whisper en modo lectura
+    # Whisper model (ggml-base.en.bin): ~/backend/repositories/leonobit/models
     volumes:
        - ./repositories/leonobit/models:/app/models:ro
 
