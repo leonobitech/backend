@@ -17,12 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src && echo 'fn main() {}' > src/main.rs
 # Prefetch y build ligera para calentar caché (si falla por no tener código real, ignoramos)
-RUN cargo fetch --locked
-RUN cargo build --release --locked || true
+RUN cargo fetch
+RUN cargo build --release || true
 
 # 📦 Copiamos el código real y compilamos
 COPY src ./src
-RUN cargo build --release --locked
+RUN cargo build --release
 
 # --- Runtime (mínimo y seguro) ---
 FROM debian:bookworm-slim
