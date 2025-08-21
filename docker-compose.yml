@@ -1118,7 +1118,7 @@ services:
 
     # Montamos los modelos Whisper en modo lectura
     volumes:
-      - whisper-models:/app/models:ro
+       - ./repositories/leonobit/models:/app/models:ro
 
     env_file:
       - ./repositories/leonobit/.env
@@ -1211,10 +1211,6 @@ volumes:
   # 🟤 Odoo
   odoo_data:
     external: false
-
-  # 🔴 Whisper
-  whisper-models:
-    driver: local
 
 networks:
   leonobitech-net:
