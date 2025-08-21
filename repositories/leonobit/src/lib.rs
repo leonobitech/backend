@@ -17,11 +17,12 @@ pub async fn run() -> anyhow::Result<()> {
     // Arranca el agregador y obtené el sender
     let metrics_tx = metrics::rtt::start_metrics_aggregator();
 
-    // Estado global (inyecta ws_secret, allowed_ws_origins y perfiles iss/aud)
+    // Estado global (inyecta ws_secret, allowed_ws_origins, perfiles iss/aud y ruta Whisper)
     let state = routes::AppState::new(
         settings.ws_jwt_secret.clone(),
         settings.allowed_ws_origins.clone(),
         metrics_tx.clone(),
+        settings.whisper_model_path.clone(),
     );
 
     let enabled = state

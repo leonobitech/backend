@@ -1,4 +1,5 @@
 // src/routes/mod.rs
+use std::path::Path;
 use std::sync::Arc;
 
 use axum::routing::{get, post};
@@ -9,11 +10,11 @@ pub mod ai_health;
 pub mod hello_routes;
 pub mod labs;
 
+use reqwest::Client as HttpClient;
 use tokio::sync::mpsc;
 
 use crate::auth::TokenProfile;
-use crate::metrics::rtt::MetricEvent; // ← canal // ← tipo del canal
-
+use crate::metrics::rtt::MetricEvent;
 #[derive(Clone)]
 pub struct AppState {
     pub peers: Arc<DashSet<String>>,
@@ -23,6 +24,12 @@ pub struct AppState {
     pub profiles: Arc<Vec<TokenProfile>>,
     /// Canal para enviar eventos de métricas
     pub metrics_tx: mpsc::Sender<MetricEvent>,
+    /// HTTP client reutilizable (timeouts, pooling)
+    pub http: HttpClient,
+    /// Ruta al modelo de Whisper (para health/checks)
+    pub whisper_model_path: String,
+    /// Flag “rápido” de disponibilidad de Whisper (archivo existe / init ok)
+    pub whisper_ready: bool,
 }
 
 impl AppState {
@@ -30,6 +37,7 @@ impl AppState {
         ws_secret: String,
         allowed_ws_origins: Vec<String>,
         metrics_tx: mpsc::Sender<MetricEvent>,
+        whisper_model_path: String,
     ) -> Self {
         // Agregá aquí todos los perfiles que quieras habilitar
         let profiles = vec![
@@ -58,6 +66,15 @@ impl AppState {
                 aud: "lab-webrtc-05-audio",
             },
         ];
+        // HTTP client con timeout razonable y UA identificable
+        let http = HttpClient::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .user_agent("leonobit/healthcheck")
+            .build()
+            .expect("http client");
+
+        // Chequeo rápido: ¿existe el modelo de Whisper?
+        let whisper_ready = Path::new(&whisper_model_path).exists();
 
         Self {
             peers: Arc::new(DashSet::new()),
@@ -65,6 +82,9 @@ impl AppState {
             allowed_ws_origins: Arc::new(allowed_ws_origins),
             profiles: Arc::new(profiles),
             metrics_tx,
+            http,
+            whisper_model_path,
+            whisper_ready,
         }
     }
 }
