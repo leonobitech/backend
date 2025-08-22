@@ -290,19 +290,7 @@ async fn setup_data_channels(
     pc: &Arc<webrtc::peer_connection::RTCPeerConnection>,
     cancel_pc: &CancellationToken,
 ) {
-    // 1) Crear DC "chat" (in-band). negotiated=None → NO pre-negociado.
-    let dc_init = RTCDataChannelInit {
-        negotiated: None,
-        ..Default::default()
-    };
-    let dc = pc.create_data_channel("chat", Some(dc_init)).await;
-
-    match dc {
-        Ok(dc) => install_chat_handlers(dc, cancel_pc),
-        Err(e) => warn!("(lab05) create_data_channel('chat') failed: {e:?}"),
-    }
-
-    // 2) Si el cliente abre uno, instalamos handlers también.
+    // Adoptar cualquier DataChannel creado por el cliente.
     let cancel_clone = cancel_pc.clone();
     pc.on_data_channel(Box::new(move |dc: Arc<RTCDataChannel>| {
         info!(
@@ -314,7 +302,6 @@ async fn setup_data_channels(
         Box::pin(async {})
     }));
 }
-
 // Registra handlers del DataChannel "chat".
 fn install_chat_handlers(dc: Arc<RTCDataChannel>, cancel_pc: &CancellationToken) {
     // a) on_open: anunciamos disponibilidad al cliente.
