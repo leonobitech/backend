@@ -1,15 +1,19 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
 //! Lab 05 — WebRTC Audio (loopback base + DataChannel "chat")
 //!
-//! Objetivo de esta etapa (0):
+//! Etapa 0 objetivo:
 //! - Mantener el **loopback de audio** idéntico a Lab-04 (camino feliz ya probado).
 //! - Agregar un **DataChannel "chat"** (bus de control) sin interferir con el audio.
 //!
 //! ¿Por qué así?
 //! - El loopback nos garantiza que PC/ICE/Transceivers/SDP están bien.
 //! - El DataChannel nos sirve para: parciales STT, texto del agente, señales TTS y barge_in.
-//! - Próximas etapas: enganchar STT (whisper-rs), GPT-4o y TTS sin romper lo que funciona.
+//! - Próximas etapas: enganchar STT (whisper-rs), GPT y TTS sin romper lo que funciona.
 
-// ============= Imports base y tipos del proyecto =============
+// ==========================
+// = Imports y tipos base   =
+// ==========================
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -31,23 +35,32 @@ use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
+use webrtc::rtp::packet::Packet; // para reescritura SSRC/PT
 use webrtc::rtp_transceiver::rtp_codec::{RTCRtpCodecCapability, RTPCodecType};
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::TrackLocal;
+use webrtc::track::track_local::TrackLocalWriter; // trae write_rtp(&Packet) al scope
+use webrtc::track::track_remote::TrackRemote; // para leer RTP remoto
 
 use super::stats_helper::install_selected_pair_logger;
 use crate::auth::{validate_ws_token_multi, TokenProfile, WsClaims};
 use crate::routes::labs::ai_pipeline::AiPipeline;
 use crate::routes::AppState;
 
-// Respuesta HTTP con la SDP answer final
+// ==========================
+// = Tipos HTTP / Respuestas=
+// ==========================
+
+/// Respuesta HTTP con la SDP answer final
 #[derive(Serialize)]
 pub struct SdpResponse {
     pub sdp: String,
     pub r#type: String,
 }
 
-// ============= Handler principal HTTP =============
+// ==========================
+// = Handler principal HTTP =
+// ==========================
 //
 // Recibe:     Offer SDP (navegador)            → Json<RTCSessionDescription>
 // Devuelve:   Answer SDP (servidor)             → Json<SdpResponse>
@@ -62,13 +75,15 @@ pub async fn handle_lab05(
     headers: HeaderMap,
     Json(offer_sdp): Json<RTCSessionDescription>,
 ) -> Result<Json<SdpResponse>, (StatusCode, String)> {
-    // ---------------- (1) Seguridad: Origin + Bearer JWT (perfil lab-05) ----------------
-    // Origin: evita que terceros no autorizados llamen al endpoint.
-    // JWT: valida iss/aud para Lab-05.
+    // -------------------------------------------------------------
+    // (1) Seguridad: Origin + Bearer JWT (perfil lab-05)
+    // -------------------------------------------------------------
     validate_origin(&headers, &state)?;
     let _claims = validate_bearer_lab05(&headers, &state)?;
 
-    // ---------------- (2) API WebRTC + PeerConnection con STUN públicos -----------------
+    // -------------------------------------------------------------
+    // (2) API WebRTC + PeerConnection con STUN públicos
+    // -------------------------------------------------------------
     // MediaEngine: codecs por default (incluye Opus).
     let mut m = MediaEngine::default();
     m.register_default_codecs().map_err(internal)?;
@@ -92,61 +107,14 @@ pub async fn handle_lab05(
     // PeerConnection del servidor.
     let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
-    // ---------------- Pipeline AI ----------------
-    let ai_pipeline = Arc::new(
-        AiPipeline::new(
-            "models/ggml-base.en.bin",
-            std::env::var("ELEVENLABS_API_KEY").unwrap(),
-        )
-        .map_err(internal)?,
-    );
-
-    // Canal interno para enviar chunks PCM hacia la pipeline AI
-    let (_tx_audio, mut rx_audio) = mpsc::channel::<Vec<f32>>(32);
-
-    // Hook: procesar audio entrante (STT -> GPT -> TTS)
-    tokio::spawn({
-        let ai_pipeline = ai_pipeline.clone();
-        async move {
-            while let Some(pcm_chunk) = rx_audio.recv().await {
-                // 1) Whisper STT (detección básica: asumimos 48k estéreo aquí)
-                let transcript = match ai_pipeline.transcribe_audio(&pcm_chunk, 48_000, 2) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        tracing::error!("Error en STT: {:?}", e);
-                        continue;
-                    }
-                };
-
-                // 2) GPT-4o
-                let gpt_reply = match ai_pipeline.generate_response(&transcript).await {
-                    Ok(r) => r,
-                    Err(e) => {
-                        tracing::error!("Error GPT: {:?}", e);
-                        continue;
-                    }
-                };
-
-                // 3) ElevenLabs TTS (PCM 16k mono bytes)
-                match ai_pipeline.synthesize_audio(&gpt_reply).await {
-                    Ok(tts_pcm_16k) => {
-                        tracing::info!("🔊 TTS generado ({} bytes, pcm_16000)", tts_pcm_16k.len());
-                        // TODO: convertir PCM 16k → Opus RTP y enviar por `local_track`
-                    }
-                    Err(e) => tracing::error!("Error ElevenLabs: {:?}", e),
-                }
-            }
-        }
-    });
-
-    // ---------------- (2.1) Observabilidad: logs de estados ICE/PC + pair seleccionado ----
-
-    // Señalización y cierre ordenado: flags/CancelToken para terminar tareas asíncronas cuando
-    // el PC se desconecta/falla/cierra.
+    // -------------------------------------------------------------
+    // (2.1) Observabilidad: logs de estados ICE/PC + pair seleccionado
+    //       + cierre ordenado con CancellationToken
+    // -------------------------------------------------------------
     let pc_closed_flag = Arc::new(AtomicBool::new(false));
     let cancel_pc = CancellationToken::new();
     {
-        // a) Estado ICE (Disconnected/Failed/Closed → cancelamos tareas y cerramos PC)
+        // a) Estado ICE → cancel y cierre
         let pc_ref = Arc::clone(&pc);
         let cancel_for_ice = cancel_pc.clone();
         let pc_for_ice_close = Arc::clone(&pc);
@@ -174,7 +142,7 @@ pub async fn handle_lab05(
             Box::pin(async {})
         }));
 
-        // b) Estado general del PeerConnection (mismo criterio de cierre)
+        // b) Estado general del PeerConnection → mismo criterio
         let pc_ref = Arc::clone(&pc);
         let cancel_for_pc = cancel_pc.clone();
         let pc_for_pc_close = Arc::clone(&pc);
@@ -202,13 +170,13 @@ pub async fn handle_lab05(
             Box::pin(async {})
         }));
 
-        // c) Log del par ICE seleccionado (útil para debug de conectividad/red)
+        // c) Log del par ICE seleccionado
         install_selected_pair_logger(&pc);
     }
 
-    // ---------------- (3) AUDIO: transceiver + track local (antes de señalización) --------
-    // Creamos una m-line de AUDIO y adjuntamos un TrackLocal (Opus) ANTES de setLocalDescription:
-    // → Así la SDP local ya incluye SSRC/MSID de nuestro flujo saliente.
+    // -------------------------------------------------------------
+    // (3) AUDIO saliente: transceiver + TrackLocal (Opus) antes de señalización
+    // -------------------------------------------------------------
     pc.add_transceiver_from_kind(RTPCodecType::Audio, None)
         .await
         .map_err(internal)?;
@@ -222,11 +190,10 @@ pub async fn handle_lab05(
             rtcp_feedback: vec![],
         },
         "audio".to_string(), // track id
-        "lab05".to_string(), // stream id (cosmético; ayuda a identificar en el cliente)
+        "lab05".to_string(), // stream id (cosmético)
     ));
 
-    // Buscamos el transceiver de audio y le "inyectamos" nuestro TrackLocal.
-    // Esto garantiza que el RTP de salida use la misma m-line/MID negociada.
+    // Inyectamos TrackLocal en el transceiver de AUDIO
     let mut audio_sender_opt = None;
     for (i, t) in pc.get_transceivers().await.iter().enumerate() {
         let dir = t.direction();
@@ -251,7 +218,7 @@ pub async fn handle_lab05(
         None => return Err(internal("no audio transceiver found")),
     };
 
-    // Mantener vivo el sender: leer RTCP evita bloqueos/colas internas
+    // Mantener vivo el sender: leer RTCP evita bloqueos internos
     {
         let rtp_sender = rtp_sender.clone();
         tokio::spawn(async move {
@@ -261,7 +228,7 @@ pub async fn handle_lab05(
         });
     }
 
-    // Obtenemos SSRC/PT locales → los usaremos para reescribir INBOUND y que el browser acepte el eco.
+    // SSRC/PT locales (para reescritura en el eco)
     let params = rtp_sender.get_parameters().await;
     let local_ssrc: Option<u32> = params.encodings.first().map(|e| e.ssrc);
     let local_pt: Option<u8> = params.rtp_parameters.codecs.first().map(|c| c.payload_type);
@@ -270,17 +237,26 @@ pub async fn handle_lab05(
         local_ssrc, local_pt
     );
 
-    // ---------------- (4) DataChannel "chat": bus de control (ping/barge_in/eco) ----------
-    // Nota: negotiated=None → in-band (puede abrirlo server o client).
+    // -------------------------------------------------------------
+    // (4) DataChannel "chat": bus de control (ping/barge_in/eco)
+    // -------------------------------------------------------------
     setup_data_channels(&pc, &cancel_pc).await;
 
-    // ---------------- (5) Señalización: Offer → Answer (+ esperar ICE gathering) ----------
-    // Orden correcto:
-    // 1) set_remote_description(offer)
-    // 2) create_answer()
-    // 3) gathering_complete_promise()
-    // 4) set_local_description(answer)
-    // 5) esperar a gather complete y devolver la SDP
+    // -------------------------------------------------------------
+    // (5) Loopback de AUDIO (on_track → reescritura SSRC/PT → TrackLocal)
+    //     *Registrar callback ANTES de set_remote_description*
+    // -------------------------------------------------------------
+    install_audio_loopback(
+        &pc,
+        local_track.clone(),
+        local_ssrc,
+        local_pt,
+        cancel_pc.clone(),
+    );
+
+    // -------------------------------------------------------------
+    // (6) Señalización: Offer → Answer (+ esperar ICE gathering)
+    // -------------------------------------------------------------
     pc.set_remote_description(offer_sdp)
         .await
         .map_err(internal)?;
@@ -300,20 +276,21 @@ pub async fn handle_lab05(
     }))
 }
 
-// ============= DataChannel (chat/control) =============
-//
+// ==================================================
+// = DataChannel (chat/control)                     =
+// ==================================================
 // Creamos un DataChannel "chat" del lado servidor y también
 // adoptamos cualquier canal que cree el cliente (on_data_channel).
 // Handlers:
 //   - on_open: mandamos banner de "ready".
 //   - on_message: ping/pong, barge_in (stub), eco de texto, log binario.
 //   - on_close: log.
-//
+
 async fn setup_data_channels(
     pc: &Arc<webrtc::peer_connection::RTCPeerConnection>,
     cancel_pc: &CancellationToken,
 ) {
-    // 1) Crear DC "chat" (in-band). negotiated=None indica que NO es pre-negociado.
+    // 1) Crear DC "chat" (in-band). negotiated=None → NO pre-negociado.
     let dc_init = RTCDataChannelInit {
         negotiated: None,
         ..Default::default()
@@ -399,11 +376,135 @@ fn install_chat_handlers(dc: Arc<RTCDataChannel>, cancel_pc: &CancellationToken)
     }));
 }
 
-// ============= Helpers de seguridad =============
-//
-// - validate_origin: chequea que la cabecera Origin esté en la allowlist.
-// - validate_bearer_lab05: valida JWT contra iss/aud de Lab-05.
-//
+// ==================================================
+// = Loopback de AUDIO (on_track)                   =
+// ==================================================
+// Reenvía el RTP recibido (Opus) al TrackLocal, reescribiendo SSRC/PT
+// para que el navegador acepte el flujo saliente como propio.
+fn install_audio_loopback(
+    pc: &Arc<webrtc::peer_connection::RTCPeerConnection>,
+    local_track: Arc<TrackLocalStaticRTP>,
+    local_ssrc: Option<u32>,
+    local_pt: Option<u8>,
+    cancel_pc: CancellationToken,
+) {
+    let lt = Arc::clone(&local_track);
+
+    pc.on_track(Box::new(move |remote: Arc<TrackRemote>, _rx, _streams| {
+        let lt = Arc::clone(&lt);
+        let cancel = cancel_pc.clone();
+
+        Box::pin(async move {
+            // Solo actuamos sobre AUDIO
+            if remote.kind() != RTPCodecType::Audio {
+                info!("(lab05) on_track ignorado (kind != audio)");
+                return;
+            }
+
+            info!(
+                "(lab05) on_track AUDIO: ssrc_in={:?} pt_in={:?} codec={}",
+                remote.ssrc(),
+                remote.payload_type(),
+                remote.codec().capability.mime_type
+            );
+
+            // Bucle de reenvío RTP → local_track (eco)
+            tokio::spawn(async move {
+                loop {
+                    if cancel.is_cancelled() {
+                        info!("(lab05) loopback cancelado");
+                        break;
+                    }
+
+                    // Leer paquete RTP del track remoto
+                    let (mut pkt, _attrs) = match remote.read_rtp().await {
+                        Ok(t) => t, // (Packet, attributes)
+                        Err(err) => {
+                            warn!("(lab05) read_rtp terminó: {err:?}");
+                            break;
+                        }
+                    };
+
+                    // Reescribir PT/SSRC a los del sender local (si existen)
+                    if let Some(pt) = local_pt {
+                        pkt.header.payload_type = pt;
+                    }
+                    if let Some(ssrc) = local_ssrc {
+                        pkt.header.ssrc = ssrc;
+                    }
+
+                    // Enviar a nuestro TrackLocal (manteniendo seq/timestamp del inbound)
+                    if let Err(e) = lt.write_rtp(&pkt).await {
+                        warn!("(lab05) write_rtp error: {e:?}");
+                        break;
+                    }
+                }
+
+                info!("(lab05) loopback finalizado");
+            });
+        })
+    }));
+}
+
+// ==================================================
+// = Pipeline IA (skeleton, NO usado en etapa 0)    =
+// ==================================================
+// Se deja montado para la siguiente etapa: de-packetizar Opus → PCM
+// y alimentar STT → GPT → TTS. Por ahora, sólo se crea y se deja
+// el canal preparado (no conectado al loopback).
+fn _spawn_ai_pipeline_example() -> Result<(), (StatusCode, String)> {
+    let ai_pipeline = Arc::new(
+        AiPipeline::new(
+            "models/ggml-base.en.bin",
+            std::env::var("ELEVENLABS_API_KEY").unwrap(),
+        )
+        .map_err(internal)?,
+    );
+
+    // Canal interno para enviar chunks PCM hacia la pipeline AI
+    let (_tx_audio, mut rx_audio) = mpsc::channel::<Vec<f32>>(32);
+
+    tokio::spawn({
+        let ai_pipeline = ai_pipeline.clone();
+        async move {
+            while let Some(pcm_chunk) = rx_audio.recv().await {
+                // 1) Whisper STT (asumimos 48k estéreo)
+                let transcript = match ai_pipeline.transcribe_audio(&pcm_chunk, 48_000, 2) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        error!("Error en STT: {:?}", e);
+                        continue;
+                    }
+                };
+
+                // 2) GPT
+                let gpt_reply = match ai_pipeline.generate_response(&transcript).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        error!("Error GPT: {:?}", e);
+                        continue;
+                    }
+                };
+
+                // 3) TTS (PCM 16k mono bytes)
+                match ai_pipeline.synthesize_audio(&gpt_reply).await {
+                    Ok(tts_pcm_16k) => {
+                        info!("🔊 TTS generado ({} bytes, pcm_16000)", tts_pcm_16k.len());
+                        // TODO: convertir PCM 16k → Opus RTP y enviar por `local_track`
+                    }
+                    Err(e) => error!("Error ElevenLabs: {:?}", e),
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+// ==================================================
+// = Seguridad: Origin + Bearer (JWT lab-05)        =
+// ==================================================
+
 fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusCode, String)> {
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         let ok = state.allowed_ws_origins.iter().any(|o| o == origin);
@@ -448,10 +549,10 @@ fn validate_bearer_lab05(
     })
 }
 
-// ============= Helper de error interno =============
-//
-// Envuelve errores en (StatusCode, String) y loguea con `error!` para troubleshooting.
-//
+// ==================================================
+// = Helper de error interno                         =
+// ==================================================
+
 fn internal<E: std::fmt::Debug>(e: E) -> (StatusCode, String) {
     error!("Internal error: {e:?}");
     (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())

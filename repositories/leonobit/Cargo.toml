@@ -30,3 +30,4 @@ whisper-rs = "0.15.0"     # binding oficial para whisper.cpp
 async-openai = "0.29.1"
 # ElevenLabs Streaming API
 reqwest = { version = "0.12.23", features = ["json", "stream"] }
+audiopus = "0.2.0"
