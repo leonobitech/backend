@@ -101,7 +101,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health/ai/whisper", get(ai_health::health_whisper))
         .route("/health/ai", get(ai_health::health_ai))
         // ---- WS/WEBRTC existentes ----
-        .route("/ws/leonobit/offer", post(leonobit::ws_handler))
+        .route("/ws/leonobit/offer", get(leonobit::ws_handler))
         .route("/ws/lab/01/offer", get(labs::lab01::ws_handler))
         .route("/ws/lab/02/offer", get(labs::lab02::ws_handler))
         .route("/webrtc/lab/03/offer", post(labs::lab03::webrtc_offer))
