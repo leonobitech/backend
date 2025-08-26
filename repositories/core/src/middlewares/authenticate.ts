@@ -103,7 +103,12 @@ const authenticate: RequestHandler = catchErrors(
 
     // 🔁 Si el token fue refrescado desde DB, forzar regeneración
     if (refreshed) {
-      const result = await refreshAccessTokenService(clientKey, meta, lang);
+      const result = await refreshAccessTokenService(
+        clientKey,
+        meta,
+        lang,
+        req
+      );
 
       const { payload } = await verifyToken(
         result.tokens.accessToken,

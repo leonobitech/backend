@@ -488,7 +488,8 @@ export const loginService = async ({
 export const refreshAccessTokenService = async (
   clientKey: string,
   meta: RequestMeta,
-  lang: SupportedLang
+  lang: SupportedLang,
+  req: Request
 ): Promise<RefreshTokenResponse> => {
   // Se busca el registro del refresh token usando la publicKey (clientKey)
   const tokenRecord = await findRefreshTokenByClientKey(clientKey);
@@ -536,7 +537,7 @@ export const refreshAccessTokenService = async (
   }
 
   // Verificación del token registrado
-  const { payload } = await verifyToken(tokenRecord.token, lang);
+  const { payload } = await verifyToken(tokenRecord.token, lang, req);
 
   appAssert(
     payload.sessionId === tokenRecord.sessionId,

@@ -356,7 +356,7 @@ export const refreshAccessTokenController = catchErrors(
     }
 
     // Invoca el servicio para refrescar el token
-    const result = await refreshAccessTokenService(clientKey, meta, lang);
+    const result = await refreshAccessTokenService(clientKey, meta, lang, req);
 
     // Establece las cookies de autenticación usando los nuevos tokens
     setAuthCookies({
