@@ -43,8 +43,8 @@ use crate::routes::AppState;
 //=====================================\\
 #[derive(Serialize)]
 pub struct SdpResponse {
-    pub sdp: String,
-    pub r#type: String,
+  pub sdp: String,
+  pub r#type: String,
 }
 
 //=====================================\\
@@ -52,194 +52,188 @@ pub struct SdpResponse {
 //=====================================\\
 #[cfg_attr(debug_assertions, axum::debug_handler)]
 pub async fn webrtc_offer_lab04(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(offer_sdp): Json<RTCSessionDescription>,
+  State(state): State<AppState>,
+  headers: HeaderMap,
+  Json(offer_sdp): Json<RTCSessionDescription>,
 ) -> Result<Json<SdpResponse>, (StatusCode, String)> {
-    //=========================================\\
-    //*****  (1) SEGURIDAD: ORIGIN + JWT  *****\\
-    //=========================================\\
-    // 1) Seguridad: Origin + Bearer JWT (perfil lab-04)
-    validate_origin(&headers, &state)?;
-    let _claims = validate_bearer_lab04(&headers, &state)?;
+  //=========================================\\
+  //*****  (1) SEGURIDAD: ORIGIN + JWT  *****\\
+  //=========================================\\
+  // 1) Seguridad: Origin + Bearer JWT (perfil lab-04)
+  validate_origin(&headers, &state)?;
+  let _claims = validate_bearer_lab04(&headers, &state)?;
 
-    //=========================================\\
-    //*****  (2) API WEBRTC + PEERCONN     ****\\
-    //=========================================\\
-    // 2) API WebRTC y PeerConnection con STUN
-    let mut m = MediaEngine::default();
-    m.register_default_codecs().map_err(internal)?;
-    let api = APIBuilder::new().with_media_engine(m).build();
+  //=========================================\\
+  //*****  (2) API WEBRTC + PEERCONN     ****\\
+  //=========================================\\
+  // 2) API WebRTC y PeerConnection con STUN
+  let mut m = MediaEngine::default();
+  m.register_default_codecs().map_err(internal)?;
+  let api = APIBuilder::new().with_media_engine(m).build();
 
-    let config = RTCConfiguration {
-        ice_servers: vec![
-            RTCIceServer {
-                urls: vec!["stun:stun.l.google.com:19302".into()],
-                ..Default::default()
-            },
-            RTCIceServer {
-                urls: vec!["stun:stun.cloudflare.com:3478".into()],
-                ..Default::default()
-            },
-        ],
+  let config = RTCConfiguration {
+    ice_servers: vec![
+      RTCIceServer {
+        urls: vec!["stun:stun.l.google.com:19302".into()],
         ..Default::default()
-    };
+      },
+      RTCIceServer {
+        urls: vec!["stun:stun.cloudflare.com:3478".into()],
+        ..Default::default()
+      },
+    ],
+    ..Default::default()
+  };
 
-    // PeerConnection
-    let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
+  // PeerConnection
+  let pc = Arc::new(api.new_peer_connection(config).await.map_err(internal)?);
 
-    // Señalización y cierre ordenado
-    let pc_closed_flag = Arc::new(AtomicBool::new(false));
-    // Token de cancelación por PC
-    let cancel_pc = CancellationToken::new();
+  // Señalización y cierre ordenado
+  let pc_closed_flag = Arc::new(AtomicBool::new(false));
+  // Token de cancelación por PC
+  let cancel_pc = CancellationToken::new();
 
-    //=========================================\\
-    //*****  (2.1) LOGS / WATCHDOG STATES  ****\\
-    //=========================================\\
-    // Logs útiles de estado
-    {
-        // ICE
-        let pc_ref = Arc::clone(&pc);
-        let cancel_for_ice = cancel_pc.clone();
-        let pc_for_ice_close = Arc::clone(&pc);
-        let closed_flag_ice = Arc::clone(&pc_closed_flag);
-        pc_ref.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
-            info!("ICE state = {:?}", st);
-            if matches!(
-                st,
-                RTCIceConnectionState::Disconnected
-                    | RTCIceConnectionState::Failed
-                    | RTCIceConnectionState::Closed
-            ) {
-                cancel_for_ice.cancel();
-                if !closed_flag_ice.swap(true, Ordering::SeqCst) {
-                    let pc_to_close = Arc::clone(&pc_for_ice_close);
-                    tokio::spawn(async move {
-                        if let Err(e) = pc_to_close.close().await {
-                            warn!("pc.close() error (ICE cb): {e:?}");
-                        } else {
-                            info!("PC closed (server-side)");
-                        }
-                    });
-                }
+  //=========================================\\
+  //*****  (2.1) LOGS / WATCHDOG STATES  ****\\
+  //=========================================\\
+  // Logs útiles de estado
+  {
+    // ICE
+    let pc_ref = Arc::clone(&pc);
+    let cancel_for_ice = cancel_pc.clone();
+    let pc_for_ice_close = Arc::clone(&pc);
+    let closed_flag_ice = Arc::clone(&pc_closed_flag);
+    pc_ref.on_ice_connection_state_change(Box::new(move |st: RTCIceConnectionState| {
+      info!("ICE state = {:?}", st);
+      if matches!(
+        st,
+        RTCIceConnectionState::Disconnected | RTCIceConnectionState::Failed | RTCIceConnectionState::Closed
+      ) {
+        cancel_for_ice.cancel();
+        if !closed_flag_ice.swap(true, Ordering::SeqCst) {
+          let pc_to_close = Arc::clone(&pc_for_ice_close);
+          tokio::spawn(async move {
+            if let Err(e) = pc_to_close.close().await {
+              warn!("pc.close() error (ICE cb): {e:?}");
+            } else {
+              info!("PC closed (server-side)");
             }
-            Box::pin(async {})
-        }));
+          });
+        }
+      }
+      Box::pin(async {})
+    }));
 
-        // PC
-        let pc_ref = Arc::clone(&pc);
-        let cancel_for_pc = cancel_pc.clone();
-        let pc_for_pc_close = Arc::clone(&pc);
-        let closed_flag_pc = Arc::clone(&pc_closed_flag);
-        pc_ref.on_peer_connection_state_change(Box::new(move |st: RTCPeerConnectionState| {
-            info!("PC state = {:?}", st);
-            if matches!(
-                st,
-                RTCPeerConnectionState::Disconnected
-                    | RTCPeerConnectionState::Failed
-                    | RTCPeerConnectionState::Closed
-            ) {
-                cancel_for_pc.cancel();
-                if !closed_flag_pc.swap(true, Ordering::SeqCst) {
-                    let pc_to_close = Arc::clone(&pc_for_pc_close);
-                    tokio::spawn(async move {
-                        if let Err(e) = pc_to_close.close().await {
-                            warn!("pc.close() error (PC cb): {e:?}");
-                        } else {
-                            info!("PC closed (server-side)");
-                        }
-                    });
-                }
+    // PC
+    let pc_ref = Arc::clone(&pc);
+    let cancel_for_pc = cancel_pc.clone();
+    let pc_for_pc_close = Arc::clone(&pc);
+    let closed_flag_pc = Arc::clone(&pc_closed_flag);
+    pc_ref.on_peer_connection_state_change(Box::new(move |st: RTCPeerConnectionState| {
+      info!("PC state = {:?}", st);
+      if matches!(
+        st,
+        RTCPeerConnectionState::Disconnected | RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed
+      ) {
+        cancel_for_pc.cancel();
+        if !closed_flag_pc.swap(true, Ordering::SeqCst) {
+          let pc_to_close = Arc::clone(&pc_for_pc_close);
+          tokio::spawn(async move {
+            if let Err(e) = pc_to_close.close().await {
+              warn!("pc.close() error (PC cb): {e:?}");
+            } else {
+              info!("PC closed (server-side)");
             }
-            Box::pin(async {})
-        }));
+          });
+        }
+      }
+      Box::pin(async {})
+    }));
 
-        // Pares ICE seleccionados (debug)
-        // helper: stats selected pair connection
-        install_selected_pair_logger(&pc);
+    // Pares ICE seleccionados (debug)
+    // helper: stats selected pair connection
+    install_selected_pair_logger(&pc);
+  }
+
+  //================================================\\
+  //*****  (3) AUDIO: TRANSCEIVER + TRACK LOCAL  ****\\
+  //================================================\\
+
+  // 3.1) Transceiver AUDIO sendrecv (crea m-line de audio)
+  pc.add_transceiver_from_kind(RTPCodecType::Audio, None)
+    .await
+    .map_err(internal)?;
+
+  // 3.2) **Crear y adjuntar TrackLocal RTP (Opus) ANTES de la señalización**
+  //      Esto asegura que la SDP local contenga SSRC/MSID del flujo que enviaremos.
+  let local_track = Arc::new(TrackLocalStaticRTP::new(
+    RTCRtpCodecCapability {
+      mime_type: "audio/opus".into(),
+      clock_rate: 48000,
+      channels: 2,
+      sdp_fmtp_line: "".into(),
+      rtcp_feedback: vec![],
+    },
+    "audio".to_string(), // track id
+    "lab04".to_string(), // stream id
+  ));
+
+  // 3.3) Enganchar el track al **transceiver de audio existente** con replace_track()
+  //      (esto garantiza que el RTP salga por la misma m-line/MID que negocia el browser).
+  let mut audio_sender_opt = None;
+  for (i, t) in pc.get_transceivers().await.iter().enumerate() {
+    let dir = t.direction();
+    let cur = t.current_direction();
+    info!("xcev[{i}] dir={:?} current={:?}", dir, cur);
+    if t.kind() == RTPCodecType::Audio {
+      let s = t.sender().await;
+      audio_sender_opt = Some(s);
+      break;
     }
+  }
 
-    //================================================\\
-    //*****  (3) AUDIO: TRANSCEIVER + TRACK LOCAL  ****\\
-    //================================================\\
-
-    // 3.1) Transceiver AUDIO sendrecv (crea m-line de audio)
-    pc.add_transceiver_from_kind(RTPCodecType::Audio, None)
+  let rtp_sender = match audio_sender_opt {
+    Some(s) => {
+      s.replace_track(Some(local_track.clone() as Arc<dyn TrackLocal + Send + Sync>))
         .await
         .map_err(internal)?;
-
-    // 3.2) **Crear y adjuntar TrackLocal RTP (Opus) ANTES de la señalización**
-    //      Esto asegura que la SDP local contenga SSRC/MSID del flujo que enviaremos.
-    let local_track = Arc::new(TrackLocalStaticRTP::new(
-        RTCRtpCodecCapability {
-            mime_type: "audio/opus".into(),
-            clock_rate: 48000,
-            channels: 2,
-            sdp_fmtp_line: "".into(),
-            rtcp_feedback: vec![],
-        },
-        "audio".to_string(), // track id
-        "lab04".to_string(), // stream id
-    ));
-
-    // 3.3) Enganchar el track al **transceiver de audio existente** con replace_track()
-    //      (esto garantiza que el RTP salga por la misma m-line/MID que negocia el browser).
-    let mut audio_sender_opt = None;
-    for (i, t) in pc.get_transceivers().await.iter().enumerate() {
-        let dir = t.direction();
-        let cur = t.current_direction();
-        info!("xcev[{i}] dir={:?} current={:?}", dir, cur);
-        if t.kind() == RTPCodecType::Audio {
-            let s = t.sender().await;
-            audio_sender_opt = Some(s);
-            break;
-        }
+      s
     }
+    None => return Err(internal("no audio transceiver found")),
+  };
 
-    let rtp_sender = match audio_sender_opt {
-        Some(s) => {
-            s.replace_track(Some(
-                local_track.clone() as Arc<dyn TrackLocal + Send + Sync>
-            ))
-            .await
-            .map_err(internal)?;
-            s
-        }
-        None => return Err(internal("no audio transceiver found")),
-    };
+  // 3.4) Mantener vivo el sender leyendo RTCP
+  {
+    let rtp_sender = rtp_sender.clone();
+    tokio::spawn(async move {
+      let mut rtcp_buf = vec![0u8; 1500];
+      while rtp_sender.read(&mut rtcp_buf).await.is_ok() {}
+      info!("RTCP reader ended");
+    });
+  }
 
-    // 3.4) Mantener vivo el sender leyendo RTCP
-    {
-        let rtp_sender = rtp_sender.clone();
-        tokio::spawn(async move {
-            let mut rtcp_buf = vec![0u8; 1500];
-            while rtp_sender.read(&mut rtcp_buf).await.is_ok() {}
-            info!("RTCP reader ended");
-        });
-    }
+  // 3.5) Obtener SSRC/PT locales negociados del sender (webrtc 0.13)
+  let params = rtp_sender.get_parameters().await;
+  let local_ssrc: Option<u32> = params.encodings.first().map(|e| e.ssrc);
+  let local_pt: Option<u8> = params.rtp_parameters.codecs.first().map(|c| c.payload_type);
 
-    // 3.5) Obtener SSRC/PT locales negociados del sender (webrtc 0.13)
-    let params = rtp_sender.get_parameters().await;
-    let local_ssrc: Option<u32> = params.encodings.first().map(|e| e.ssrc);
-    let local_pt: Option<u8> = params.rtp_parameters.codecs.first().map(|c| c.payload_type);
+  info!(
+    "✅ [lab04] sender attached to audio transceiver (local_ssrc={:?} local_pt={:?})",
+    local_ssrc, local_pt
+  );
 
-    info!(
-        "✅ [lab04] sender attached to audio transceiver (local_ssrc={:?} local_pt={:?})",
-        local_ssrc, local_pt
-    );
+  //==================================================\\
+  //*****  (4) on_track: LOOPBACK RTP (eco)       *****\\
+  //==================================================\\
+  // 4) on_track: loopback RTP (eco) — leer remoto y escribir al local_track ya anunciado
+  {
+    let pc2 = Arc::clone(&pc);
+    let cancel_for_ontrack = cancel_pc.clone();
+    let local_track_for_cb = local_track.clone();
+    let local_ssrc_for_cb = local_ssrc;
+    let local_pt_for_cb = local_pt;
 
-    //==================================================\\
-    //*****  (4) on_track: LOOPBACK RTP (eco)       *****\\
-    //==================================================\\
-    // 4) on_track: loopback RTP (eco) — leer remoto y escribir al local_track ya anunciado
-    {
-        let pc2 = Arc::clone(&pc);
-        let cancel_for_ontrack = cancel_pc.clone();
-        let local_track_for_cb = local_track.clone();
-        let local_ssrc_for_cb = local_ssrc;
-        let local_pt_for_cb = local_pt;
-
-        pc.on_track(Box::new(move |track_remote, _receiver, _transceiver| {
+    pc.on_track(Box::new(move |track_remote, _receiver, _transceiver| {
             let pc2 = Arc::clone(&pc2);
             let cancel_for_async = cancel_for_ontrack.clone();
             let local_track = local_track_for_cb.clone();
@@ -359,31 +353,29 @@ pub async fn webrtc_offer_lab04(
                 });
             })
         }));
-    }
+  }
 
-    //=============================================\\
-    //*****  (5) SEÑALIZACIÓN (OFFER → ANSWER)  ****\\
-    //=============================================\\
-    // 5.1) Señalización: Offer → Answer
-    pc.set_remote_description(offer_sdp)
-        .await
-        .map_err(internal)?;
-    let answer = pc.create_answer(None).await.map_err(internal)?;
+  //=============================================\\
+  //*****  (5) SEÑALIZACIÓN (OFFER → ANSWER)  ****\\
+  //=============================================\\
+  // 5.1) Señalización: Offer → Answer
+  pc.set_remote_description(offer_sdp).await.map_err(internal)?;
+  let answer = pc.create_answer(None).await.map_err(internal)?;
 
-    // 5.2) Esperar ICE gathering para incluir candidatos en la Answer
-    let mut gather_rx = pc.gathering_complete_promise().await;
-    pc.set_local_description(answer).await.map_err(internal)?;
-    let _ = gather_rx.recv().await;
+  // 5.2) Esperar ICE gathering para incluir candidatos en la Answer
+  let mut gather_rx = pc.gathering_complete_promise().await;
+  pc.set_local_description(answer).await.map_err(internal)?;
+  let _ = gather_rx.recv().await;
 
-    // 5.3) Responder SDP final
-    let local = pc
-        .local_description()
-        .await
-        .ok_or_else(|| internal("missing local_description"))?;
-    Ok(Json(SdpResponse {
-        sdp: local.sdp,
-        r#type: "answer".into(),
-    }))
+  // 5.3) Responder SDP final
+  let local = pc
+    .local_description()
+    .await
+    .ok_or_else(|| internal("missing local_description"))?;
+  Ok(Json(SdpResponse {
+    sdp: local.sdp,
+    r#type: "answer".into(),
+  }))
 }
 
 //=====================================\\
@@ -392,51 +384,45 @@ pub async fn webrtc_offer_lab04(
 /* ───────────── Seguridad & Util ───────────── */
 
 fn validate_origin(headers: &HeaderMap, state: &AppState) -> Result<(), (StatusCode, String)> {
-    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
-        let ok = state.allowed_ws_origins.iter().any(|o| o == origin);
-        if ok {
-            return Ok(());
-        }
+  if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
+    let ok = state.allowed_ws_origins.iter().any(|o| o == origin);
+    if ok {
+      return Ok(());
     }
-    Err((StatusCode::FORBIDDEN, "invalid origin".into()))
+  }
+  Err((StatusCode::FORBIDDEN, "invalid origin".into()))
 }
 
-fn validate_bearer_lab04(
-    headers: &HeaderMap,
-    state: &AppState,
-) -> Result<WsClaims, (StatusCode, String)> {
-    let auth = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let token = auth
-        .strip_prefix("Bearer ")
-        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing bearer".to_string()))?;
+fn validate_bearer_lab04(headers: &HeaderMap, state: &AppState) -> Result<WsClaims, (StatusCode, String)> {
+  let auth = headers.get("authorization").and_then(|v| v.to_str().ok()).unwrap_or("");
+  let token = auth
+    .strip_prefix("Bearer ")
+    .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing bearer".to_string()))?;
 
-    let allow: Vec<TokenProfile> = state
-        .profiles
-        .iter()
-        .cloned()
-        .filter(|p| p.iss == "lab-04" && p.aud == "lab-webrtc-04-audio")
-        .collect();
+  let allow: Vec<TokenProfile> = state
+    .profiles
+    .iter()
+    .cloned()
+    .filter(|p| p.iss == "lab-04" && p.aud == "lab-webrtc-04-audio")
+    .collect();
 
-    if allow.is_empty() {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "lab-04 profile not configured".into(),
-        ));
-    }
+  if allow.is_empty() {
+    return Err((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      "lab-04 profile not configured".into(),
+    ));
+  }
 
-    validate_ws_token_multi(token, &state.ws_secret, &allow).map_err(|e| {
-        warn!("JWT inválido (lab-04): {e}");
-        (StatusCode::UNAUTHORIZED, "unauthorized".into())
-    })
+  validate_ws_token_multi(token, &state.ws_secret, &allow).map_err(|e| {
+    warn!("JWT inválido (lab-04): {e}");
+    (StatusCode::UNAUTHORIZED, "unauthorized".into())
+  })
 }
 
 //=====================================\\
 //***********  ERRORES  ***************\\
 //=====================================\\
 fn internal<E: std::fmt::Debug>(e: E) -> (StatusCode, String) {
-    error!("Internal error: {e:?}");
-    (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())
+  error!("Internal error: {e:?}");
+  (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())
 }

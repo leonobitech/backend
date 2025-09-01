@@ -3,8 +3,8 @@
 # ===========================
 
 # Máximo ancho de línea
-max_width = 100
-comment_width = 100
+max_width = 120
+comment_width = 120
 
 # Reordenar módulos y métodos automáticamente
 reorder_modules = true
@@ -21,7 +21,7 @@ trailing_comma = "Vertical"
 control_brace_style = "AlwaysSameLine"
 
 # Indentación estándar Rust
-tab_spaces = 4
+tab_spaces = 2
 
 # Parámetros de funciones largas en columnas para mayor legibilidad
 fn_params_layout = "Tall"

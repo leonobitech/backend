@@ -179,11 +179,11 @@ src/
 │   ├── mod.rs
 │   ├── hello_routes.rs
 │   ├── ai_health.rs
+│   ├── leonobit.rs
 │   └── labs/
 │       ├── mod.rs
 │       ├── ai_pipeline.rs
 │       ├── stats_helper.rs
-│       ├── leonobit.rs
 │       ├── lab01.rs
 │       ├── lab02.rs
 │       ├── lab03.rs
