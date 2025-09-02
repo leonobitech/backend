@@ -114,27 +114,29 @@ impl WebRtcSession {
       tracing::info!("on_data_channel: {label}");
 
       Box::pin(async move {
-        // open
-        let dc_for_open = dc.clone();
+        // on_open
+        let dc_open = dc.clone();
         dc.on_open(Box::new(move || {
-          tracing::info!("dc {} open", dc_for_open.label());
+          tracing::info!("dc {} open", dc_open.label());
           Box::pin(async {})
         }));
 
-        // close
-        let dc_for_close = dc.clone();
+        // on_close
+        let dc_close = dc.clone();
         dc.on_close(Box::new(move || {
-          tracing::info!("dc {} close", dc_for_close.label());
+          tracing::info!("dc {} close", dc_close.label());
           Box::pin(async {})
         }));
 
-        // echo pong en 'ctrl' → medir RTT en el front
+        // on_message
         if label == "ctrl" {
-          // ✅ dos clones: uno para registrar el handler, otro para usar dentro del handler
-          let ctrl_for_msg = dc.clone(); // receptor para on_message (se presta / no se mueve)
-          let ctrl_for_send = ctrl_for_msg.clone(); // se mueve a la closure y luego se vuelve a clonar dentro
+          // ✅ 1 clone “externo” para el handler...
+          let ctrl_outer = dc.clone();
+
           dc.on_message(Box::new(move |msg| {
-            let ctrl = ctrl_for_send.clone();
+            // ...y dentro del handler, 1 clone “por mensaje” para el async move
+            let ctrl = ctrl_outer.clone();
+
             Box::pin(async move {
               if let Ok(txt) = std::str::from_utf8(&msg.data) {
                 if let Some(ts) = txt.strip_prefix("ping:") {
@@ -144,9 +146,11 @@ impl WebRtcSession {
             })
           }));
         } else {
-          // otros canales: opcional
-          let _dc_for_msg = dc.clone();
-          dc.on_message(Box::new(move |_msg| Box::pin(async {})));
+          let dc_other = dc.clone();
+          dc.on_message(Box::new(move |_msg| {
+            let _ = &dc_other; // si querés usarlo más adelante
+            Box::pin(async {})
+          }));
         }
       })
     }));
