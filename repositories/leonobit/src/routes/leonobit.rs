@@ -103,8 +103,8 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
   // 0) Split
   let (mut ws_tx, mut ws_rx) = socket.split();
 
-  // 1) Canal de salida WS
-  let (out_tx, mut out_rx) = mpsc::unbounded_channel::<OutMsg>();
+  // 1) Canal de salida WS (bounded)
+  let (out_tx, mut out_rx) = mpsc::channel::<OutMsg>(64);
 
   // 2) Writer
   let writer = tokio::spawn(async move {
@@ -134,7 +134,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
       Ok(InMsg::Auth { token }) => token,
       _ => {
         warn!("[ws] primer mensaje no es auth");
-        let _ = out_tx.send(OutMsg::Error {
+        let _ = out_tx.try_send(OutMsg::Error {
           message: "auth required".into(),
         });
         return;
@@ -142,7 +142,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     },
     _ => {
       warn!("[ws] auth timeout");
-      let _ = out_tx.send(OutMsg::Error {
+      let _ = out_tx.try_send(OutMsg::Error {
         message: "auth timeout".into(),
       });
       return;
@@ -154,7 +154,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     Ok(c) => c,
     Err(e) => {
       warn!("WS token inválido: {e}");
-      let _ = out_tx.send(OutMsg::Error {
+      let _ = out_tx.try_send(OutMsg::Error {
         message: "invalid token".into(),
       });
       return;
@@ -164,7 +164,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
 
   // 5) canales: señalización WebRTC, audio Opus hacia worker y texto saliente
   let (sig_tx, sig_rx) = mpsc::unbounded_channel::<SigOut>();
-  let (opus_tx, opus_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+  let (opus_tx, opus_rx) = mpsc::channel::<Vec<u8>>(64);
   let (stt_tx, mut stt_rx) = mpsc::unbounded_channel::<SttMsg>();
 
   // 6) Contexto de Whisper desde AppState
@@ -182,7 +182,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     Ok(s) => s,
     Err(e) => {
       tracing::error!("no se pudo crear WebRtcSession: {e:#}");
-      let _ = out_tx.send(OutMsg::Error {
+      let _ = out_tx.try_send(OutMsg::Error {
         message: "webrtc init error".into(),
       });
       return;
@@ -197,14 +197,14 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
       match ev {
         SigOut::WebrtcAnswer { sdp } => {
           debug!("[ws] ← core: answer (len={})", sdp.len());
-          let _ = out_tx_for_sig.send(OutMsg::WebrtcAnswer { sdp });
+          let _ = out_tx_for_sig.send(OutMsg::WebrtcAnswer { sdp }).await;
         }
         SigOut::WebrtcCandidate { candidate } => {
           debug!(
             "[ws] ← core: candidate (mid={:?} mline={:?})",
             candidate.sdp_mid, candidate.sdp_mline_index
           );
-          let _ = out_tx_for_sig.send(OutMsg::WebrtcCandidate { candidate });
+          let _ = out_tx_for_sig.send(OutMsg::WebrtcCandidate { candidate }).await;
         }
       }
     }
@@ -216,17 +216,20 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     while let Some(msg) = stt_rx.recv().await {
       match msg {
         SttMsg::Partial { text } => {
-          let _ = out_tx_for_stt.send(OutMsg::SttPartial { text });
+          let _ = out_tx_for_stt.try_send(OutMsg::SttPartial { text });
         }
         SttMsg::Final { text } => {
-          let _ = out_tx_for_stt.send(OutMsg::SttFinal { text });
+          // Final es importante: garantizamos entrega (y si el writer murió, salimos)
+          if out_tx_for_stt.send(OutMsg::SttFinal { text }).await.is_err() {
+            break;
+          }
         }
       }
     }
   });
 
   // 11) READY
-  let _ = out_tx.send(OutMsg::Ready);
+  let _ = out_tx.try_send(OutMsg::Ready);
 
   // 12) Loop lectura WS
   while let Some(res) = ws_rx.next().await {
@@ -234,7 +237,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
       Ok(Message::Text(txt)) => match serde_json::from_str::<InMsg>(&txt) {
         Ok(InMsg::Ping { ts }) => {
           debug!("[ws] ping");
-          let _ = out_tx.send(OutMsg::Pong { ts });
+          let _ = out_tx.try_send(OutMsg::Pong { ts });
         }
         Ok(InMsg::Control { op, payload }) if op.eq_ignore_ascii_case("goodbye") => {
           let reason = payload.get("reason").and_then(|v| v.as_str()).unwrap_or("<sin reason>");
@@ -246,11 +249,11 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
           match session.apply_offer_and_create_answer(sdp).await {
             Ok(answer_sdp) => {
               info!("[ws] answer generada (len={})", answer_sdp.len());
-              let _ = out_tx.send(OutMsg::WebrtcAnswer { sdp: answer_sdp });
+              let _ = out_tx.send(OutMsg::WebrtcAnswer { sdp: answer_sdp }).await;
             }
             Err(e) => {
               warn!("apply_offer_and_create_answer error: {e:?}");
-              let _ = out_tx.send(OutMsg::Error {
+              let _ = out_tx.try_send(OutMsg::Error {
                 message: "invalid offer".into(),
               });
             }
@@ -290,4 +293,4 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
 El handler (leonobit.rs) crea los canales, toma el path del modelo desde AppState,
 spawnea run_whisper_worker(...) y pasa el opus_tx a WebRtcSession::new(...).
 WebRtcSession recibe ese opus_tx y en on_track empuja los payloads Opus al worker.
- */
+*/

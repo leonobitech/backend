@@ -2,17 +2,17 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use whisper_rs::{DtwMode, DtwModelPreset, FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use tokio::sync::mpsc::{Receiver, UnboundedSender};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext};
 
 use crate::core::audio::opus::Opus48k;
 use crate::core::audio::resample::Resampler48kTo16k;
 use crate::core::audio::stt::SttMsg;
 
 // ====== Ventanas / hop a 16 kHz ======
-const WINDOW_SAMPLES_16K: usize = 80_000; // ~5.0 s
-const HOP_SAMPLES_16K: usize = 8_000; // ~0.5 s
-const TAIL_AFTER_FINAL_16K: usize = 32_000; // ~2.0 s de “cola” tras final
+const WINDOW_SAMPLES_16K: usize = 48_000; // ~3.0 s
+const HOP_SAMPLES_16K: usize = 5_120; // ~0.32 s
+const TAIL_AFTER_FINAL_16K: usize = 16_000; // ~1.0 s
 
 // ====== VAD simple por RMS ======
 const SILENCE_THRESHOLD_RMS: f32 = 6e-4;
@@ -30,15 +30,15 @@ fn is_silence(samples: &[f32], thr: f32) -> bool {
 /// Worker: recibe frames Opus 48k mono, decodifica → 16k mono → Whisper,
 /// y emite **parciales** y **finales** como JSON a través de `tx_text`.
 pub async fn run_whisper_worker(
-  mut rx_opus: UnboundedReceiver<Vec<u8>>,
+  mut rx_opus: Receiver<Vec<u8>>,
   stt_tx: UnboundedSender<SttMsg>,
   ctx: std::sync::Arc<WhisperContext>,
 ) -> Result<()> {
   // ---------- Contexto Whisper ----------
-  let mut ctx_params = WhisperContextParameters::default();
-  ctx_params.dtw_parameters.mode = DtwMode::ModelPreset {
-    model_preset: DtwModelPreset::BaseEn,
-  };
+  //let mut ctx_params = WhisperContextParameters::default();
+  //ctx_params.dtw_parameters.mode = DtwMode::ModelPreset {
+  // model_preset: DtwModelPreset::BaseEn,
+  //};
   //let ctx = WhisperContext::new_with_params(whisper_ctx, ctx_params).context("cargar modelo whisper")?;
   let mut state = ctx.create_state().context("crear whisper state")?;
 
@@ -48,14 +48,17 @@ pub async fn run_whisper_worker(
 
   // ---------- Parámetros Whisper ----------
   let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
-  params.set_n_threads(1);
+  // Usa todos los físicos (tenés 6). Si quieres, deja -1 para que Whisper decida.
+  let n_physical = num_cpus::get_physical() as i32;
+  params.set_n_threads(n_physical.max(1));
   params.set_translate(false);
-  params.set_language(Some("en"));
+  // Si tu audio es español, esto ayuda (y evita autodetección):
+  params.set_language(Some("es"));
   params.set_print_special(false);
   params.set_print_progress(false);
   params.set_print_realtime(false);
-  params.set_print_timestamps(true); // útil para segmentación
-  params.set_token_timestamps(true); // útil para DTW
+  params.set_print_timestamps(false); // menos trabajo
+  params.set_token_timestamps(false); // menos trabajo
 
   // ---------- Estado para parciales ----------
   let mut pcm16_acc: Vec<f32> = Vec::new(); // acumulador de ventana 16k
@@ -96,7 +99,8 @@ pub async fn run_whisper_worker(
     if since_last_infer >= HOP_SAMPLES_16K {
       since_last_infer = 0;
 
-      state.full(params.clone(), &pcm16_acc[..]).context("whisper full()")?;
+      // No bloquees el runtime; mandá la inferencia al pool de bloqueo
+      tokio::task::block_in_place(|| state.full(params.clone(), &pcm16_acc[..]).context("whisper full()"))?;
 
       // Construir hipótesis parcial concatenando los segmentos actuales
       // Usamos la API por iterador (estable en 0.15.x) para evitar

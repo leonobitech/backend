@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use serde::Serialize;
+use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, Mutex};
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
@@ -34,7 +35,7 @@ pub struct WebRtcSession {
 
 impl WebRtcSession {
   // ✅ Inyectamos el opus_tx que viene del handler
-  pub async fn new(to_ws: mpsc::UnboundedSender<SigOut>, opus_tx: mpsc::UnboundedSender<Vec<u8>>) -> Result<Self> {
+  pub async fn new(to_ws: mpsc::UnboundedSender<SigOut>, opus_tx: mpsc::Sender<Vec<u8>>) -> Result<Self> {
     // 1) Codecs por defecto
     let mut me = MediaEngine::default();
     me.register_default_codecs()?;
@@ -171,13 +172,28 @@ impl WebRtcSession {
       let opus_tx = opus_tx_outer.clone();
 
       Box::pin(async move {
+        let mut dropped: usize = 0;
         loop {
           match track.read_rtp().await {
             Ok((pkt, _)) => {
-              // pkt.payload = bytes Opus
-              if let Err(e) = opus_tx.send(pkt.payload.to_vec()) {
-                tracing::warn!("no se pudo enviar payload a worker: {e:?}");
-                break;
+              match opus_tx.try_send(pkt.payload.to_vec()) {
+                Ok(()) => {
+                  if dropped > 0 {
+                    tracing::debug!("opus resumed after dropping {dropped} frames");
+                    dropped = 0;
+                  }
+                }
+                Err(TrySendError::Full(_)) => {
+                  // Cola llena → preferimos latencia baja: drop y continuar
+                  dropped += 1;
+                  if dropped % 50 == 1 {
+                    tracing::debug!("opus queue full → dropped {dropped} frames (sample)");
+                  }
+                }
+                Err(TrySendError::Closed(_)) => {
+                  tracing::warn!("opus channel closed");
+                  break;
+                }
               }
             }
             Err(e) => {
