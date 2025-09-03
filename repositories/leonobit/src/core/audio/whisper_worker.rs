@@ -1,3 +1,4 @@
+// repositorios/leonobit/src/core/audio/whisper_worker.rs
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -31,14 +32,14 @@ fn is_silence(samples: &[f32], thr: f32) -> bool {
 pub async fn run_whisper_worker(
   mut rx_opus: UnboundedReceiver<Vec<u8>>,
   stt_tx: UnboundedSender<SttMsg>,
-  model_path: &str,
+  ctx: std::sync::Arc<WhisperContext>,
 ) -> Result<()> {
   // ---------- Contexto Whisper ----------
   let mut ctx_params = WhisperContextParameters::default();
   ctx_params.dtw_parameters.mode = DtwMode::ModelPreset {
     model_preset: DtwModelPreset::BaseEn,
   };
-  let ctx = WhisperContext::new_with_params(model_path, ctx_params).context("cargar modelo whisper")?;
+  //let ctx = WhisperContext::new_with_params(whisper_ctx, ctx_params).context("cargar modelo whisper")?;
   let mut state = ctx.create_state().context("crear whisper state")?;
 
   // ---------- Audio: Opus + Resampler ----------

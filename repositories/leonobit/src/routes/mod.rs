@@ -27,10 +27,12 @@ pub struct AppState {
   pub metrics_tx: mpsc::Sender<MetricEvent>,
   /// HTTP client reutilizable (timeouts, pooling)
   pub http: HttpClient,
-  /// Ruta al modelo de Whisper (para health/checks)
+  /// Ruta al modelo de Whisper (para health/checks/logs)
   pub whisper_model_path: String,
   /// Flag “rápido” de disponibilidad de Whisper (archivo existe / init ok)
   pub whisper_ready: bool,
+  /// Contexto de Whisper (para usar en los handlers)
+  pub whisper_ctx: Arc<whisper_rs::WhisperContext>,
 }
 
 impl AppState {
@@ -39,6 +41,7 @@ impl AppState {
     allowed_ws_origins: Vec<String>,
     metrics_tx: mpsc::Sender<MetricEvent>,
     whisper_model_path: String,
+    whisper_ctx: std::sync::Arc<whisper_rs::WhisperContext>,
   ) -> Self {
     // Agregá aquí todos los perfiles que quieras habilitar
     let profiles = vec![
@@ -86,6 +89,7 @@ impl AppState {
       http,
       whisper_model_path,
       whisper_ready,
+      whisper_ctx,
     }
   }
 }

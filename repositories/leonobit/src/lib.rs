@@ -1,8 +1,11 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 
+use anyhow::Context;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tracing::info;
+use whisper_rs::{DtwMode, DtwModelPreset, WhisperContext, WhisperContextParameters};
 
 pub mod auth;
 mod config;
@@ -18,12 +21,23 @@ pub async fn run() -> anyhow::Result<()> {
   // Arranca el agregador y obtené el sender
   let metrics_tx = metrics::rtt::start_metrics_aggregator();
 
+  // Precargar el modelo al iniicar el proceso
+  let mut ctx_params = WhisperContextParameters::default();
+  ctx_params.dtw_parameters.mode = DtwMode::ModelPreset {
+    model_preset: DtwModelPreset::BaseEn,
+  };
+  let whisper_ctx = Arc::new(
+    WhisperContext::new_with_params(&settings.whisper_model_path, ctx_params)
+      .context("cargar modelo whisper al inicio")?,
+  );
+
   // Estado global (inyecta ws_secret, allowed_ws_origins, perfiles iss/aud y ruta Whisper)
   let state = routes::AppState::new(
     settings.ws_jwt_secret.clone(),
     settings.allowed_ws_origins.clone(),
     metrics_tx.clone(),
     settings.whisper_model_path.clone(),
+    whisper_ctx.clone(),
   );
 
   let enabled = state

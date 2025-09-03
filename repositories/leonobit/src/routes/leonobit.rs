@@ -109,22 +109,21 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
   // 2) Writer
   let writer = tokio::spawn(async move {
     while let Some(msg) = out_rx.recv().await {
-      let Ok(txt) = serde_json::to_string(&msg) else { continue };
-      // 👇 Log del JSON exacto que se enviará por WebSocket
-      tracing::debug!("[ws] → {}", txt);
-      if ws_tx.send(Message::Text(txt)).await.is_err() {
-        break;
-      }
-      let Ok(txt) = serde_json::to_string(&msg) else { continue };
-      let size = txt.len();
-      match &msg {
-        OutMsg::WebrtcAnswer { .. } => debug!("[ws] → webrtc.answer ({} bytes JSON)", size),
-        OutMsg::WebrtcCandidate { .. } => debug!("[ws] → webrtc.candidate ({} bytes JSON)", size),
-        OutMsg::Pong { .. } => debug!("[ws] → pong ({} bytes JSON)", size),
-        OutMsg::Ready => debug!("[ws] → ready ({} bytes JSON)", size),
-        OutMsg::SttPartial { text } => debug!("[ws] → stt.partial len={} txt='{:.48}…'", size, text),
-        OutMsg::SttFinal { text } => info!("[ws] → stt.final len={} txt='{}'", size, text),
-        OutMsg::Error { message } => warn!("[ws] → error: {}", message),
+      if let Ok(txt) = serde_json::to_string(&msg) {
+        tracing::debug!("[ws] → {}", txt);
+        let size = txt.len();
+        if ws_tx.send(Message::Text(txt)).await.is_err() {
+          break;
+        }
+        match &msg {
+          OutMsg::WebrtcAnswer { .. } => debug!("[ws] → webrtc.answer ({} bytes JSON)", size),
+          OutMsg::WebrtcCandidate { .. } => debug!("[ws] → webrtc.candidate ({} bytes JSON)", size),
+          OutMsg::Pong { .. } => debug!("[ws] → pong ({} bytes JSON)", size),
+          OutMsg::Ready => debug!("[ws] → ready ({} bytes JSON)", size),
+          OutMsg::SttPartial { text } => debug!("[ws] → stt.partial len={} txt='{:.48}…'", size, text),
+          OutMsg::SttFinal { text } => info!("[ws] → stt.final len={} txt='{}'", size, text),
+          OutMsg::Error { message } => warn!("[ws] → error: {}", message),
+        }
       }
     }
   });
@@ -168,12 +167,12 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
   let (opus_tx, opus_rx) = mpsc::unbounded_channel::<Vec<u8>>();
   let (stt_tx, mut stt_rx) = mpsc::unbounded_channel::<SttMsg>();
 
-  // 6) Path del modelo desde AppState
-  let model_path = state.whisper_model_path.clone();
+  // 6) Contexto de Whisper desde AppState
+  let whisper_ctx = state.whisper_ctx.clone();
 
   // 7) Spawnear el worker de Whisper (lee Opus, decodifica, resamplea y transcribe)
   tokio::spawn(async move {
-    if let Err(e) = run_whisper_worker(opus_rx, stt_tx, &model_path).await {
+    if let Err(e) = run_whisper_worker(opus_rx, stt_tx, whisper_ctx).await {
       tracing::error!("whisper worker error: {e:#}");
     }
   });
