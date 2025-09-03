@@ -164,7 +164,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
 
   // 5) canales: señalización WebRTC, audio Opus hacia worker y texto saliente
   let (sig_tx, sig_rx) = mpsc::unbounded_channel::<SigOut>();
-  let (opus_tx, opus_rx) = mpsc::channel::<Vec<u8>>(512);
+  let (opus_tx, opus_rx) = mpsc::channel::<Vec<u8>>(48);
   let (stt_tx, mut stt_rx) = mpsc::unbounded_channel::<SttMsg>();
 
   // 6) Contexto de Whisper desde AppState
