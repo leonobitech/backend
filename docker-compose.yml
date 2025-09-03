@@ -64,7 +64,6 @@ services:
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.middlewares=auth-traefik@docker,block-trackers@file,secure-strict@file"
 
-
   redis_core:
     image: redis:latest
     container_name: redis_core
@@ -93,7 +92,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
 
   core:
     container_name: core
@@ -125,10 +123,11 @@ services:
         condition: service_started
 
     healthcheck:
-      test: [
-        "CMD-SHELL",
-        "node -e \"require('http').get('http://localhost:8000/health', res => process.exit(res.statusCode === 200 ? 0 : 1))\""
-      ]
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''http'').get(''http://localhost:8000/health'', res => process.exit(res.statusCode === 200 ? 0 : 1))"',
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -149,7 +148,6 @@ services:
       # 🧩 Middlewares globales aplicados al router
       #########################################
       - "traefik.http.routers.core.middlewares=core-secure@file, block-trackers@file"
-
 
   n8n_main:
     image: n8nio/n8n:latest
@@ -214,7 +212,6 @@ services:
       - "traefik.http.routers.n8n_webhooktest.service=n8n_main@docker"
       - "traefik.http.routers.n8n_webhooktest.middlewares=secure-relaxed@file"
 
-
   n8n_webhook_1:
     image: n8nio/n8n:latest
     container_name: n8n_webhook_1
@@ -262,7 +259,6 @@ services:
       - "traefik.http.routers.n8n_webhook.service=n8n_webhook_1@docker"
       - "traefik.http.routers.n8n_webhook.middlewares=secure-basic@file"
 
-
   n8n_worker_1:
     image: n8nio/n8n:latest
     container_name: n8n_worker_1
@@ -291,7 +287,6 @@ services:
         condition: service_healthy
       redis_n8n:
         condition: service_healthy
-
 
   n8n_worker_2:
     image: n8nio/n8n:latest
@@ -322,7 +317,6 @@ services:
       redis_n8n:
         condition: service_healthy
 
-
   redis_n8n:
     image: redis:latest
     container_name: redis_n8n
@@ -352,7 +346,6 @@ services:
       retries: 5
       start_period: 10s
 
-
   postgres_n8n:
     image: postgres:latest
     container_name: postgres_n8n
@@ -363,7 +356,7 @@ services:
 
     env_file:
       - ./repositories/n8n/.env
-    
+
     environment:
       - POSTGRES_USER=${POSTGRES_USER_N8N}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_N8N}
@@ -379,12 +372,19 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_N8N}", "-d", "${POSTGRES_DB_N8N}"]
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USER_N8N}",
+          "-d",
+          "${POSTGRES_DB_N8N}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-
 
   postgres_odoo:
     image: postgres:latest
@@ -396,7 +396,7 @@ services:
 
     env_file:
       - ./repositories/odoo/.env
-    
+
     environment:
       - POSTGRES_DB=${POSTGRES_DB_ODOO}
       - POSTGRES_USER=${POSTGRES_USER_ODOO}
@@ -412,12 +412,19 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_ODOO}", "-d", "${POSTGRES_DB_ODOO}"]
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USER_ODOO}",
+          "-d",
+          "${POSTGRES_DB_ODOO}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-
 
   odoo:
     image: odoo:latest
@@ -492,7 +499,6 @@ services:
       - "traefik.http.routers.odoo-media.service=odoo@docker"
       - "traefik.http.routers.odoo-media.middlewares=odoo-media@file"
 
-
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant
@@ -518,7 +524,6 @@ services:
     healthcheck:
       disable: true
 
-
   postgres_baserow:
     image: postgres:latest
     container_name: postgres_baserow
@@ -532,7 +537,7 @@ services:
 
     env_file:
       - ./repositories/baserow/.env
-    
+
     environment:
       - POSTGRES_USER=${POSTGRES_USER_BR}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_BR}
@@ -545,12 +550,19 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER_BR}", "-d", "${POSTGRES_DB_BR}"]
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USER_BR}",
+          "-d",
+          "${POSTGRES_DB_BR}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-
 
   redis_baserow:
     image: redis:latest
@@ -580,7 +592,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
 
   backend:
     image: baserow/backend:latest
@@ -648,7 +659,6 @@ services:
       # - "traefik.http.routers.baserow-media.middlewares=secure-basic@file"
       # - "traefik.http.services.baserow-media.loadbalancer.server.port=8000"
 
-
   baserow_celery:
     image: baserow/backend:latest
     container_name: baserow_celery
@@ -678,7 +688,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
 
   baserow_celery_export_worker:
     image: baserow/backend:latest
@@ -713,7 +722,6 @@ services:
     mem_limit: 128m
     cpus: 0.25
 
-
   baserow_celery_beat:
     image: baserow/backend:latest
     container_name: baserow_celery_beat
@@ -743,7 +751,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
 
   baserow:
     image: baserow/web-frontend:latest
@@ -783,7 +790,6 @@ services:
       #########################################
       - "traefik.http.services.baserow.loadbalancer.server.port=3000"
 
-
   baserow_media:
     image: nginx:alpine
     container_name: baserow_media_server
@@ -819,7 +825,6 @@ services:
       #########################################
       - "traefik.docker.network=leonobitech-net"
 
-
   redis_chatwoot:
     image: redis:latest
     container_name: redis_chatwoot
@@ -852,7 +857,6 @@ services:
       retries: 5
       start_period: 10s
 
-
   postgres_chatwoot:
     image: pgvector/pgvector:pg16
     container_name: postgres_chatwoot
@@ -882,12 +886,19 @@ services:
       - leonobitech-net
 
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USERNAME_CW}", "-d", "${POSTGRES_DATABASE_CW}"]
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USERNAME_CW}",
+          "-d",
+          "${POSTGRES_DATABASE_CW}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-
 
   chatwoot:
     image: chatwoot/chatwoot:latest
@@ -899,7 +910,7 @@ services:
 
     env_file:
       - ./repositories/chatwoot/.env
-    
+
     environment:
       - POSTGRES_HOST=${POSTGRES_HOST_CW}
       - POSTGRES_PORT=${POSTGRES_PORT_CW}
@@ -908,7 +919,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
 
     entrypoint: docker/entrypoints/rails.sh
-    command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
 
     volumes:
       - chatwoot_data:/app/storage
@@ -1118,12 +1129,12 @@ services:
 
     # Whisper model (ggml-base.en.bin): ~/backend/repositories/leonobit/models
     volumes:
-       - ./repositories/leonobit/models:/app/models:ro
+      - ./repositories/leonobit/models:/app/models:ro
 
     env_file:
       - ./repositories/leonobit/.env
     environment:
-      - RUST_LOG=info,tower_http=info
+      - RUST_LOG=info,leonobit=debug,axum=info,webrtc=info,tower_http=info
       - PORT=8000
       - CORS_ORIGIN=${CORS_ORIGIN}
       - ALLOWED_WS_ORIGINS=${ALLOWED_WS_ORIGINS}
@@ -1177,36 +1188,35 @@ services:
       - "traefik.http.middlewares.webrtc-rl.ratelimit.burst=60"
       - "traefik.http.routers.leonobit-webrtc.middlewares=webrtc-rl@docker"
 
-
 volumes:
   # 🔴 Redis
-  redis_core_data:         # Almacena los datos persistentes del Redis del Core
-  redis_n8n_data:          # Redis exclusivo para el ecosistema de n8n
-  redis_chatwoot_data:     # Redis exclusivo para Chatwoot
+  redis_core_data: # Almacena los datos persistentes del Redis del Core
+  redis_n8n_data: # Redis exclusivo para el ecosistema de n8n
+  redis_chatwoot_data: # Redis exclusivo para Chatwoot
 
   # 🟢 PostgreSQL
-  n8n_postgres_data:       # Base de datos de n8n
-  odoo_postgres_data:      # Base de datos de Odoo
-  baserow_postgres_data:   # Base de datos de Baserow
-  chatwoot_postgres_data:  # Base de datos de Chatwoot
+  n8n_postgres_data: # Base de datos de n8n
+  odoo_postgres_data: # Base de datos de Odoo
+  baserow_postgres_data: # Base de datos de Baserow
+  chatwoot_postgres_data: # Base de datos de Chatwoot
 
   # 🔵 Qdrant (vector search)
-  qdrant_data:             # Almacenamiento principal de Qdrant
-  qdrant_snapshots:        # Snapshots de backup/restauración de vectores
+  qdrant_data: # Almacenamiento principal de Qdrant
+  qdrant_snapshots: # Snapshots de backup/restauración de vectores
 
   # 🟡 n8n - nodos individuales
-  n8n_data_main:           # Volumen principal del nodo UI de n8n
-  n8n_data_webhook_1:      # Volumen del nodo exclusivo para Webhooks
-  n8n_data_worker_1:       # Volumen del worker de ejecución 1
-  n8n_data_worker_2:       # Volumen del worker de ejecución 2
+  n8n_data_main: # Volumen principal del nodo UI de n8n
+  n8n_data_webhook_1: # Volumen del nodo exclusivo para Webhooks
+  n8n_data_worker_1: # Volumen del worker de ejecución 1
+  n8n_data_worker_2: # Volumen del worker de ejecución 2
 
   # 🟠 Baserow
-  baserow_data:            # Datos internos de Baserow (keys, tokens, config)
-  baserow_media:           # Archivos subidos por usuarios y exportaciones
-  baserow_redis_data:      # Redis de Baserow (caching, async)
+  baserow_data: # Datos internos de Baserow (keys, tokens, config)
+  baserow_media: # Archivos subidos por usuarios y exportaciones
+  baserow_redis_data: # Redis de Baserow (caching, async)
 
   # 🟣 Chatwoot
-  chatwoot_data:           # Datos internos de Chatwoot (keys, tokens, config)
+  chatwoot_data: # Datos internos de Chatwoot (keys, tokens, config)
 
   # 🟤 Odoo
   odoo_data:

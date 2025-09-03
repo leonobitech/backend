@@ -1,3 +1,4 @@
+// src/core/webrtc/session.rs
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -28,13 +29,13 @@ pub enum SigOut {
 pub struct WebRtcSession {
   pc: RTCPeerConnection,
   closing: Arc<AtomicBool>,
-  // 🔹 Lista de data channels activos (creados por el cliente)
   dcs: Arc<Mutex<Vec<Arc<RTCDataChannel>>>>,
 }
 
 impl WebRtcSession {
-  pub async fn new(to_ws: mpsc::UnboundedSender<SigOut>) -> Result<Self> {
-    // 1) Codecs (incluye Opus)
+  // ✅ Inyectamos el opus_tx que viene del handler
+  pub async fn new(to_ws: mpsc::UnboundedSender<SigOut>, opus_tx: mpsc::UnboundedSender<Vec<u8>>) -> Result<Self> {
+    // 1) Codecs por defecto
     let mut me = MediaEngine::default();
     me.register_default_codecs()?;
     let api = APIBuilder::new().with_media_engine(me).build();
@@ -66,7 +67,7 @@ impl WebRtcSession {
     )
     .await?;
 
-    // ===== Logs de estado (sin cambios) =====
+    // ===== Logs de estado =====
     pc.on_peer_connection_state_change(Box::new(|s| {
       Box::pin(async move { tracing::info!("[pc] state = {:?}", s) })
     }));
@@ -82,7 +83,7 @@ impl WebRtcSession {
       })
     }));
 
-    // ===== Contador y reenvío de ICE (trickle) =====
+    // ===== Trickle ICE saliente =====
     let cand_count = Arc::new(AtomicUsize::new(0));
     {
       let tx = to_ws.clone();
@@ -114,12 +115,10 @@ impl WebRtcSession {
         let label = dc.label().to_string();
         tracing::info!("on_data_channel: {label}");
 
-        // Guardamos la referencia para poder cerrarlo luego
+        // Guardamos referencia para cierre ordenado
         {
           let dc_clone = dc.clone();
           let dcs_list = Arc::clone(&dcs_list);
-          // No es async, pero el lock es muy corto (push); está bien usar Mutex aquí.
-          // Si preferís, podés convertir esto a un pequeño spawn(async move { ... }) con tokio::sync::Mutex.
           tokio::spawn(async move {
             dcs_list.lock().await.push(dc_clone);
           });
@@ -165,10 +164,28 @@ impl WebRtcSession {
     }
 
     // ===== Track remoto (audio del cliente) =====
-    pc.on_track(Box::new(|track, _rx, _trx| {
+    // ⚠️ IMPORTANTE: clonamos el sender para cada callback
+    let opus_tx_outer = opus_tx.clone();
+    pc.on_track(Box::new(move |track, _rx, _trx| {
       tracing::info!("on_track kind={:?}", track.kind());
+      let opus_tx = opus_tx_outer.clone();
+
       Box::pin(async move {
-        // Fase 1 (luego): leer RTP/Opus → decodificar → PCM → Whisper
+        loop {
+          match track.read_rtp().await {
+            Ok((pkt, _)) => {
+              // pkt.payload = bytes Opus
+              if let Err(e) = opus_tx.send(pkt.payload.to_vec()) {
+                tracing::warn!("no se pudo enviar payload a worker: {e:?}");
+                break;
+              }
+            }
+            Err(e) => {
+              tracing::warn!("track.read_rtp error: {e:?}");
+              break;
+            }
+          }
+        }
       })
     }));
 
@@ -192,7 +209,7 @@ impl WebRtcSession {
       .await
       .context("set_local_description(answer)")?;
 
-    // Esperar fin de gathering para tener candidates en SDP local
+    // esperar fin de ICE gathering
     let mut done = self.pc.gathering_complete_promise().await;
     let _ = done.recv().await;
     tracing::info!("[pc] ICE gathering state = Complete");
@@ -217,12 +234,9 @@ impl WebRtcSession {
     Ok(())
   }
 
-  /// Cierre ordenado (silencia callbacks, detiene media, cierra DCs y drena SCTP)
   pub async fn close(&self) {
-    // 1) bandera de cierre → evita emitir cosas en callbacks
     self.closing.store(true, Ordering::Relaxed);
 
-    // 2) silenciar callbacks (evita ruido extra)
     self.pc.on_ice_candidate(Box::new(|_| Box::pin(async {})));
     self.pc.on_data_channel(Box::new(|_| Box::pin(async {})));
     self.pc.on_track(Box::new(|_, _, _| Box::pin(async {})));
@@ -232,12 +246,10 @@ impl WebRtcSession {
       .pc
       .on_peer_connection_state_change(Box::new(|_| Box::pin(async {})));
 
-    // 3) cerrar DataChannels explícitamente
     {
       let mut to_close = Vec::new();
       {
         let mut guard = self.dcs.lock().await;
-        // Tomamos las refs y vaciamos la lista
         to_close.append(&mut *guard);
       }
       for dc in to_close {
@@ -245,7 +257,6 @@ impl WebRtcSession {
       }
     }
 
-    // 4) detener envíos de media
     for s in self.pc.get_senders().await {
       let _ = s.replace_track(None).await;
     }
@@ -253,10 +264,7 @@ impl WebRtcSession {
       let _ = t.stop().await;
     }
 
-    // 5) pequeño “drain” de SCTP para que no aparezca ErrChunk
     tokio::time::sleep(std::time::Duration::from_millis(80)).await;
-
-    // 6) cerrar PC
     let _ = self.pc.close().await;
     tracing::info!("[pc] closed()");
   }

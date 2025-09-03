@@ -1,13 +1,16 @@
+// handlers WebSocket para Leonobit (WebRTC + STT con Whisper)
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use futures_util::{SinkExt, StreamExt}; // <- importante: split + send/next
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 use tracing::{debug, info, warn};
 
-use crate::auth::{validate_ws_token_multi, WsClaims};
+use crate::auth::validate_ws_token_multi;
+use crate::core::audio::stt::SttMsg;
+use crate::core::audio::whisper_worker::run_whisper_worker;
 use crate::core::webrtc::session::{SigOut, WebRtcSession};
 use crate::routes::AppState;
 
@@ -57,10 +60,21 @@ enum OutMsg {
   WebrtcCandidate {
     candidate: webrtc::ice_transport::ice_candidate::RTCIceCandidateInit,
   },
-  // opcional: podrías agregar Error/Notice
+
+  // errores
   #[serde(rename = "error")]
   Error {
     message: String,
+  },
+
+  // STT (Whisper)
+  #[serde(rename = "stt.partial")]
+  SttPartial {
+    text: String,
+  },
+  #[serde(rename = "stt.final")]
+  SttFinal {
+    text: String,
   },
 }
 
@@ -86,20 +100,21 @@ pub async fn ws_handler(
 }
 
 async fn ws_loop(state: AppState, socket: WebSocket) {
-  // 0) Split: no volvemos a usar `socket` directamente
+  // 0) Split
   let (mut ws_tx, mut ws_rx) = socket.split();
 
-  // 1) Canal para el writer: ÚNICO lugar donde escribimos al socket
+  // 1) Canal de salida WS
   let (out_tx, mut out_rx) = mpsc::unbounded_channel::<OutMsg>();
 
-  // 2) Writer task: drena `out_rx` y manda al WS
+  // 2) Writer
   let writer = tokio::spawn(async move {
     while let Some(msg) = out_rx.recv().await {
       let Ok(txt) = serde_json::to_string(&msg) else { continue };
+      // 👇 Log del JSON exacto que se enviará por WebSocket
+      tracing::debug!("[ws] → {}", txt);
       if ws_tx.send(Message::Text(txt)).await.is_err() {
-        break; // socket cerrado
+        break;
       }
-      // Log de salidas WS (útil para ver answer/candidates)
       let Ok(txt) = serde_json::to_string(&msg) else { continue };
       let size = txt.len();
       match &msg {
@@ -107,14 +122,14 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
         OutMsg::WebrtcCandidate { .. } => debug!("[ws] → webrtc.candidate ({} bytes JSON)", size),
         OutMsg::Pong { .. } => debug!("[ws] → pong ({} bytes JSON)", size),
         OutMsg::Ready => debug!("[ws] → ready ({} bytes JSON)", size),
+        OutMsg::SttPartial { text } => debug!("[ws] → stt.partial len={} txt='{:.48}…'", size, text),
+        OutMsg::SttFinal { text } => info!("[ws] → stt.final len={} txt='{}'", size, text),
         OutMsg::Error { message } => warn!("[ws] → error: {}", message),
       }
     }
-    // opcional: enviar Close
-    // let _ = ws_tx.send(Message::Close(None)).await;
   });
 
-  // 3) Esperar AUTH del cliente con timeout (Evita sockets colgados si el cliente nunca manda Auth.)
+  // 3) Esperar AUTH
   let token = match timeout(Duration::from_secs(5), ws_rx.next()).await {
     Ok(Some(Ok(Message::Text(txt)))) => match serde_json::from_str::<InMsg>(&txt) {
       Ok(InMsg::Auth { token }) => token,
@@ -136,7 +151,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
   };
 
   // 4) Validar JWT
-  let claims: WsClaims = match validate_ws_token_multi(&token, &state.ws_secret, &state.profiles) {
+  let claims: crate::auth::WsClaims = match validate_ws_token_multi(&token, &state.ws_secret, &state.profiles) {
     Ok(c) => c,
     Err(e) => {
       warn!("WS token inválido: {e}");
@@ -148,88 +163,113 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
   };
   info!("✅ WS autorizado: sub={} role={:?}", claims.sub, claims.role);
 
-  // 5) Canal de eventos del core/WebRTC → los convertimos a OutMsg y van al writer
-  let (sig_tx, mut sig_rx) = mpsc::unbounded_channel::<SigOut>();
+  // 5) canales: señalización WebRTC, audio Opus hacia worker y texto saliente
+  let (sig_tx, sig_rx) = mpsc::unbounded_channel::<SigOut>();
+  let (opus_tx, opus_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+  let (stt_tx, mut stt_rx) = mpsc::unbounded_channel::<SttMsg>();
 
-  // 6) Instanciar sesión WebRTC
-  let session = match WebRtcSession::new(sig_tx.clone()).await {
+  // 6) Path del modelo desde AppState
+  let model_path = state.whisper_model_path.clone();
+
+  // 7) Spawnear el worker de Whisper (lee Opus, decodifica, resamplea y transcribe)
+  tokio::spawn(async move {
+    if let Err(e) = run_whisper_worker(opus_rx, stt_tx, &model_path).await {
+      tracing::error!("whisper worker error: {e:#}");
+    }
+  });
+
+  // 8) Crear la sesión WebRTC inyectando audio (`opus_tx`) hacia el worker
+  let session = match WebRtcSession::new(sig_tx.clone(), opus_tx).await {
     Ok(s) => s,
     Err(e) => {
-      warn!("No se pudo crear WebRTC session: {e:?}");
+      tracing::error!("no se pudo crear WebRtcSession: {e:#}");
       let _ = out_tx.send(OutMsg::Error {
-        message: "failed to create PC".into(),
+        message: "webrtc init error".into(),
       });
       return;
     }
   };
 
-  // 7) Forwarder: SigOut -> OutMsg -> out_tx
-  let out_tx_clone = out_tx.clone();
+  // 9) Forwarder core→WS (solo señalización)
+  let out_tx_for_sig = out_tx.clone();
   let forwarder = tokio::spawn(async move {
+    let mut sig_rx = sig_rx; // mover al task
     while let Some(ev) = sig_rx.recv().await {
       match ev {
         SigOut::WebrtcAnswer { sdp } => {
           debug!("[ws] ← core: answer (len={})", sdp.len());
-          let _ = out_tx_clone.send(OutMsg::WebrtcAnswer { sdp });
+          let _ = out_tx_for_sig.send(OutMsg::WebrtcAnswer { sdp });
         }
         SigOut::WebrtcCandidate { candidate } => {
           debug!(
             "[ws] ← core: candidate (mid={:?} mline={:?})",
             candidate.sdp_mid, candidate.sdp_mline_index
           );
-          let _ = out_tx_clone.send(OutMsg::WebrtcCandidate { candidate });
+          let _ = out_tx_for_sig.send(OutMsg::WebrtcCandidate { candidate });
         }
       }
     }
   });
 
-  // 8) READY
-  let _ = out_tx.send(OutMsg::Ready);
-
-  // Loop de lectura
-  while let Some(res) = ws_rx.next().await {
-    match res {
-      Ok(Message::Text(txt)) => {
-        match serde_json::from_str::<InMsg>(&txt) {
-          Ok(InMsg::Ping { ts }) => {
-            debug!("[ws] ping");
-            let _ = out_tx.send(OutMsg::Pong { ts });
-          }
-          Ok(InMsg::Control { op, payload }) if op.eq_ignore_ascii_case("goodbye") => {
-            let reason = payload.get("reason").and_then(|v| v.as_str()).unwrap_or("<sin reason>");
-            info!("👋 control.goodbye recibido (reason={reason})");
-            break;
-          }
-          Ok(InMsg::WebrtcOffer { sdp }) => {
-            info!("[ws] offer recibida (len={})", sdp.len());
-            match session.apply_offer_and_create_answer(sdp).await {
-              Ok(answer_sdp) => {
-                info!("[ws] answer generada (len={})", answer_sdp.len());
-                let _ = out_tx.send(OutMsg::WebrtcAnswer { sdp: answer_sdp });
-              }
-              Err(e) => {
-                warn!("apply_offer_and_create_answer error: {e:?}");
-                let _ = out_tx.send(OutMsg::Error {
-                  message: "invalid offer".into(),
-                });
-              }
-            }
-          }
-          Ok(InMsg::WebrtcCandidate { candidate }) => {
-            debug!(
-              "[ws] candidate remoto (mid={:?} mline={:?} len={})",
-              candidate.sdp_mid,
-              candidate.sdp_mline_index,
-              candidate.candidate.len()
-            );
-            if let Err(e) = session.add_remote_ice(candidate).await {
-              warn!("add_remote_ice error: {e:?}");
-            }
-          }
-
-          _ => { /* ignorar otros */ }
+  // 10) Consumo de transcripciones del worker → WS
+  let out_tx_for_stt = out_tx.clone();
+  tokio::spawn(async move {
+    while let Some(msg) = stt_rx.recv().await {
+      match msg {
+        SttMsg::Partial { text } => {
+          let _ = out_tx_for_stt.send(OutMsg::SttPartial { text });
+        }
+        SttMsg::Final { text } => {
+          let _ = out_tx_for_stt.send(OutMsg::SttFinal { text });
         }
       }
+    }
+  });
+
+  // 11) READY
+  let _ = out_tx.send(OutMsg::Ready);
+
+  // 12) Loop lectura WS
+  while let Some(res) = ws_rx.next().await {
+    match res {
+      Ok(Message::Text(txt)) => match serde_json::from_str::<InMsg>(&txt) {
+        Ok(InMsg::Ping { ts }) => {
+          debug!("[ws] ping");
+          let _ = out_tx.send(OutMsg::Pong { ts });
+        }
+        Ok(InMsg::Control { op, payload }) if op.eq_ignore_ascii_case("goodbye") => {
+          let reason = payload.get("reason").and_then(|v| v.as_str()).unwrap_or("<sin reason>");
+          info!("👋 control.goodbye recibido (reason={reason})");
+          break;
+        }
+        Ok(InMsg::WebrtcOffer { sdp }) => {
+          info!("[ws] offer recibida (len={})", sdp.len());
+          match session.apply_offer_and_create_answer(sdp).await {
+            Ok(answer_sdp) => {
+              info!("[ws] answer generada (len={})", answer_sdp.len());
+              let _ = out_tx.send(OutMsg::WebrtcAnswer { sdp: answer_sdp });
+            }
+            Err(e) => {
+              warn!("apply_offer_and_create_answer error: {e:?}");
+              let _ = out_tx.send(OutMsg::Error {
+                message: "invalid offer".into(),
+              });
+            }
+          }
+        }
+        Ok(InMsg::WebrtcCandidate { candidate }) => {
+          debug!(
+            "[ws] candidate remoto (mid={:?} mline={:?} len={})",
+            candidate.sdp_mid,
+            candidate.sdp_mline_index,
+            candidate.candidate.len()
+          );
+          if let Err(e) = session.add_remote_ice(candidate).await {
+            warn!("add_remote_ice error: {e:?}");
+          }
+        }
+        _ => {}
+      },
       Ok(Message::Close(_)) => break,
       Ok(_) => {}
       Err(e) => {
@@ -239,9 +279,16 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     }
   }
 
+  // Cierre ordenado
   session.close().await;
   drop(out_tx);
   let _ = writer.await;
   forwarder.abort();
   info!("❌ Conexión WS cerrada");
 }
+
+/*
+El handler (leonobit.rs) crea los canales, toma el path del modelo desde AppState,
+spawnea run_whisper_worker(...) y pasa el opus_tx a WebRtcSession::new(...).
+WebRtcSession recibe ese opus_tx y en on_track empuja los payloads Opus al worker.
+ */
