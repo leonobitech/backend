@@ -49,7 +49,7 @@ pub async fn run_whisper_worker(
   let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
   params.set_n_threads(1);
   params.set_translate(false);
-  params.set_language(Some("en")); // Detectar idioma automáticamente
+  params.set_language(Some("en"));
   params.set_print_special(false);
   params.set_print_progress(false);
   params.set_print_realtime(false);
@@ -102,14 +102,18 @@ pub async fn run_whisper_worker(
       // llamadas a métodos full_* que pueden variar entre versiones.
       let mut hypo = String::new();
       for seg in state.as_iter() {
-        let seg_txt = seg.to_string();
-        let seg_txt = seg_txt.trim();
-        if !seg_txt.is_empty() {
-          if !hypo.is_empty() {
-            hypo.push(' ');
-          }
-          hypo.push_str(seg_txt);
+        let mut seg_txt = seg.to_string();
+        seg_txt = seg_txt.trim().to_string();
+
+        // ⛔ ignorar silencio explícito de whisper
+        if seg_txt.is_empty() || seg_txt == "[BLANK_AUDIO]" {
+          continue;
         }
+
+        if !hypo.is_empty() {
+          hypo.push(' ');
+        }
+        hypo.push_str(&seg_txt);
       }
 
       // Emitir PARCIAL si cambió

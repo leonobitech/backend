@@ -16,7 +16,7 @@ impl Opus48k {
     let dec = OpusDecoder::new(SampleRate::Hz48000, ch).context("crear OpusDecoder")?;
     Ok(Self {
       dec,
-      buf_i16: vec![0i16; 4096],
+      buf_i16: vec![0i16; 16384], // 16k samples para 1 segundo de audio
       stereo,
     })
   }
