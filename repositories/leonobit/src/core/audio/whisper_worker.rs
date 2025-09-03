@@ -49,7 +49,7 @@ pub async fn run_whisper_worker(
   let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
   params.set_n_threads(1);
   params.set_translate(false);
-  params.set_language(Some("es"));
+  params.set_language(None); // Detectar idioma automáticamente
   params.set_print_special(false);
   params.set_print_progress(false);
   params.set_print_realtime(false);
@@ -64,11 +64,18 @@ pub async fn run_whisper_worker(
 
   // ---------- Bucle principal ----------
   while let Some(opus_frame) = rx_opus.recv().await {
-    // 1) Opus → PCM 48k mono (tupla: (vec, nsamp))
-    let (pcm48_mono, _nsamp) = opus.decode(&opus_frame).context("decodificar opus 48k")?;
-    if pcm48_mono.is_empty() {
+    // 1) Opus → PCM 48k (posible estéreo)
+    let (pcm48, _nsamp) = opus.decode(&opus_frame).context("decodificar opus 48k")?;
+    if pcm48.is_empty() {
       continue;
     }
+
+    // 1.1) Downmix si vino estéreo (resampler es 1 canal)
+    let pcm48_mono = if opus.is_stereo() {
+      Opus48k::downmix_stereo_to_mono(&pcm48)
+    } else {
+      pcm48
+    };
 
     // 2) 48k → 16k
     let pcm16_chunk = resampler.process(&pcm48_mono).context("resample 48k→16k")?;
