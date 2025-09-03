@@ -953,7 +953,7 @@ services:
     stop_grace_period: 45s
     # Límites
     cpus: 1.0
-    mem_limit: 512m
+    mem_limit: 640m
 
     # Logs rotados
     logging:
