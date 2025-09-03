@@ -917,6 +917,17 @@ services:
       - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
       - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
+      # ===== Performance / Memoria (WEB) =====
+      - RAILS_ENV=production
+      - RAILS_LOG_TO_STDOUT=true
+      - WEB_CONCURRENCY=1 # Puma workers (sube a 2 si ves CPU o latencia)
+      - RAILS_MAX_THREADS=3 # Threads por worker (baja consumo y conexiones DB)
+      - MALLOC_ARENA_MAX=2 # Reduce arenas glibc → menos RSS
+      - RUBY_YJIT_ENABLE=0 # Evita overhead de YJIT si viene habilitado
+      - DISABLE_SPRING=1 # sin Spring en prod
+
+      # (opcional) si la imagen trae jemalloc: mejora RSS
+      # - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
 
     entrypoint: docker/entrypoints/rails.sh
     command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
@@ -936,7 +947,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 20s
+
+    # Graceful shutdown (Puma)
+    stop_grace_period: 45s
+    # Límites
+    cpus: 1.0
+    mem_limit: 512m
+
+    # Logs rotados
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
     labels:
       - "traefik.enable=true"
@@ -1001,7 +1025,16 @@ services:
       - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
       - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
+      # ===== Sidekiq (default/mailers) =====
+      - RAILS_ENV=production
+      - RAILS_LOG_TO_STDOUT=true
+      - SIDEKIQ_CONCURRENCY=5 # suficiente para colas light
+      - MALLOC_ARENA_MAX=2
+      - RUBY_YJIT_ENABLE=0
+      # - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+
     command: ["bundle", "exec", "sidekiq", "-q", "default", "-q", "mailers"]
+
     volumes:
       - chatwoot_data:/app/storage
     depends_on:
@@ -1009,13 +1042,22 @@ services:
       - postgres_chatwoot
     networks:
       - leonobitech-net
+
     healthcheck:
       test: ["CMD", "pgrep", "sidekiq"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+    stop_grace_period: 60s
     cpus: 0.75
-    mem_limit: 750m
+    mem_limit: 512m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   chatwoot_worker_low:
     image: chatwoot/chatwoot:latest
@@ -1031,6 +1073,13 @@ services:
       - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
       - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
+      # ===== Sidekiq (default/mailers) =====
+      - RAILS_ENV=production
+      - RAILS_LOG_TO_STDOUT=true
+      - SIDEKIQ_CONCURRENCY=3
+      - MALLOC_ARENA_MAX=2
+      - RUBY_YJIT_ENABLE=0
+      # - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
     command: ["bundle", "exec", "sidekiq", "-q", "low"]
     volumes:
       - chatwoot_data:/app/storage
@@ -1044,8 +1093,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    cpus: 0.3
-    mem_limit: 512m
+
+    stop_grace_period: 60s
+    cpus: 0.5
+    mem_limit: 384m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   chatwoot_worker_critical:
     image: chatwoot/chatwoot:latest
@@ -1061,6 +1118,13 @@ services:
       - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
       - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
+
+      - RAILS_ENV=production
+      - RAILS_LOG_TO_STDOUT=true
+      - SIDEKIQ_CONCURRENCY=3
+      - MALLOC_ARENA_MAX=2
+      - RUBY_YJIT_ENABLE=0
+      # - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
     command: ["bundle", "exec", "sidekiq", "-q", "critical"]
     volumes:
       - chatwoot_data:/app/storage
@@ -1074,8 +1138,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    cpus: 1.0
-    mem_limit: 1g
+
+    stop_grace_period: 60s
+    cpus: 0.75
+    mem_limit: 512m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   chatwoot_worker_scheduler:
     image: chatwoot/chatwoot:latest
@@ -1091,6 +1163,13 @@ services:
       - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
       - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
+
+      - RAILS_ENV=production
+      - RAILS_LOG_TO_STDOUT=true
+      - SIDEKIQ_CONCURRENCY=2
+      - MALLOC_ARENA_MAX=2
+      - RUBY_YJIT_ENABLE=0
+
     command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
     volumes:
       - chatwoot_data:/app/storage
@@ -1104,8 +1183,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+    stop_grace_period: 60s
     cpus: 0.5
-    mem_limit: 512m
+    mem_limit: 384m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   leonobit:
     container_name: leonobit
