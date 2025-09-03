@@ -50,7 +50,7 @@ USER 10001:10001
 # Puerto y logs
 ENV PORT=8000
 ENV RUST_LOG=info,leonobit=debug,axum=info,webrtc=info,tower_http=info
-ENV WHISPER_MODEL_PATH=/app/models/ggml-base.en.bin
+ENV WHISPER_MODEL_PATH=/app/models/ggml-base.bin
 
 EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/leonobit"]

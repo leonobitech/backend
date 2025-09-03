@@ -11,12 +11,10 @@ use crate::core::audio::resample::Resampler48kTo16k;
 use crate::core::audio::stt::SttMsg;
 
 // ====== Ventanas / hop a 16 kHz (reactivo) ======
-const WINDOW_SAMPLES_16K: usize = 48_000; // ~3.0 s
-const HOP_SAMPLES_16K: usize = 5_120; // ~0.32 s
-const TAIL_AFTER_FINAL_16K: usize = 16_000; // ~1.0 s
-
-// ✅ umbral mínimo para invocar whisper::full() (evita assert por audio corto)
-const MIN_SAMPLES_FOR_INFER_16K: usize = 24_000; // ~1.5 s
+const WINDOW_SAMPLES_16K: usize = 24_000; // ~1.5 s
+const HOP_SAMPLES_16K: usize = 2_560; // ~160 ms
+const MIN_SAMPLES_FOR_INFER_16K: usize = 8_000; // ~0.5 s
+const TAIL_AFTER_FINAL_16K: usize = 12_000; // ~0.75 s
 
 // ====== VAD simple por RMS ======
 const SILENCE_THRESHOLD_RMS: f32 = 6e-4;
@@ -53,7 +51,7 @@ pub async fn run_whisper_worker(
   let n_threads = (n_logical.saturating_sub(1).max(1)) as i32;
   params.set_n_threads(n_threads);
   params.set_translate(false);
-  params.set_language(Some("en"));
+  params.set_language(Some("es"));
   params.set_print_special(false);
   params.set_print_progress(false);
   params.set_print_realtime(false);
