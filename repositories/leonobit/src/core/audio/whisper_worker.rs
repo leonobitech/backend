@@ -49,7 +49,7 @@ pub async fn run_whisper_worker(
   let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
   params.set_n_threads(1);
   params.set_translate(false);
-  params.set_language(None); // Detectar idioma automáticamente
+  params.set_language(Some("en")); // Detectar idioma automáticamente
   params.set_print_special(false);
   params.set_print_progress(false);
   params.set_print_realtime(false);
