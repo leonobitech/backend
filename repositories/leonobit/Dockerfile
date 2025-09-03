@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     libstdc++6 \
+    libopus0 \
  && rm -rf /var/lib/apt/lists/*
 
 # Copiar binario
