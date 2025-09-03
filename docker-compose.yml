@@ -635,7 +635,7 @@ services:
     stop_grace_period: 45s
     # Límites conservadores
     cpus: 1.5
-    mem_limit: 768m
+    mem_limit: 896m
     # Rotación de logs del contenedor
     logging:
       driver: "json-file"
@@ -736,8 +736,8 @@ services:
         "--concurrency=1",
         "--max-tasks-per-child=50",
         "--prefetch-multiplier=1",
+        "--max-memory-per-child=220000",
       ]
-
     env_file:
       - ./repositories/baserow/.env
     environment:
@@ -765,7 +765,7 @@ services:
       - no-new-privileges:true
 
     stop_grace_period: 60s
-    mem_limit: 192m
+    mem_limit: 256m
     cpus: 0.5
     logging:
       driver: "json-file"
