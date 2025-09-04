@@ -11,10 +11,10 @@ use crate::core::audio::resample::Resampler48kTo16k;
 use crate::core::audio::stt::SttMsg;
 
 // ===== Ventanas / hop a 16 kHz (reactivo) =====
-const WINDOW_SAMPLES_16K: usize = 32_000; // ~2.0 s
-const HOP_SAMPLES_16K: usize = 5_120; // ~0.32 s
-const TAIL_AFTER_FINAL_16K: usize = 16_000; // ~1.0 s
-const MIN_SAMPLES_FOR_INFER_16K: usize = 16_000; // ~1.0 s (evita invocar con muy poco audio)
+const WINDOW_SAMPLES_16K: usize = 16_000; // ~2.0 s
+const HOP_SAMPLES_16K: usize = 1_600; // ~0.32 s
+const TAIL_AFTER_FINAL_16K: usize = 8_000; // keep ~0.5 s after a FINAL for continuity
+const MIN_SAMPLES_FOR_INFER_16K: usize = 8_000; // ~1.0 s (evita invocar con muy poco audio)
 
 // ===== VAD simple por RMS =====
 const SILENCE_THRESHOLD_RMS: f32 = 6e-4;
@@ -51,7 +51,12 @@ pub async fn run_whisper_worker(
   // ---------- Parámetros Whisper ----------
   let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
 
-  let n_threads = (num_cpus::get().saturating_sub(1)).max(1) as i32;
+  let n_threads = std::env::var("WHISPER_THREADS")
+    .ok()
+    .and_then(|s| s.parse::<i32>().ok())
+    .unwrap_or_else(|| (num_cpus::get_physical().saturating_sub(1)).max(1) as i32);
+
+  tracing::info!("whisper threads = {}", n_threads);
   params.set_n_threads(n_threads);
   params.set_translate(false);
   params.set_language(Some("es")); // <-- pon "en" si quieres inglés
@@ -60,6 +65,8 @@ pub async fn run_whisper_worker(
   params.set_print_realtime(false);
   params.set_print_timestamps(false);
   params.set_token_timestamps(false);
+  params.set_audio_ctx(384);
+  params.set_max_len(64); // or set_max_tokens(64)
 
   // ---------- Buffer PCM16 compartido ----------
   let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(WINDOW_SAMPLES_16K)));
