@@ -11,10 +11,10 @@ use crate::core::audio::resample::Resampler48kTo16k;
 use crate::core::audio::stt::SttMsg;
 
 // ===== Ventanas / hop a 16 kHz (reactivo) =====
-const WINDOW_SAMPLES_16K: usize = 48_000; // ~3.0 s
+const WINDOW_SAMPLES_16K: usize = 32_000; // ~2.0 s
 const HOP_SAMPLES_16K: usize = 5_120; // ~0.32 s
 const TAIL_AFTER_FINAL_16K: usize = 16_000; // ~1.0 s
-const MIN_SAMPLES_FOR_INFER_16K: usize = 24_000; // ~1.5 s (evita invocar con muy poco audio)
+const MIN_SAMPLES_FOR_INFER_16K: usize = 16_000; // ~1.0 s (evita invocar con muy poco audio)
 
 // ===== VAD simple por RMS =====
 const SILENCE_THRESHOLD_RMS: f32 = 6e-4;
@@ -50,8 +50,8 @@ pub async fn run_whisper_worker(
 
   // ---------- Parámetros Whisper ----------
   let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
-  let n_physical = num_cpus::get_physical().max(1);
-  let n_threads = n_physical.saturating_sub(1).max(1) as i32; // deja 1 core libre
+
+  let n_threads = (num_cpus::get().saturating_sub(1)).max(1) as i32;
   params.set_n_threads(n_threads);
   params.set_translate(false);
   params.set_language(Some("es")); // <-- pon "en" si quieres inglés
