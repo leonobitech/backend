@@ -10,13 +10,13 @@ use crate::core::audio::opus::Opus48k;
 use crate::core::audio::resample::Resampler48kTo16k;
 use crate::core::audio::stt::SttMsg;
 
-// ====== Ventanas / hop a 16 kHz (reactivo) ======
-const WINDOW_SAMPLES_16K: usize = 24_000; // ~1.5 s
-const HOP_SAMPLES_16K: usize = 2_560; // ~160 ms
-const MIN_SAMPLES_FOR_INFER_16K: usize = 8_000; // ~0.5 s
-const TAIL_AFTER_FINAL_16K: usize = 12_000; // ~0.75 s
+// ===== Ventanas / hop a 16 kHz (reactivo) =====
+const WINDOW_SAMPLES_16K: usize = 48_000; // ~3.0 s
+const HOP_SAMPLES_16K: usize = 5_120; // ~0.32 s
+const TAIL_AFTER_FINAL_16K: usize = 16_000; // ~1.0 s
+const MIN_SAMPLES_FOR_INFER_16K: usize = 24_000; // ~1.5 s (evita invocar con muy poco audio)
 
-// ====== VAD simple por RMS ======
+// ===== VAD simple por RMS =====
 const SILENCE_THRESHOLD_RMS: f32 = 6e-4;
 const SILENCE_HOLDOFF_MS: u64 = 450;
 
@@ -29,8 +29,13 @@ fn is_silence(samples: &[f32], thr: f32) -> bool {
   rms < thr
 }
 
+// helper ms pretty
+fn ms(d: Duration) -> f32 {
+  (d.as_secs_f64() * 1000.0) as f32
+}
+
 /// Task A (ingest): RTP Opus → 48k → 16k → buffer compartido
-/// Task B (infer): cada ~320 ms toma tail (<=3.0s), corre Whisper y emite parciales/finales
+/// Task B (infer): cada hop toma tail, corre Whisper y emite parciales/finales
 pub async fn run_whisper_worker(
   mut rx_opus: Receiver<Vec<u8>>,
   stt_tx: UnboundedSender<SttMsg>,
@@ -39,33 +44,38 @@ pub async fn run_whisper_worker(
   // ---------- Estado Whisper ----------
   let mut state = ctx.create_state().context("crear whisper state")?;
 
-  // ---------- Audio helpers (solo ingest) ----------
+  // ---------- Audio helpers ----------
   let mut opus = Opus48k::new(true).context("crear decoder opus 48k")?;
   let mut resampler = Resampler48kTo16k::new().context("crear resampler 48k→16k")?;
 
-  // ---------- Parámetros Whisper (inglés, sin timestamps) ----------
+  // ---------- Parámetros Whisper ----------
   let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
-
-  // Usa núcleos disponibles menos 1 (deja 1 libre para el resto del runtime)
-  let n_logical = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
-  let n_threads = (n_logical.saturating_sub(1).max(1)) as i32;
+  let n_physical = num_cpus::get_physical().max(1);
+  let n_threads = n_physical.saturating_sub(1).max(1) as i32; // deja 1 core libre
   params.set_n_threads(n_threads);
   params.set_translate(false);
-  params.set_language(Some("es"));
+  params.set_language(Some("es")); // <-- pon "en" si quieres inglés
   params.set_print_special(false);
   params.set_print_progress(false);
   params.set_print_realtime(false);
-  params.set_print_timestamps(false); // menos trabajo
-  params.set_token_timestamps(false); // menos trabajo
+  params.set_print_timestamps(false);
+  params.set_token_timestamps(false);
 
   // ---------- Buffer PCM16 compartido ----------
   let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(WINDOW_SAMPLES_16K)));
 
+  // Para métricas simples por log:
+  let first_audio_at: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+  let last_ingest_log_at: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
+
   // ===== Task A: Ingestión =====
   let pcm_buf_ing = Arc::clone(&pcm_buf);
+  let first_audio_ing = Arc::clone(&first_audio_at);
+  let last_ingest_log_ing = Arc::clone(&last_ingest_log_at);
+
   let mut ingest_handle = tokio::spawn(async move {
     while let Some(opus_frame) = rx_opus.recv().await {
-      // Opus → 48k
+      let t0 = Instant::now();
       let (pcm48, _nsamp) = match opus.decode(&opus_frame) {
         Ok(x) => x,
         Err(e) => {
@@ -73,11 +83,13 @@ pub async fn run_whisper_worker(
           continue;
         }
       };
+      let t1 = Instant::now();
+
       if pcm48.is_empty() {
         continue;
       }
 
-      // Downmix si viniera estéreo
+      // Downmix si estéreo
       let pcm48_mono = if opus.is_stereo() {
         Opus48k::downmix_stereo_to_mono(&pcm48)
       } else {
@@ -92,16 +104,42 @@ pub async fn run_whisper_worker(
           continue;
         }
       };
+      let t2 = Instant::now();
+
       if pcm16_chunk.is_empty() {
         continue;
       }
 
+      // Marca primer audio
+      {
+        let mut first = first_audio_ing.lock().await;
+        if first.is_none() {
+          *first = Some(Instant::now());
+        }
+      }
+
       // Append + recorte a ventana
-      let mut g = pcm_buf_ing.lock().await;
-      g.extend_from_slice(&pcm16_chunk);
-      if g.len() > WINDOW_SAMPLES_16K {
-        let cut = g.len() - WINDOW_SAMPLES_16K;
-        g.drain(..cut);
+      {
+        let mut g = pcm_buf_ing.lock().await;
+        g.extend_from_slice(&pcm16_chunk);
+        if g.len() > WINDOW_SAMPLES_16K {
+          let cut = g.len() - WINDOW_SAMPLES_16K;
+          g.drain(..cut);
+        }
+
+        // Log ingest cada ~1s para no inundar
+        let mut last = last_ingest_log_ing.lock().await;
+        if last.elapsed() >= Duration::from_secs(1) {
+          let tail_secs = g.len() as f32 / 16_000.0;
+          tracing::info!(
+            "ingest: decode={:.2}ms resample={:.2}ms chunk={} tail={:.2}s",
+            ms(t1 - t0),
+            ms(t2 - t1),
+            pcm16_chunk.len(),
+            tail_secs
+          );
+          *last = Instant::now();
+        }
       }
     }
     tracing::info!("ingest task finished");
@@ -110,75 +148,99 @@ pub async fn run_whisper_worker(
   // ===== Task B: Inferencia periódica =====
   let mut last_partial = String::new();
   let mut last_partial_at = Instant::now();
+  let mut first_partial_logged = false;
 
-  let hop_ms = (1000.0 * HOP_SAMPLES_16K as f32 / 16_000.0) as u64;
-  let mut tick = tokio::time::interval(Duration::from_millis(hop_ms));
+  let mut tick = tokio::time::interval(Duration::from_millis(
+    (1000.0 * HOP_SAMPLES_16K as f32 / 16_000.0) as u64,
+  ));
   tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
   loop {
     tokio::select! {
-      // Si termina ingestión (se cerró el canal), salimos
-      res = &mut ingest_handle => {
-        if let Err(e) = res {
-          tracing::warn!("ingest join error: {e:#}");
-        }
-        break;
-      }
-
-      // Tick de inferencia
-      _ = tick.tick() => {
-        // Snapshot del tail
-        let tail: Vec<f32> = {
-          let g = pcm_buf.lock().await;
-          if g.len() < MIN_SAMPLES_FOR_INFER_16K {
-            // Aún no hay audio suficiente para evitar assert interno de whisper
-            continue;
-          }
-          g.clone()
-        };
-
-        // Inferencia sin bloquear el runtime (sección de cómputo pesado)
-        if let Err(e) = tokio::task::block_in_place(|| {
-          state.full(params.clone(), &tail[..]).context("whisper full()")
-        }) {
-          tracing::error!("whisper full error: {e:#}");
-          continue;
+        res = &mut ingest_handle => {
+            if let Err(e) = res {
+                tracing::warn!("ingest join error: {e:#}");
+            }
+            break;
         }
 
-        // Hipótesis parcial
-        let mut hypo = String::new();
-        for seg in state.as_iter() {
-          let mut seg_txt = seg.to_string();
-          seg_txt = seg_txt.trim().to_string();
-          if seg_txt.is_empty() || seg_txt == "[BLANK_AUDIO]" { continue; }
-          if !hypo.is_empty() { hypo.push(' '); }
-          hypo.push_str(&seg_txt);
-        }
+        _ = tick.tick() => {
+            // Snapshot del tail
+            let tail: Vec<f32> = {
+                let g = pcm_buf.lock().await;
+                if g.is_empty() { continue; }
+                g.clone()
+            };
 
-        if !hypo.is_empty() && hypo != last_partial {
-          let _ = stt_tx.send(SttMsg::Partial { text: hypo.clone() });
-          last_partial = hypo;
-          last_partial_at = Instant::now();
-        }
+            let tail_secs = tail.len() as f32 / 16_000.0;
 
-        // VAD para FINAL (mira ~0.25 s del final)
-        let vad_window = tail.get(tail.len().saturating_sub(4_000)..).unwrap_or(&tail[..]);
-        if is_silence(vad_window, SILENCE_THRESHOLD_RMS)
-          && !last_partial.is_empty()
-          && last_partial_at.elapsed() > Duration::from_millis(SILENCE_HOLDOFF_MS)
-        {
-          let final_text = std::mem::take(&mut last_partial);
-          let _ = stt_tx.send(SttMsg::Final { text: final_text });
+            // Evita invocar whisper con muy poco audio (reduce “ruido” y latencia por pasada)
+            if tail.len() < MIN_SAMPLES_FOR_INFER_16K {
+                tracing::debug!("infer: tail demasiado corto ({:.2}s) — skip", tail_secs);
+                continue;
+            }
 
-          // Mantener “cola” corta en el buffer compartido para continuidad
-          let mut g = pcm_buf.lock().await;
-          if g.len() > TAIL_AFTER_FINAL_16K {
-            let keep_from = g.len() - TAIL_AFTER_FINAL_16K;
-            g.drain(..keep_from);
-          }
-          last_partial_at = Instant::now();
+            // Cronometra modelo
+            let t_model = Instant::now();
+            let res = tokio::task::block_in_place(|| {
+                state.full(params.clone(), &tail[..])
+            });
+            let dt_model = t_model.elapsed();
+
+            if let Err(e) = res {
+                tracing::error!("whisper full error: {e:#} (tail={:.2}s)", tail_secs);
+                continue;
+            } else {
+                tracing::info!("infer: whisper_full={:.0}ms tail={:.2}s", ms(dt_model), tail_secs);
+            }
+
+            // Construye hipótesis
+            let mut hypo = String::new();
+            for seg in state.as_iter() {
+                let mut seg_txt = seg.to_string();
+                seg_txt = seg_txt.trim().to_string();
+                if seg_txt.is_empty() || seg_txt == "[BLANK_AUDIO]" { continue; }
+                if !hypo.is_empty() { hypo.push(' '); }
+                hypo.push_str(&seg_txt);
+            }
+
+            // Emitir PARCIAL si cambió
+            if !hypo.is_empty() && hypo != last_partial {
+                // Latencia extremo a extremo (first audio → primer parcial)
+                if !first_partial_logged {
+                    let start_opt = { first_audio_at.lock().await.clone() };
+                    if let Some(t0) = start_opt {
+                        let e2e = t0.elapsed();
+                        tracing::info!("E2E: first_partial after {:.0}ms since first_audio", ms(e2e));
+                    }
+                    first_partial_logged = true;
+                }
+
+                tracing::info!("stt.partial: '{}'", hypo);
+                let _ = stt_tx.send(SttMsg::Partial { text: hypo.clone() });
+                last_partial = hypo;
+                last_partial_at = Instant::now();
+            }
+
+            // Confirmar FINAL por VAD
+            let vad_window = tail.get(tail.len().saturating_sub(4000)..).unwrap_or(&tail[..]); // ~0.25s
+            if is_silence(vad_window, SILENCE_THRESHOLD_RMS)
+                && !last_partial.is_empty()
+                && last_partial_at.elapsed() > Duration::from_millis(SILENCE_HOLDOFF_MS)
+            {
+                let final_text = std::mem::take(&mut last_partial);
+                tracing::info!("stt.final: '{}'", final_text);
+                let _ = stt_tx.send(SttMsg::Final { text: final_text });
+
+                // Mantener “cola” corta
+                let mut g = pcm_buf.lock().await;
+                if g.len() > TAIL_AFTER_FINAL_16K {
+                    let keep_from = g.len() - TAIL_AFTER_FINAL_16K;
+                    g.drain(..keep_from);
+                }
+                last_partial_at = Instant::now();
+            }
         }
-      }
     }
   }
 
