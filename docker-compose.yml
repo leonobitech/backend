@@ -610,7 +610,7 @@ services:
       - MALLOC_ARENA_MAX=2
       # Gunicorn más contenido (2 workers x 2 threads), recicla workers para evitar crecimiento
       - WEB_CONCURRENCY=2
-      - GUNICORN_CMD_ARGS=--workers=2 --threads=2 --timeout 60 --graceful-timeout 30 --max-requests 200 --max-requests-jitter 50 --worker-tmp-dir /dev/shm
+      - GUNICORN_CMD_ARGS=--workers=2 --threads=2 --timeout 300 --graceful-timeout 60 --max-requests 200 --max-requests-jitter 50 --worker-tmp-dir /dev/shm
 
     volumes:
       - baserow_data:/baserow/data
