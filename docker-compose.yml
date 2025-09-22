@@ -455,7 +455,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "odoo"]
+      test: ["CMD", "pgrep", "-f", "odoo", "--no-database-list"]
       interval: 10s
       timeout: 5s
       retries: 5
