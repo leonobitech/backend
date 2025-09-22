@@ -445,7 +445,7 @@ services:
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
       - odoo_data:/var/lib/odoo
 
-    command: ["odoo", "-c", "/etc/odoo/odoo.conf"]
+    command: ["odoo", "-c", "/etc/odoo/odoo.conf", "--no-database-list"]
 
     networks:
       - leonobitech-net
@@ -455,7 +455,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "odoo", "--no-database-list"]
+      test: ["CMD", "pgrep", "-f", "odoo"]
       interval: 10s
       timeout: 5s
       retries: 5
