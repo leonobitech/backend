@@ -6,6 +6,8 @@ repositories/core/keys/*
 .env
 .env*.local
 
+repositories/n8n/SystemPrompt.md
+
 # ─────────────────────────────────────────────
 # 🔧 Node.js (modules and build)
 # ─────────────────────────────────────────────
