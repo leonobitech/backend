@@ -478,7 +478,8 @@ services:
       - "traefik.http.routers.odoo-main.tls=true"
       - "traefik.http.routers.odoo-main.tls.certresolver=le"
       - "traefik.http.routers.odoo-main.service=odoo"
-      - "traefik.http.routers.odoo-main.middlewares=core-auth@file,secure-odoo@file"
+      #- "traefik.http.routers.odoo-main.middlewares=core-auth@file,secure-odoo@file"
+      - "traefik.http.routers.odoo-main.middlewares=secure-odoo@file"
 
       #########################################
       # 🔌 WebSocket (longpolling)
