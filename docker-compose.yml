@@ -445,7 +445,7 @@ services:
       - ./repositories/odoo/addons:/mnt/extra-addons:rw
       - odoo_data:/var/lib/odoo
 
-    command: ["odoo", "-c", "/etc/odoo/odoo.conf", "--no-database-list"]
+    command: ["odoo", "-c", "/etc/odoo/odoo.conf"]
 
     networks:
       - leonobitech-net
