@@ -229,6 +229,9 @@ services:
     env_file:
       - ./repositories/n8n/.env
 
+    environment:
+      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
+
     volumes:
       - n8n_data_webhook_1:/home/node/.n8n
 
@@ -276,6 +279,9 @@ services:
     env_file:
       - ./repositories/n8n/.env
 
+    environment:
+      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
+
     volumes:
       - n8n_data_worker_1:/home/node/.n8n
 
@@ -304,6 +310,9 @@ services:
 
     env_file:
       - ./repositories/n8n/.env
+
+    environment:
+      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
 
     volumes:
       - n8n_data_worker_2:/home/node/.n8n
