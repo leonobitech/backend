@@ -212,6 +212,15 @@ services:
       - "traefik.http.routers.n8n_webhooktest.service=n8n_main@docker"
       - "traefik.http.routers.n8n_webhooktest.middlewares=secure-relaxed@file"
 
+      #########################################
+      # 🎯 MCP público de test (libre pero con headers mínimos)
+      #########################################
+      - "traefik.http.routers.n8n_mcptest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/mcp-test`)"
+      - "traefik.http.routers.n8n_mcptest.entrypoints=websecure"
+      - "traefik.http.routers.n8n_mcptest.tls.certresolver=le"
+      - "traefik.http.routers.n8n_mcptest.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_mcptest.middlewares=secure-relaxed@file"
+
   n8n_webhook_1:
     image: n8nio/n8n:latest
     container_name: n8n_webhook_1
@@ -261,6 +270,15 @@ services:
       - "traefik.http.routers.n8n_webhook.tls.certresolver=le"
       - "traefik.http.routers.n8n_webhook.service=n8n_webhook_1@docker"
       - "traefik.http.routers.n8n_webhook.middlewares=secure-basic@file"
+
+      #########################################
+      # 🌐 Router: Público para /MCP/*
+      #########################################
+      - "traefik.http.routers.n8n_mcp.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/mcp`)"
+      - "traefik.http.routers.n8n_mcp.entrypoints=websecure"
+      - "traefik.http.routers.n8n_mcp.tls.certresolver=le"
+      - "traefik.http.routers.n8n_mcp.service=n8n_webhook_1@docker"
+      - "traefik.http.routers.n8n_mcp.middlewares=secure-basic@file"
 
   n8n_worker_1:
     image: n8nio/n8n:latest
