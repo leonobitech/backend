@@ -9,7 +9,6 @@
 # -----------------------------------------------------------------------------
 http:
   middlewares:
-
     # -------------------------------------------------------------------------
     # 🔐 Shared ForwardAuth – delegates auth to Core microservice
     # -------------------------------------------------------------------------
@@ -23,22 +22,27 @@ http:
         authResponseHeaders:
           - "X-User-Id"
           - "X-User-Role"
-          - "Set-Cookie"
         addAuthCookiesToResponse:
           - "accessKey"
           - "clientKey"
 
+    # 🔒 APIs: sin cache + aisladas por sesión
+    api-nostore-vary:
+      headers:
+        customResponseHeaders:
+          Cache-Control: "no-store"
+          Vary: "Cookie, Authorization"
     # -------------------------------------------------------------------------
     # 🔐 CSP personalizada para Core – permite credenciales desde frontend
     # -------------------------------------------------------------------------
     core-secure:
       headers:
-        STSSeconds: 315360000
+        stsSeconds: 315360000
         forceSTSHeader: true
-        STSIncludeSubdomains: true
-        STSPreload: true
+        stsIncludeSubdomains: true
+        stsPreload: true
         SSLHost: "leonobitech.com"
-        browserXSSFilter: true
+        browserXssFilter: true
         contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: strict-origin-when-cross-origin
@@ -52,7 +56,7 @@ http:
           default-src 'self';
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline';
-          connect-src 'self' https://*.leonobitech.com wss://leonobit.leonobitech.com blob: data:;
+          connect-src 'self' https://*.leonobitech.com wss://*.leonobitech.com blob: data:;
           img-src 'self' data:;
           frame-ancestors 'self';
 
@@ -61,12 +65,12 @@ http:
     # -------------------------------------------------------------------------
     secure-strict:
       headers:
-        STSSeconds: 315360000
+        stsSeconds: 315360000
         forceSTSHeader: true
-        STSIncludeSubdomains: true
-        STSPreload: true
+        stsIncludeSubdomains: true
+        stsPreload: true
         SSLHost: "leonobitech.com"
-        browserXSSFilter: true
+        browserXssFilter: true
         contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: "no-referrer"
@@ -78,12 +82,12 @@ http:
     # -------------------------------------------------------------------------
     secure-relaxed:
       headers:
-        STSSeconds: 315360000
+        stsSeconds: 315360000
         forceSTSHeader: true
-        STSIncludeSubdomains: true
-        STSPreload: true
+        stsIncludeSubdomains: true
+        stsPreload: true
         SSLHost: "leonobitech.com"
-        browserXSSFilter: true
+        browserXssFilter: true
         contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: "no-referrer"
@@ -97,19 +101,17 @@ http:
           connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com wss://leonobit.leonobitech.com;
           frame-ancestors 'self';
 
-
-
     # -------------------------------------------------------------------------
     # 𞶑 Basic headers – no CSP, for media or public assets
     # -------------------------------------------------------------------------
     secure-basic:
       headers:
-        STSSeconds: 315360000
+        stsSeconds: 315360000
         forceSTSHeader: true
-        STSIncludeSubdomains: true
-        STSPreload: true
+        stsIncludeSubdomains: true
+        stsPreload: true
         SSLHost: "leonobitech.com"
-        browserXSSFilter: true
+        browserXssFilter: true
         contentTypeNosniff: true
         frameDeny: true
         referrerPolicy: "no-referrer"
@@ -132,12 +134,12 @@ http:
       headers:
         STSSeconds: 315360000
         forceSTSHeader: true
-        STSIncludeSubdomains: true
-        STSPreload: true
+        stsIncludeSubdomains: true
+        stsPreload: true
         SSLHost: "leonobitech.com"
-        browserXSSFilter: true
+        browserXssFilter: true
         contentTypeNosniff: true
-        frameDeny: false
+        frameDeny: true
         referrerPolicy: strict-origin-when-cross-origin
         permissionsPolicy: >-
           geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
@@ -159,11 +161,11 @@ http:
     # -------------------------------------------------------------------------
     odoo-media:
       headers:
-        STSSeconds: 315360000
+        stsSeconds: 315360000
         forceSTSHeader: true
-        STSIncludeSubdomains: true
-        STSPreload: true
-        browserXSSFilter: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        browserXssFilter: true
         contentTypeNosniff: false
         frameDeny: true
         referrerPolicy: no-referrer

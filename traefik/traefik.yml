@@ -2,11 +2,11 @@
 # 🌐 Traefik static configuration
 
 log:
-  level: INFO  # Cambiar a DEBUG si necesitás depurar
+  level: INFO # Cambiar a DEBUG si necesitás depurar
 
 api:
   dashboard: true
-  insecure: false  # ✅ Siempre en false en producción
+  insecure: false # ✅ Siempre en false en producción
 
 entryPoints:
   web:
@@ -15,23 +15,23 @@ entryPoints:
       redirections:
         entryPoint:
           to: websecure
-          scheme: https  # 🔐 Redirecciona todo HTTP a HTTPS
+          scheme: https # 🔐 Redirecciona todo HTTP a HTTPS
 
   websecure:
     address: ":443"
 
 providers:
   docker:
-    exposedByDefault: false  # ✅ Solo servicios con traefik.enable=true
+    exposedByDefault: false # ✅ Solo servicios con traefik.enable=true
 
   file:
-    filename: /etc/traefik/dynamic/middlewares.yaml  # 🔧 Middlewares dinámicos
-    watch: true  # 🔄 Recarga automática al editar el archivo
+    filename: /etc/traefik/dynamic/middlewares.yaml # 🔧 Middlewares dinámicos
+    watch: true # 🔄 Recarga automática al editar el archivo
 
 certificatesResolvers:
   le:
     acme:
       email: ${SSL_EMAIL}
-      storage: /acme.json
+      storage: /letsencrypt/acme.json
       httpChallenge:
-        entryPoint: web  # 🌍 Realiza desafío HTTP en puerto 80
+        entryPoint: web # 🌍 Realiza desafío HTTP en puerto 80

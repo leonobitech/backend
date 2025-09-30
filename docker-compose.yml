@@ -147,7 +147,7 @@ services:
       #########################################
       # 🧩 Middlewares globales aplicados al router
       #########################################
-      - "traefik.http.routers.core.middlewares=core-secure@file, block-trackers@file"
+      - "traefik.http.routers.core.middlewares=core-secure@file, block-trackers@file, api-nostore-vary@file"
 
   n8n_main:
     image: n8nio/n8n:latest
@@ -192,7 +192,7 @@ services:
       - "traefik.http.routers.n8n_rest.entrypoints=websecure"
       - "traefik.http.routers.n8n_rest.tls.certresolver=le"
       - "traefik.http.routers.n8n_rest.service=n8n_main@docker"
-      - "traefik.http.routers.n8n_rest.middlewares=secure-relaxed@file"
+      - "traefik.http.routers.n8n_rest.middlewares=secure-relaxed@file, api-nostore-vary@file"
 
       #########################################
       # 🖼️ Rutas estáticas (íconos, sin auth)
@@ -682,7 +682,7 @@ services:
       - "traefik.http.routers.baserow-api.entrypoints=websecure"
       - "traefik.http.routers.baserow-api.tls.certresolver=le"
       - "traefik.http.routers.baserow-api.service=baserow-api"
-      - "traefik.http.routers.baserow-api.middlewares=secure-strict@file, block-trackers@file"
+      - "traefik.http.routers.baserow-api.middlewares=secure-strict@file,block-trackers@file,api-nostore-vary@file"
       - "traefik.http.services.baserow-api.loadbalancer.server.port=8000"
 
       #########################################
