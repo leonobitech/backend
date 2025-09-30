@@ -86,7 +86,6 @@ services:
       #########################################
       - "traefik.http.routers.traefik.rule=Host(`traefik.leonobitech.com`)"
       - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.tls.certresolver=le"
       - "traefik.http.routers.traefik.service=api@internal"
       # Cadena de middlewares: auth (labels) + headers/rules (file)
       - "traefik.http.routers.traefik.middlewares=auth-traefik@docker,block-trackers@file,secure-strict@file"
