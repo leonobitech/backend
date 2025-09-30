@@ -14,7 +14,7 @@ http:
       forwardingTimeouts:
         dialTimeout: 10s
         responseHeaderTimeout: 120s
-        idleConnTimeout: 900s # 15 min (ajusta si necesitas más)
+        idleConnTimeout: 3600s # 1 hora (ajusta si necesitas más)
 
   middlewares:
     # -------------------------------------------------------------------------
