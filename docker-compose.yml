@@ -721,7 +721,7 @@ services:
       - "traefik.http.routers.baserow-ws.service=baserow-ws"
       - "traefik.http.routers.baserow-ws.middlewares=ws-safe@file"
       - "traefik.http.services.baserow-ws.loadbalancer.server.port=8000"
-      - "traefik.http.services.baserow-ws.loadbalancer.servertransport=ws-transport@file"
+      - "traefik.http.services.baserow-ws.loadbalancer.serverstransport=ws-transport@file"
 
       #########################################
       # 🖼️ Archivos /media (opcional, descomentable)
