@@ -4,6 +4,7 @@ services:
     container_name: traefik
     restart: unless-stopped
 
+    # Mantener privilegios al mínimo
     security_opt:
       - no-new-privileges:true
 
@@ -11,48 +12,73 @@ services:
       - .env
 
     command:
-      # 🔧 Configuración básica
-      - "--api.dashboard=true"
-      - "--api.insecure=false"
+      # ✅ Dashboard y /ping (sólo en 127.0.0.1:8080)
+      - --api.dashboard=true
+      - --api.insecure=false
+      - --ping=true
+      - --entrypoints.traefik.address=:8080
 
       # 📡 Entrypoints HTTP/HTTPS
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--entrypoints.websecure.address=:443"
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+      - --entrypoints.websecure.address=:443
 
-      # 🐳 Provider: Docker
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
+      # 🐳 Provider: Docker (sólo contenedores con label enable=true)
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      # Asegura que Traefik use la red donde están tus servicios
+      - --providers.docker.network=leonobitech-net
 
-      # 📂 Middleware externo desde directorio
-      - "--providers.file.directory=/etc/traefik/dynamic"
-      - "--providers.file.watch=true"
+      # 📂 Provider: archivos dinámicos (middlewares, etc.)
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
 
-      # 🔐 Let's Encrypt (ACME)
-      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.le.acme.email=${SSL_EMAIL}"
-      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      # 🔐 Let's Encrypt (ACME) — HTTP-01
+      - --certificatesresolvers.le.acme.email=${SSL_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+
+      # (Opcional) logs para debug:
+      # - --log.level=DEBUG
+      # - --accesslog=true
 
     ports:
       - "80:80"
       - "443:443"
+      # Dashboard/health sólo local:
+      - "127.0.0.1:8080:8080"
 
     volumes:
+      # Docker socket en sólo lectura
       - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # ACME en volumen/archivo persistente
       - ./traefik/acme.json:/letsencrypt/acme.json:rw
-      - ./traefik/dynamic/middlewares.yaml:/etc/traefik/dynamic/middlewares.yaml:ro
+
+      # 🔴 Importante: montar el DIRECTORIO dinámico completo
+      - ./traefik/dynamic/:/etc/traefik/dynamic:ro
 
     networks:
       - leonobitech-net
 
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
     labels:
-      # ✅ Activar Traefik para este contenedor
+      # ✅ Habilitar Traefik para este contenedor (necesario para el router del dashboard)
       - "traefik.enable=true"
 
       #########################################
-      # 🔐 Middleware: Autenticación básica para dashboard (único local)
+      # 🔐 Middleware: BasicAuth (definido por label)
       #########################################
+      # Usa variable TRAEFIK_AUTH tipo htpasswd (p.ej. `admin:$$apr1$$...`)
       - "traefik.http.middlewares.auth-traefik.basicauth.users=${TRAEFIK_AUTH}"
 
       #########################################
@@ -62,6 +88,7 @@ services:
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.tls.certresolver=le"
       - "traefik.http.routers.traefik.service=api@internal"
+      # Cadena de middlewares: auth (labels) + headers/rules (file)
       - "traefik.http.routers.traefik.middlewares=auth-traefik@docker,block-trackers@file,secure-strict@file"
 
   redis_core:
