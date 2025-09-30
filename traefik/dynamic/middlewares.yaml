@@ -8,6 +8,14 @@
 # 🧠 TIP: You can use environment variables with Go templates, e.g. {{ env "DOMAIN_NAME" }}
 # -----------------------------------------------------------------------------
 http:
+  # 1) Transport WS con timeouts altos (compartido por todos)
+  serversTransports:
+    ws-transport:
+      forwardingTimeouts:
+        dialTimeout: 10s
+        responseHeaderTimeout: 120s
+        idleConnTimeout: 900s # 15 min (ajusta si necesitas más)
+
   middlewares:
     # -------------------------------------------------------------------------
     # 🔐 Shared ForwardAuth – delegates auth to Core microservice
@@ -188,17 +196,17 @@ http:
     # - Permite origen cruzado para cliente web
     # - Agrega STS y filtros anti-XSS
     #########################################
-    ws-headers:
+    # 2) Middleware WS neutro y seguro (compartido por todos)
+    ws-safe:
       headers:
         customRequestHeaders:
           X-Forwarded-Proto: "https"
-          Connection: "Upgrade"
-          Upgrade: "websocket"
-        customResponseHeaders:
-          Access-Control-Allow-Origin: "*"
-        stsSeconds: 31536000
-        forceSTSHeader: true
+        # Seguridad razonable sin interferir con WS
         browserXssFilter: true
+        contentTypeNosniff: true
+        referrerPolicy: "no-referrer"
+        # Evita forzar frame deny en endpoints embebibles tipo Chatwoot widget
+        # frameDeny: true   # <- si tienes widget embebido, mejor NO aplicarlo en WS
 
     #########################################
     # 🟢 Webhook Meta (WhatsApp) - Open Access

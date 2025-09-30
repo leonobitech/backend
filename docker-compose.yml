@@ -543,7 +543,7 @@ services:
       - "traefik.http.routers.odoo-ws.tls=true"
       - "traefik.http.routers.odoo-ws.tls.certresolver=le"
       - "traefik.http.routers.odoo-ws.service=odoo-ws"
-      - "traefik.http.routers.odoo-ws.middlewares=ws-headers@file"
+      - "traefik.http.routers.odoo-ws.middlewares=secure-basic@file"
 
       #########################################
       # 📦 Media pública y binarios (descargas, imágenes)
@@ -719,8 +719,9 @@ services:
       - "traefik.http.routers.baserow-ws.entrypoints=websecure"
       - "traefik.http.routers.baserow-ws.tls.certresolver=le"
       - "traefik.http.routers.baserow-ws.service=baserow-ws"
-      - "traefik.http.routers.baserow-ws.middlewares=secure-strict@file"
+      - "traefik.http.routers.baserow-ws.middlewares=ws-safe@file"
       - "traefik.http.services.baserow-ws.loadbalancer.server.port=8000"
+      - "traefik.http.services.baserow-ws.loadbalancer.servertransport=ws-transport@file"
 
       #########################################
       # 🖼️ Archivos /media (opcional, descomentable)
@@ -1120,7 +1121,7 @@ services:
       - "traefik.http.routers.chatwoot-cable.tls.certresolver=le"
       - "traefik.http.routers.chatwoot-cable.service=chatwoot"
       - "traefik.http.routers.chatwoot-cable.priority=110"
-      - "traefik.http.routers.chatwoot-cable.middlewares=ws-headers@file"
+      - "traefik.http.routers.chatwoot-cable.middlewares=ws-safe@file"
 
       #########################################
       # 🟢 RUTA EXCEPCIÓN PARA WEBHOOK DE WHATSAPP
@@ -1147,6 +1148,7 @@ services:
       # 🔁 Servicio expuesto en el puerto 3000
       #########################################
       - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
+      - "traefik.http.services.chatwoot.loadbalancer.serverstransport=ws-transport@file"
 
   chatwoot_worker_default:
     image: chatwoot/chatwoot:latest
