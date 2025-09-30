@@ -5,25 +5,30 @@ import { loggerAudit } from "@utils/logging/loggerAudit";
 const baseAllowedCookies = [
   "accessKey",
   "clientKey",
-  "sidebar:state",
+  "sidebar_state",
   "clientMeta",
 ];
 
 // 🍪 Cookies necesarias para Traefik ForwardAuth (n8n, Odoo)
 const forwardAuthExtras = [
-  "n8n-auth",
-  "tz",
-  "frontend_lang",
-  "session_id",
-  "cids",
-  "baserow_dashboard_alert_closed",
-  "baserow_group_id",
-  "defaultViewId",
-  "i18n-language",
-  "user_session",
+  "n8n-auth", // n8n
+
+  "tz", // Odoo
+  "session_id", // Odoo
+  "frontend_lang", // Odoo
+  "cids", // Odoo
+
+  "jwt_token", // Baserow
+  "baserow_dashboard_alert_closed", // Baserow
+  "baserow_group_id", // Baserow
+  "defaultViewId", // Baserow
+  "i18n-language", // Baserow
+
+  "cw_d_session_info", // Chatwoot
+  "_chatwoot_session", // Chatwoot
+
   "clientMeta",
 ];
-("jwt_token");
 
 export default function cleanCookies(
   req: Request,
