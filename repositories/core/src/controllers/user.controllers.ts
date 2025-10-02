@@ -3,10 +3,11 @@ import prisma from "@config/prisma";
 import { HTTP_CODE } from "@constants/httpCode";
 import catchErrors from "@utils/http/catchErrors";
 import appAssert from "@utils/validation/appAssert";
-import { updateProfileSchema } from "@schemas/accountSchemas";
+import { updateProfileSchema, changePasswordSchema } from "@schemas/accountSchemas";
 import logger from "@utils/logging/logger";
 import { ERROR_CODE } from "@constants/errorCode";
 import { loggerAudit } from "@utils/logging/loggerAudit";
+import { compareValue, hashValue } from "@utils/auth/bcrypt";
 
 /**
  * 📌 POST /account/me
@@ -150,6 +151,105 @@ export const updateProfile = catchErrors(
     res.status(HTTP_CODE.OK).json({
       message: "Perfil actualizado correctamente.",
       user: updatedUser,
+    });
+  }
+);
+
+//==============================================================================
+
+/**
+ * 📌 POST /account/password/change
+ * Cambiar la contraseña del usuario autenticado
+ */
+export const changePassword = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const parsed = changePasswordSchema.safeParse(req.body);
+
+    appAssert(
+      parsed.success,
+      HTTP_CODE.BAD_REQUEST,
+      "Datos inválidos",
+      ERROR_CODE.INVALID_INPUT,
+      parsed.error
+        ? Object.entries(parsed.error.flatten().fieldErrors).map(
+            ([field, messages]) => ({
+              field,
+              message: messages?.join(", ") || "Valor inválido",
+            })
+          )
+        : []
+    );
+
+    const { currentPassword, newPassword } = parsed.data;
+
+    // Obtener el usuario con la contraseña actual
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: {
+        id: true,
+        password: true,
+      },
+    });
+
+    appAssert(
+      user,
+      HTTP_CODE.NOT_FOUND,
+      "Usuario no encontrado",
+      ERROR_CODE.USER_NOT_FOUND
+    );
+
+    // Verificar que la contraseña actual sea correcta
+    const isCurrentPasswordValid = await compareValue(
+      currentPassword,
+      user.password
+    );
+
+    appAssert(
+      isCurrentPasswordValid,
+      HTTP_CODE.UNAUTHORIZED,
+      "Contraseña actual incorrecta",
+      ERROR_CODE.INVALID_CREDENTIALS
+    );
+
+    // Verificar que la nueva contraseña no sea igual a la actual
+    const isSamePassword = await compareValue(newPassword, user.password);
+
+    appAssert(
+      !isSamePassword,
+      HTTP_CODE.BAD_REQUEST,
+      "La nueva contraseña debe ser diferente a la actual",
+      ERROR_CODE.INVALID_INPUT
+    );
+
+    // Hashear la nueva contraseña
+    const hashedNewPassword = await hashValue(newPassword);
+
+    // Actualizar la contraseña
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: {
+        password: hashedNewPassword,
+      },
+    });
+
+    // 🧾 Auditoría del cambio
+    loggerAudit(
+      "account.password.changed",
+      {
+        performedBy: req.userId,
+        timestamp: new Date().toISOString(),
+      },
+      req
+    );
+
+    logger.info("✅ Contraseña cambiada exitosamente", {
+      userId: req.userId,
+      sessionId: req.sessionId,
+    });
+
+    res.status(HTTP_CODE.OK).json({
+      message: "Contraseña actualizada correctamente.",
+      passwordChangedAt: new Date().toISOString(),
     });
   }
 );

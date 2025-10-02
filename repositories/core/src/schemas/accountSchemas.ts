@@ -47,3 +47,8 @@ export const updateProfileSchema = z.object({
   avatar: z.string().url().optional(),
   bio: z.string().max(200).optional(),
 });
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: passwordSchema,
+});

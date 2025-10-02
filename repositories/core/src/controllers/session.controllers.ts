@@ -65,7 +65,7 @@ export const deleteSession = catchErrors(
     const lang = (req.headers["accept-language"]?.split(",")[0] ||
       "en") as SupportedLang;
 
-    const sessionId = z.string().min(1).safeParse(req.params.id);
+    const sessionId = z.string().min(1).safeParse(req.params.sessionId);
 
     appAssert(
       req.userId && req.sessionId,
