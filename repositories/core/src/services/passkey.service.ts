@@ -82,7 +82,7 @@ export async function generatePasskeyRegistrationChallenge(
     expiresAt: Date.now() + webAuthnConfig.challengeTTL,
   };
 
-  await redis.setex(
+  await redis.setEx(
     challengeKey,
     Math.floor(webAuthnConfig.challengeTTL / 1000),
     JSON.stringify(challengeData)
@@ -254,7 +254,7 @@ export async function generatePasskeyAuthenticationChallenge(
     expiresAt: Date.now() + webAuthnConfig.challengeTTL,
   };
 
-  await redis.setex(
+  await redis.setEx(
     challengeKey,
     Math.floor(webAuthnConfig.challengeTTL / 1000),
     JSON.stringify(challengeData)
