@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { catchErrors } from "@utils/errors";
+import catchErrors from "@utils/http/catchErrors";
 import {
   generatePasskeyRegistrationChallenge,
   verifyPasskeyRegistration,

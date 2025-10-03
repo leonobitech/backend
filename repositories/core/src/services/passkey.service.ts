@@ -12,7 +12,7 @@ import type {
 import { prisma } from "@config/prisma";
 import { redis } from "@config/redis";
 import { webAuthnConfig } from "@config/webauthn";
-import { HttpException } from "@utils/errors";
+import HttpException from "@utils/http/HttpException";
 import { ERROR_CODE } from "@constants/errorCode";
 import { HTTP_CODE } from "@constants/httpCode";
 import type { ClientMeta } from "@/types/request";
