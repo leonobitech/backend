@@ -37,6 +37,7 @@ model User {
   devices           Device[]
   tokenRecords      TokenRecord[]
   securityEventLogs SecurityEventLog[]
+  passkeys          Passkey[]
 }
 
 model Device {
@@ -59,6 +60,7 @@ model Device {
   updatedAt   DateTime @updatedAt
 
   sessions    Session[]
+  passkeys    Passkey[]
   @@unique([userId, device, os, browser], name: "unique_device")
 }
 
@@ -141,4 +143,25 @@ model SecurityEventLog {
 
   @@index([userId])
   @@index([sessionId])
+}
+
+model Passkey {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @map("userId") @db.ObjectId
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  credentialId    String   @unique // WebAuthn credential ID (base64url)
+  publicKey       String   // Public key (base64url)
+  counter         Int      @default(0) // Signature counter for replay protection
+
+  deviceId        String?  @map("deviceId") @db.ObjectId
+  device          Device?  @relation(fields: [deviceId], references: [id])
+
+  name            String?  // Friendly name (e.g., "MacBook Pro", "iPhone 13")
+  transports      String[] // Authenticator transports (usb, nfc, ble, internal)
+
+  createdAt       DateTime @default(now())
+  lastUsedAt      DateTime @default(now())
+
+  @@index([userId])
 }

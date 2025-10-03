@@ -29,6 +29,7 @@ import accountRoutes from "@routes/account.routes";
 import sessionRoutes from "@routes/session.routes";
 import userRoutes from "@routes/user.routes";
 import adminRouter from "@routes/admin.routes";
+import passkeyRoutes from "@routes/passkey.routes";
 
 // test route for error handling
 import testRouter from "@routes/test.routes";
@@ -110,6 +111,7 @@ app.use("/account", accountRoutes);
 // 🔐 Auth & protected routes
 app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
+app.use("/account/passkey", passkeyRoutes); // Passkey routes (mixed auth)
 app.use("/admin", authenticate, authorize(UserRole.Admin), adminRouter);
 
 // Test route for error handling
