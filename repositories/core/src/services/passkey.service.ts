@@ -4,6 +4,7 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
+import { isoUint8Array } from "@simplewebauthn/server/helpers";
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
@@ -54,7 +55,7 @@ export async function generatePasskeyRegistrationChallenge(
   const options = await generateRegistrationOptions({
     rpName: webAuthnConfig.rpName,
     rpID: webAuthnConfig.rpId,
-    userID: user.id,
+    userID: isoUint8Array.fromUTF8String(user.id),
     userName: user.email,
     userDisplayName: user.name || user.email,
     timeout: webAuthnConfig.timeout,
