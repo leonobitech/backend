@@ -11,8 +11,8 @@ import {
 import {
   generateAccessTokens,
   setAuthCookies,
-  findOrCreateDevice,
 } from "@services/account.service";
+import { findOrCreateDevice } from "@utils/auth/findOrCreateDevice";
 import { HTTP_CODE } from "@constants/httpCode";
 import type {
   PasskeyRegisterChallengeRequest,
