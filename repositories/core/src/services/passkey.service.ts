@@ -180,7 +180,10 @@ export async function verifyPasskeyRegistration(
       publicKey: Buffer.from(credentialInfo.publicKey).toString("base64url"),
       counter: credentialInfo.counter,
       name: name || `${meta.deviceInfo.device} (${meta.deviceInfo.os})`,
-      transports: credential.response.transports || [],
+      // Always include 'hybrid' transport to enable cross-device QR code authentication
+      transports: Array.from(
+        new Set([...(credential.response.transports || []), "hybrid"])
+      ),
     },
     select: {
       id: true,
@@ -235,7 +238,11 @@ export async function generatePasskeyAuthenticationChallenge(
     allowCredentials = passkeys.map((passkey) => ({
       id: passkey.credentialId,
       type: "public-key" as const,
-      transports: passkey.transports as AuthenticatorTransportFuture[],
+      // Always include 'hybrid' transport to enable QR code for cross-device auth
+      transports: [
+        ...(passkey.transports as AuthenticatorTransportFuture[]),
+        "hybrid",
+      ] as AuthenticatorTransportFuture[],
     }));
   }
 
@@ -244,6 +251,8 @@ export async function generatePasskeyAuthenticationChallenge(
     timeout: webAuthnConfig.timeout,
     userVerification: webAuthnConfig.userVerification,
     allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
+    // Add hints to prefer hybrid/cross-device authentication
+    hints: ["hybrid", "security-key"],
   });
 
   // Store challenge in Redis
