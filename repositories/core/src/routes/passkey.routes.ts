@@ -42,11 +42,11 @@ passkeyRoutes.post("/login/challenge", generateLoginChallenge);
 passkeyRoutes.post("/login/verify", verifyLogin);
 
 /**
- * @route   GET /account/passkeys
- * @desc    List user's passkeys
+ * @route   POST /account/passkey
+ * @desc    List user's passkeys (changed to POST to send meta in body)
  * @access  Private (requires authentication)
  */
-passkeyRoutes.get("/", authenticate, getPasskeys);
+passkeyRoutes.post("/", authenticate, getPasskeys);
 
 /**
  * @route   DELETE /account/passkeys/:passkeyId
