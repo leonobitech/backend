@@ -8,11 +8,7 @@ import {
   listUserPasskeys,
   deletePasskey,
 } from "@services/passkey.service";
-import {
-  generateAccessTokens,
-  setAuthCookies,
-} from "@services/account.service";
-import { findOrCreateDevice } from "@utils/auth/findOrCreateDevice";
+import { setAuthCookies } from "@utils/auth/cookies";
 import { HTTP_CODE } from "@constants/httpCode";
 import type {
   PasskeyRegisterChallengeRequest,
@@ -88,35 +84,26 @@ export const verifyLogin = catchErrors(
   async (req: Request, res: Response) => {
     const { credential, meta } = req.body as PasskeyLoginVerifyRequest;
 
-    const { user, passkeyId } = await verifyPasskeyAuthentication(
-      credential,
-      meta
-    );
-
-    // Find or create device
-    const device = await findOrCreateDevice(user.id, meta);
-
-    // Generate tokens and create session
-    const { accessToken, refreshToken, session } = await generateAccessTokens(
-      user.id,
-      device.id,
-      meta
-    );
+    const result = await verifyPasskeyAuthentication(credential, meta);
 
     // Set auth cookies
-    setAuthCookies(res, accessToken, refreshToken, session.clientKey);
+    setAuthCookies({
+      res,
+      accessKey: result.tokens.accessTokenId,
+      clientKey: result.tokens.hashedPublicKey,
+    });
 
     res.status(HTTP_CODE.OK).json({
       message: "Login successful with passkey",
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        role: result.user.role,
       },
       session: {
-        id: session.id,
-        expiresAt: session.expiresAt,
+        id: result.session.id,
+        expiresAt: result.session.expiresAt,
       },
     });
   }

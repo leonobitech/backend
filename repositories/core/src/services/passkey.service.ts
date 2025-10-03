@@ -17,6 +17,12 @@ import { ERROR_CODE } from "@constants/errorCode";
 import { HTTP_CODE } from "@constants/httpCode";
 import type { ClientMeta } from "@/types/request";
 import type { StoredChallenge } from "@/types/passkey";
+import { findOrCreateDevice } from "@utils/auth/findOrCreateDevice";
+import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
+import { generateAccessToken, generateRefreshToken } from "@utils/auth/jwt";
+import { getJwtExpiration } from "@utils/auth/getJwtExpiration";
+import { thirtyDaysFromNow } from "@utils/date/date";
+import type { UserRole } from "@constants/userRole";
 
 /**
  * Generate passkey registration options (challenge)
@@ -369,9 +375,85 @@ export async function verifyPasskeyAuthentication(
   // Delete challenge
   await redis.del(foundChallengeKey);
 
+  // Find or create device
+  const device = await findOrCreateDevice(passkey.user.id, meta);
+
+  // Create session
+  const session = await prisma.session.create({
+    data: {
+      userId: passkey.user.id,
+      deviceId: device.id,
+      clientKey: "",
+      expiresAt: thirtyDaysFromNow(),
+    },
+  });
+
+  // Generate client key (fingerprint)
+  const hashedPublicKey = await generateClientKeyFromMeta(
+    meta,
+    passkey.user.id,
+    session.id
+  );
+
+  // Update session with clientKey
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { clientKey: hashedPublicKey },
+  });
+
+  // Sign tokens
+  const { token: accessToken, hashedJti: accessTokenId } =
+    await generateAccessToken(
+      passkey.user.id,
+      session.id,
+      passkey.user.role as UserRole,
+      hashedPublicKey
+    );
+
+  const { token: refreshToken, hashedJti: refreshTokenId } =
+    await generateRefreshToken(
+      passkey.user.id,
+      session.id,
+      passkey.user.role as UserRole,
+      hashedPublicKey
+    );
+
+  // Register tokens in TokenRecord
+  await prisma.tokenRecord.createMany({
+    data: [
+      {
+        jti: accessTokenId,
+        type: "ACCESS",
+        token: accessToken,
+        sessionId: session.id,
+        userId: passkey.user.id,
+        publicKey: hashedPublicKey,
+        expiresAt: await getJwtExpiration(accessToken),
+        revoked: false,
+      },
+      {
+        jti: refreshTokenId,
+        type: "REFRESH",
+        token: refreshToken,
+        sessionId: session.id,
+        userId: passkey.user.id,
+        publicKey: hashedPublicKey,
+        expiresAt: await getJwtExpiration(refreshToken),
+        revoked: false,
+      },
+    ],
+  });
+
   return {
     user: passkey.user,
-    passkeyId: passkey.id,
+    session: {
+      id: session.id,
+      expiresAt: session.expiresAt,
+    },
+    tokens: {
+      accessTokenId,
+      hashedPublicKey,
+    },
   };
 }
 
