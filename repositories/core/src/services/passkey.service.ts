@@ -121,7 +121,7 @@ export async function generatePasskeyRegistrationChallenge(
     rpID: webAuthnConfig.rpId,            // Dominio (ej: "leonobitech.com")
     userID: isoUint8Array.fromUTF8String(user.id),  // ID del usuario convertido a bytes
     userName: user.email,                 // Email del usuario
-    userDisplayName: user.name || user.email,  // Nombre amigable que se muestra
+    userDisplayName: (user.name && user.name.trim() !== '') ? user.name : user.email.split('@')[0],  // Nombre amigable (usa parte del email si name está vacío)
     timeout: webAuthnConfig.timeout,      // 2 minutos para completar el proceso
     attestationType: webAuthnConfig.attestation,  // "none" = no verificar fabricante del dispositivo
 
