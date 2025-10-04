@@ -603,45 +603,39 @@ export async function verifyPasskeyAuthentication(
     "passkey.service"
   );
 
-  // 1️⃣ Buscar el challenge en Redis
-  // NOTA: Aquí hay un problema de implementación. El challengeKey usa clientDataJSON que no es el challenge
-  // En producción deberías usar una estructura de datos diferente (hash map o decodificar clientDataJSON)
-  const challengeKey = `passkey:login:challenge:${credential.response.clientDataJSON}`;
+  // 1️⃣ Decodificar clientDataJSON para extraer el challenge
+  // El clientDataJSON contiene el challenge en formato base64url
+  const clientDataJSON = Buffer.from(
+    credential.response.clientDataJSON,
+    "base64url"
+  ).toString("utf-8");
+
+  const clientData = JSON.parse(clientDataJSON);
+  const receivedChallenge = clientData.challenge;
+
+  loggerEvent(
+    "passkey.service.login.verify.challenge-extracted",
+    { receivedChallenge },
+    undefined,
+    "passkey.service"
+  );
+
+  // 2️⃣ Buscar el challenge en Redis usando el challenge decodificado
+  const challengeKey = `passkey:login:challenge:${receivedChallenge}`;
 
   loggerEvent(
     "passkey.service.login.verify.searching-challenge",
-    {},
+    { challengeKey },
     undefined,
     "passkey.service"
   );
 
-  // Iteramos sobre todos los challenges activos (no óptimo, mejorar en producción)
-  const allKeys = await redis.keys("passkey:login:challenge:*");
-  let storedChallengeData: string | null = null;
-  let foundChallengeKey: string | null = null;
+  const storedChallengeData = await redis.get(challengeKey);
 
-  loggerEvent(
-    "passkey.service.login.verify.challenges-found",
-    { count: allKeys.length },
-    undefined,
-    "passkey.service"
-  );
-
-  for (const key of allKeys) {
-    const data = await redis.get(key);
-    if (data) {
-      const parsed: StoredChallenge = JSON.parse(data);
-      // La verificación real del challenge se hace en verifyAuthenticationResponse
-      storedChallengeData = data;
-      foundChallengeKey = key;
-      break;  // Tomamos el primer challenge disponible
-    }
-  }
-
-  if (!storedChallengeData || !foundChallengeKey) {
+  if (!storedChallengeData) {
     loggerEvent(
       "passkey.service.login.verify.challenge-not-found",
-      { credentialId: credential.id },
+      { credentialId: credential.id, challengeKey },
       undefined,
       "passkey.service"
     );
@@ -654,16 +648,16 @@ export async function verifyPasskeyAuthentication(
 
   loggerEvent(
     "passkey.service.login.verify.challenge-retrieved",
-    { challengeKey: foundChallengeKey },
+    { challengeKey },
     undefined,
     "passkey.service"
   );
 
   const storedChallenge: StoredChallenge = JSON.parse(storedChallengeData);
 
-  // 2️⃣ Verificar que el challenge no haya expirado
+  // 3️⃣ Verificar que el challenge no haya expirado
   if (storedChallenge.expiresAt < Date.now()) {
-    await redis.del(foundChallengeKey);
+    await redis.del(challengeKey);
     loggerEvent(
       "passkey.service.login.verify.challenge-expired",
       {
@@ -688,7 +682,7 @@ export async function verifyPasskeyAuthentication(
     "passkey.service"
   );
 
-  // 3️⃣ Buscar el passkey en la base de datos usando el credentialId
+  // 4️⃣ Buscar el passkey en la base de datos usando el credentialId
   // El credentialId identifica únicamente a este passkey específico
   loggerEvent(
     "passkey.service.login.verify.searching-passkey",
@@ -763,7 +757,7 @@ export async function verifyPasskeyAuthentication(
 
   // 5️⃣ Verificar criptográficamente la autenticación
   // La librería @simplewebauthn/server verifica:
-  // - Que el challenge coincida
+  // - Que el challenge coincida con el guardado en Redis
   // - Que el origin sea correcto
   // - Que la firma criptográfica sea válida usando la clave pública guardada
   // - Que el counter sea mayor al anterior (protección contra clonación)
@@ -771,6 +765,7 @@ export async function verifyPasskeyAuthentication(
     "passkey.service.login.verify.verifying-authentication",
     {
       userId: passkey.user.id,
+      expectedChallenge: storedChallenge.challenge,
       expectedOrigin: webAuthnConfig.origin,
       expectedRPID: webAuthnConfig.rpId,
       storedCounter: passkey.counter,
@@ -840,11 +835,11 @@ export async function verifyPasskeyAuthentication(
   );
 
   // 7️⃣ Eliminar el challenge de Redis (ya fue usado)
-  await redis.del(foundChallengeKey);
+  await redis.del(challengeKey);
 
   loggerEvent(
     "passkey.service.login.verify.challenge-deleted",
-    { userId: passkey.user.id },
+    { userId: passkey.user.id, challengeKey },
     undefined,
     "passkey.service"
   );
