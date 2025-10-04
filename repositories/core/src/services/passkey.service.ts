@@ -364,10 +364,12 @@ export async function verifyPasskeyRegistration(
   });
 
   // 5️⃣ Guardar el passkey en la base de datos
-  // Procesar transports: usar solo los que reportó el navegador
-  const transportsToSave = Array.from(
-    new Set([...(credential.response.transports || [])])
-  );
+  // Procesar transports: filtrar solo 'internal' para evitar cross-device hasta que iCloud sincronice
+  // Esto previene que Safari muestre QR code cuando el passkey no está sincronizado aún
+  const transportsFromBrowser = credential.response.transports || [];
+  const transportsToSave = transportsFromBrowser.includes('internal')
+    ? ['internal'] // Solo internal para passkeys locales (Mac Touch ID, Windows Hello)
+    : Array.from(new Set(transportsFromBrowser)); // Respetar otros tipos (USB, NFC, etc.)
 
   loggerEvent(
     "passkey.service.register.verify.creating-passkey",
@@ -375,7 +377,9 @@ export async function verifyPasskeyRegistration(
       userId,
       deviceId: device.id,
       name: name || `${meta.deviceInfo.device} (${meta.deviceInfo.os})`,
+      transportsFromBrowser,
       transportsToSave,
+      filtered: transportsFromBrowser.length !== transportsToSave.length,
     },
     undefined,
     "passkey.service"
