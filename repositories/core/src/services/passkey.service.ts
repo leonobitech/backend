@@ -1,23 +1,39 @@
+/**
+ * 🔐 PASSKEY SERVICE
+ *
+ * Este servicio maneja la autenticación con Passkeys (WebAuthn/FIDO2).
+ * Los passkeys son credenciales criptográficas que permiten autenticación sin contraseña
+ * usando biometría (Face ID, Touch ID, huella digital) o llaves de seguridad físicas.
+ *
+ * Flujo general:
+ * 1. REGISTRO: El servidor genera un challenge → el navegador crea una credencial → el servidor la verifica y guarda
+ * 2. LOGIN: El servidor genera un challenge → el usuario autentica con su passkey → el servidor verifica y crea sesión
+ *
+ * Tecnologías usadas:
+ * - @simplewebauthn/server: Librería que implementa el estándar WebAuthn
+ * - Redis: Para almacenar challenges temporales (5 minutos de expiración)
+ * - Prisma: Para persistir passkeys, devices y sessions
+ */
+
 import {
-  generateRegistrationOptions,
-  verifyRegistrationResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse,
+  generateRegistrationOptions,   // Genera opciones para crear un nuevo passkey
+  verifyRegistrationResponse,     // Verifica que el passkey creado sea válido
+  generateAuthenticationOptions,  // Genera opciones para autenticar con un passkey existente
+  verifyAuthenticationResponse,   // Verifica que la autenticación sea válida
 } from "@simplewebauthn/server";
 import { isoUint8Array } from "@simplewebauthn/server/helpers";
 import type {
-  RegistrationResponseJSON,
-  AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
-} from "@simplewebauthn/types";
+  RegistrationResponseJSON,        // Tipo: Respuesta del navegador al crear passkey
+  AuthenticationResponseJSON,      // Tipo: Respuesta del navegador al autenticar
+  AuthenticatorTransportFuture,    // Tipo: Métodos de transporte (usb, nfc, ble, hybrid, internal)
+} from "@simplewebauthn/server";
 import { prisma } from "@config/prisma";
 import { redis } from "@config/redis";
 import { webAuthnConfig } from "@config/webauthn";
 import HttpException from "@utils/http/HttpException";
 import { ERROR_CODE } from "@constants/errorCode";
 import { HTTP_CODE } from "@constants/httpCode";
-import type { ClientMeta } from "@/types/request";
-import type { StoredChallenge } from "@/types/passkey";
+import type { StoredChallenge } from "@custom-types/modules/auth/passkey";
 import { findOrCreateDevice } from "@utils/auth/findOrCreateDevice";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
 import { generateAccessToken, generateRefreshToken } from "@utils/auth/jwt";
@@ -26,13 +42,31 @@ import { thirtyDaysFromNow } from "@utils/date/date";
 import type { UserRole } from "@constants/userRole";
 
 /**
- * Generate passkey registration options (challenge)
+ * 📝 PASO 1 DE REGISTRO: Generar challenge para crear un passkey
+ *
+ * ¿Qué hace?
+ * - Crea un "desafío criptográfico" que el navegador usará para crear el passkey
+ * - Obtiene los passkeys existentes del usuario para evitar duplicados
+ * - Guarda el challenge en Redis con 5 minutos de expiración
+ *
+ * Flujo:
+ * 1. El usuario YA está autenticado (requiere token JWT válido)
+ * 2. Busca al usuario en la base de datos
+ * 3. Obtiene los passkeys que ya tiene registrados
+ * 4. Genera opciones de registro con configuración WebAuthn
+ * 5. Guarda el challenge en Redis (temporal)
+ * 6. Retorna las opciones al frontend para que el navegador cree el passkey
+ *
+ * @param userId - ID del usuario autenticado (viene del middleware authenticate)
+ * @param meta - Metadata de la petición (IP, user agent, device info, etc.)
+ * @returns Opciones que el navegador usará para crear el passkey
  */
 export async function generatePasskeyRegistrationChallenge(
   userId: string,
-  meta: ClientMeta
+  meta: RequestMeta
 ) {
-  // Get user
+  // 1️⃣ Buscar al usuario en la base de datos
+  // Necesitamos su email y nombre para asociarlo al passkey
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, email: true, name: true },
@@ -42,107 +76,148 @@ export async function generatePasskeyRegistrationChallenge(
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.USER_NOT_FOUND,
-      "User not found"
+      "UserNotFound"
     );
   }
 
-  // Get existing passkeys for excludeCredentials
+  // 2️⃣ Obtener passkeys existentes del usuario
+  // Esto permite que el navegador evite crear duplicados del mismo dispositivo
   const existingPasskeys = await prisma.passkey.findMany({
     where: { userId },
     select: { credentialId: true, transports: true },
   });
 
+  // 3️⃣ Generar las opciones de registro usando la librería WebAuthn
   const options = await generateRegistrationOptions({
-    rpName: webAuthnConfig.rpName,
-    rpID: webAuthnConfig.rpId,
-    userID: isoUint8Array.fromUTF8String(user.id),
-    userName: user.email,
-    userDisplayName: user.name || user.email,
-    timeout: webAuthnConfig.timeout,
-    attestationType: webAuthnConfig.attestation,
+    rpName: webAuthnConfig.rpName,        // "LeonobiTech" - Nombre que se muestra al usuario
+    rpID: webAuthnConfig.rpId,            // Dominio (ej: "leonobitech.com")
+    userID: isoUint8Array.fromUTF8String(user.id),  // ID del usuario convertido a bytes
+    userName: user.email,                 // Email del usuario
+    userDisplayName: user.name || user.email,  // Nombre amigable que se muestra
+    timeout: webAuthnConfig.timeout,      // 2 minutos para completar el proceso
+    attestationType: webAuthnConfig.attestation,  // "none" = no verificar fabricante del dispositivo
+
+    // excludeCredentials: Lista de passkeys que ya tiene el usuario
+    // El navegador no permitirá registrar el mismo dispositivo dos veces
     excludeCredentials: existingPasskeys.map((passkey) => ({
       id: passkey.credentialId,
       type: "public-key",
       transports: passkey.transports as AuthenticatorTransportFuture[],
     })),
+
+    // Configuración del autenticador (dispositivo que crea el passkey)
     authenticatorSelection: {
-      authenticatorAttachment: webAuthnConfig.authenticatorAttachment,
-      requireResidentKey: webAuthnConfig.requireResidentKey,
-      residentKey: "required",
-      userVerification: webAuthnConfig.userVerification,
+      authenticatorAttachment: webAuthnConfig.authenticatorAttachment,  // undefined = cualquier tipo
+      requireResidentKey: webAuthnConfig.requireResidentKey,  // true = passkey se guarda en el dispositivo
+      residentKey: "required",  // El passkey DEBE guardarse en el dispositivo (no efímero)
+      userVerification: webAuthnConfig.userVerification,  // "preferred" = biometría preferida pero no obligatoria
     },
-    supportedAlgorithmIDs: webAuthnConfig.supportedAlgorithms as number[],
+
+    // Algoritmos criptográficos soportados: ES256 (-7) y RS256 (-257)
+    supportedAlgorithmIDs: [...webAuthnConfig.supportedAlgorithms],
   });
 
-  // Store challenge in Redis with 5 minute expiration
+  // 4️⃣ Guardar el challenge en Redis (expiración de 5 minutos)
+  // El challenge es un valor aleatorio que se usa para prevenir ataques de replay
   const challengeKey = `passkey:register:challenge:${userId}`;
   const challengeData: StoredChallenge = {
-    challenge: options.challenge,
+    challenge: options.challenge,  // String base64url del challenge
     userId,
-    expiresAt: Date.now() + webAuthnConfig.challengeTTL,
+    expiresAt: Date.now() + webAuthnConfig.challengeTTL,  // 5 minutos
   };
 
   await redis.setEx(
     challengeKey,
-    Math.floor(webAuthnConfig.challengeTTL / 1000),
+    Math.floor(webAuthnConfig.challengeTTL / 1000),  // TTL en segundos
     JSON.stringify(challengeData)
   );
 
+  // 5️⃣ Retornar las opciones al frontend
+  // El navegador usará estas opciones con navigator.credentials.create()
   return options;
 }
 
 /**
- * Verify passkey registration and store credential
+ * ✅ PASO 2 DE REGISTRO: Verificar el passkey creado y guardarlo en la base de datos
+ *
+ * ¿Qué hace?
+ * - Verifica que el passkey creado por el navegador sea válido
+ * - Valida el challenge guardado en Redis
+ * - Guarda el passkey en la base de datos
+ * - Asocia el passkey con el dispositivo del usuario
+ *
+ * Flujo:
+ * 1. El frontend llamó a navigator.credentials.create() y el usuario creó el passkey
+ * 2. El navegador retorna una credencial (credential) que contiene la clave pública
+ * 3. Recuperamos el challenge de Redis para validar que la petición sea legítima
+ * 4. Verificamos criptográficamente que la credencial sea válida
+ * 5. Guardamos la clave pública en la base de datos
+ * 6. Asociamos el passkey con el dispositivo (iPhone, Android, etc.)
+ *
+ * @param userId - ID del usuario autenticado
+ * @param credential - Credencial generada por el navegador (contiene clave pública)
+ * @param name - Nombre amigable para el passkey (ej: "iPhone de Felix")
+ * @param meta - Metadata del dispositivo (IP, user agent, etc.)
+ * @returns El passkey guardado en la base de datos
  */
 export async function verifyPasskeyRegistration(
   userId: string,
   credential: RegistrationResponseJSON,
   name: string | undefined,
-  meta: ClientMeta
+  meta: RequestMeta
 ) {
-  // Retrieve and validate challenge
+  // 1️⃣ Recuperar el challenge de Redis
+  // El challenge se generó en el paso anterior y debe coincidir
   const challengeKey = `passkey:register:challenge:${userId}`;
   const storedChallengeData = await redis.get(challengeKey);
 
   if (!storedChallengeData) {
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
-      ERROR_CODE.INVALID_OR_EXPIRED_CODE,
-      "Challenge expired or not found"
+      ERROR_CODE.CHALLENGE_NOT_FOUND_OR_EXPIRED,
+      "ChallengeNotFoundOrExpired"
     );
   }
 
   const storedChallenge: StoredChallenge = JSON.parse(storedChallengeData);
 
+  // 2️⃣ Verificar que el challenge no haya expirado (5 minutos)
   if (storedChallenge.expiresAt < Date.now()) {
     await redis.del(challengeKey);
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
-      ERROR_CODE.CODE_EXPIRED,
-      "Challenge expired"
+      ERROR_CODE.CHALLENGE_EXPIRED,
+      "ChallengeExpired"
     );
   }
 
-  // Verify registration response
+  // 3️⃣ Verificar criptográficamente que la credencial sea válida
+  // La librería @simplewebauthn/server verifica:
+  // - Que el challenge coincida con el que enviamos
+  // - Que el origin sea correcto (ej: https://leonobitech.com)
+  // - Que el rpID coincida (ej: leonobitech.com)
+  // - Que la firma criptográfica sea válida
   const verification = await verifyRegistrationResponse({
     response: credential,
     expectedChallenge: storedChallenge.challenge,
     expectedOrigin: webAuthnConfig.origin,
     expectedRPID: webAuthnConfig.rpId,
-    requireUserVerification: webAuthnConfig.userVerification === "required",
+    requireUserVerification: false, // "preferred" means optional (permite biometría opcional)
   });
 
   if (!verification.verified || !verification.registrationInfo) {
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
-      ERROR_CODE.INVALID_CREDENTIALS,
-      "Passkey verification failed"
+      ERROR_CODE.PASSKEY_VERIFICATION_FAILED,
+      "PasskeyVerificationFailed"
     );
   }
 
   const { credential: credentialInfo } = verification.registrationInfo;
 
-  // Find or create device
+  // 4️⃣ Encontrar o crear el dispositivo en la base de datos
+  // Un dispositivo es único por la combinación: userId + device + os + browser
+  // Ejemplo: "iPhone + iOS + Safari" es un dispositivo único
   const device = await prisma.device.upsert({
     where: {
       unique_device: {
@@ -171,16 +246,21 @@ export async function verifyPasskeyRegistration(
     },
   });
 
-  // Store passkey
+  // 5️⃣ Guardar el passkey en la base de datos
   const passkey = await prisma.passkey.create({
     data: {
       userId,
       deviceId: device.id,
+      // credentialId: Identificador único de la credencial (como un UUID)
       credentialId: Buffer.from(credentialInfo.id).toString("base64url"),
+      // publicKey: Clave pública que se usará para verificar autenticaciones futuras
       publicKey: Buffer.from(credentialInfo.publicKey).toString("base64url"),
+      // counter: Contador de usos (protege contra ataques de clonación)
       counter: credentialInfo.counter,
+      // Nombre amigable (ej: "iPhone de Felix" o generado automático)
       name: name || `${meta.deviceInfo.device} (${meta.deviceInfo.os})`,
-      // Always include 'hybrid' transport to enable cross-device QR code authentication
+      // Métodos de transporte soportados (USB, NFC, Bluetooth, híbrido, interno)
+      // Siempre incluimos 'hybrid' para permitir autenticación cross-device con QR
       transports: Array.from(
         new Set([...(credential.response.transports || []), "hybrid"])
       ),
@@ -192,18 +272,39 @@ export async function verifyPasskeyRegistration(
     },
   });
 
-  // Delete challenge
+  // 6️⃣ Eliminar el challenge de Redis (ya fue usado)
   await redis.del(challengeKey);
 
+  // 7️⃣ Retornar el passkey creado
   return passkey;
 }
 
 /**
- * Generate passkey authentication options (challenge)
+ * 🔑 PASO 1 DE LOGIN: Generar challenge para autenticar con un passkey existente
+ *
+ * ¿Qué hace?
+ * - Crea un "desafío criptográfico" para que el usuario autentique con su passkey
+ * - Si se proporciona email, busca los passkeys específicos de ese usuario
+ * - Si NO se proporciona email, permite login "discoverable" (el dispositivo muestra sus passkeys)
+ *
+ * Flujo:
+ * 1. Usuario SIN sesión activa quiere iniciar sesión con passkey
+ * 2. (Opcional) Frontend envía el email del usuario
+ * 3. Si hay email, buscamos sus passkeys y los enviamos al navegador
+ * 4. Generamos un challenge y lo guardamos en Redis
+ * 5. El navegador mostrará los passkeys disponibles al usuario
+ *
+ * Tipos de login:
+ * - CON email: El navegador solo mostrará los passkeys de ese usuario específico
+ * - SIN email: "Discoverable credentials" - el navegador muestra TODOS los passkeys guardados en el dispositivo
+ *
+ * @param email - (Opcional) Email del usuario para filtrar passkeys
+ * @param meta - Metadata de la petición
+ * @returns Opciones que el navegador usará para autenticar
  */
 export async function generatePasskeyAuthenticationChallenge(
   email?: string,
-  meta?: ClientMeta
+  meta?: RequestMeta
 ) {
   let allowCredentials: Array<{
     id: string;
@@ -213,7 +314,7 @@ export async function generatePasskeyAuthenticationChallenge(
 
   let userId: string | undefined;
 
-  // If email provided, get user's passkeys
+  // 1️⃣ Si se proporciona email, buscar los passkeys del usuario
   if (email) {
     const user = await prisma.user.findUnique({
       where: { email },
@@ -224,21 +325,24 @@ export async function generatePasskeyAuthenticationChallenge(
       throw new HttpException(
         HTTP_CODE.NOT_FOUND,
         ERROR_CODE.USER_NOT_FOUND,
-        "User not found"
+        "UserNotFound"
       );
     }
 
     userId = user.id;
 
+    // Obtener todos los passkeys registrados por este usuario
     const passkeys = await prisma.passkey.findMany({
       where: { userId: user.id },
       select: { credentialId: true, transports: true },
     });
 
+    // Mapear los passkeys a la estructura que espera WebAuthn
     allowCredentials = passkeys.map((passkey) => ({
-      id: passkey.credentialId,
+      id: passkey.credentialId,  // ID único de cada passkey
       type: "public-key" as const,
-      // Always include 'hybrid' transport to enable QR code for cross-device auth
+      // Métodos de transporte + 'hybrid' para permitir QR cross-device
+      // Ejemplo: ['internal', 'hybrid'] = Face ID en iPhone + posibilidad de escanear QR desde otro dispositivo
       transports: [
         ...(passkey.transports as AuthenticatorTransportFuture[]),
         "hybrid",
@@ -246,20 +350,21 @@ export async function generatePasskeyAuthenticationChallenge(
     }));
   }
 
+  // 2️⃣ Generar opciones de autenticación
   const options = await generateAuthenticationOptions({
-    rpID: webAuthnConfig.rpId,
-    timeout: webAuthnConfig.timeout,
-    userVerification: webAuthnConfig.userVerification,
-    allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
-    // Add hints to prefer hybrid/cross-device authentication
-    hints: ["hybrid", "security-key"],
+    rpID: webAuthnConfig.rpId,  // Dominio (ej: "leonobitech.com")
+    timeout: webAuthnConfig.timeout,  // 2 minutos para completar
+    userVerification: webAuthnConfig.userVerification,  // "preferred" = biometría preferida
+    // Si hay passkeys específicos, enviarlos. Si no, undefined = modo "discoverable"
+    allowCredentials:
+      allowCredentials.length > 0 ? allowCredentials : undefined,
   });
 
-  // Store challenge in Redis
+  // 3️⃣ Guardar el challenge en Redis (expiración de 5 minutos)
   const challengeKey = `passkey:login:challenge:${options.challenge}`;
   const challengeData: StoredChallenge = {
     challenge: options.challenge,
-    userId,
+    userId,  // Puede ser undefined si no se proporcionó email
     expiresAt: Date.now() + webAuthnConfig.challengeTTL,
   };
 
@@ -269,21 +374,45 @@ export async function generatePasskeyAuthenticationChallenge(
     JSON.stringify(challengeData)
   );
 
+  // 4️⃣ Retornar las opciones al frontend
+  // El navegador usará estas opciones con navigator.credentials.get()
   return options;
 }
 
 /**
- * Verify passkey authentication
+ * ✅ PASO 2 DE LOGIN: Verificar la autenticación con passkey y crear sesión
+ *
+ * ¿Qué hace?
+ * - Verifica que el passkey usado sea válido
+ * - Valida el challenge guardado en Redis
+ * - Crea una nueva sesión en la base de datos
+ * - Genera tokens JWT (access + refresh)
+ * - Retorna los datos de usuario y sesión
+ *
+ * Flujo:
+ * 1. El frontend llamó a navigator.credentials.get() y el usuario autenticó con su passkey
+ * 2. El navegador retorna una credencial firmada criptográficamente
+ * 3. Recuperamos el challenge de Redis y el passkey de la base de datos
+ * 4. Verificamos la firma criptográfica usando la clave pública guardada
+ * 5. Creamos una sesión, dispositivo, y tokens JWT
+ * 6. Retornamos todo al frontend para que guarde las cookies de sesión
+ *
+ * Este es el proceso COMPLETO de login sin contraseña.
+ *
+ * @param credential - Credencial firmada por el navegador
+ * @param meta - Metadata de la petición
+ * @returns Usuario, sesión, y tokens para cookies
  */
 export async function verifyPasskeyAuthentication(
   credential: AuthenticationResponseJSON,
-  meta: ClientMeta
+  meta: RequestMeta
 ) {
-  // Retrieve challenge
+  // 1️⃣ Buscar el challenge en Redis
+  // NOTA: Aquí hay un problema de implementación. El challengeKey usa clientDataJSON que no es el challenge
+  // En producción deberías usar una estructura de datos diferente (hash map o decodificar clientDataJSON)
   const challengeKey = `passkey:login:challenge:${credential.response.clientDataJSON}`;
 
-  // Try to find challenge by iterating (Redis doesn't support wildcard get easily)
-  // In production, consider using a hash map or different key structure
+  // Iteramos sobre todos los challenges activos (no óptimo, mejorar en producción)
   const allKeys = await redis.keys("passkey:login:challenge:*");
   let storedChallengeData: string | null = null;
   let foundChallengeKey: string | null = null;
@@ -292,33 +421,35 @@ export async function verifyPasskeyAuthentication(
     const data = await redis.get(key);
     if (data) {
       const parsed: StoredChallenge = JSON.parse(data);
-      // We'll verify the challenge matches during verification
+      // La verificación real del challenge se hace en verifyAuthenticationResponse
       storedChallengeData = data;
       foundChallengeKey = key;
-      break;
+      break;  // Tomamos el primer challenge disponible
     }
   }
 
   if (!storedChallengeData || !foundChallengeKey) {
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
-      ERROR_CODE.INVALID_OR_EXPIRED_CODE,
-      "Challenge not found or expired"
+      ERROR_CODE.CHALLENGE_NOT_FOUND_OR_EXPIRED,
+      "ChallengeNotFoundOrExpired"
     );
   }
 
   const storedChallenge: StoredChallenge = JSON.parse(storedChallengeData);
 
+  // 2️⃣ Verificar que el challenge no haya expirado
   if (storedChallenge.expiresAt < Date.now()) {
     await redis.del(foundChallengeKey);
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
-      ERROR_CODE.CODE_EXPIRED,
-      "Challenge expired"
+      ERROR_CODE.CHALLENGE_EXPIRED,
+      "ChallengeExpired"
     );
   }
 
-  // Find passkey by credentialId
+  // 3️⃣ Buscar el passkey en la base de datos usando el credentialId
+  // El credentialId identifica únicamente a este passkey específico
   const passkey = await prisma.passkey.findUnique({
     where: { credentialId: credential.id },
     include: {
@@ -338,20 +469,26 @@ export async function verifyPasskeyAuthentication(
   if (!passkey) {
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
-      ERROR_CODE.INVALID_CREDENTIALS,
-      "Passkey not found"
+      ERROR_CODE.INVALID_PASSKEY,
+      "InvalidPasskey"
     );
   }
 
+  // 4️⃣ Verificar que la cuenta del usuario esté activa
   if (!passkey.user.isActive) {
     throw new HttpException(
       HTTP_CODE.FORBIDDEN,
-      ERROR_CODE.FORBIDDEN,
-      "User account is deactivated"
+      ERROR_CODE.USER_ACCOUNT_IS_DEACTIVATED,
+      "UserAccountIsDeactivated"
     );
   }
 
-  // Verify authentication response
+  // 5️⃣ Verificar criptográficamente la autenticación
+  // La librería @simplewebauthn/server verifica:
+  // - Que el challenge coincida
+  // - Que el origin sea correcto
+  // - Que la firma criptográfica sea válida usando la clave pública guardada
+  // - Que el counter sea mayor al anterior (protección contra clonación)
   const verification = await verifyAuthenticationResponse({
     response: credential,
     expectedChallenge: storedChallenge.challenge,
@@ -359,21 +496,23 @@ export async function verifyPasskeyAuthentication(
     expectedRPID: webAuthnConfig.rpId,
     credential: {
       id: passkey.credentialId,
-      publicKey: Buffer.from(passkey.publicKey, "base64url"),
-      counter: passkey.counter,
+      publicKey: Buffer.from(passkey.publicKey, "base64url"),  // Clave pública guardada
+      counter: passkey.counter,  // Contador de usos previos
     },
-    requireUserVerification: webAuthnConfig.userVerification === "required",
+    requireUserVerification: false, // "preferred" means optional
   });
 
   if (!verification.verified) {
     throw new HttpException(
       HTTP_CODE.UNAUTHORIZED,
-      ERROR_CODE.INVALID_CREDENTIALS,
-      "Passkey authentication failed"
+      ERROR_CODE.INVALID_PASSKEY,
+      "InvalidPasskey"
     );
   }
 
-  // Update counter and lastUsedAt
+  // 6️⃣ Actualizar el contador del passkey
+  // El counter se incrementa en cada uso y previene ataques de clonación
+  // Si un atacante clona el passkey, el contador estará desincronizado
   await prisma.passkey.update({
     where: { id: passkey.id },
     data: {
@@ -382,36 +521,42 @@ export async function verifyPasskeyAuthentication(
     },
   });
 
-  // Delete challenge
+  // 7️⃣ Eliminar el challenge de Redis (ya fue usado)
   await redis.del(foundChallengeKey);
 
-  // Find or create device
+  // 8️⃣ Encontrar o crear el dispositivo
+  // Esto registra desde qué dispositivo se hizo login (iPhone, Android, etc.)
   const device = await findOrCreateDevice(passkey.user.id, meta);
 
-  // Create session
+  // 9️⃣ Crear una nueva sesión en la base de datos
+  // Una sesión representa un login activo que expira en 30 días
   const session = await prisma.session.create({
     data: {
       userId: passkey.user.id,
       deviceId: device.id,
-      clientKey: "",
-      expiresAt: thirtyDaysFromNow(),
+      clientKey: "",  // Se actualiza en el siguiente paso
+      expiresAt: thirtyDaysFromNow(),  // 30 días de expiración
     },
   });
 
-  // Generate client key (fingerprint)
+  // 🔟 Generar el clientKey (fingerprint del dispositivo)
+  // El clientKey es un hash de: IP + userAgent + userId + sessionId
+  // Esto previene que roben el token y lo usen desde otro dispositivo
   const hashedPublicKey = await generateClientKeyFromMeta(
     meta,
     passkey.user.id,
     session.id
   );
 
-  // Update session with clientKey
+  // 1️⃣1️⃣ Actualizar la sesión con el clientKey
   await prisma.session.update({
     where: { id: session.id },
     data: { clientKey: hashedPublicKey },
   });
 
-  // Sign tokens
+  // 1️⃣2️⃣ Generar tokens JWT (access y refresh)
+  // Access token: Válido por 15 minutos, se usa en cada petición
+  // Refresh token: Válido por 30 días, se usa para renovar el access token
   const { token: accessToken, hashedJti: accessTokenId } =
     await generateAccessToken(
       passkey.user.id,
@@ -428,16 +573,17 @@ export async function verifyPasskeyAuthentication(
       hashedPublicKey
     );
 
-  // Register tokens in TokenRecord
+  // 1️⃣3️⃣ Registrar los tokens en la base de datos
+  // Esto permite revocarlos si es necesario (logout, sesión comprometida, etc.)
   await prisma.tokenRecord.createMany({
     data: [
       {
-        jti: accessTokenId,
-        type: "ACCESS",
-        token: accessToken,
+        jti: accessTokenId,         // Identificador único del token
+        type: "ACCESS",             // Tipo de token
+        token: accessToken,         // El token JWT completo
         sessionId: session.id,
         userId: passkey.user.id,
-        publicKey: hashedPublicKey,
+        publicKey: hashedPublicKey, // clientKey para validar que no fue robado
         expiresAt: await getJwtExpiration(accessToken),
         revoked: false,
       },
@@ -454,6 +600,10 @@ export async function verifyPasskeyAuthentication(
     ],
   });
 
+  // 1️⃣4️⃣ Retornar los datos al controlador
+  // El controlador usará estos datos para:
+  // - Establecer cookies (accessKey, clientKey)
+  // - Enviar datos del usuario al frontend
   return {
     user: passkey.user,
     session: {
@@ -461,45 +611,77 @@ export async function verifyPasskeyAuthentication(
       expiresAt: session.expiresAt,
     },
     tokens: {
-      accessTokenId,
-      hashedPublicKey,
+      accessTokenId,     // Se guarda en cookie "accessKey"
+      hashedPublicKey,   // Se guarda en cookie "clientKey"
     },
   };
 }
 
 /**
- * List user's passkeys
+ * 📋 LISTAR PASSKEYS: Obtener todos los passkeys registrados por el usuario
+ *
+ * ¿Qué hace?
+ * - Busca todos los passkeys del usuario en la base de datos
+ * - Incluye información del dispositivo asociado (iPhone, Android, etc.)
+ * - Retorna una lista ordenada por fecha de creación (más reciente primero)
+ *
+ * Uso típico:
+ * - Pantalla de "Mis dispositivos" o "Seguridad" en el frontend
+ * - El usuario puede ver todos sus passkeys y eliminar los que ya no use
+ *
+ * @param userId - ID del usuario autenticado
+ * @returns Lista de passkeys con información del dispositivo
  */
 export async function listUserPasskeys(userId: string) {
+  // Buscar todos los passkeys del usuario con información del dispositivo
   const passkeys = await prisma.passkey.findMany({
     where: { userId },
     include: {
       device: {
         select: {
-          device: true,
-          os: true,
-          browser: true,
+          device: true,   // Ejemplo: "iPhone", "Pixel 7"
+          os: true,       // Ejemplo: "iOS 17", "Android 14"
+          browser: true,  // Ejemplo: "Safari", "Chrome"
         },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "desc" },  // Más recientes primero
   });
 
+  // Mapear a un formato simplificado para el frontend
   return passkeys.map((passkey) => ({
     id: passkey.id,
-    name: passkey.name,
-    device: passkey.device,
-    transports: passkey.transports,
-    createdAt: passkey.createdAt,
-    lastUsedAt: passkey.lastUsedAt,
+    name: passkey.name,               // Nombre amigable (ej: "iPhone de Felix")
+    device: passkey.device,           // Información del dispositivo
+    transports: passkey.transports,   // Métodos de transporte soportados
+    createdAt: passkey.createdAt,     // Cuándo se creó
+    lastUsedAt: passkey.lastUsedAt,   // Último uso
   }));
 }
 
 /**
- * Delete a passkey
+ * 🗑️ ELIMINAR PASSKEY: Borrar un passkey específico
+ *
+ * ¿Qué hace?
+ * - Verifica que el passkey pertenezca al usuario (seguridad)
+ * - Elimina el passkey de la base de datos
+ * - El usuario ya no podrá usar ese passkey para iniciar sesión
+ *
+ * Casos de uso:
+ * - Usuario perdió su iPhone y quiere desvincularlo
+ * - Usuario cambió de teléfono y quiere eliminar el antiguo
+ * - Usuario ya no usa un dispositivo específico
+ *
+ * IMPORTANTE: Eliminar un passkey NO cierra las sesiones activas.
+ * Para cerrar sesiones, el usuario debe usar la función de "Cerrar sesión en todos los dispositivos".
+ *
+ * @param userId - ID del usuario autenticado
+ * @param passkeyId - ID del passkey a eliminar
+ * @returns El ID del passkey eliminado
  */
 export async function deletePasskey(userId: string, passkeyId: string) {
-  // Verify passkey belongs to user
+  // 1️⃣ Verificar que el passkey pertenezca al usuario
+  // Esto previene que un usuario elimine passkeys de otros usuarios
   const passkey = await prisma.passkey.findFirst({
     where: { id: passkeyId, userId },
   });
@@ -507,14 +689,16 @@ export async function deletePasskey(userId: string, passkeyId: string) {
   if (!passkey) {
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
-      ERROR_CODE.NOT_FOUND,
-      "Passkey not found"
+      ERROR_CODE.PASSKEY_NOT_FOUND,
+      "PasskeyNotFound"
     );
   }
 
+  // 2️⃣ Eliminar el passkey de la base de datos
   await prisma.passkey.delete({
     where: { id: passkeyId },
   });
 
+  // 3️⃣ Retornar confirmación
   return { passkeyId };
 }

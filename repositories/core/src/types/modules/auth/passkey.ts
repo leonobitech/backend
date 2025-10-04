@@ -2,14 +2,13 @@ import type {
   AuthenticationResponseJSON,
   AuthenticatorTransportFuture,
   RegistrationResponseJSON,
-} from "@simplewebauthn/types";
-import type { ClientMeta } from "./request";
+} from "@simplewebauthn/server";
 
 /**
  * Passkey registration challenge request
  */
 export interface PasskeyRegisterChallengeRequest {
-  meta: ClientMeta;
+  meta: RequestMeta;
 }
 
 /**
@@ -46,7 +45,7 @@ export interface PasskeyRegisterChallengeResponse {
 export interface PasskeyRegisterVerifyRequest {
   name?: string; // Friendly name for the passkey
   credential: RegistrationResponseJSON;
-  meta: ClientMeta;
+  meta: RequestMeta;
 }
 
 /**
@@ -66,7 +65,7 @@ export interface PasskeyRegisterVerifyResponse {
  */
 export interface PasskeyLoginChallengeRequest {
   email?: string; // Optional: for user identification
-  meta: ClientMeta;
+  meta: RequestMeta;
 }
 
 /**
@@ -89,7 +88,7 @@ export interface PasskeyLoginChallengeResponse {
  */
 export interface PasskeyLoginVerifyRequest {
   credential: AuthenticationResponseJSON;
-  meta: ClientMeta;
+  meta: RequestMeta;
 }
 
 /**
@@ -126,7 +125,7 @@ export interface PasskeyListItem {
  */
 export interface PasskeyDeleteRequest {
   passkeyId: string;
-  meta: ClientMeta;
+  meta: RequestMeta;
 }
 
 /**
