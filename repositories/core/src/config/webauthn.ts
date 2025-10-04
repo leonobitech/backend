@@ -1,7 +1,8 @@
 import { APP_ORIGIN } from "./env";
 
 // Extract hostname from APP_ORIGIN for RP ID
-const rpId = new URL(APP_ORIGIN).hostname;
+// Remove 'www.' if present to allow passkeys to work on both www and non-www domains
+const rpId = new URL(APP_ORIGIN).hostname.replace(/^www\./, '');
 
 export const webAuthnConfig = {
   // Relying Party (RP) - Your application
