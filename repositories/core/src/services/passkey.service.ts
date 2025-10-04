@@ -374,9 +374,9 @@ export async function verifyPasskeyRegistration(
       // Nombre amigable (ej: "iPhone de Felix" o generado automático)
       name: name || `${meta.deviceInfo.device} (${meta.deviceInfo.os})`,
       // Métodos de transporte soportados (USB, NFC, Bluetooth, híbrido, interno)
-      // Siempre incluimos 'hybrid' para permitir autenticación cross-device con QR
+      // Usar solo los transports que el navegador reportó (sin forzar 'hybrid')
       transports: Array.from(
-        new Set([...(credential.response.transports || []), "hybrid"])
+        new Set([...(credential.response.transports || [])])
       ),
     },
     select: {
@@ -503,12 +503,10 @@ export async function generatePasskeyAuthenticationChallenge(
     allowCredentials = passkeys.map((passkey) => ({
       id: passkey.credentialId,  // ID único de cada passkey
       type: "public-key" as const,
-      // Métodos de transporte + 'hybrid' para permitir QR cross-device
-      // Ejemplo: ['internal', 'hybrid'] = Face ID en iPhone + posibilidad de escanear QR desde otro dispositivo
-      transports: [
-        ...(passkey.transports as AuthenticatorTransportFuture[]),
-        "hybrid",
-      ] as AuthenticatorTransportFuture[],
+      // Usar los transports tal como están guardados en la DB
+      // Si ya incluyen 'hybrid', Safari lo mostrará como opción
+      // Si solo tienen 'internal', Safari usará autenticación local
+      transports: (passkey.transports as AuthenticatorTransportFuture[]) || [],
     }));
   } else {
     loggerEvent(
