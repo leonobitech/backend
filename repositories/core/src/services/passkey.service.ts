@@ -318,6 +318,20 @@ export async function verifyPasskeyRegistration(
 
   const { credential: credentialInfo } = verification.registrationInfo;
 
+  // 🔍 DEBUG: Log transports recibidos del navegador
+  loggerEvent(
+    "passkey.service.register.verify.transports-debug",
+    {
+      userId,
+      transportsReceived: credential.response.transports,
+      transportsType: typeof credential.response.transports,
+      transportsIsArray: Array.isArray(credential.response.transports),
+      transportsLength: credential.response.transports?.length,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   // 4️⃣ Encontrar o crear el dispositivo en la base de datos
   // Un dispositivo es único por la combinación: userId + device + os + browser
   // Ejemplo: "iPhone + iOS + Safari" es un dispositivo único
@@ -350,12 +364,18 @@ export async function verifyPasskeyRegistration(
   });
 
   // 5️⃣ Guardar el passkey en la base de datos
+  // Procesar transports: usar solo los que reportó el navegador
+  const transportsToSave = Array.from(
+    new Set([...(credential.response.transports || [])])
+  );
+
   loggerEvent(
     "passkey.service.register.verify.creating-passkey",
     {
       userId,
       deviceId: device.id,
       name: name || `${meta.deviceInfo.device} (${meta.deviceInfo.os})`,
+      transportsToSave,
     },
     undefined,
     "passkey.service"
@@ -374,10 +394,8 @@ export async function verifyPasskeyRegistration(
       // Nombre amigable (ej: "iPhone de Felix" o generado automático)
       name: name || `${meta.deviceInfo.device} (${meta.deviceInfo.os})`,
       // Métodos de transporte soportados (USB, NFC, Bluetooth, híbrido, interno)
-      // Usar solo los transports que el navegador reportó (sin forzar 'hybrid')
-      transports: Array.from(
-        new Set([...(credential.response.transports || [])])
-      ),
+      // Usar EXACTAMENTE los transports que el navegador reportó
+      transports: transportsToSave,
     },
     select: {
       id: true,
