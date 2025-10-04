@@ -102,6 +102,9 @@ if (NODE_ENV === "development") {
 // 🔐 Endpoint usado por Traefik para permitir ver Dashboard de n8n y odoo
 app.use("/security", securityRoutes);
 
+// ✅ Rutas públicas de passkey (ANTES del apiKeyGuard para permitir login sin API key)
+app.use("/account/passkey", passkeyRoutes); // Passkey routes (mixed auth)
+
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
 
@@ -111,7 +114,6 @@ app.use("/account", accountRoutes);
 // 🔐 Auth & protected routes
 app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
-app.use("/account/passkey", passkeyRoutes); // Passkey routes (mixed auth)
 app.use("/admin", authenticate, authorize(UserRole.Admin), adminRouter);
 
 // Test route for error handling

@@ -30,6 +30,8 @@ import type {
   PasskeyLoginChallengeRequest,
   PasskeyLoginVerifyRequest,
 } from "@custom-types/modules/auth/passkey";
+import { loggerEvent } from "@utils/logging/loggerEvent";
+import { loggerAudit } from "@utils/logging/loggerAudit";
 
 /**
  * 📝 POST /account/passkey/register/challenge
@@ -57,8 +59,22 @@ export const generateRegisterChallenge = catchErrors(
     const userId = req.userId!;
     const { meta } = req.body as PasskeyRegisterChallengeRequest;
 
+    loggerEvent(
+      "passkey.register.challenge.start",
+      { userId, device: meta.deviceInfo.device, os: meta.deviceInfo.os },
+      req,
+      "passkey.controller"
+    );
+
     // Llamar al servicio para generar el challenge
     const options = await generatePasskeyRegistrationChallenge(userId, meta);
+
+    loggerEvent(
+      "passkey.register.challenge.success",
+      { userId, challengeLength: options.challenge.length },
+      req,
+      "passkey.controller"
+    );
 
     // Retornar las opciones al frontend
     res.status(HTTP_CODE.OK).json({
@@ -95,12 +111,31 @@ export const verifyRegister = catchErrors(
     const userId = req.userId!;
     const { credential, name, meta } = req.body as PasskeyRegisterVerifyRequest;
 
+    loggerEvent(
+      "passkey.register.verify.start",
+      { userId, credentialId: credential.id, name },
+      req,
+      "passkey.controller"
+    );
+
     // Verificar y guardar el passkey
     const passkey = await verifyPasskeyRegistration(
       userId,
       credential,
       name,
       meta
+    );
+
+    loggerAudit(
+      "passkey.registered",
+      {
+        performedBy: userId,
+        passkeyId: passkey.id,
+        passkeyName: passkey.name,
+        device: meta.deviceInfo.device,
+        os: meta.deviceInfo.os,
+      },
+      req
     );
 
     // Retornar confirmación
@@ -136,8 +171,26 @@ export const generateLoginChallenge = catchErrors(
   async (req: Request, res: Response) => {
     const { email, meta } = req.body as PasskeyLoginChallengeRequest;
 
+    loggerEvent(
+      "passkey.login.challenge.start",
+      { email: email || "discoverable", hasEmail: !!email },
+      req,
+      "passkey.controller"
+    );
+
     // Generar challenge (con o sin email)
     const options = await generatePasskeyAuthenticationChallenge(email, meta);
+
+    loggerEvent(
+      "passkey.login.challenge.success",
+      {
+        email: email || "discoverable",
+        challengeLength: options.challenge.length,
+        allowCredentialsCount: options.allowCredentials?.length || 0
+      },
+      req,
+      "passkey.controller"
+    );
 
     res.status(HTTP_CODE.OK).json({
       message: "Authentication challenge generated",
@@ -175,8 +228,28 @@ export const generateLoginChallenge = catchErrors(
 export const verifyLogin = catchErrors(async (req: Request, res: Response) => {
   const { credential, meta } = req.body as PasskeyLoginVerifyRequest;
 
+  loggerEvent(
+    "passkey.login.verify.start",
+    { credentialId: credential.id },
+    req,
+    "passkey.controller"
+  );
+
   // Verificar autenticación y crear sesión completa
   const result = await verifyPasskeyAuthentication(credential, meta);
+
+  loggerAudit(
+    "passkey.login.success",
+    {
+      performedBy: result.user.id,
+      sessionId: result.session.id,
+      email: result.user.email,
+      device: meta.deviceInfo.device,
+      os: meta.deviceInfo.os,
+      ipAddress: meta.ipAddress,
+    },
+    req
+  );
 
   // Establecer cookies de autenticación (HttpOnly, Secure, SameSite)
   setAuthCookies({
@@ -253,8 +326,24 @@ export const deletePasskeyById = catchErrors(
     const userId = req.userId!;
     const { passkeyId } = req.params;
 
+    loggerEvent(
+      "passkey.delete.start",
+      { userId, passkeyId },
+      req,
+      "passkey.controller"
+    );
+
     // Eliminar passkey
     const result = await deletePasskey(userId, passkeyId);
+
+    loggerAudit(
+      "passkey.deleted",
+      {
+        performedBy: userId,
+        passkeyId: result.passkeyId,
+      },
+      req
+    );
 
     res.status(HTTP_CODE.OK).json({
       message: "Passkey deleted successfully",

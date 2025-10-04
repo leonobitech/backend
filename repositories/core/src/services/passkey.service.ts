@@ -40,6 +40,7 @@ import { generateAccessToken, generateRefreshToken } from "@utils/auth/jwt";
 import { getJwtExpiration } from "@utils/auth/getJwtExpiration";
 import { thirtyDaysFromNow } from "@utils/date/date";
 import type { UserRole } from "@constants/userRole";
+import { loggerEvent } from "@utils/logging/loggerEvent";
 
 /**
  * 📝 PASO 1 DE REGISTRO: Generar challenge para crear un passkey
@@ -65,6 +66,13 @@ export async function generatePasskeyRegistrationChallenge(
   userId: string,
   meta: RequestMeta
 ) {
+  loggerEvent(
+    "passkey.service.register.challenge.start",
+    { userId },
+    undefined,
+    "passkey.service"
+  );
+
   // 1️⃣ Buscar al usuario en la base de datos
   // Necesitamos su email y nombre para asociarlo al passkey
   const user = await prisma.user.findUnique({
@@ -73,6 +81,12 @@ export async function generatePasskeyRegistrationChallenge(
   });
 
   if (!user) {
+    loggerEvent(
+      "passkey.service.register.challenge.user-not-found",
+      { userId },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.USER_NOT_FOUND,
@@ -80,12 +94,26 @@ export async function generatePasskeyRegistrationChallenge(
     );
   }
 
+  loggerEvent(
+    "passkey.service.register.challenge.user-found",
+    { userId, email: user.email },
+    undefined,
+    "passkey.service"
+  );
+
   // 2️⃣ Obtener passkeys existentes del usuario
   // Esto permite que el navegador evite crear duplicados del mismo dispositivo
   const existingPasskeys = await prisma.passkey.findMany({
     where: { userId },
     select: { credentialId: true, transports: true },
   });
+
+  loggerEvent(
+    "passkey.service.register.challenge.existing-passkeys",
+    { userId, count: existingPasskeys.length },
+    undefined,
+    "passkey.service"
+  );
 
   // 3️⃣ Generar las opciones de registro usando la librería WebAuthn
   const options = await generateRegistrationOptions({
@@ -132,8 +160,26 @@ export async function generatePasskeyRegistrationChallenge(
     JSON.stringify(challengeData)
   );
 
+  loggerEvent(
+    "passkey.service.register.challenge.redis-stored",
+    {
+      userId,
+      challengeKey,
+      ttlSeconds: Math.floor(webAuthnConfig.challengeTTL / 1000),
+    },
+    undefined,
+    "passkey.service"
+  );
+
   // 5️⃣ Retornar las opciones al frontend
   // El navegador usará estas opciones con navigator.credentials.create()
+  loggerEvent(
+    "passkey.service.register.challenge.complete",
+    { userId, rpId: options.rp.id, rpName: options.rp.name },
+    undefined,
+    "passkey.service"
+  );
+
   return options;
 }
 
@@ -166,12 +212,25 @@ export async function verifyPasskeyRegistration(
   name: string | undefined,
   meta: RequestMeta
 ) {
+  loggerEvent(
+    "passkey.service.register.verify.start",
+    { userId, credentialId: credential.id },
+    undefined,
+    "passkey.service"
+  );
+
   // 1️⃣ Recuperar el challenge de Redis
   // El challenge se generó en el paso anterior y debe coincidir
   const challengeKey = `passkey:register:challenge:${userId}`;
   const storedChallengeData = await redis.get(challengeKey);
 
   if (!storedChallengeData) {
+    loggerEvent(
+      "passkey.service.register.verify.challenge-not-found",
+      { userId, challengeKey },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
       ERROR_CODE.CHALLENGE_NOT_FOUND_OR_EXPIRED,
@@ -179,11 +238,24 @@ export async function verifyPasskeyRegistration(
     );
   }
 
+  loggerEvent(
+    "passkey.service.register.verify.challenge-retrieved",
+    { userId },
+    undefined,
+    "passkey.service"
+  );
+
   const storedChallenge: StoredChallenge = JSON.parse(storedChallengeData);
 
   // 2️⃣ Verificar que el challenge no haya expirado (5 minutos)
   if (storedChallenge.expiresAt < Date.now()) {
     await redis.del(challengeKey);
+    loggerEvent(
+      "passkey.service.register.verify.challenge-expired",
+      { userId, expiresAt: storedChallenge.expiresAt, now: Date.now() },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
       ERROR_CODE.CHALLENGE_EXPIRED,
@@ -191,12 +263,30 @@ export async function verifyPasskeyRegistration(
     );
   }
 
+  loggerEvent(
+    "passkey.service.register.verify.challenge-valid",
+    { userId },
+    undefined,
+    "passkey.service"
+  );
+
   // 3️⃣ Verificar criptográficamente que la credencial sea válida
   // La librería @simplewebauthn/server verifica:
   // - Que el challenge coincida con el que enviamos
   // - Que el origin sea correcto (ej: https://leonobitech.com)
   // - Que el rpID coincida (ej: leonobitech.com)
   // - Que la firma criptográfica sea válida
+  loggerEvent(
+    "passkey.service.register.verify.verifying-credential",
+    {
+      userId,
+      expectedOrigin: webAuthnConfig.origin,
+      expectedRPID: webAuthnConfig.rpId,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   const verification = await verifyRegistrationResponse({
     response: credential,
     expectedChallenge: storedChallenge.challenge,
@@ -206,12 +296,25 @@ export async function verifyPasskeyRegistration(
   });
 
   if (!verification.verified || !verification.registrationInfo) {
+    loggerEvent(
+      "passkey.service.register.verify.verification-failed",
+      { userId, verified: verification.verified },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
       ERROR_CODE.PASSKEY_VERIFICATION_FAILED,
       "PasskeyVerificationFailed"
     );
   }
+
+  loggerEvent(
+    "passkey.service.register.verify.verification-success",
+    { userId },
+    undefined,
+    "passkey.service"
+  );
 
   const { credential: credentialInfo } = verification.registrationInfo;
 
@@ -247,6 +350,17 @@ export async function verifyPasskeyRegistration(
   });
 
   // 5️⃣ Guardar el passkey en la base de datos
+  loggerEvent(
+    "passkey.service.register.verify.creating-passkey",
+    {
+      userId,
+      deviceId: device.id,
+      name: name || `${meta.deviceInfo.device} (${meta.deviceInfo.os})`,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   const passkey = await prisma.passkey.create({
     data: {
       userId,
@@ -272,8 +386,22 @@ export async function verifyPasskeyRegistration(
     },
   });
 
+  loggerEvent(
+    "passkey.service.register.verify.passkey-created",
+    { userId, passkeyId: passkey.id, passkeyName: passkey.name },
+    undefined,
+    "passkey.service"
+  );
+
   // 6️⃣ Eliminar el challenge de Redis (ya fue usado)
   await redis.del(challengeKey);
+
+  loggerEvent(
+    "passkey.service.register.verify.complete",
+    { userId, passkeyId: passkey.id },
+    undefined,
+    "passkey.service"
+  );
 
   // 7️⃣ Retornar el passkey creado
   return passkey;
@@ -306,6 +434,13 @@ export async function generatePasskeyAuthenticationChallenge(
   email?: string,
   meta?: RequestMeta
 ) {
+  loggerEvent(
+    "passkey.service.login.challenge.start",
+    { email: email || "discoverable", hasEmail: !!email },
+    undefined,
+    "passkey.service"
+  );
+
   let allowCredentials: Array<{
     id: string;
     type: "public-key";
@@ -316,12 +451,25 @@ export async function generatePasskeyAuthenticationChallenge(
 
   // 1️⃣ Si se proporciona email, buscar los passkeys del usuario
   if (email) {
+    loggerEvent(
+      "passkey.service.login.challenge.searching-user",
+      { email },
+      undefined,
+      "passkey.service"
+    );
+
     const user = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
     });
 
     if (!user) {
+      loggerEvent(
+        "passkey.service.login.challenge.user-not-found",
+        { email },
+        undefined,
+        "passkey.service"
+      );
       throw new HttpException(
         HTTP_CODE.NOT_FOUND,
         ERROR_CODE.USER_NOT_FOUND,
@@ -331,11 +479,25 @@ export async function generatePasskeyAuthenticationChallenge(
 
     userId = user.id;
 
+    loggerEvent(
+      "passkey.service.login.challenge.user-found",
+      { userId },
+      undefined,
+      "passkey.service"
+    );
+
     // Obtener todos los passkeys registrados por este usuario
     const passkeys = await prisma.passkey.findMany({
       where: { userId: user.id },
       select: { credentialId: true, transports: true },
     });
+
+    loggerEvent(
+      "passkey.service.login.challenge.passkeys-found",
+      { userId, count: passkeys.length },
+      undefined,
+      "passkey.service"
+    );
 
     // Mapear los passkeys a la estructura que espera WebAuthn
     allowCredentials = passkeys.map((passkey) => ({
@@ -348,6 +510,13 @@ export async function generatePasskeyAuthenticationChallenge(
         "hybrid",
       ] as AuthenticatorTransportFuture[],
     }));
+  } else {
+    loggerEvent(
+      "passkey.service.login.challenge.discoverable-mode",
+      {},
+      undefined,
+      "passkey.service"
+    );
   }
 
   // 2️⃣ Generar opciones de autenticación
@@ -374,8 +543,30 @@ export async function generatePasskeyAuthenticationChallenge(
     JSON.stringify(challengeData)
   );
 
+  loggerEvent(
+    "passkey.service.login.challenge.redis-stored",
+    {
+      challengeKey,
+      userId: userId || "discoverable",
+      ttlSeconds: Math.floor(webAuthnConfig.challengeTTL / 1000),
+    },
+    undefined,
+    "passkey.service"
+  );
+
   // 4️⃣ Retornar las opciones al frontend
   // El navegador usará estas opciones con navigator.credentials.get()
+  loggerEvent(
+    "passkey.service.login.challenge.complete",
+    {
+      userId: userId || "discoverable",
+      allowCredentialsCount: allowCredentials.length,
+      rpId: webAuthnConfig.rpId,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   return options;
 }
 
@@ -407,15 +598,36 @@ export async function verifyPasskeyAuthentication(
   credential: AuthenticationResponseJSON,
   meta: RequestMeta
 ) {
+  loggerEvent(
+    "passkey.service.login.verify.start",
+    { credentialId: credential.id },
+    undefined,
+    "passkey.service"
+  );
+
   // 1️⃣ Buscar el challenge en Redis
   // NOTA: Aquí hay un problema de implementación. El challengeKey usa clientDataJSON que no es el challenge
   // En producción deberías usar una estructura de datos diferente (hash map o decodificar clientDataJSON)
   const challengeKey = `passkey:login:challenge:${credential.response.clientDataJSON}`;
 
+  loggerEvent(
+    "passkey.service.login.verify.searching-challenge",
+    {},
+    undefined,
+    "passkey.service"
+  );
+
   // Iteramos sobre todos los challenges activos (no óptimo, mejorar en producción)
   const allKeys = await redis.keys("passkey:login:challenge:*");
   let storedChallengeData: string | null = null;
   let foundChallengeKey: string | null = null;
+
+  loggerEvent(
+    "passkey.service.login.verify.challenges-found",
+    { count: allKeys.length },
+    undefined,
+    "passkey.service"
+  );
 
   for (const key of allKeys) {
     const data = await redis.get(key);
@@ -429,6 +641,12 @@ export async function verifyPasskeyAuthentication(
   }
 
   if (!storedChallengeData || !foundChallengeKey) {
+    loggerEvent(
+      "passkey.service.login.verify.challenge-not-found",
+      { credentialId: credential.id },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
       ERROR_CODE.CHALLENGE_NOT_FOUND_OR_EXPIRED,
@@ -436,11 +654,28 @@ export async function verifyPasskeyAuthentication(
     );
   }
 
+  loggerEvent(
+    "passkey.service.login.verify.challenge-retrieved",
+    { challengeKey: foundChallengeKey },
+    undefined,
+    "passkey.service"
+  );
+
   const storedChallenge: StoredChallenge = JSON.parse(storedChallengeData);
 
   // 2️⃣ Verificar que el challenge no haya expirado
   if (storedChallenge.expiresAt < Date.now()) {
     await redis.del(foundChallengeKey);
+    loggerEvent(
+      "passkey.service.login.verify.challenge-expired",
+      {
+        credentialId: credential.id,
+        expiresAt: storedChallenge.expiresAt,
+        now: Date.now(),
+      },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.BAD_REQUEST,
       ERROR_CODE.CHALLENGE_EXPIRED,
@@ -448,8 +683,22 @@ export async function verifyPasskeyAuthentication(
     );
   }
 
+  loggerEvent(
+    "passkey.service.login.verify.challenge-valid",
+    {},
+    undefined,
+    "passkey.service"
+  );
+
   // 3️⃣ Buscar el passkey en la base de datos usando el credentialId
   // El credentialId identifica únicamente a este passkey específico
+  loggerEvent(
+    "passkey.service.login.verify.searching-passkey",
+    { credentialId: credential.id },
+    undefined,
+    "passkey.service"
+  );
+
   const passkey = await prisma.passkey.findUnique({
     where: { credentialId: credential.id },
     include: {
@@ -467,6 +716,12 @@ export async function verifyPasskeyAuthentication(
   });
 
   if (!passkey) {
+    loggerEvent(
+      "passkey.service.login.verify.passkey-not-found",
+      { credentialId: credential.id },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.INVALID_PASSKEY,
@@ -474,8 +729,26 @@ export async function verifyPasskeyAuthentication(
     );
   }
 
+  loggerEvent(
+    "passkey.service.login.verify.passkey-found",
+    {
+      credentialId: credential.id,
+      userId: passkey.user.id,
+      email: passkey.user.email,
+      passkeyCounter: passkey.counter,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   // 4️⃣ Verificar que la cuenta del usuario esté activa
   if (!passkey.user.isActive) {
+    loggerEvent(
+      "passkey.service.login.verify.user-inactive",
+      { userId: passkey.user.id, email: passkey.user.email },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.FORBIDDEN,
       ERROR_CODE.USER_ACCOUNT_IS_DEACTIVATED,
@@ -483,12 +756,31 @@ export async function verifyPasskeyAuthentication(
     );
   }
 
+  loggerEvent(
+    "passkey.service.login.verify.user-active",
+    { userId: passkey.user.id },
+    undefined,
+    "passkey.service"
+  );
+
   // 5️⃣ Verificar criptográficamente la autenticación
   // La librería @simplewebauthn/server verifica:
   // - Que el challenge coincida
   // - Que el origin sea correcto
   // - Que la firma criptográfica sea válida usando la clave pública guardada
   // - Que el counter sea mayor al anterior (protección contra clonación)
+  loggerEvent(
+    "passkey.service.login.verify.verifying-authentication",
+    {
+      userId: passkey.user.id,
+      expectedOrigin: webAuthnConfig.origin,
+      expectedRPID: webAuthnConfig.rpId,
+      storedCounter: passkey.counter,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   const verification = await verifyAuthenticationResponse({
     response: credential,
     expectedChallenge: storedChallenge.challenge,
@@ -503,12 +795,33 @@ export async function verifyPasskeyAuthentication(
   });
 
   if (!verification.verified) {
+    loggerEvent(
+      "passkey.service.login.verify.verification-failed",
+      {
+        userId: passkey.user.id,
+        credentialId: credential.id,
+        verified: verification.verified,
+      },
+      undefined,
+      "passkey.service"
+    );
     throw new HttpException(
       HTTP_CODE.UNAUTHORIZED,
       ERROR_CODE.INVALID_PASSKEY,
       "InvalidPasskey"
     );
   }
+
+  loggerEvent(
+    "passkey.service.login.verify.verification-success",
+    {
+      userId: passkey.user.id,
+      newCounter: verification.authenticationInfo.newCounter,
+      oldCounter: passkey.counter,
+    },
+    undefined,
+    "passkey.service"
+  );
 
   // 6️⃣ Actualizar el contador del passkey
   // El counter se incrementa en cada uso y previene ataques de clonación
@@ -521,15 +834,55 @@ export async function verifyPasskeyAuthentication(
     },
   });
 
+  loggerEvent(
+    "passkey.service.login.verify.passkey-updated",
+    { userId: passkey.user.id, passkeyId: passkey.id },
+    undefined,
+    "passkey.service"
+  );
+
   // 7️⃣ Eliminar el challenge de Redis (ya fue usado)
   await redis.del(foundChallengeKey);
 
+  loggerEvent(
+    "passkey.service.login.verify.challenge-deleted",
+    { userId: passkey.user.id },
+    undefined,
+    "passkey.service"
+  );
+
   // 8️⃣ Encontrar o crear el dispositivo
   // Esto registra desde qué dispositivo se hizo login (iPhone, Android, etc.)
+  loggerEvent(
+    "passkey.service.login.verify.finding-device",
+    {
+      userId: passkey.user.id,
+      device: meta.deviceInfo.device,
+      os: meta.deviceInfo.os,
+      browser: meta.deviceInfo.browser,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   const device = await findOrCreateDevice(passkey.user.id, meta);
+
+  loggerEvent(
+    "passkey.service.login.verify.device-ready",
+    { userId: passkey.user.id, deviceId: device.id },
+    undefined,
+    "passkey.service"
+  );
 
   // 9️⃣ Crear una nueva sesión en la base de datos
   // Una sesión representa un login activo que expira en 30 días
+  loggerEvent(
+    "passkey.service.login.verify.creating-session",
+    { userId: passkey.user.id, deviceId: device.id },
+    undefined,
+    "passkey.service"
+  );
+
   const session = await prisma.session.create({
     data: {
       userId: passkey.user.id,
@@ -539,13 +892,34 @@ export async function verifyPasskeyAuthentication(
     },
   });
 
+  loggerEvent(
+    "passkey.service.login.verify.session-created",
+    { userId: passkey.user.id, sessionId: session.id },
+    undefined,
+    "passkey.service"
+  );
+
   // 🔟 Generar el clientKey (fingerprint del dispositivo)
   // El clientKey es un hash de: IP + userAgent + userId + sessionId
   // Esto previene que roben el token y lo usen desde otro dispositivo
+  loggerEvent(
+    "passkey.service.login.verify.generating-clientkey",
+    { userId: passkey.user.id, sessionId: session.id },
+    undefined,
+    "passkey.service"
+  );
+
   const hashedPublicKey = await generateClientKeyFromMeta(
     meta,
     passkey.user.id,
     session.id
+  );
+
+  loggerEvent(
+    "passkey.service.login.verify.clientkey-generated",
+    { userId: passkey.user.id, sessionId: session.id },
+    undefined,
+    "passkey.service"
   );
 
   // 1️⃣1️⃣ Actualizar la sesión con el clientKey
@@ -554,9 +928,23 @@ export async function verifyPasskeyAuthentication(
     data: { clientKey: hashedPublicKey },
   });
 
+  loggerEvent(
+    "passkey.service.login.verify.session-updated",
+    { userId: passkey.user.id, sessionId: session.id },
+    undefined,
+    "passkey.service"
+  );
+
   // 1️⃣2️⃣ Generar tokens JWT (access y refresh)
   // Access token: Válido por 15 minutos, se usa en cada petición
   // Refresh token: Válido por 30 días, se usa para renovar el access token
+  loggerEvent(
+    "passkey.service.login.verify.generating-tokens",
+    { userId: passkey.user.id, sessionId: session.id },
+    undefined,
+    "passkey.service"
+  );
+
   const { token: accessToken, hashedJti: accessTokenId } =
     await generateAccessToken(
       passkey.user.id,
@@ -573,8 +961,27 @@ export async function verifyPasskeyAuthentication(
       hashedPublicKey
     );
 
+  loggerEvent(
+    "passkey.service.login.verify.tokens-generated",
+    {
+      userId: passkey.user.id,
+      sessionId: session.id,
+      accessTokenId,
+      refreshTokenId,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   // 1️⃣3️⃣ Registrar los tokens en la base de datos
   // Esto permite revocarlos si es necesario (logout, sesión comprometida, etc.)
+  loggerEvent(
+    "passkey.service.login.verify.storing-tokens",
+    { userId: passkey.user.id, sessionId: session.id },
+    undefined,
+    "passkey.service"
+  );
+
   await prisma.tokenRecord.createMany({
     data: [
       {
@@ -600,10 +1007,28 @@ export async function verifyPasskeyAuthentication(
     ],
   });
 
+  loggerEvent(
+    "passkey.service.login.verify.tokens-stored",
+    { userId: passkey.user.id, sessionId: session.id },
+    undefined,
+    "passkey.service"
+  );
+
   // 1️⃣4️⃣ Retornar los datos al controlador
   // El controlador usará estos datos para:
   // - Establecer cookies (accessKey, clientKey)
   // - Enviar datos del usuario al frontend
+  loggerEvent(
+    "passkey.service.login.verify.complete",
+    {
+      userId: passkey.user.id,
+      sessionId: session.id,
+      email: passkey.user.email,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   return {
     user: passkey.user,
     session: {
