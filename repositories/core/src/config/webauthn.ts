@@ -1,13 +1,14 @@
 import { APP_ORIGIN } from "./env";
 
 // Extract hostname from APP_ORIGIN for RP ID
-// Remove 'www.' if present to allow passkeys to work on both www and non-www domains
-const rpId = new URL(APP_ORIGIN).hostname.replace(/^www\./, '');
+// Use the exact hostname from APP_ORIGIN to ensure consistency
+// For WebAuthn to work correctly, rpId must match the origin's hostname
+const rpId = new URL(APP_ORIGIN).hostname;
 
 export const webAuthnConfig = {
   // Relying Party (RP) - Your application
   rpName: "LeonobiTech",
-  rpId, // Domain name (e.g., "leonobitech.com")
+  rpId, // Domain name (e.g., "www.leonobitech.com" or "localhost")
 
   // Origin for verification
   origin: APP_ORIGIN, // Full origin (e.g., "https://leonobitech.com")
