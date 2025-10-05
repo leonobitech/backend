@@ -548,6 +548,22 @@ export const refreshAccessTokenService = async (
 
   const { user, session } = tokenRecord;
 
+  // 🕐 Mover el token viejo al período de gracia ANTES de generar el nuevo
+  // Esto permite que el cliente use las cookies viejas por 2 minutos mientras se propagan las nuevas
+  const oldAccessTokenRecord = await prisma.tokenRecord.findFirst({
+    where: {
+      sessionId: session.id,
+      userId: user.id,
+      publicKey: clientKey,
+      type: "ACCESS",
+    },
+  });
+
+  if (oldAccessTokenRecord) {
+    const { moveTokenToGracePeriod } = await import("@utils/auth/tokenRedis");
+    await moveTokenToGracePeriod(oldAccessTokenRecord.jti);
+  }
+
   // 🔐 Generar nuevos tokens utilizando el clientKey recibido (que coincide con la huella original)
   const newAccess = await generateAccessToken(
     user.id,

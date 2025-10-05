@@ -46,6 +46,27 @@ export const cacheAccessToken = async (
 };
 
 /**
+ * 🕐 Mueve un token a "período de gracia" (120 segundos) para permitir propagación de cookies.
+ * Se usa durante el refresh para que el token viejo siga siendo válido brevemente.
+ */
+export const moveTokenToGracePeriod = async (
+  hashedJti: string
+): Promise<void> => {
+  const oldKey = `access_token:${hashedJti}`;
+  const graceKey = `access_token:${hashedJti}:grace`;
+
+  const data = await redis.get(oldKey);
+  if (data) {
+    // Mover el token al período de gracia con 2 minutos de TTL
+    await redis.set(graceKey, data, { EX: 120 });
+    console.log(`⏳ Token ${hashedJti.substring(0, 8)}... movido a período de gracia (120s)`);
+  }
+
+  // Eliminar el token original
+  await redis.del(oldKey);
+};
+
+/**
  * 📦 Recupera el token desde Redis, valida que no esté expirado (TTL <= 0)
  * Si no existe o expiró, lanza error. Útil para prevalidar antes de jwtVerify.
  */
@@ -59,8 +80,11 @@ export const findAccessTokenOrThrow = async (
   clientKeyHash: string;
   ttl: number;
   refreshed: boolean;
+  fromGrace?: boolean;
 }> => {
   const key = `access_token:${accessKey}`;
+  const graceKey = `access_token:${accessKey}:grace`;
+
   const data = await redis.get(key);
   const ttl = await redis.ttl(key);
 
@@ -71,8 +95,21 @@ export const findAccessTokenOrThrow = async (
     return { token, clientKeyHash, ttl, refreshed: false };
   }
 
+  // 🕐 Buscar en período de gracia antes de ir al fallback
+  const graceData = await redis.get(graceKey);
+  const graceTtl = await redis.ttl(graceKey);
+
+  if (graceData && graceTtl > 0) {
+    const { token, clientKeyHash } = JSON.parse(graceData);
+    console.log(`⏳ Token encontrado en período de gracia (TTL: ${graceTtl}s)`);
+
+    // Retorna desde período de gracia (no genera nuevo refresh)
+    return { token, clientKeyHash, ttl: graceTtl, refreshed: false, fromGrace: true };
+  }
+
   // 🔥 Limpieza proactiva si estaba vencido
   await redis.del(key);
+  await redis.del(graceKey);
 
   // ⛓️ Fallback a DB si está habilitado
   if (useFallback) {

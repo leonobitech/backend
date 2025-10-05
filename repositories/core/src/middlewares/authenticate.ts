@@ -81,16 +81,13 @@ const authenticate: RequestHandler = catchErrors(
     try {
       tokenResult = await findAccessTokenOrThrow(accessKey, clientKey, meta, true);
     } catch (err) {
-      // Si el token no existe o las cookies están desincronizadas,
-      // limpiar cookies y forzar re-login limpio
-      if (err instanceof HttpException &&
-          (err.errorCode === ERROR_CODE.TOKEN_REVOKED ||
-           err.errorCode === ERROR_CODE.INVALID_CLIENT_KEY)) {
-
-        logger.warn("🧹 Cookies desincronizadas detectadas - limpiando y forzando re-login", {
+      // Solo limpiar cookies si el token NO EXISTE en DB (TOKEN_REVOKED)
+      // NO limpiar si es INVALID_CLIENT_KEY porque puede ser refresh temporal
+      if (err instanceof HttpException && err.errorCode === ERROR_CODE.TOKEN_REVOKED) {
+        logger.warn("🧹 Token revocado - limpiando cookies y forzando re-login", {
           ...meta,
           errorCode: err.errorCode,
-          event: "auth.cookies.desync",
+          event: "auth.token.revoked.cleanup",
         });
 
         clearAuthCookies(res);
@@ -104,6 +101,7 @@ const authenticate: RequestHandler = catchErrors(
       clientKeyHash,
       ttl,
       refreshed,
+      fromGrace,
     } = tokenResult;
 
     // 🔐 Verificación básica contra Redis
@@ -121,8 +119,46 @@ const authenticate: RequestHandler = catchErrors(
       ...meta,
       ttlSeconds: ttl,
       audience: audience,
+      fromGrace: fromGrace || false,
       event: "auth.token.received",
     });
+
+    // ⏳ Si el token viene del período de gracia, NO hacer refresh
+    // Esto significa que ya se refrescó y solo estamos esperando propagación de cookies
+    if (fromGrace) {
+      logger.info("⏳ Token en período de gracia - permitiendo acceso sin nuevo refresh", {
+        ...meta,
+        ttlRemaining: ttl,
+        event: "auth.token.grace_period",
+      });
+
+      const { payload } = await verifyToken(accessToken, lang, req);
+
+      if (
+        payload.aud !== Audience.Access ||
+        !("userId" in payload) ||
+        !("role" in payload)
+      ) {
+        throw new HttpException(
+          HTTP_CODE.UNAUTHORIZED,
+          getErrorMessage("INVALID_AUDIENCE", lang),
+          ERROR_CODE.INVALID_AUDIENCE,
+          [`Expected Audience: ${Audience.Access}`]
+        );
+      }
+
+      req.user = payload;
+      req.userId = payload.userId;
+      req.sessionId = payload.sessionId;
+      req.role = payload.role;
+
+      res.locals.user = {
+        id: req.userId!,
+        role: req.role!,
+      };
+
+      return next();
+    }
 
     // 🔁 Si el token fue refrescado desde DB, forzar regeneración
     if (refreshed) {
