@@ -390,7 +390,8 @@ export async function verifyPasskeyRegistration(
       userId,
       deviceId: device.id,
       // credentialId: Identificador único de la credencial (como un UUID)
-      credentialId: Buffer.from(credentialInfo.id).toString("base64url"),
+      // Usar credential.id directamente (ya viene en base64url del navegador)
+      credentialId: credential.id,
       // publicKey: Clave pública que se usará para verificar autenticaciones futuras
       publicKey: Buffer.from(credentialInfo.publicKey).toString("base64url"),
       // counter: Contador de usos (protege contra ataques de clonación)
