@@ -16,7 +16,7 @@ export const generateClientKeyFromMeta = async (
     }
   }
 
-  // 2️⃣ Campos inmutables
+  // 2️⃣ Campos inmutables (excluir host ya que puede variar entre frontend/backend)
   const fields: Record<string, string> = {
     userId,
     sessionId,
@@ -30,7 +30,6 @@ export const generateClientKeyFromMeta = async (
     timezone: meta.timezone,
     screenResolution: meta.screenResolution,
     label: meta.label,
-    host: meta.host,
   };
 
   // 3️⃣ Montamos la cadena
