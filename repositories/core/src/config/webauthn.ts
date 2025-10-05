@@ -1,14 +1,15 @@
 import { APP_ORIGIN } from "./env";
 
 // Extract hostname from APP_ORIGIN for RP ID
-// Use the exact hostname from APP_ORIGIN to ensure consistency
-// For WebAuthn to work correctly, rpId must match the origin's hostname
-const rpId = new URL(APP_ORIGIN).hostname;
+// IMPORTANT: rpId must be the registrable domain (eTLD+1) without 'www.' prefix
+// This ensures passkeys are grouped correctly with passwords in Apple Keychain
+// and allows the passkey to work on both www and non-www versions of the site
+const rpId = new URL(APP_ORIGIN).hostname.replace(/^www\./, '');
 
 export const webAuthnConfig = {
   // Relying Party (RP) - Your application
   rpName: "LeonobiTech",
-  rpId, // Domain name (e.g., "www.leonobitech.com" or "localhost")
+  rpId, // Registrable domain (e.g., "leonobitech.com" without www)
 
   // Origin for verification
   origin: APP_ORIGIN, // Full origin (e.g., "https://leonobitech.com")
