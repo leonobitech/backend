@@ -18,6 +18,7 @@ import { findAccessTokenOrThrow } from "@utils/auth/tokenRedis";
 import { createHash } from "crypto";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
+import { clearAuthCookies } from "@utils/auth/cookies";
 import { refreshAccessTokenService } from "@services/account.service";
 import { refreshAuthCookies } from "@utils/auth/cookies";
 import { loggerEvent } from "@utils/logging/loggerEvent";
@@ -76,12 +77,34 @@ const authenticate: RequestHandler = catchErrors(
     }
 
     // Buscar el token en Redis
+    let tokenResult;
+    try {
+      tokenResult = await findAccessTokenOrThrow(accessKey, clientKey, meta, true);
+    } catch (err) {
+      // Si el token no existe o las cookies están desincronizadas,
+      // limpiar cookies y forzar re-login limpio
+      if (err instanceof HttpException &&
+          (err.errorCode === ERROR_CODE.TOKEN_REVOKED ||
+           err.errorCode === ERROR_CODE.INVALID_CLIENT_KEY)) {
+
+        logger.warn("🧹 Cookies desincronizadas detectadas - limpiando y forzando re-login", {
+          ...meta,
+          errorCode: err.errorCode,
+          event: "auth.cookies.desync",
+        });
+
+        clearAuthCookies(res);
+        throw err;
+      }
+      throw err;
+    }
+
     const {
       token: accessToken,
       clientKeyHash,
       ttl,
       refreshed,
-    } = await findAccessTokenOrThrow(accessKey, clientKey, meta, true);
+    } = tokenResult;
 
     // 🔐 Verificación básica contra Redis
     if (clientKey !== clientKeyHash) {
