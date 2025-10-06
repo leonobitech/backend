@@ -29,8 +29,8 @@ export const webAuthnConfig = {
   // Require resident key (passkey stored on authenticator)
   requireResidentKey: true,
 
-  // User verification requirement
-  userVerification: "preferred" as const,
+  // User verification requirement (mandatory biometrics/PIN)
+  userVerification: "required" as const,
 
   // Attestation preference (none = no attestation, faster)
   attestation: "none" as const,

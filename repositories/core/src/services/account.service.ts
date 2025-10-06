@@ -850,21 +850,29 @@ export const logoutAllOtherSessionsService = async (
 export const requestPasswordResetService = async (
   email: ResetPasswordRequest
 ): Promise<ResetPasswordRequestResponse> => {
-  // 1️⃣ Verificar si existe el usuario
-  const user = await prisma.user.findUnique({ where: { email } });
+  const sanitizedEmail = email.trim();
+  const genericMessage =
+    "If the account exists, you'll receive a password reset code via email.";
 
-  appAssert(
-    user,
-    HTTP_CODE.NOT_FOUND,
-    "No user found with this email.",
-    ERROR_CODE.USER_NOT_FOUND,
-    [
-      {
-        field: "email",
-        message: "We couldn't find an account with this email.",
+  // 1️⃣ Verificar si existe el usuario (sin filtrar por existencia en la respuesta)
+  const user = await prisma.user.findUnique({ where: { email: sanitizedEmail } });
+
+  if (!user) {
+    const placeholderExpiresIn = Math.floor(
+      (fiveMinutesFromNow().getTime() - Date.now()) / 1000
+    );
+
+    return {
+      status: "passwordResetCodeSent",
+      message: genericMessage,
+      data: {
+        email,
+        requestId: uuidv4(),
+        expiresIn: placeholderExpiresIn,
+        codeSent: true,
       },
-    ]
-  );
+    };
+  }
 
   // 2️⃣ Eliminar códigos anteriores de tipo PasswordReset
   await prisma.verificationCode.deleteMany({
@@ -873,10 +881,12 @@ export const requestPasswordResetService = async (
       type: VerificationCodeType.PasswordReset,
     },
   });
-  // 2️⃣ Generar nuevo código y hashear
+
+  // 3️⃣ Generar nuevo código y hashear
   const rawCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
   const hashedCode = await hashValue(rawCode);
   const requestId = uuidv4();
+  const expiresAt = fiveMinutesFromNow();
 
   const verifyCode = await prisma.verificationCode.create({
     data: {
@@ -884,24 +894,39 @@ export const requestPasswordResetService = async (
       type: VerificationCodeType.PasswordReset,
       hashedCode,
       requestId,
-      expiresAt: fiveMinutesFromNow(),
+      expiresAt,
     },
   });
 
-  // 3️⃣ Enviar email
+  // 4️⃣ Enviar email real (solo cuando el usuario existe)
   await sendPasswordResetEmail(user.email, rawCode);
 
   const expiresIn = Math.floor(
     (verifyCode.expiresAt.getTime() - Date.now()) / 1000
   );
 
+  logger.info("📩 Password reset code sent", {
+    email: user.email,
+    userId: user.id,
+    event: "auth.reset_password.code.sent",
+  });
+
+  loggerEvent(
+    "user.password.reset.requested",
+    {
+      email: user.email,
+    },
+    undefined,
+    "requestPasswordResetService"
+  );
+
   return {
     status: "passwordResetCodeSent",
-    message: "Password reset code sent to your email.",
+    message: genericMessage,
     data: {
       email: user.email,
-      requestId: requestId,
-      expiresIn: expiresIn,
+      requestId,
+      expiresIn,
       codeSent: true,
     },
   };

@@ -16,16 +16,16 @@
  */
 
 import {
-  generateRegistrationOptions,   // Genera opciones para crear un nuevo passkey
-  verifyRegistrationResponse,     // Verifica que el passkey creado sea válido
-  generateAuthenticationOptions,  // Genera opciones para autenticar con un passkey existente
-  verifyAuthenticationResponse,   // Verifica que la autenticación sea válida
+  generateRegistrationOptions, // Genera opciones para crear un nuevo passkey
+  verifyRegistrationResponse, // Verifica que el passkey creado sea válido
+  generateAuthenticationOptions, // Genera opciones para autenticar con un passkey existente
+  verifyAuthenticationResponse, // Verifica que la autenticación sea válida
 } from "@simplewebauthn/server";
 import { isoUint8Array } from "@simplewebauthn/server/helpers";
 import type {
-  RegistrationResponseJSON,        // Tipo: Respuesta del navegador al crear passkey
-  AuthenticationResponseJSON,      // Tipo: Respuesta del navegador al autenticar
-  AuthenticatorTransportFuture,    // Tipo: Métodos de transporte (usb, nfc, ble, hybrid, internal)
+  RegistrationResponseJSON, // Tipo: Respuesta del navegador al crear passkey
+  AuthenticationResponseJSON, // Tipo: Respuesta del navegador al autenticar
+  AuthenticatorTransportFuture, // Tipo: Métodos de transporte (usb, nfc, ble, hybrid, internal)
 } from "@simplewebauthn/server";
 import { prisma } from "@config/prisma";
 import { redis } from "@config/redis";
@@ -117,13 +117,16 @@ export async function generatePasskeyRegistrationChallenge(
 
   // 3️⃣ Generar las opciones de registro usando la librería WebAuthn
   const options = await generateRegistrationOptions({
-    rpName: webAuthnConfig.rpName,        // "LeonobiTech" - Nombre que se muestra al usuario
-    rpID: webAuthnConfig.rpId,            // Dominio (ej: "leonobitech.com")
-    userID: isoUint8Array.fromUTF8String(user.id),  // ID del usuario convertido a bytes
-    userName: user.email,                 // Email del usuario
-    userDisplayName: (user.name && user.name.trim() !== '') ? user.name : user.email.split('@')[0],  // Nombre amigable (usa parte del email si name está vacío)
-    timeout: webAuthnConfig.timeout,      // 2 minutos para completar el proceso
-    attestationType: webAuthnConfig.attestation,  // "none" = no verificar fabricante del dispositivo
+    rpName: webAuthnConfig.rpName, // "LeonobiTech" - Nombre que se muestra al usuario
+    rpID: webAuthnConfig.rpId, // Dominio (ej: "leonobitech.com")
+    userID: isoUint8Array.fromUTF8String(user.id), // ID del usuario convertido a bytes
+    userName: user.email, // Email del usuario
+    userDisplayName:
+      user.name && user.name.trim() !== ""
+        ? user.name
+        : user.email.split("@")[0], // Nombre amigable (usa parte del email si name está vacío)
+    timeout: webAuthnConfig.timeout, // 2 minutos para completar el proceso
+    attestationType: webAuthnConfig.attestation, // "none" = no verificar fabricante del dispositivo
 
     // excludeCredentials: Lista de passkeys que ya tiene el usuario
     // El navegador no permitirá registrar el mismo dispositivo dos veces
@@ -135,10 +138,10 @@ export async function generatePasskeyRegistrationChallenge(
 
     // Configuración del autenticador (dispositivo que crea el passkey)
     authenticatorSelection: {
-      authenticatorAttachment: webAuthnConfig.authenticatorAttachment,  // undefined = cualquier tipo
-      requireResidentKey: webAuthnConfig.requireResidentKey,  // true = passkey se guarda en el dispositivo
-      residentKey: "required",  // El passkey DEBE guardarse en el dispositivo (no efímero)
-      userVerification: webAuthnConfig.userVerification,  // "preferred" = biometría preferida pero no obligatoria
+      authenticatorAttachment: webAuthnConfig.authenticatorAttachment, // undefined = cualquier tipo
+      requireResidentKey: webAuthnConfig.requireResidentKey, // true = passkey se guarda en el dispositivo
+      residentKey: "required", // El passkey DEBE guardarse en el dispositivo (no efímero)
+      userVerification: webAuthnConfig.userVerification, // "required" = fuerza biometría/PIN
     },
 
     // Algoritmos criptográficos soportados: ES256 (-7) y RS256 (-257)
@@ -149,14 +152,14 @@ export async function generatePasskeyRegistrationChallenge(
   // El challenge es un valor aleatorio que se usa para prevenir ataques de replay
   const challengeKey = `passkey:register:challenge:${userId}`;
   const challengeData: StoredChallenge = {
-    challenge: options.challenge,  // String base64url del challenge
+    challenge: options.challenge, // String base64url del challenge
     userId,
-    expiresAt: Date.now() + webAuthnConfig.challengeTTL,  // 5 minutos
+    expiresAt: Date.now() + webAuthnConfig.challengeTTL, // 5 minutos
   };
 
   await redis.setEx(
     challengeKey,
-    Math.floor(webAuthnConfig.challengeTTL / 1000),  // TTL en segundos
+    Math.floor(webAuthnConfig.challengeTTL / 1000), // TTL en segundos
     JSON.stringify(challengeData)
   );
 
@@ -292,7 +295,7 @@ export async function verifyPasskeyRegistration(
     expectedChallenge: storedChallenge.challenge,
     expectedOrigin: webAuthnConfig.origin,
     expectedRPID: webAuthnConfig.rpId,
-    requireUserVerification: false, // "preferred" means optional (permite biometría opcional)
+    requireUserVerification: true,
   });
 
   if (!verification.verified || !verification.registrationInfo) {
@@ -490,48 +493,43 @@ export async function generatePasskeyAuthenticationChallenge(
     if (!user) {
       loggerEvent(
         "passkey.service.login.challenge.user-not-found",
-        { email },
+        { email, fallback: "discoverable" },
         undefined,
         "passkey.service"
       );
-      throw new HttpException(
-        HTTP_CODE.NOT_FOUND,
-        ERROR_CODE.USER_NOT_FOUND,
-        "UserNotFound"
+    } else {
+      userId = user.id;
+
+      loggerEvent(
+        "passkey.service.login.challenge.user-found",
+        { userId },
+        undefined,
+        "passkey.service"
       );
+
+      // Obtener todos los passkeys registrados por este usuario
+      const passkeys = await prisma.passkey.findMany({
+        where: { userId: user.id },
+        select: { credentialId: true, transports: true },
+      });
+
+      loggerEvent(
+        "passkey.service.login.challenge.passkeys-found",
+        { userId, count: passkeys.length },
+        undefined,
+        "passkey.service"
+      );
+
+      // Mapear los passkeys a la estructura que espera WebAuthn
+      allowCredentials = passkeys.map((passkey) => ({
+        id: passkey.credentialId, // ID único de cada passkey
+        type: "public-key" as const,
+        // Usar los transports tal como están guardados en la DB
+        // Si ya incluyen 'hybrid', Safari lo mostrará como opción
+        // Si solo tienen 'internal', Safari usará autenticación local
+        transports: (passkey.transports as AuthenticatorTransportFuture[]) || [],
+      }));
     }
-
-    userId = user.id;
-
-    loggerEvent(
-      "passkey.service.login.challenge.user-found",
-      { userId },
-      undefined,
-      "passkey.service"
-    );
-
-    // Obtener todos los passkeys registrados por este usuario
-    const passkeys = await prisma.passkey.findMany({
-      where: { userId: user.id },
-      select: { credentialId: true, transports: true },
-    });
-
-    loggerEvent(
-      "passkey.service.login.challenge.passkeys-found",
-      { userId, count: passkeys.length },
-      undefined,
-      "passkey.service"
-    );
-
-    // Mapear los passkeys a la estructura que espera WebAuthn
-    allowCredentials = passkeys.map((passkey) => ({
-      id: passkey.credentialId,  // ID único de cada passkey
-      type: "public-key" as const,
-      // Usar los transports tal como están guardados en la DB
-      // Si ya incluyen 'hybrid', Safari lo mostrará como opción
-      // Si solo tienen 'internal', Safari usará autenticación local
-      transports: (passkey.transports as AuthenticatorTransportFuture[]) || [],
-    }));
   } else {
     loggerEvent(
       "passkey.service.login.challenge.discoverable-mode",
@@ -543,9 +541,9 @@ export async function generatePasskeyAuthenticationChallenge(
 
   // 2️⃣ Generar opciones de autenticación
   const options = await generateAuthenticationOptions({
-    rpID: webAuthnConfig.rpId,  // Dominio (ej: "leonobitech.com")
-    timeout: webAuthnConfig.timeout,  // 2 minutos para completar
-    userVerification: webAuthnConfig.userVerification,  // "preferred" = biometría preferida
+    rpID: webAuthnConfig.rpId, // Dominio (ej: "leonobitech.com")
+    timeout: webAuthnConfig.timeout, // 2 minutos para completar
+    userVerification: webAuthnConfig.userVerification, // "required" = fuerza biometría/PIN
     // Si hay passkeys específicos, enviarlos. Si no, undefined = modo "discoverable"
     allowCredentials:
       allowCredentials.length > 0 ? allowCredentials : undefined,
@@ -555,7 +553,7 @@ export async function generatePasskeyAuthenticationChallenge(
   const challengeKey = `passkey:login:challenge:${options.challenge}`;
   const challengeData: StoredChallenge = {
     challenge: options.challenge,
-    userId,  // Puede ser undefined si no se proporcionó email
+    userId, // Puede ser undefined si no se proporcionó email
     expiresAt: Date.now() + webAuthnConfig.challengeTTL,
   };
 
@@ -805,10 +803,10 @@ export async function verifyPasskeyAuthentication(
     expectedRPID: webAuthnConfig.rpId,
     credential: {
       id: passkey.credentialId,
-      publicKey: Buffer.from(passkey.publicKey, "base64url"),  // Clave pública guardada
-      counter: passkey.counter,  // Contador de usos previos
+      publicKey: Buffer.from(passkey.publicKey, "base64url"), // Clave pública guardada
+      counter: passkey.counter, // Contador de usos previos
     },
-    requireUserVerification: false, // "preferred" means optional
+    requireUserVerification: true,
   });
 
   if (!verification.verified) {
@@ -904,8 +902,8 @@ export async function verifyPasskeyAuthentication(
     data: {
       userId: passkey.user.id,
       deviceId: device.id,
-      clientKey: "",  // Se actualiza en el siguiente paso
-      expiresAt: thirtyDaysFromNow(),  // 30 días de expiración
+      clientKey: "", // Se actualiza en el siguiente paso
+      expiresAt: thirtyDaysFromNow(), // 30 días de expiración
     },
   });
 
@@ -1002,9 +1000,9 @@ export async function verifyPasskeyAuthentication(
   await prisma.tokenRecord.createMany({
     data: [
       {
-        jti: accessTokenId,         // Identificador único del token
-        type: "ACCESS",             // Tipo de token
-        token: accessToken,         // El token JWT completo
+        jti: accessTokenId, // Identificador único del token
+        type: "ACCESS", // Tipo de token
+        token: accessToken, // El token JWT completo
         sessionId: session.id,
         userId: passkey.user.id,
         publicKey: hashedPublicKey, // clientKey para validar que no fue robado
@@ -1053,8 +1051,8 @@ export async function verifyPasskeyAuthentication(
       expiresAt: session.expiresAt,
     },
     tokens: {
-      accessTokenId,     // Se guarda en cookie "accessKey"
-      hashedPublicKey,   // Se guarda en cookie "clientKey"
+      accessTokenId, // Se guarda en cookie "accessKey"
+      hashedPublicKey, // Se guarda en cookie "clientKey"
     },
   };
 }
@@ -1081,23 +1079,23 @@ export async function listUserPasskeys(userId: string) {
     include: {
       device: {
         select: {
-          device: true,   // Ejemplo: "iPhone", "Pixel 7"
-          os: true,       // Ejemplo: "iOS 17", "Android 14"
-          browser: true,  // Ejemplo: "Safari", "Chrome"
+          device: true, // Ejemplo: "iPhone", "Pixel 7"
+          os: true, // Ejemplo: "iOS 17", "Android 14"
+          browser: true, // Ejemplo: "Safari", "Chrome"
         },
       },
     },
-    orderBy: { createdAt: "desc" },  // Más recientes primero
+    orderBy: { createdAt: "desc" }, // Más recientes primero
   });
 
   // Mapear a un formato simplificado para el frontend
   return passkeys.map((passkey) => ({
     id: passkey.id,
-    name: passkey.name,               // Nombre amigable (ej: "iPhone de Felix")
-    device: passkey.device,           // Información del dispositivo
-    transports: passkey.transports,   // Métodos de transporte soportados
-    createdAt: passkey.createdAt,     // Cuándo se creó
-    lastUsedAt: passkey.lastUsedAt,   // Último uso
+    name: passkey.name, // Nombre amigable (ej: "iPhone de Felix")
+    device: passkey.device, // Información del dispositivo
+    transports: passkey.transports, // Métodos de transporte soportados
+    createdAt: passkey.createdAt, // Cuándo se creó
+    lastUsedAt: passkey.lastUsedAt, // Último uso
   }));
 }
 
