@@ -3,6 +3,7 @@
 # ─────────────────────────────────────────────
 repositories/*/.env
 repositories/core/keys/*
+repositories/chatgpt-oauth/keys/*
 .env
 .env*.local
 

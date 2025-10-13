@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "n": "izQGurwdN8RU6wmOaZ_krgQwbJsQQ9h-0ugZW3Qdr-XyXYEkfAXcsMbOZNJwgVXyLl22ULxTh4Z8qlTdkLS3hsLwGaZ5QFLZD9XigLF5ehssC5kC2dF3UHsX6sQqCJl4ZPmP4qHqLk0MOyZI5Tg58TNrmfFUDs6IpQDFliv8YPlaDcrghWJnlR6aQaf37qxYZ0kyULO9gMY4AJBtalW4IHANFTcn2CjQ2t_qIAmF4cEBDDkkZhUSdYbYFGLdj_7UtjOgJTCoRht4HgsXl1SNIASoNtas8DdIeLeheU_aaPx6AMe7HvCeGLIlsZnVM0mHXExO4YH3SndBUTpMsLUj8Q",
+      "e": "AQAB",
+      "kid": "chatgpt-key-1",
+      "use": "sig",
+      "alg": "RS256"
+    }
+  ]
+}
