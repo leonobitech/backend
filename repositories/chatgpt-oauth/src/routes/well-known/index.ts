@@ -21,9 +21,9 @@ wellKnownRouter.get("/ai-plugin.json", (_req, res) => {
       client_url: `${env.PUBLIC_URL}/oauth/authorize`,
       scope: env.SCOPES,
       authorization_url: `${env.PUBLIC_URL}/oauth/authorize`,
-      authorization_content_type: "application/json",
+      authorization_content_type: "application/x-www-form-urlencoded",
       token_url: `${env.PUBLIC_URL}/oauth/token`,
-      token_content_type: "application/json",
+      token_content_type: "application/x-www-form-urlencoded",
       refresh_url: `${env.PUBLIC_URL}/oauth/token`,
       redirect_url: "https://chat.openai.com/aip/oauth/callback"
     },
