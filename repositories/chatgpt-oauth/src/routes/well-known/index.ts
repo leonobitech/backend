@@ -262,7 +262,7 @@ const openApiSpec = {
               }
             }
           },
-          security: [{ oauth2: [env.SCOPES] }]
+          security: [{ oauth: [env.SCOPES] }]
         }
       },
       "/healthz": {
