@@ -1,12 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { importPKCS8, JWTPayload, SignJWT } from "jose";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const keysDir = resolve(__dirname, "../../keys");
+const keysDir = resolve(process.cwd(), "keys");
 
 let cachedPrivateKey: CryptoKey | null = null;
 

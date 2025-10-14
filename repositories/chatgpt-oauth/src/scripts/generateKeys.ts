@@ -1,11 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { exportJWK, exportPKCS8, exportSPKI, generateKeyPair } from "jose";
 import { env } from "../config/env";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const keysDir = resolve(__dirname, "../../keys");
+const keysDir = resolve(process.cwd(), "keys");
 
 async function main() {
   await mkdir(keysDir, { recursive: true });

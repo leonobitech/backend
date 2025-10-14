@@ -1,12 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { Router } from "express";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const keysDir = resolve(__dirname, "../../../keys");
+const keysDir = resolve(process.cwd(), "keys");
 
 export const wellKnownRouter = Router();
 
