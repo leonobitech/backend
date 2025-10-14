@@ -46,22 +46,21 @@ wellKnownRouter.get("/ai-plugin.json", (_req, res) => {
   res.json(manifest);
 });
 
-wellKnownRouter.get("/openapi.json", (_req, res) => {
-  const spec = {
-    openapi: "3.1.0",
-    info: {
-      title: "Leonobitech ChatGPT OAuth Service",
-      description: "Endpoints OAuth2, JWKS y salud para la integración con ChatGPT MCP.",
-      version: "0.1.0"
-    },
-    servers: [{ url: env.PUBLIC_URL }],
-    paths: {
-      "/oauth/authorize": {
-        get: {
-          summary: "Authorization Code + PKCE",
-          description:
-            "Inicia el flujo OAuth2 Authorization Code con PKCE. Requiere parámetros `client_id`, `redirect_uri`, `response_type`, `scope`, `state`, `code_challenge` y `code_challenge_method`.",
-          parameters: [
+const openApiSpec = {
+  openapi: "3.1.0",
+  info: {
+    title: "Leonobitech ChatGPT OAuth Service",
+    description: "Endpoints OAuth2, JWKS y salud para la integración con ChatGPT MCP.",
+    version: "0.1.0"
+  },
+  servers: [{ url: env.PUBLIC_URL }],
+  paths: {
+    "/oauth/authorize": {
+      get: {
+        summary: "Authorization Code + PKCE",
+        description:
+          "Inicia el flujo OAuth2 Authorization Code con PKCE. Requiere parámetros `client_id`, `redirect_uri`, `response_type`, `scope`, `state`, `code_challenge` y `code_challenge_method`.",
+        parameters: [
             {
               name: "response_type",
               in: "query",
@@ -259,7 +258,17 @@ wellKnownRouter.get("/openapi.json", (_req, res) => {
     security: [{ oauth2: [env.SCOPES] }]
   };
 
-  res.json(spec);
+const openApiPaths = [
+  "/openapi.json",
+  "/oauth-authorization-server/.well-known/openapi.json",
+  "/openid-configuration/.well-known/openapi.json",
+  "/openapi.json/.well-known/openid-configuration"
+];
+
+openApiPaths.forEach((path) => {
+  wellKnownRouter.get(path, (_req, res) => {
+    res.json(openApiSpec);
+  });
 });
 
 wellKnownRouter.get("/jwks.json", async (_req, res, next) => {
