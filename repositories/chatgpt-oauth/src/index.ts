@@ -11,6 +11,23 @@ import { wellKnownRouter } from "@/routes/well-known";
 const app = express();
 
 app.set("trust proxy", true);
+app.use((req, _res, next) => {
+  logger.info(
+    {
+      method: req.method,
+      url: req.originalUrl,
+      query: req.query,
+      headers: {
+        host: req.headers.host,
+        "user-agent": req.headers["user-agent"],
+        accept: req.headers.accept,
+        "content-type": req.headers["content-type"]
+      }
+    },
+    "incoming request"
+  );
+  next();
+});
 app.use(helmet());
 app.use(
   cors({
