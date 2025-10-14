@@ -52,7 +52,7 @@ wellKnownRouter.get("/ai-plugin.json", (_req, res) => {
 });
 
 const openApiSpec = {
-  openapi: "3.1.0",
+  openapi: "3.0.1",
   info: {
     title: "Leonobitech ChatGPT OAuth Service",
     description: "Endpoints OAuth2, JWKS y salud para la integración con ChatGPT MCP.",
@@ -64,7 +64,7 @@ const openApiSpec = {
       get: {
         summary: "Authorization Code + PKCE",
         description:
-          "Inicia el flujo OAuth2 Authorization Code con PKCE. Requiere parámetros `client_id`, `redirect_uri`, `response_type`, `scope`, `state`, `code_challenge` y `code_challenge_method`.",
+          "Inicia el flujo OAuth2 Authorization Code con PKCE. Requiere parámetros `client_id`, `redirect_uri`, `response_type`, `scope`, `code_challenge` y `code_challenge_method`. El parámetro `state` es opcional pero recomendado.",
         parameters: [
             {
               name: "response_type",
@@ -103,7 +103,7 @@ const openApiSpec = {
             {
               name: "state",
               in: "query",
-              required: true,
+              required: false,
               schema: {
                 type: "string"
               }
@@ -289,6 +289,7 @@ const openApiSpec = {
             authorizationCode: {
               authorizationUrl: `${env.PUBLIC_URL}/oauth/authorize`,
               tokenUrl: `${env.PUBLIC_URL}/oauth/token`,
+              refreshUrl: `${env.PUBLIC_URL}/oauth/token`,
               scopes: scopeDescriptions
             }
           }
