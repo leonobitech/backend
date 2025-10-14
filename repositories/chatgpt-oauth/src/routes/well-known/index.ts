@@ -272,3 +272,35 @@ wellKnownRouter.get("/jwks.json", async (_req, res, next) => {
     next(error);
   }
 });
+
+const oauthServerMetadata = {
+  issuer: env.PUBLIC_URL,
+  authorization_endpoint: `${env.PUBLIC_URL}/oauth/authorize`,
+  token_endpoint: `${env.PUBLIC_URL}/oauth/token`,
+  jwks_uri: `${env.PUBLIC_URL}/.well-known/jwks.json`,
+  response_types_supported: ["code"],
+  grant_types_supported: ["authorization_code", "refresh_token"],
+  code_challenge_methods_supported: ["S256", "plain"],
+  scopes_supported: [env.SCOPES],
+  token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"]
+};
+
+wellKnownRouter.get("/oauth-authorization-server", (_req, res) => {
+  res.json(oauthServerMetadata);
+});
+
+wellKnownRouter.get("/openid-configuration", (_req, res) => {
+  res.json({
+    ...oauthServerMetadata,
+    claims_supported: ["iss", "aud", "sub", "exp", "iat", "nonce", "scope"],
+    subject_types_supported: ["public"],
+    id_token_signing_alg_values_supported: ["RS256"]
+  });
+});
+
+wellKnownRouter.get("/oauth-protected-resource", (_req, res) => {
+  res.json({
+    issuer: env.PUBLIC_URL,
+    resource_scopes_supported: [env.SCOPES]
+  });
+});
