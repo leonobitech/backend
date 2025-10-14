@@ -20,6 +20,7 @@ wellKnownRouter.get("/ai-plugin.json", (_req, res) => {
       type: "oauth",
       client_url: `${env.PUBLIC_URL}/oauth/authorize`,
       scope: env.SCOPES,
+      scopes: [env.SCOPES],
       authorization_url: `${env.PUBLIC_URL}/oauth/authorize`,
       authorization_content_type: "application/x-www-form-urlencoded",
       token_url: `${env.PUBLIC_URL}/oauth/token`,
