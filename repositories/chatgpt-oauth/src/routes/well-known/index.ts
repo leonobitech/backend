@@ -232,6 +232,7 @@ const openApiSpec = {
         post: {
           summary: "Ping tool",
           description: "Devuelve un payload simple para comprobar conectividad MCP.",
+          operationId: "ping",
           requestBody: {
             required: false,
             content: {
@@ -260,7 +261,8 @@ const openApiSpec = {
                 }
               }
             }
-          }
+          },
+          security: [{ oauth2: [env.SCOPES] }]
         }
       },
       "/healthz": {
