@@ -33,6 +33,11 @@ wellKnownRouter.get("/ai-plugin.json", (_req, res) => {
       url: `${env.PUBLIC_URL}/.well-known/openapi.json`,
       is_user_authenticated: true
     },
+    mcp_server: {
+      type: "openapi",
+      url: `${env.PUBLIC_URL}/.well-known/openapi.json`,
+      is_user_authenticated: true
+    },
     legal_info_url: "https://www.leonobitech.com/legal",
     contact_email: "security@leonobitech.com",
     logo_url: "https://www.leonobitech.com/icon.png"
