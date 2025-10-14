@@ -5,6 +5,11 @@ import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 
 const keysDir = resolve(process.cwd(), "keys");
+const scopes = Array.from(new Set(env.SCOPES.split(/\s+/).filter(Boolean)));
+const scopeDescriptions = scopes.reduce<Record<string, string>>((acc, scope) => {
+  acc[scope] = "Permite a ChatGPT invocar herramientas Leonobitech MCP.";
+  return acc;
+}, {});
 
 export const wellKnownRouter = Router();
 
@@ -19,8 +24,8 @@ wellKnownRouter.get("/ai-plugin.json", (_req, res) => {
     auth: {
       type: "oauth",
       client_url: `${env.PUBLIC_URL}/oauth/authorize`,
-      scope: env.SCOPES,
-      scopes: [env.SCOPES],
+      scope: scopes.join(" "),
+      scopes,
       authorization_url: `${env.PUBLIC_URL}/oauth/authorize`,
       authorization_content_type: "application/x-www-form-urlencoded",
       token_url: `${env.PUBLIC_URL}/oauth/token`,
@@ -262,7 +267,7 @@ const openApiSpec = {
               }
             }
           },
-          security: [{ oauth: [env.SCOPES] }]
+          security: [{ oauth: scopes }]
         }
       },
       "/healthz": {
@@ -284,15 +289,13 @@ const openApiSpec = {
             authorizationCode: {
               authorizationUrl: `${env.PUBLIC_URL}/oauth/authorize`,
               tokenUrl: `${env.PUBLIC_URL}/oauth/token`,
-              scopes: {
-                [env.SCOPES]: "Permite a ChatGPT invocar herramientas Leonobitech MCP."
-              }
+              scopes: scopeDescriptions
             }
           }
         }
       }
     },
-    security: [{ oauth: [env.SCOPES] }]
+    security: [{ oauth: scopes }]
   };
 
 const openApiPaths = [
@@ -327,7 +330,7 @@ const oauthServerMetadata = {
   response_types_supported: ["code"],
   grant_types_supported: ["authorization_code", "refresh_token"],
   code_challenge_methods_supported: ["S256", "plain"],
-  scopes_supported: [env.SCOPES],
+  scopes_supported: scopes,
   token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"]
 };
 
@@ -347,6 +350,6 @@ wellKnownRouter.get("/openid-configuration", (_req, res) => {
 wellKnownRouter.get("/oauth-protected-resource", (_req, res) => {
   res.json({
     issuer: env.PUBLIC_URL,
-    resource_scopes_supported: [env.SCOPES]
+    resource_scopes_supported: scopes
   });
 });

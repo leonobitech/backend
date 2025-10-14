@@ -27,6 +27,8 @@ const authorizeQuerySchema = z.object({
   prompt: z.string().optional()
 });
 
+const requiredScopes = Array.from(new Set(env.SCOPES.split(/\s+/).filter(Boolean)));
+
 oauthRouter.get("/authorize", async (req, res) => {
   const parseResult = authorizeQuerySchema.safeParse(req.query);
   if (!parseResult.success) {
@@ -55,10 +57,20 @@ oauthRouter.get("/authorize", async (req, res) => {
     return res.status(400).json({ error: "invalid_redirect_uri" });
   }
 
-  if (!scope.split(" ").includes(env.SCOPES)) {
-    logger.warn({ scope }, "Invalid scope on authorize");
+  const requestedScopes = Array.from(new Set(scope.split(/\s+/).filter(Boolean)));
+
+  if (!requestedScopes.length) {
+    logger.warn({ scope }, "Empty scope set on authorize");
     return res.status(400).json({ error: "invalid_scope" });
   }
+
+  const missingScopes = requiredScopes.filter((required) => !requestedScopes.includes(required));
+  if (missingScopes.length > 0) {
+    logger.warn({ requested: requestedScopes, missing: missingScopes }, "Invalid scope on authorize");
+    return res.status(400).json({ error: "invalid_scope" });
+  }
+
+  const normalizedScope = requestedScopes.join(" ");
 
   // TODO: Integrar flujo real de login/consent. Por ahora usamos login_hint o un subject fijo.
   const subject = login_hint ?? "chatgpt-user";
@@ -68,19 +80,19 @@ oauthRouter.get("/authorize", async (req, res) => {
     redirectUri: redirect_uri,
     codeChallenge: code_challenge,
     codeChallengeMethod: code_challenge_method,
-    scope,
+    scope: normalizedScope,
     subject,
-      state,
-      nonce
-    });
+    state,
+    nonce
+  });
 
-    const url = new URL(redirect_uri);
-    url.searchParams.set("code", codePayload.code);
-    if (state) {
-      url.searchParams.set("state", state);
-    }
-    url.searchParams.set("client_id", client_id);
-    res.redirect(url.toString());
+  const url = new URL(redirect_uri);
+  url.searchParams.set("code", codePayload.code);
+  if (state) {
+    url.searchParams.set("state", state);
+  }
+  url.searchParams.set("client_id", client_id);
+  res.redirect(url.toString());
   logger.info({ subject, client_id, state }, "Issued authorization code");
 });
 
