@@ -56,7 +56,91 @@ wellKnownRouter.get("/openapi.json", (_req, res) => {
           summary: "Authorization Code + PKCE",
           description:
             "Inicia el flujo OAuth2 Authorization Code con PKCE. Requiere parámetros `client_id`, `redirect_uri`, `response_type`, `scope`, `state`, `code_challenge` y `code_challenge_method`.",
-          parameters: [],
+          parameters: [
+            {
+              name: "response_type",
+              in: "query",
+              required: true,
+              schema: {
+                type: "string",
+                enum: ["code"]
+              }
+            },
+            {
+              name: "client_id",
+              in: "query",
+              required: true,
+              schema: {
+                type: "string"
+              }
+            },
+            {
+              name: "redirect_uri",
+              in: "query",
+              required: true,
+              schema: {
+                type: "string",
+                format: "uri"
+              }
+            },
+            {
+              name: "scope",
+              in: "query",
+              required: true,
+              schema: {
+                type: "string"
+              }
+            },
+            {
+              name: "state",
+              in: "query",
+              required: true,
+              schema: {
+                type: "string"
+              }
+            },
+            {
+              name: "code_challenge",
+              in: "query",
+              required: true,
+              schema: {
+                type: "string"
+              }
+            },
+            {
+              name: "code_challenge_method",
+              in: "query",
+              required: true,
+              schema: {
+                type: "string",
+                enum: ["S256", "plain"]
+              }
+            },
+            {
+              name: "prompt",
+              in: "query",
+              required: false,
+              schema: {
+                type: "string"
+              }
+            },
+            {
+              name: "login_hint",
+              in: "query",
+              required: false,
+              schema: {
+                type: "string"
+              }
+            },
+            {
+              name: "nonce",
+              in: "query",
+              required: false,
+              schema: {
+                type: "string"
+              }
+            }
+          ],
           responses: {
             "302": {
               description: "Redirige al login/consent o al redirect_uri con el authorization code."
