@@ -301,6 +301,7 @@ const openApiSpec = {
 const openApiPaths = [
   "/openapi.json",
   "/oauth-authorization-server/.well-known/openapi.json",
+  "/oauth-protected-resource/.well-known/openapi.json",
   "/openid-configuration/.well-known/openapi.json",
   "/openapi.json/.well-known/openid-configuration"
 ];
