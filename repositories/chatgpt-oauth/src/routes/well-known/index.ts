@@ -278,7 +278,7 @@ const openApiSpec = {
     },
     components: {
       securitySchemes: {
-        oauth2: {
+        oauth: {
           type: "oauth2",
           flows: {
             authorizationCode: {
@@ -292,7 +292,7 @@ const openApiSpec = {
         }
       }
     },
-    security: [{ oauth2: [env.SCOPES] }]
+    security: [{ oauth: [env.SCOPES] }]
   };
 
 const openApiPaths = [
