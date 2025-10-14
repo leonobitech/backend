@@ -228,6 +228,41 @@ const openApiSpec = {
           }
         }
       },
+      "/mcp/ping": {
+        post: {
+          summary: "Ping tool",
+          description: "Devuelve un payload simple para comprobar conectividad MCP.",
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string", description: "Mensaje opcional a eco." }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": {
+              description: "Respuesta pong satisfactoria.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      result: { type: "string" }
+                    },
+                    required: ["result"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "/healthz": {
         get: {
           summary: "Health check",
