@@ -70,16 +70,17 @@ oauthRouter.get("/authorize", async (req, res) => {
     codeChallengeMethod: code_challenge_method,
     scope,
     subject,
-    state,
-    nonce
-  });
+      state,
+      nonce
+    });
 
-  const url = new URL(redirect_uri);
-  url.searchParams.set("code", codePayload.code);
-  if (state) {
-    url.searchParams.set("state", state);
-  }
-  res.redirect(url.toString());
+    const url = new URL(redirect_uri);
+    url.searchParams.set("code", codePayload.code);
+    if (state) {
+      url.searchParams.set("state", state);
+    }
+    url.searchParams.set("client_id", client_id);
+    res.redirect(url.toString());
   logger.info({ subject, client_id, state }, "Issued authorization code");
 });
 
@@ -119,7 +120,7 @@ oauthRouter.post("/token", async (req, res) => {
   const body = parseResult.data;
 
   if (body.grant_type === "authorization_code") {
-    const { clientId, clientSecret } = extractClientCredentials(req, body.client_id, body.client_secret);
+    const { clientId } = extractClientCredentials(req, body.client_id, body.client_secret);
 
     if (!body.code || !body.redirect_uri || !clientId || !body.code_verifier) {
       logger.warn("Missing parameters on authorization_code grant");
@@ -128,11 +129,6 @@ oauthRouter.post("/token", async (req, res) => {
 
     if (clientId !== env.CLIENT_ID) {
       logger.warn({ clientId }, "Unauthorized client on token exchange");
-      return res.status(401).json({ error: "unauthorized_client" });
-    }
-
-    if (env.CLIENT_SECRET && clientSecret !== env.CLIENT_SECRET) {
-      logger.warn("Client secret mismatch on token exchange");
       return res.status(401).json({ error: "unauthorized_client" });
     }
 
@@ -180,7 +176,7 @@ oauthRouter.post("/token", async (req, res) => {
   }
 
   if (body.grant_type === "refresh_token") {
-    const { clientId, clientSecret } = extractClientCredentials(req, body.client_id, body.client_secret);
+    const { clientId } = extractClientCredentials(req, body.client_id, body.client_secret);
 
     if (!body.refresh_token || !clientId) {
       logger.warn("Missing parameters on refresh_token grant");
@@ -189,11 +185,6 @@ oauthRouter.post("/token", async (req, res) => {
 
     if (clientId !== env.CLIENT_ID) {
       logger.warn({ clientId }, "Unauthorized client on refresh grant");
-      return res.status(401).json({ error: "unauthorized_client" });
-    }
-
-    if (env.CLIENT_SECRET && clientSecret !== env.CLIENT_SECRET) {
-      logger.warn("Client secret mismatch on refresh grant");
       return res.status(401).json({ error: "unauthorized_client" });
     }
 
