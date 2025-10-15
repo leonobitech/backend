@@ -287,7 +287,7 @@ Si quieres probar el flujo completo sin Claude Desktop:
 curl -X POST https://claude-auth.leonobitech.com/oauth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "redirect_uris": ["https://claude.ai/mcp/oauth/callback"],
+    "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
     "grant_types": ["authorization_code", "refresh_token"],
     "scope": "claude.app",
     "token_endpoint_auth_method": "client_secret_post"
@@ -312,7 +312,7 @@ echo "Challenge: $CODE_CHALLENGE"
 Abre en tu navegador (reemplaza `CODE_CHALLENGE`):
 
 ```
-https://claude-auth.leonobitech.com/oauth/authorize?response_type=code&client_id=claude-mcp&redirect_uri=https://claude.ai/mcp/oauth/callback&scope=claude.app&state=test123&code_challenge=PASTE_CODE_CHALLENGE_HERE&code_challenge_method=S256
+https://claude-auth.leonobitech.com/oauth/authorize?response_type=code&client_id=claude-mcp&redirect_uri=https://claude.ai/api/mcp/auth_callback&scope=claude.app&state=test123&code_challenge=PASTE_CODE_CHALLENGE_HERE&code_challenge_method=S256
 ```
 
 Copia el `code` de la URL de redirección.
@@ -324,7 +324,7 @@ curl -X POST https://claude-auth.leonobitech.com/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "code=PASTE_CODE_HERE" \
-  -d "redirect_uri=https://claude.ai/mcp/oauth/callback" \
+  -d "redirect_uri=https://claude.ai/api/mcp/auth_callback" \
   -d "client_id=claude-mcp" \
   -d "code_verifier=$CODE_VERIFIER"
 ```

@@ -53,7 +53,7 @@ PORT=8100
 PUBLIC_URL=https://claude-auth.leonobitech.com
 CLIENT_ID=claude-mcp
 CLIENT_SECRET=super-secret-change-me
-REDIRECT_URI=https://claude.ai/mcp/oauth/callback
+REDIRECT_URI=https://claude.ai/api/mcp/auth_callback
 SCOPES=claude.app
 JWKS_KID=claude-key-1
 JWT_ISSUER=https://claude-auth.leonobitech.com
@@ -68,7 +68,7 @@ REFRESH_TOKEN_TTL=604800
 LOG_LEVEL=info
 ```
 
-> Nota: verifica en la documentación más reciente de Anthropic si el `REDIRECT_URI` cambia. Claude Desktop (>= 0.7.0) utiliza `https://claude.ai/mcp/oauth/callback`.
+> Nota: verifica en la documentación más reciente de Anthropic si el `REDIRECT_URI` cambia. Claude Desktop (>= 0.8.0) utiliza `https://claude.ai/api/mcp/auth_callback`.
 
 2. Instala dependencias y genera las llaves:
 
@@ -252,7 +252,7 @@ Deberías recibir `{ "result": "pong" }` (o `pong: hola claude` si envías el ca
 
 - **Manifest**: se expone `/.well-known/anthropic/manifest.json` con la estructura que Claude Desktop espera; mantenemos `/.well-known/ai-plugin.json` como fallback.
 - **Scopes**: valor por defecto `claude.app`. Cambia según el contrato que definas para tus herramientas.
-- **Redirect URI**: `https://claude.ai/mcp/oauth/callback` (ChatGPT usa `https://chat.openai.com/aip/oauth/callback`).
+- **Redirect URI**: `https://claude.ai/api/mcp/auth_callback` (ChatGPT usa `https://chat.openai.com/aip/oauth/callback`).
 - **CORS**: habilitado para `https://claude.ai`, `https://app.claude.ai` y `https://desktop.claude.ai`.
 - **Sujetos por defecto**: `claude-user` cuando no se especifica `login_hint`.
 
