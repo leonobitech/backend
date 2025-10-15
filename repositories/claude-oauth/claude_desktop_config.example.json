@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "leonobitech": {
+      "url": "https://claude-auth.leonobitech.com/mcp/sse",
+      "transport": "sse",
+      "oauth": {
+        "authorizationUrl": "https://claude-auth.leonobitech.com/oauth/authorize",
+        "tokenUrl": "https://claude-auth.leonobitech.com/oauth/token",
+        "clientId": "claude-mcp",
+        "clientSecret": "uper-secret-change-me",
+        "scope": "claude.app"
+      }
+    }
+  }
+}

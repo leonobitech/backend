@@ -267,10 +267,64 @@ const openApiSpec = {
           }
         }
       },
+      "/mcp/sse": {
+        get: {
+          summary: "MCP SSE Connection",
+          description: "Establece una conexión SSE (Server-Sent Events) para el protocolo MCP. Este es el endpoint principal para Claude Desktop.",
+          operationId: "mcp_sse_connect",
+          responses: {
+            "200": {
+              description: "Conexión SSE establecida exitosamente.",
+              content: {
+                "text/event-stream": {
+                  schema: {
+                    type: "string"
+                  }
+                }
+              }
+            },
+            "401": { description: "Token ausente o inválido." },
+            "403": { description: "Token sin scopes suficientes." }
+          },
+          security: [{ oauth: scopes }]
+        }
+      },
+      "/mcp/message": {
+        post: {
+          summary: "MCP Message Handler",
+          description: "Recibe mensajes JSON-RPC del cliente MCP (usado por Claude Desktop).",
+          operationId: "mcp_message",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    jsonrpc: { type: "string", enum: ["2.0"] },
+                    method: { type: "string" },
+                    params: { type: "object" },
+                    id: { type: ["string", "number", "null"] }
+                  },
+                  required: ["jsonrpc", "method"]
+                }
+              }
+            }
+          },
+          responses: {
+            "202": {
+              description: "Mensaje aceptado para procesamiento."
+            },
+            "401": { description: "Token ausente o inválido." },
+            "403": { description: "Token sin scopes suficientes." }
+          },
+          security: [{ oauth: scopes }]
+        }
+      },
       "/mcp/ping": {
         post: {
-          summary: "Ping tool",
-          description: "Devuelve un payload simple para comprobar conectividad MCP.",
+          summary: "Ping tool (legacy)",
+          description: "Devuelve un payload simple para comprobar conectividad MCP. Nota: Para Claude Desktop, usa /mcp/sse en su lugar.",
           operationId: "ping",
           requestBody: {
             required: false,

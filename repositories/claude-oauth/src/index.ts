@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { ensureRedisConnection } from "@/lib/redis";
 import { healthRouter } from "@/routes/health";
 import { mcpRouter } from "@/routes/mcp";
+import { mcpSseRouter } from "@/routes/mcp-sse";
 import { oauthRouter } from "@/routes/oauth";
 import { wellKnownRouter } from "@/routes/well-known";
 
@@ -42,6 +43,7 @@ app.use("/healthz", healthRouter);
 app.use("/.well-known", wellKnownRouter);
 app.use("/oauth", oauthRouter);
 app.use("/mcp", mcpRouter);
+app.use("/mcp", mcpSseRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not Found" });

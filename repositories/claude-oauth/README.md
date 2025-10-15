@@ -136,17 +136,69 @@ npm start            # modo producción (usa dist/index.mjs)
 
 ## Integración con Claude Desktop
 
-1. Asegúrate de ejecutar el servicio (dev o prod) y que `PUBLIC_URL` apunte a un dominio accesible desde tu máquina (puedes usar `https://localhost:8100` con un túnel HTTPS como `ngrok` mientras desarrollas).
-2. Abre Claude Desktop → `Settings` → `Connectors` → `Add connector`.
-3. Proporciona la URL pública a `/.well-known/anthropic/manifest.json`.
-4. Claude Desktop descargará el manifest, disparará el registro dinámico y abrirá el flujo OAuth en un navegador embebido.
-5. Completa el login/consent (esta demo omite la UI y genera el código automáticamente).  
-6. Una vez emitidos los tokens, Claude listará las herramientas disponibles (`ping`), permitiendo invocarla desde el panel de tools o directamente desde un chat:
+### Configuración Rápida
+
+Ver la guía completa en [CLAUDE_DESKTOP_SETUP.md](./CLAUDE_DESKTOP_SETUP.md).
+
+1. Edita tu archivo de configuración de Claude Desktop:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+2. Agrega la configuración del servidor MCP:
+
+```json
+{
+  "mcpServers": {
+    "leonobitech": {
+      "url": "https://claude-auth.leonobitech.com/mcp/sse",
+      "transport": "sse",
+      "oauth": {
+        "authorizationUrl": "https://claude-auth.leonobitech.com/oauth/authorize",
+        "tokenUrl": "https://claude-auth.leonobitech.com/oauth/token",
+        "clientId": "claude-mcp",
+        "clientSecret": "tu-client-secret",
+        "scope": "claude.app"
+      }
+    }
+  }
+}
+```
+
+3. Reinicia Claude Desktop
+4. Prueba: "Usa la herramienta ping para enviar un mensaje de prueba"
+
+### Endpoints para Claude Desktop
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/mcp/sse` | GET | Conexión SSE principal (mantiene conexión abierta) |
+| `/mcp/message` | POST | Recibe mensajes JSON-RPC del cliente MCP |
+| `/mcp/ping` | POST | Tool de prueba (legacy endpoint) |
+
+**Herramientas MCP disponibles:**
+- `ping`: Prueba de conectividad (devuelve mensaje echo)
+- `get_user_info`: Información del usuario autenticado
+
+### Flujo de Conexión
+
+1. Claude Desktop lee la configuración y detecta el servidor MCP
+2. Inicia el flujo OAuth (abre navegador si es primera vez)
+3. Usuario autoriza en `/oauth/authorize`
+4. Claude obtiene el `access_token`
+5. Se conecta a `/mcp/sse` con el token como header `Authorization: Bearer <token>`
+6. Mantiene la conexión SSE abierta para recibir eventos
+7. Envía mensajes JSON-RPC a `/mcp/message` cuando invoca herramientas
+
+### Hola Mundo
+
+En Claude Desktop, escribe:
 
 ```
-User: /tools ping
-Claude: ✅ Pong (firmado con el access token emitido).
+Usa la herramienta ping para enviarme "Hola Mundo desde MCP!"
 ```
+
+Claude responderá: `🏓 Hola Mundo desde MCP!`
 
 Si ves errores 401/403 en el panel de herramientas, revisa el scope (`claude.app`) y la configuración de issuer/audience en `.env`.
 
