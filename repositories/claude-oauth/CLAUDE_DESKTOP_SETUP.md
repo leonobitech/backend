@@ -62,7 +62,7 @@ Crea o edita el archivo con este contenido:
       "transport": {
         "type": "sse",
         "url": "https://claude-auth.leonobitech.com/mcp/sse",
-        "messageUrl": "https://claude-auth.leonobitech.com/mcp/message"
+        "message_url": "https://claude-auth.leonobitech.com/mcp/message"
       },
       "oauth": {
         "authorizationUrl": "https://claude-auth.leonobitech.com/oauth/authorize",
