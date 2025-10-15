@@ -483,7 +483,11 @@ wellKnownRouter.get("/openid-configuration", (_req, res) => {
 
 wellKnownRouter.get("/oauth-protected-resource", (_req, res) => {
   res.json({
+    resource: `${env.PUBLIC_URL}/mcp`,
     issuer: env.PUBLIC_URL,
-    resource_scopes_supported: scopes
+    authorization_servers: [env.PUBLIC_URL],
+    bearer_methods_supported: ["header"],
+    resource_scopes_supported: scopes,
+    resource_documentation: `${env.PUBLIC_URL}/.well-known/anthropic/manifest.json`
   });
 });
