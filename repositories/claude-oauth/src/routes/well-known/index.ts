@@ -90,15 +90,14 @@ wellKnownRouter.get("/anthropic/manifest.json", (req, res) => {
       redirect_uri: env.REDIRECT_URI
     },
     api: {
-      type: "sse",
-      url: `${env.PUBLIC_URL}/mcp/sse`,
-      message_url: `${env.PUBLIC_URL}/mcp/message`,
+      type: "http",
+      url: `${env.PUBLIC_URL}/mcp`,
       is_user_authenticated: true
     }
   });
 });
 
-// POST: Redirect to MCP message endpoint if authenticated
+// POST: Redirect to MCP HTTP endpoint (not SSE message endpoint!)
 wellKnownRouter.post("/anthropic/manifest.json", (req, res) => {
   // Log ALL headers and body to debug Claude Desktop behavior
   logger.info({
@@ -111,8 +110,9 @@ wellKnownRouter.post("/anthropic/manifest.json", (req, res) => {
   const authHeader = req.headers.authorization;
 
   if (authHeader?.startsWith("Bearer ")) {
-    logger.info({ body: req.body }, "Manifest POST with auth - redirecting to MCP message");
-    return res.redirect(307, "/mcp/message");
+    logger.info({ body: req.body }, "Manifest POST with auth - redirecting to MCP HTTP endpoint");
+    // Redirect to the HTTP transport endpoint, not SSE message
+    return res.redirect(307, "/mcp");
   }
 
   // If no auth, return manifest (fallback)
