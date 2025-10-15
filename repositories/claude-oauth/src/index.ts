@@ -5,7 +5,7 @@ import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { ensureRedisConnection } from "@/lib/redis";
 import { healthRouter } from "@/routes/health";
-import { mcpHttpRouter } from "@/routes/mcp-http";
+import { mcpSseRouter } from "@/routes/mcp-sse";
 import { oauthRouter } from "@/routes/oauth";
 import { wellKnownRouter } from "@/routes/well-known";
 
@@ -41,7 +41,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use("/healthz", healthRouter);
 app.use("/.well-known", wellKnownRouter);
 app.use("/oauth", oauthRouter);
-app.use("/mcp", mcpHttpRouter);
+app.use("/mcp", mcpSseRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not Found" });

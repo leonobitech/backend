@@ -72,8 +72,9 @@ wellKnownRouter.get("/anthropic/manifest.json", (_req, res) => {
     },
     mcp: {
       transport: {
-        type: "streamable-http",
-        url: `${env.PUBLIC_URL}/mcp`
+        type: "sse",
+        url: `${env.PUBLIC_URL}/mcp/sse`,
+        message_url: `${env.PUBLIC_URL}/mcp/message`
       },
       capabilities: {
         tools: true
