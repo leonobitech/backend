@@ -255,7 +255,14 @@ oauthRouter.post("/register", (req, res) => {
 
   const { redirect_uris, scope, grant_types, token_endpoint_auth_method } = parseResult.data;
 
-  if (!redirect_uris.includes(env.REDIRECT_URI)) {
+  const allowedRedirectUris = new Set(
+    [env.REDIRECT_URI, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/mcp/oauth/callback"].filter(
+      Boolean
+    )
+  );
+
+  const hasAllowedRedirect = redirect_uris.some((uri) => allowedRedirectUris.has(uri));
+  if (!hasAllowedRedirect) {
     logger.warn({ redirect_uris }, "Unsupported redirect_uri on registration");
     return res.status(400).json({ error: "invalid_redirect_uri" });
   }
