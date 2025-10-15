@@ -61,7 +61,13 @@ oauthRouter.get("/authorize", async (req, res) => {
     return res.status(400).json({ error: "unauthorized_client" });
   }
 
-  if (redirect_uri !== env.REDIRECT_URI) {
+  const allowedRedirectUris = new Set(
+    [env.REDIRECT_URI, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/mcp/oauth/callback"].filter(
+      Boolean
+    )
+  );
+
+  if (!allowedRedirectUris.has(redirect_uri)) {
     logger.warn({ redirect_uri }, "Invalid redirect_uri on authorize");
     return res.status(400).json({ error: "invalid_redirect_uri" });
   }
