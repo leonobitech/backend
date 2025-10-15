@@ -72,21 +72,20 @@ wellKnownRouter.get("/anthropic/manifest.json", (_req, res) => {
     },
     api: baseManifest.api,
     mcp: {
-      protocol: "sse",
-      transport: {
-        type: "sse",
-        url: `${env.PUBLIC_URL}/mcp/sse`
+      transport: "sse",
+      url: `${env.PUBLIC_URL}/mcp/sse`,
+      message_url: `${env.PUBLIC_URL}/mcp/message`,
+      capabilities: {
+        tools: true
       },
-      resources: [
+      tools: [
         {
           name: "ping",
-          description: "Herramienta de diagnóstico que responde con un pong.",
-          url: `${env.PUBLIC_URL}/mcp/message`
+          description: "Herramienta de diagnóstico que responde con un pong."
         },
         {
           name: "get_user_info",
-          description: "Devuelve información básica sobre el usuario autenticado.",
-          url: `${env.PUBLIC_URL}/mcp/message`
+          description: "Devuelve información básica sobre el usuario autenticado."
         }
       ]
     }
