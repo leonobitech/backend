@@ -72,13 +72,21 @@ wellKnownRouter.get("/anthropic/manifest.json", (_req, res) => {
     },
     api: baseManifest.api,
     mcp: {
-      protocol: "openapi",
-      server_url: `${env.PUBLIC_URL}/.well-known/openapi.json`,
+      protocol: "sse",
+      transport: {
+        type: "sse",
+        url: `${env.PUBLIC_URL}/mcp/sse`
+      },
       resources: [
         {
           name: "ping",
           description: "Herramienta de diagnóstico que responde con un pong.",
-          url: `${env.PUBLIC_URL}/mcp/ping`
+          url: `${env.PUBLIC_URL}/mcp/message`
+        },
+        {
+          name: "get_user_info",
+          description: "Devuelve información básica sobre el usuario autenticado.",
+          url: `${env.PUBLIC_URL}/mcp/message`
         }
       ]
     }
