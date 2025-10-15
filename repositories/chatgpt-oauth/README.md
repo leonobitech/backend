@@ -34,7 +34,7 @@ Es la capa remota de autenticación necesaria para conectar un servidor MCP (Mod
 ```
 ChatGPT (cliente OAuth/MCP)
    │
-   │ 1. Discovery: https://auth.leonobitech.com/.well-known/**
+   │ 1. Discovery: https://chatgpt-auth.leonobitech.com/.well-known/**
    │ 2. Registro dinámico: POST /oauth/register
    │ 3. Authorization Code + PKCE: GET /oauth/authorize
    │ 4. Token exchange: POST /oauth/token
@@ -84,12 +84,12 @@ keys/
 
 ```env
 PORT=8100
-PUBLIC_URL=https://auth.leonobitech.com
+PUBLIC_URL=https://chatgpt-auth.leonobitech.com
 CLIENT_ID=chatgpt-mcp
 CLIENT_SECRET=...
 REDIRECT_URI=https://chat.openai.com/aip/oauth/callback
 SCOPES=chatgpt.app
-JWT_ISSUER=https://auth.leonobitech.com
+JWT_ISSUER=https://chatgpt-auth.leonobitech.com
 JWT_AUDIENCE=chatgpt-mcp
 REDIS_HOST=redis_core
 REDIS_DB=4
@@ -165,7 +165,7 @@ npm start            # producción (usa dist/index.mjs)
 ### 1. Authorization Code
 
 1. Configura variables:
-   - `AUTH_BASE=https://auth.leonobitech.com`
+   - `AUTH_BASE=https://chatgpt-auth.leonobitech.com`
    - `CLIENT_ID`, `CLIENT_SECRET`
    - `REDIRECT_URI=https://chat.openai.com/aip/oauth/callback`
    - `SCOPE=chatgpt.app`
@@ -247,7 +247,7 @@ client_id={{CLIENT_ID}}
 
 1. Obtén acceso al modo developer o usa un ChatGPT Workspace (Teams/Business/Enterprise). El backend de OpenAI responde con `{"detail":"Must use workspace account..."}` si la cuenta no tiene permisos.
 2. En ChatGPT → Settings → Connectors → New Connector.
-3. MCP Server URL: `https://auth.leonobitech.com/.well-known/openapi.json`.
+3. MCP Server URL: `https://chatgpt-auth.leonobitech.com/.well-known/openapi.json`.
 4. ChatGPT realizará:
    - Descarga del OpenAPI y manifest.
    - `POST /oauth/register` para obtener `client_id/client_secret`.
