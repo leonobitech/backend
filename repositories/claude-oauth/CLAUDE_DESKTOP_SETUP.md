@@ -59,8 +59,11 @@ Crea o edita el archivo con este contenido:
   "mcpServers": {
     "leonobitech": {
       "url": "https://claude-auth.leonobitech.com/mcp/sse",
-      "transport": "sse",
-      "messageUrl": "https://claude-auth.leonobitech.com/mcp/message",
+      "transport": {
+        "type": "sse",
+        "url": "https://claude-auth.leonobitech.com/mcp/sse",
+        "messageUrl": "https://claude-auth.leonobitech.com/mcp/message"
+      },
       "oauth": {
         "authorizationUrl": "https://claude-auth.leonobitech.com/oauth/authorize",
         "tokenUrl": "https://claude-auth.leonobitech.com/oauth/token",
