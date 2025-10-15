@@ -28,6 +28,15 @@ const authorizeQuerySchema = z.object({
 });
 
 const requiredScopes = Array.from(new Set(env.SCOPES.split(/\s+/).filter(Boolean)));
+const registrationBodySchema = z.object({
+  redirect_uris: z.array(z.string().url()).min(1),
+  client_name: z.string().optional(),
+  grant_types: z.array(z.enum(["authorization_code", "refresh_token"])).optional(),
+  scope: z.string().optional(),
+  token_endpoint_auth_method: z
+    .enum(["none", "client_secret_post", "client_secret_basic"])
+    .optional()
+});
 
 oauthRouter.get("/authorize", async (req, res) => {
   const parseResult = authorizeQuerySchema.safeParse(req.query);
@@ -235,4 +244,53 @@ oauthRouter.post("/token", async (req, res) => {
   }
 
   return res.status(400).json({ error: "unsupported_grant_type" });
+});
+
+oauthRouter.post("/register", (req, res) => {
+  const parseResult = registrationBodySchema.safeParse(req.body);
+  if (!parseResult.success) {
+    logger.warn({ body: req.body, errors: parseResult.error.flatten() }, "Invalid client registration request");
+    return res.status(400).json({ error: "invalid_client_metadata", details: parseResult.error.flatten() });
+  }
+
+  const { redirect_uris, scope, grant_types, token_endpoint_auth_method } = parseResult.data;
+
+  if (!redirect_uris.includes(env.REDIRECT_URI)) {
+    logger.warn({ redirect_uris }, "Unsupported redirect_uri on registration");
+    return res.status(400).json({ error: "invalid_redirect_uri" });
+  }
+
+  if (scope) {
+    const requestedScopes = Array.from(new Set(scope.split(/\s+/).filter(Boolean)));
+    const missingScopes = requiredScopes.filter((required) => !requestedScopes.includes(required));
+    if (missingScopes.length > 0) {
+      logger.warn({ requestedScopes }, "Invalid scope on registration");
+      return res.status(400).json({ error: "invalid_scope" });
+    }
+  }
+
+  if (grant_types && !grant_types.includes("authorization_code")) {
+    logger.warn({ grant_types }, "Missing authorization_code grant on registration");
+    return res.status(400).json({ error: "invalid_client_metadata" });
+  }
+
+  if (token_endpoint_auth_method && token_endpoint_auth_method !== "client_secret_post") {
+    logger.warn({ token_endpoint_auth_method }, "Unsupported auth method on registration");
+    return res.status(400).json({ error: "invalid_client_metadata" });
+  }
+
+  const issuedAt = Math.floor(Date.now() / 1000);
+  logger.info("Served dynamic client registration");
+
+  return res.status(201).json({
+    client_id: env.CLIENT_ID,
+    client_secret: env.CLIENT_SECRET,
+    client_id_issued_at: issuedAt,
+    client_secret_expires_at: 0,
+    redirect_uris: [env.REDIRECT_URI],
+    scope: env.SCOPES,
+    token_endpoint_auth_method: "client_secret_post",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"]
+  });
 });

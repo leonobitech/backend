@@ -160,11 +160,11 @@ const openApiSpec = {
           }
         }
       },
-      "/oauth/token": {
-        post: {
-          summary: "Token endpoint",
-          description:
-            "Intercambia un authorization code por access_token/refresh_token firmado con RS256. También soporta refresh_token grant.",
+    "/oauth/token": {
+      post: {
+        summary: "Token endpoint",
+        description:
+          "Intercambia un authorization code por access_token/refresh_token firmado con RS256. También soporta refresh_token grant.",
           requestBody: {
             required: true,
             content: {
@@ -265,7 +265,9 @@ const openApiSpec = {
                   }
                 }
               }
-            }
+            },
+            "401": { description: "Token ausente o inválido." },
+            "403": { description: "Token sin scopes suficientes." }
           },
           security: [{ oauth: scopes }]
         }
@@ -277,6 +279,88 @@ const openApiSpec = {
             "200": {
               description: "Servicio saludable."
             }
+          }
+        }
+      }
+    },
+    "/oauth/register": {
+      post: {
+        summary: "Dynamic client registration",
+        description:
+          "Registra clientes OAuth dinámicamente. Actualmente devuelve el client_id/client_secret estáticos del servicio si el redirect_uri coincide.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  redirect_uris: {
+                    type: "array",
+                    items: { type: "string", format: "uri" },
+                    minItems: 1
+                  },
+                  client_name: { type: "string" },
+                  grant_types: {
+                    type: "array",
+                    items: { type: "string", enum: ["authorization_code", "refresh_token"] }
+                  },
+                  scope: { type: "string" },
+                  token_endpoint_auth_method: {
+                    type: "string",
+                    enum: ["none", "client_secret_post", "client_secret_basic"]
+                  }
+                },
+                required: ["redirect_uris"],
+                additionalProperties: true
+              }
+            }
+          }
+        },
+        responses: {
+          "201": {
+            description: "Cliente registrado correctamente.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    client_id: { type: "string" },
+                    client_secret: { type: "string" },
+                    client_id_issued_at: { type: "integer" },
+                    client_secret_expires_at: { type: "integer" },
+                    redirect_uris: {
+                      type: "array",
+                      items: { type: "string", format: "uri" }
+                    },
+                    scope: { type: "string" },
+                    token_endpoint_auth_method: { type: "string" },
+                    grant_types: {
+                      type: "array",
+                      items: { type: "string" }
+                    },
+                    response_types: {
+                      type: "array",
+                      items: { type: "string" }
+                    }
+                  },
+                  required: [
+                    "client_id",
+                    "client_secret",
+                    "client_id_issued_at",
+                    "client_secret_expires_at",
+                    "redirect_uris",
+                    "scope",
+                    "token_endpoint_auth_method",
+                    "grant_types",
+                    "response_types"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            description: "Solicitud inválida."
           }
         }
       }
@@ -328,6 +412,7 @@ const oauthServerMetadata = {
   issuer: env.PUBLIC_URL,
   authorization_endpoint: `${env.PUBLIC_URL}/oauth/authorize`,
   token_endpoint: `${env.PUBLIC_URL}/oauth/token`,
+  registration_endpoint: `${env.PUBLIC_URL}/oauth/register`,
   jwks_uri: `${env.PUBLIC_URL}/.well-known/jwks.json`,
   response_types_supported: ["code"],
   grant_types_supported: ["authorization_code", "refresh_token"],
