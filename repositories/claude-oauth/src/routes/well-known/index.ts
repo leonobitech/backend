@@ -52,7 +52,26 @@ wellKnownRouter.get("/ai-plugin.json", (_req, res) => {
   res.json(baseManifest);
 });
 
-wellKnownRouter.get("/anthropic/manifest.json", (_req, res) => {
+// GET: Return manifest as JSON
+wellKnownRouter.get("/anthropic/manifest.json", (req, res) => {
+  // Log ALL headers to debug Claude Desktop behavior
+  logger.info({
+    method: "GET",
+    path: "/anthropic/manifest.json",
+    allHeaders: req.headers,
+    query: req.query
+  }, "Manifest request received");
+
+  // If this is an authenticated SSE request, redirect to MCP endpoint
+  const authHeader = req.headers.authorization;
+  const acceptHeader = req.headers.accept;
+
+  if (authHeader?.startsWith("Bearer ") && acceptHeader?.includes("text/event-stream")) {
+    logger.info({ headers: req.headers }, "Manifest GET with auth - redirecting to MCP SSE");
+    return res.redirect(307, "/mcp/sse");
+  }
+
+  // Normal manifest request
   res.json({
     schema_version: "1.0",
     name_for_human: baseManifest.name_for_human,
@@ -77,6 +96,27 @@ wellKnownRouter.get("/anthropic/manifest.json", (_req, res) => {
       is_user_authenticated: true
     }
   });
+});
+
+// POST: Redirect to MCP message endpoint if authenticated
+wellKnownRouter.post("/anthropic/manifest.json", (req, res) => {
+  // Log ALL headers and body to debug Claude Desktop behavior
+  logger.info({
+    method: "POST",
+    path: "/anthropic/manifest.json",
+    allHeaders: req.headers,
+    body: req.body
+  }, "Manifest POST request received");
+
+  const authHeader = req.headers.authorization;
+
+  if (authHeader?.startsWith("Bearer ")) {
+    logger.info({ body: req.body }, "Manifest POST with auth - redirecting to MCP message");
+    return res.redirect(307, "/mcp/message");
+  }
+
+  // If no auth, return manifest (fallback)
+  res.status(405).json({ error: "Method not allowed without authentication" });
 });
 
 const openApiSpec = {
