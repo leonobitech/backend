@@ -70,7 +70,6 @@ wellKnownRouter.get("/anthropic/manifest.json", (_req, res) => {
       token_url: `${env.PUBLIC_URL}/oauth/token`,
       redirect_uri: env.REDIRECT_URI
     },
-    api: baseManifest.api,
     mcp: {
       transport: {
         type: "streamable-http",
