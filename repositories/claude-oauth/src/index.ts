@@ -30,9 +30,15 @@ app.use((req, _res, next) => {
   next();
 });
 app.use(helmet());
+const corsOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: ["https://claude.ai", "https://app.claude.ai", "https://desktop.claude.ai", env.PUBLIC_URL]
+    origin: corsOrigins.length > 0 ? corsOrigins : [env.PUBLIC_URL],
+    credentials: true
   })
 );
 app.use(express.json());

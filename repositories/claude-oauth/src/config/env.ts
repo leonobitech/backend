@@ -24,7 +24,8 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL: z.coerce.number().min(300).default(604800),
   JWKS_KID: z.string().min(1),
   JWT_ISSUER: z.string().url(),
-  JWT_AUDIENCE: z.string().min(1)
+  JWT_AUDIENCE: z.string().min(1),
+  CORS_ORIGINS: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);

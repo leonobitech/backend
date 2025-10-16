@@ -66,6 +66,7 @@ ACCESS_TOKEN_TTL=300
 AUTH_CODE_TTL=180
 REFRESH_TOKEN_TTL=604800
 LOG_LEVEL=info
+CORS_ORIGINS=https://claude.ai,https://app.claude.ai,https://desktop.claude.ai,https://claude-auth.leonobitech.com
 ```
 
 > Nota: verifica en la documentación más reciente de Anthropic si el `REDIRECT_URI` cambia. Claude Desktop (>= 0.8.0) utiliza `https://claude.ai/api/mcp/auth_callback`.
