@@ -266,6 +266,21 @@ export class OdooClient {
     return this.write("crm.lead", [opportunityId], { stage_id: stageId });
   }
 
+  /**
+   * Convertir un lead a oportunidad
+   * En Odoo 19, los leads ya no existen como fase separada, todo es opportunity
+   */
+  async convertLeadToOpportunity(leadId: number): Promise<boolean> {
+    return this.write("crm.lead", [leadId], { type: "opportunity" });
+  }
+
+  /**
+   * Convertir múltiples leads a oportunidades
+   */
+  async convertLeadsToOpportunities(leadIds: number[]): Promise<boolean> {
+    return this.write("crm.lead", leadIds, { type: "opportunity" });
+  }
+
   // ==================== CONTACTS ====================
 
   /**

@@ -215,6 +215,21 @@ function createMcpServer(userId: string): Server {
           }
         },
         {
+          name: "odoo_convert_to_opportunity",
+          description: "Convert leads to opportunities in Odoo CRM. In Odoo 19, leads don't exist as a separate phase - everything should be an opportunity to be visible in the pipeline UI.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              lead_ids: {
+                type: "array",
+                items: { type: "number" },
+                description: "Array of lead IDs to convert to opportunities (required)"
+              }
+            },
+            required: ["lead_ids"]
+          }
+        },
+        {
           name: "odoo_search_contacts",
           description: "Search for contacts (customers, suppliers, companies) in Odoo",
           inputSchema: {
@@ -490,6 +505,34 @@ function createMcpServer(userId: string): Server {
                     message: `Opportunity #${opportunityId} moved to stage "${stageName}"`,
                     opportunity_id: opportunityId,
                     new_stage: stageName
+                  },
+                  null,
+                  2
+                )
+              }
+            ]
+          };
+        }
+
+        case "odoo_convert_to_opportunity": {
+          const leadIds = args.lead_ids as number[];
+
+          if (!Array.isArray(leadIds) || leadIds.length === 0) {
+            throw new Error("lead_ids must be a non-empty array of lead IDs");
+          }
+
+          await odoo.convertLeadsToOpportunities(leadIds);
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    message: `Successfully converted ${leadIds.length} lead(s) to opportunity/opportunities`,
+                    converted_ids: leadIds,
+                    note: "These leads are now visible as opportunities in your Odoo CRM pipeline"
                   },
                   null,
                   2
