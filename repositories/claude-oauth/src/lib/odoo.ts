@@ -563,9 +563,22 @@ export class OdooClient {
       state: "outgoing" // Marca como saliente para que Odoo lo envíe
     });
 
-    // En lugar de llamar send() que retorna None, simplemente retornamos el mailId
-    // Odoo procesará el email automáticamente porque está en estado 'outgoing'
-    // Si quieres forzar el envío inmediato, Odoo lo hará en el siguiente cron job
+    // Forzar el procesamiento inmediato de la cola de emails
+    // En lugar de esperar al cron job (que puede tardar hasta 1 hora)
+    try {
+      // Procesar la cola de emails inmediatamente usando el modelo ir.cron
+      // Buscar el cron job de mail queue
+      await this.execute_kw(
+        "mail.mail",
+        "process_email_queue",
+        [],
+        {}
+      );
+      logger.info({ mailId }, "Email queue processed immediately");
+    } catch (error) {
+      // Si falla, no importa - el cron job lo enviará eventualmente
+      logger.warn({ error, mailId }, "Could not force immediate email send, will be sent by cron");
+    }
 
     return mailId;
   }
