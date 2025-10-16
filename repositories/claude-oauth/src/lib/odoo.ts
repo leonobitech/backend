@@ -540,8 +540,40 @@ export class OdooClient {
   }
 
   /**
+   * Publicar un mensaje en el chatter de un registro
+   */
+  async postMessageToChatter(data: {
+    model: string; // e.g., 'crm.lead', 'res.partner'
+    resId: number; // ID del registro
+    body: string; // Contenido HTML del mensaje
+    messageType?: "notification" | "comment"; // Tipo de mensaje (default: comment)
+    subtypeXmlId?: string; // e.g., 'mail.mt_note' para nota interna
+  }): Promise<number> {
+    const values: Record<string, any> = {
+      model: data.model,
+      res_id: data.resId,
+      body: data.body,
+      message_type: data.messageType || "comment"
+    };
+
+    // Si se especifica un subtipo (para notas internas vs comentarios públicos)
+    if (data.subtypeXmlId) {
+      // Buscar el ID del subtipo
+      const subtypes = await this.search("mail.message.subtype", [["name", "=", data.subtypeXmlId]], {
+        fields: ["id"],
+        limit: 1
+      });
+      if (subtypes.length > 0) {
+        values.subtype_id = subtypes[0].id;
+      }
+    }
+
+    return this.create("mail.message", values);
+  }
+
+  /**
    * Agendar una reunión en el calendario de Odoo vinculada a una oportunidad
-   * Ahora con validación de disponibilidad
+   * Ahora con validación de disponibilidad y registro en el chatter
    */
   async scheduleMeeting(data: {
     name: string;
@@ -624,6 +656,41 @@ export class OdooClient {
     if (data.location) values.location = data.location;
 
     const eventId = await this.create("calendar.event", values);
+
+    // Publicar mensaje en el chatter de la oportunidad
+    const startDate = new Date(data.start);
+    const formattedDate = startDate.toLocaleString("es-ES", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    const chatterMessage = `
+      <p>📅 <strong>Reunión agendada</strong></p>
+      <ul>
+        <li><strong>Título:</strong> ${data.name}</li>
+        <li><strong>Fecha:</strong> ${formattedDate}</li>
+        <li><strong>Duración:</strong> ${duration} hora(s)</li>
+        ${data.location ? `<li><strong>Ubicación:</strong> ${data.location}</li>` : ""}
+        ${data.description ? `<li><strong>Descripción:</strong> ${data.description}</li>` : ""}
+      </ul>
+      <p><em>Reunión creada automáticamente vía Claude MCP</em></p>
+    `;
+
+    try {
+      await this.postMessageToChatter({
+        model: "crm.lead",
+        resId: data.opportunityId,
+        body: chatterMessage,
+        messageType: "comment"
+      });
+      logger.info({ opportunityId: data.opportunityId, eventId }, "Meeting logged to opportunity chatter");
+    } catch (error) {
+      logger.warn({ error, opportunityId: data.opportunityId }, "Failed to post meeting to chatter, but event was created");
+    }
 
     return { eventId };
   }
