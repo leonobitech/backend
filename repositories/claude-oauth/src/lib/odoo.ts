@@ -168,7 +168,6 @@ export class OdooClient {
         "contact_name",
         "email_from",
         "phone",
-        "mobile",
         "expected_revenue",
         "probability",
         "stage_id",
