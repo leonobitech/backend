@@ -552,18 +552,20 @@ export class OdooClient {
       subtype_xmlid: "mail.mt_comment"
     });
 
-    // También enviar el correo usando mail.mail para que realmente se envíe por SMTP
+    // Enviar el correo usando mail.mail para que realmente se envíe por SMTP
     const mailId = await this.create("mail.mail", {
       subject: data.subject,
       body_html: data.body,
       email_to: recipientEmail,
       auto_delete: false,
       model: "crm.lead",
-      res_id: data.opportunityId
+      res_id: data.opportunityId,
+      state: "outgoing" // Marca como saliente para que Odoo lo envíe
     });
 
-    // Enviar el correo inmediatamente
-    await this.execute_kw("mail.mail", "send", [[mailId]], {});
+    // En lugar de llamar send() que retorna None, simplemente retornamos el mailId
+    // Odoo procesará el email automáticamente porque está en estado 'outgoing'
+    // Si quieres forzar el envío inmediato, Odoo lo hará en el siguiente cron job
 
     return mailId;
   }
