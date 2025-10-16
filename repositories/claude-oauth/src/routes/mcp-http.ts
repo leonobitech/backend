@@ -363,6 +363,40 @@ function createMcpServer(userId: string): Server {
             },
             required: ["opportunity_id", "subject", "body"]
           }
+        },
+        {
+          name: "odoo_schedule_meeting",
+          description: "Schedule a meeting in Odoo calendar linked to an opportunity. The meeting will appear in Odoo's calendar view and automatically invite the opportunity's contact and assigned salesperson.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              opportunity_id: {
+                type: "number",
+                description: "ID of the opportunity to link the meeting to (required)"
+              },
+              title: {
+                type: "string",
+                description: "Meeting title/name (required)"
+              },
+              start_datetime: {
+                type: "string",
+                description: "Start date and time in ISO format YYYY-MM-DD HH:MM:SS (e.g., '2025-10-16 14:00:00') (required)"
+              },
+              duration_hours: {
+                type: "number",
+                description: "Duration in hours (default: 1)"
+              },
+              description: {
+                type: "string",
+                description: "Meeting description/agenda (optional)"
+              },
+              location: {
+                type: "string",
+                description: "Meeting location (optional)"
+              }
+            },
+            required: ["opportunity_id", "title", "start_datetime"]
+          }
         }
       ]
     };
@@ -730,6 +764,46 @@ function createMcpServer(userId: string): Server {
                     message: `Email sent successfully to opportunity #${opportunityId}`,
                     subject: subject,
                     recipient: emailTo || "opportunity contact email"
+                  },
+                  null,
+                  2
+                )
+              }
+            ]
+          };
+        }
+
+        case "odoo_schedule_meeting": {
+          const opportunityId = args.opportunity_id as number;
+          const title = args.title as string;
+          const startDatetime = args.start_datetime as string;
+          const durationHours = args.duration_hours as number | undefined;
+          const description = args.description as string | undefined;
+          const location = args.location as string | undefined;
+
+          const eventId = await odoo.scheduleMeeting({
+            name: title,
+            opportunityId,
+            start: startDatetime,
+            duration: durationHours,
+            description,
+            location
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    event_id: eventId,
+                    message: `Meeting "${title}" scheduled successfully in Odoo calendar`,
+                    opportunity_id: opportunityId,
+                    start: startDatetime,
+                    duration: durationHours || 1,
+                    location: location || "Not specified",
+                    note: "The meeting is now visible in Odoo's calendar and linked to the opportunity"
                   },
                   null,
                   2

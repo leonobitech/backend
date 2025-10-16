@@ -411,6 +411,66 @@ export class OdooClient {
     return this.create("mail.activity", values);
   }
 
+  /**
+   * Agendar una reunión en el calendario de Odoo vinculada a una oportunidad
+   */
+  async scheduleMeeting(data: {
+    name: string;
+    opportunityId: number;
+    start: string; // ISO datetime string (YYYY-MM-DD HH:MM:SS)
+    duration?: number; // Duración en horas (default: 1)
+    description?: string;
+    location?: string;
+  }): Promise<number> {
+    // Obtener información de la oportunidad para vincular partner
+    const opportunities = await this.read("crm.lead", [data.opportunityId], ["partner_id", "user_id"]);
+
+    if (opportunities.length === 0) {
+      throw new Error(`Opportunity #${data.opportunityId} not found`);
+    }
+
+    const opp = opportunities[0];
+    const partnerIds: number[] = [];
+
+    // Agregar el partner de la oportunidad como asistente
+    if (opp.partner_id && Array.isArray(opp.partner_id) && opp.partner_id[0]) {
+      partnerIds.push(opp.partner_id[0]);
+    }
+
+    // Agregar el usuario responsable como asistente
+    if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
+      // Buscar el partner_id del usuario
+      const users = await this.read("res.users", [opp.user_id[0]], ["partner_id"]);
+      if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
+        partnerIds.push(users[0].partner_id[0]);
+      }
+    }
+
+    const values: Record<string, any> = {
+      name: data.name,
+      start: data.start,
+      stop: this.calculateEndTime(data.start, data.duration || 1),
+      duration: data.duration || 1,
+      res_model: "crm.lead",
+      res_id: data.opportunityId,
+      partner_ids: [[6, 0, partnerIds]] // Odoo many2many format
+    };
+
+    if (data.description) values.description = data.description;
+    if (data.location) values.location = data.location;
+
+    return this.create("calendar.event", values);
+  }
+
+  /**
+   * Calcular hora de fin basado en hora de inicio y duración
+   */
+  private calculateEndTime(start: string, durationHours: number): string {
+    const startDate = new Date(start);
+    startDate.setHours(startDate.getHours() + durationHours);
+    return startDate.toISOString().replace("T", " ").substring(0, 19);
+  }
+
   // ==================== REPORTS ====================
 
   /**
