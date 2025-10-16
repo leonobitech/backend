@@ -44,7 +44,7 @@ export class OdooClient {
       commonClient.methodCall(
         "authenticate",
         [ODOO_DB, ODOO_USERNAME, ODOO_API_KEY, {}],
-        (error, uid: number) => {
+        (error: Error | null, uid: number) => {
           if (error) {
             logger.error({ error }, "Error authenticating with Odoo");
             reject(new Error(`Odoo authentication failed: ${error.message}`));
@@ -81,7 +81,7 @@ export class OdooClient {
       objectClient.methodCall(
         "execute_kw",
         [ODOO_DB, this.uid, ODOO_API_KEY, model, method, args, kwargs],
-        (error, result) => {
+        (error: Error | null, result: any) => {
           if (error) {
             logger.error({ error, model, method }, "Error executing Odoo method");
             reject(new Error(`Odoo ${model}.${method} failed: ${error.message}`));
