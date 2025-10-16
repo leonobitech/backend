@@ -412,7 +412,136 @@ export class OdooClient {
   }
 
   /**
+   * Verificar disponibilidad en el calendario para un rango de tiempo
+   */
+  async checkCalendarAvailability(data: {
+    start: string;
+    duration: number;
+    partnerIds: number[];
+  }): Promise<{
+    available: boolean;
+    conflicts: Array<{
+      id: number;
+      name: string;
+      start: string;
+      stop: string;
+      partner_ids: any;
+    }>;
+  }> {
+    const endTime = this.calculateEndTime(data.start, data.duration);
+
+    // Buscar eventos que se superpongan con el rango solicitado
+    // Un evento se superpone si: (start1 < end2) AND (end1 > start2)
+    const domain = [
+      "|",
+      "&",
+      ["start", "<=", data.start],
+      ["stop", ">", data.start],
+      "&",
+      ["start", "<", endTime],
+      ["stop", ">=", endTime],
+      "|",
+      "&",
+      ["start", ">=", data.start],
+      ["start", "<", endTime],
+      "&",
+      ["stop", ">", data.start],
+      ["stop", "<=", endTime]
+    ];
+
+    // Agregar filtro de partners si se proporcionan
+    if (data.partnerIds.length > 0) {
+      domain.unshift(["partner_ids", "in", data.partnerIds]);
+    }
+
+    const conflicts = await this.search("calendar.event", domain, {
+      fields: ["id", "name", "start", "stop", "partner_ids"],
+      limit: 10
+    });
+
+    return {
+      available: conflicts.length === 0,
+      conflicts
+    };
+  }
+
+  /**
+   * Encontrar slots disponibles en el calendario
+   */
+  async findAvailableSlots(data: {
+    preferredStart: string;
+    duration: number;
+    partnerIds: number[];
+    maxSuggestions?: number;
+  }): Promise<Array<{ start: string; end: string }>> {
+    const suggestions: Array<{ start: string; end: string }> = [];
+    const maxSuggestions = data.maxSuggestions || 5;
+    const durationMs = data.duration * 60 * 60 * 1000; // Convertir horas a ms
+
+    // Parsear la hora preferida
+    let currentSlot = new Date(data.preferredStart);
+    const searchDays = 7; // Buscar dentro de los próximos 7 días
+    const endSearchDate = new Date(currentSlot);
+    endSearchDate.setDate(endSearchDate.getDate() + searchDays);
+
+    // Obtener todos los eventos en el rango de búsqueda
+    const searchEndStr = endSearchDate.toISOString().replace("T", " ").substring(0, 19);
+    const domain = [["start", ">=", data.preferredStart], ["start", "<=", searchEndStr]];
+
+    if (data.partnerIds.length > 0) {
+      domain.unshift(["partner_ids", "in", data.partnerIds]);
+    }
+
+    const allEvents = await this.search("calendar.event", domain, {
+      fields: ["start", "stop"],
+      order: "start asc"
+    });
+
+    // Función para verificar si un slot está libre
+    const isSlotFree = (slotStart: Date, slotEnd: Date): boolean => {
+      for (const event of allEvents) {
+        const eventStart = new Date(event.start);
+        const eventStop = new Date(event.stop);
+
+        // Verificar superposición
+        if (slotStart < eventStop && slotEnd > eventStart) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    // Buscar slots disponibles
+    while (suggestions.length < maxSuggestions && currentSlot < endSearchDate) {
+      const slotEnd = new Date(currentSlot.getTime() + durationMs);
+
+      // Solo considerar horario laboral (9am - 6pm)
+      const hour = currentSlot.getHours();
+      if (hour >= 9 && hour < 18) {
+        if (isSlotFree(currentSlot, slotEnd)) {
+          suggestions.push({
+            start: currentSlot.toISOString().replace("T", " ").substring(0, 19),
+            end: slotEnd.toISOString().replace("T", " ").substring(0, 19)
+          });
+        }
+      }
+
+      // Avanzar 30 minutos
+      currentSlot = new Date(currentSlot.getTime() + 30 * 60 * 1000);
+
+      // Si pasamos las 6pm, saltar al siguiente día a las 9am
+      if (currentSlot.getHours() >= 18) {
+        currentSlot.setDate(currentSlot.getDate() + 1);
+        currentSlot.setHours(9, 0, 0, 0);
+      }
+    }
+
+    return suggestions;
+  }
+
+  /**
    * Agendar una reunión en el calendario de Odoo vinculada a una oportunidad
+   * Ahora con validación de disponibilidad
    */
   async scheduleMeeting(data: {
     name: string;
@@ -421,7 +550,15 @@ export class OdooClient {
     duration?: number; // Duración en horas (default: 1)
     description?: string;
     location?: string;
-  }): Promise<number> {
+    forceSchedule?: boolean; // Forzar agendamiento incluso con conflictos
+  }): Promise<{
+    eventId?: number;
+    conflict?: {
+      available: boolean;
+      conflicts: any[];
+      availableSlots: Array<{ start: string; end: string }>;
+    };
+  }> {
     // Obtener información de la oportunidad para vincular partner
     const opportunities = await this.read("crm.lead", [data.opportunityId], ["partner_id", "user_id"]);
 
@@ -446,11 +583,38 @@ export class OdooClient {
       }
     }
 
+    // Verificar disponibilidad ANTES de crear el evento
+    const duration = data.duration || 1;
+    const availabilityCheck = await this.checkCalendarAvailability({
+      start: data.start,
+      duration,
+      partnerIds
+    });
+
+    // Si hay conflictos y no se fuerza el agendamiento, retornar los conflictos y sugerencias
+    if (!availabilityCheck.available && !data.forceSchedule) {
+      const availableSlots = await this.findAvailableSlots({
+        preferredStart: data.start,
+        duration,
+        partnerIds,
+        maxSuggestions: 5
+      });
+
+      return {
+        conflict: {
+          available: false,
+          conflicts: availabilityCheck.conflicts,
+          availableSlots
+        }
+      };
+    }
+
+    // Si está disponible o se fuerza el agendamiento, crear el evento
     const values: Record<string, any> = {
       name: data.name,
       start: data.start,
-      stop: this.calculateEndTime(data.start, data.duration || 1),
-      duration: data.duration || 1,
+      stop: this.calculateEndTime(data.start, duration),
+      duration,
       res_model: "crm.lead",
       res_id: data.opportunityId,
       partner_ids: [[6, 0, partnerIds]] // Odoo many2many format
@@ -459,7 +623,9 @@ export class OdooClient {
     if (data.description) values.description = data.description;
     if (data.location) values.location = data.location;
 
-    return this.create("calendar.event", values);
+    const eventId = await this.create("calendar.event", values);
+
+    return { eventId };
   }
 
   /**

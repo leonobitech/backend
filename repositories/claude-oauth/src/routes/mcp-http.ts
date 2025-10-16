@@ -366,7 +366,7 @@ function createMcpServer(userId: string): Server {
         },
         {
           name: "odoo_schedule_meeting",
-          description: "Schedule a meeting in Odoo calendar linked to an opportunity. The meeting will appear in Odoo's calendar view and automatically invite the opportunity's contact and assigned salesperson.",
+          description: "Schedule a meeting in Odoo calendar linked to an opportunity. This tool automatically checks for calendar conflicts and suggests alternative time slots if needed. The meeting will appear in Odoo's calendar view and automatically invite the opportunity's contact and assigned salesperson.",
           inputSchema: {
             type: "object",
             properties: {
@@ -393,6 +393,10 @@ function createMcpServer(userId: string): Server {
               location: {
                 type: "string",
                 description: "Meeting location (optional)"
+              },
+              force_schedule: {
+                type: "boolean",
+                description: "Force scheduling even if there are calendar conflicts (default: false). Use this only after reviewing conflict warnings."
               }
             },
             required: ["opportunity_id", "title", "start_datetime"]
@@ -780,16 +784,69 @@ function createMcpServer(userId: string): Server {
           const durationHours = args.duration_hours as number | undefined;
           const description = args.description as string | undefined;
           const location = args.location as string | undefined;
+          const forceSchedule = args.force_schedule as boolean | undefined;
 
-          const eventId = await odoo.scheduleMeeting({
+          const result = await odoo.scheduleMeeting({
             name: title,
             opportunityId,
             start: startDatetime,
             duration: durationHours,
             description,
-            location
+            location,
+            forceSchedule
           });
 
+          // Si hay conflictos, retornar información detallada con slots alternativos
+          if (result.conflict) {
+            const formatDateTime = (dateStr: string) => {
+              const date = new Date(dateStr);
+              return date.toLocaleString("es-ES", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+              });
+            };
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      success: false,
+                      conflict: true,
+                      message: `⚠️ The requested time slot is not available. There are ${result.conflict.conflicts.length} conflicting event(s).`,
+                      requested_time: {
+                        start: startDatetime,
+                        duration: durationHours || 1
+                      },
+                      conflicts: result.conflict.conflicts.map((conflict) => ({
+                        name: conflict.name,
+                        start: conflict.start,
+                        end: conflict.stop,
+                        formatted_time: `${formatDateTime(conflict.start)} - ${new Date(conflict.stop).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`
+                      })),
+                      available_slots: result.conflict.availableSlots.map((slot) => ({
+                        start: slot.start,
+                        end: slot.end,
+                        formatted_time: formatDateTime(slot.start),
+                        duration: durationHours || 1
+                      })),
+                      suggestion: "You can choose one of the available time slots above, or use force_schedule: true to schedule anyway.",
+                      note: "To schedule despite conflicts, call this tool again with force_schedule: true"
+                    },
+                    null,
+                    2
+                  )
+                }
+              ]
+            };
+          }
+
+          // Si se agendó exitosamente
           return {
             content: [
               {
@@ -797,7 +854,7 @@ function createMcpServer(userId: string): Server {
                 text: JSON.stringify(
                   {
                     success: true,
-                    event_id: eventId,
+                    event_id: result.eventId,
                     message: `Meeting "${title}" scheduled successfully in Odoo calendar`,
                     opportunity_id: opportunityId,
                     start: startDatetime,
