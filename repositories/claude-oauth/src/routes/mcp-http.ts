@@ -340,13 +340,13 @@ function createMcpServer(userId: string): Server {
         },
         {
           name: "odoo_send_email",
-          description: "Send an email to an opportunity's contact in Odoo CRM. The email will be logged in the opportunity's chatter and sent via SMTP.",
+          description: "Send an email to an EXISTING opportunity's contact in Odoo CRM. IMPORTANT: Use the opportunity_id from a previously created opportunity - DO NOT create a new one. The email will be logged in the opportunity's chatter and sent via SMTP. Automatically moves opportunity from New to Qualified stage.",
           inputSchema: {
             type: "object",
             properties: {
               opportunity_id: {
                 type: "number",
-                description: "ID of the opportunity to send email to (required)"
+                description: "ID of the EXISTING opportunity to send email to (use the ID returned from odoo_create_lead or odoo_get_opportunities) (required)"
               },
               subject: {
                 type: "string",
@@ -366,13 +366,13 @@ function createMcpServer(userId: string): Server {
         },
         {
           name: "odoo_schedule_meeting",
-          description: "Schedule a meeting in Odoo calendar linked to an opportunity. This tool automatically checks for calendar conflicts and suggests alternative time slots if needed. The meeting will appear in Odoo's calendar view and automatically invite the opportunity's contact and assigned salesperson. Automatically moves opportunity from New to Qualified stage.",
+          description: "Schedule a meeting in Odoo calendar linked to an EXISTING opportunity. IMPORTANT: Use the opportunity_id from a previously created opportunity - DO NOT create a new one. This tool automatically checks for calendar conflicts and suggests alternative time slots if needed. The meeting will appear in Odoo's calendar view and automatically invite the opportunity's contact and assigned salesperson. Automatically moves opportunity from New to Qualified stage.",
           inputSchema: {
             type: "object",
             properties: {
               opportunity_id: {
                 type: "number",
-                description: "ID of the opportunity to link the meeting to (required)"
+                description: "ID of the EXISTING opportunity to link the meeting to (use the ID from odoo_create_lead or odoo_get_opportunities) (required)"
               },
               title: {
                 type: "string",
@@ -404,13 +404,13 @@ function createMcpServer(userId: string): Server {
         },
         {
           name: "odoo_send_proposal",
-          description: "Send a professional branded commercial proposal with a beautiful HTML template. Uses Leonobitech's corporate design with gradient header, structured sections, and call-to-action buttons. Automatically moves opportunity from New/Qualified to Proposition stage. Perfect for sending formal proposals with consistent branding.",
+          description: "Send a professional branded commercial proposal with a beautiful HTML template to an EXISTING opportunity. IMPORTANT: Use the opportunity_id from a previously created opportunity - DO NOT create a new one. Uses Leonobitech's corporate design with gradient header, structured sections, and call-to-action buttons. Automatically moves opportunity from New/Qualified to Proposition stage. Perfect for sending formal proposals with consistent branding.",
           inputSchema: {
             type: "object",
             properties: {
               opportunity_id: {
                 type: "number",
-                description: "ID of the opportunity to send proposal to (required)"
+                description: "ID of the EXISTING opportunity to send proposal to (use the ID from odoo_create_lead or odoo_get_opportunities) (required)"
               },
               client_name: {
                 type: "string",
@@ -467,13 +467,13 @@ function createMcpServer(userId: string): Server {
         },
         {
           name: "odoo_mark_as_won",
-          description: "Mark an opportunity as won and move it to Won stage. Optionally update the final deal amount and add closing notes.",
+          description: "Mark an EXISTING opportunity as won and move it to Won stage. IMPORTANT: Use the opportunity_id from a previously created opportunity - DO NOT create a new one. Optionally update the final deal amount and add closing notes.",
           inputSchema: {
             type: "object",
             properties: {
               opportunity_id: {
                 type: "number",
-                description: "ID of the opportunity to mark as won (required)"
+                description: "ID of the EXISTING opportunity to mark as won (use the ID from odoo_create_lead or odoo_get_opportunities) (required)"
               },
               final_amount: {
                 type: "number",
