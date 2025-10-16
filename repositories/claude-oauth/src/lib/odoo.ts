@@ -974,7 +974,7 @@ export class OdooClient {
       logger.warn({ error, mailId }, "Could not force immediate email send, will be sent by cron");
     }
 
-    // Registrar el email en el chatter de forma legible y bien formateada
+    // Registrar el email en el chatter de forma resumida (sin HTML completo del body)
     const chatterMessage = `
       <div style="margin: 10px 0; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">
         <p style="margin: 0 0 10px 0;">
@@ -990,9 +990,6 @@ export class OdooClient {
             <td style="padding: 4px 0;">${data.subject}</td>
           </tr>
         </table>
-        <div style="margin-top: 15px; padding: 15px; background-color: white; border: 1px solid #dee2e6; border-radius: 4px;">
-          ${data.body}
-        </div>
         <p style="margin: 10px 0 0 0; font-size: 12px; color: #999; font-style: italic;">
           Sistema automatizado Leonobitech
         </p>
