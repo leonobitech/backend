@@ -677,7 +677,7 @@ export class OdooClient {
         ${data.location ? `<li><strong>Ubicación:</strong> ${data.location}</li>` : ""}
         ${data.description ? `<li><strong>Descripción:</strong> ${data.description}</li>` : ""}
       </ul>
-      <p><em>Reunión creada automáticamente vía Claude MCP</em></p>
+      <p><em>Sistema automatizado Leonobitech</em></p>
     `;
 
     try {
@@ -885,7 +885,7 @@ export class OdooClient {
           ${data.body}
         </div>
         <p style="margin: 10px 0 0 0; font-size: 12px; color: #999; font-style: italic;">
-          Email enviado automáticamente vía Claude MCP
+          Sistema automatizado Leonobitech
         </p>
       </div>
     `;
