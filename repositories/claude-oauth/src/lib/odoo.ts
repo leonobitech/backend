@@ -6,7 +6,6 @@
  */
 
 import xmlrpc from "xmlrpc";
-import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 
 // Configuración de Odoo desde variables de entorno
@@ -287,7 +286,6 @@ export class OdooClient {
         "name",
         "email",
         "phone",
-        "mobile",
         "is_company",
         "street",
         "city",
@@ -307,7 +305,6 @@ export class OdooClient {
     name: string;
     email?: string;
     phone?: string;
-    mobile?: string;
     isCompany?: boolean;
     street?: string;
     city?: string;
@@ -320,7 +317,6 @@ export class OdooClient {
 
     if (data.email) values.email = data.email;
     if (data.phone) values.phone = data.phone;
-    if (data.mobile) values.mobile = data.mobile;
     if (data.street) values.street = data.street;
     if (data.city) values.city = data.city;
     if (data.website) values.website = data.website;
