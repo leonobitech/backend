@@ -139,13 +139,13 @@ function createMcpServer(userId: string): Server {
         },
         {
           name: "odoo_create_lead",
-          description: "Create a new lead in Odoo CRM",
+          description: "Create a new lead or opportunity in Odoo CRM. In Odoo 19, you can create directly as opportunity to make it immediately visible in the pipeline.",
           inputSchema: {
             type: "object",
             properties: {
               name: {
                 type: "string",
-                description: "Lead name/title (required)"
+                description: "Lead/Opportunity name/title (required)"
               },
               partner_name: {
                 type: "string",
@@ -170,6 +170,10 @@ function createMcpServer(userId: string): Server {
               expected_revenue: {
                 type: "number",
                 description: "Expected revenue amount"
+              },
+              create_as_opportunity: {
+                type: "boolean",
+                description: "If true, creates directly as opportunity (visible in pipeline immediately). Default: false (creates as lead)"
               }
             },
             required: ["name"]
@@ -443,6 +447,9 @@ function createMcpServer(userId: string): Server {
         }
 
         case "odoo_create_lead": {
+          const createAsOpportunity = args.create_as_opportunity as boolean | undefined;
+          const recordType: "lead" | "opportunity" = createAsOpportunity ? "opportunity" : "lead";
+
           const leadData = {
             name: args.name as string,
             partner_name: args.partner_name as string | undefined,
@@ -451,7 +458,7 @@ function createMcpServer(userId: string): Server {
             phone: args.phone as string | undefined,
             description: args.description as string | undefined,
             expected_revenue: args.expected_revenue as number | undefined,
-            type: "lead" as const
+            type: recordType
           };
 
           const leadId = await odoo.createLead(leadData);
@@ -463,8 +470,13 @@ function createMcpServer(userId: string): Server {
                 text: JSON.stringify(
                   {
                     success: true,
-                    lead_id: leadId,
-                    message: `Lead created successfully with ID: ${leadId}`,
+                    id: leadId,
+                    type: recordType,
+                    message: `${recordType === "opportunity" ? "Opportunity" : "Lead"} created successfully with ID: ${leadId}`,
+                    note:
+                      recordType === "opportunity"
+                        ? "Created directly as opportunity - visible in pipeline immediately"
+                        : "Created as lead - use odoo_convert_to_opportunity to make it visible in pipeline",
                     data: leadData
                   },
                   null,
