@@ -487,11 +487,24 @@ export class OdooClient {
       }
 
       const opp = opportunities[0];
-      recipientEmail = opp.email_from || (opp.partner_id ? await this.getPartnerEmail(opp.partner_id[0]) : null);
+
+      // Intentar obtener email de diferentes fuentes
+      // 1. Desde email_from del lead/opportunity
+      if (opp.email_from && typeof opp.email_from === "string" && opp.email_from.trim()) {
+        recipientEmail = opp.email_from.trim();
+      }
+
+      // 2. Si no hay email_from, intentar desde el partner asociado
+      if (!recipientEmail && opp.partner_id && Array.isArray(opp.partner_id) && opp.partner_id[0]) {
+        const partnerEmail = await this.getPartnerEmail(opp.partner_id[0]);
+        if (partnerEmail) {
+          recipientEmail = partnerEmail;
+        }
+      }
 
       if (!recipientEmail) {
         throw new Error(
-          `No email found for opportunity #${data.opportunityId}. Please provide an email_to parameter.`
+          `No email found for opportunity #${data.opportunityId}. The opportunity has no email_from field and no associated partner with email. Please provide an email_to parameter.`
         );
       }
     }
