@@ -184,6 +184,7 @@ export class OdooClient {
 
   /**
    * Crear un nuevo lead en el CRM
+   * Automáticamente crea un partner (contacto) si se proporciona email o partner_name
    */
   async createLead(data: {
     name: string;
@@ -200,6 +201,40 @@ export class OdooClient {
       type: data.type || "lead"
     };
 
+    // Si se proporciona partner_name o email, crear un partner (contacto)
+    if (data.partner_name || data.email) {
+      // Buscar si ya existe un partner con ese email
+      let partnerId: number | null = null;
+
+      if (data.email) {
+        const existingPartners = await this.search("res.partner", [["email", "=", data.email]], {
+          fields: ["id"],
+          limit: 1
+        });
+
+        if (existingPartners.length > 0) {
+          partnerId = existingPartners[0].id;
+        }
+      }
+
+      // Si no existe, crear el partner
+      if (!partnerId) {
+        const partnerData: Record<string, any> = {
+          name: data.partner_name || data.contact_name || "Unknown Contact",
+          is_company: !!data.partner_name // Si hay partner_name, es empresa
+        };
+
+        if (data.email) partnerData.email = data.email;
+        if (data.phone) partnerData.phone = data.phone;
+
+        partnerId = await this.create("res.partner", partnerData);
+      }
+
+      // Vincular el partner al lead
+      values.partner_id = partnerId;
+    }
+
+    // Mantener email_from para referencia
     if (data.partner_name) values.partner_name = data.partner_name;
     if (data.contact_name) values.contact_name = data.contact_name;
     if (data.email) values.email_from = data.email;
