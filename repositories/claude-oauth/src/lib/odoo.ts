@@ -837,14 +837,6 @@ export class OdooClient {
       }
     }
 
-    // Crear el mensaje de correo usando mail.message (que se adjunta a la oportunidad)
-    await this.execute_kw("crm.lead", "message_post", [[data.opportunityId]], {
-      body: data.body,
-      subject: data.subject,
-      message_type: "comment",
-      subtype_xmlid: "mail.mt_comment"
-    });
-
     // Enviar el correo usando mail.mail para que realmente se envíe por SMTP
     const mailId = await this.create("mail.mail", {
       subject: data.subject,
@@ -871,6 +863,43 @@ export class OdooClient {
     } catch (error) {
       // Si falla, no importa - el cron job lo enviará eventualmente
       logger.warn({ error, mailId }, "Could not force immediate email send, will be sent by cron");
+    }
+
+    // Registrar el email en el chatter de forma legible y bien formateada
+    const chatterMessage = `
+      <div style="margin: 10px 0; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">
+        <p style="margin: 0 0 10px 0;">
+          <strong style="font-size: 14px;">📧 Email enviado</strong>
+        </p>
+        <table style="width: 100%; margin-bottom: 10px;">
+          <tr>
+            <td style="padding: 4px 0; color: #666; width: 80px;"><strong>Para:</strong></td>
+            <td style="padding: 4px 0;">${recipientEmail}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0; color: #666;"><strong>Asunto:</strong></td>
+            <td style="padding: 4px 0;">${data.subject}</td>
+          </tr>
+        </table>
+        <div style="margin-top: 15px; padding: 15px; background-color: white; border: 1px solid #dee2e6; border-radius: 4px;">
+          ${data.body}
+        </div>
+        <p style="margin: 10px 0 0 0; font-size: 12px; color: #999; font-style: italic;">
+          Email enviado automáticamente vía Claude MCP
+        </p>
+      </div>
+    `;
+
+    try {
+      await this.postMessageToChatter({
+        model: "crm.lead",
+        resId: data.opportunityId,
+        body: chatterMessage,
+        messageType: "comment"
+      });
+      logger.info({ opportunityId: data.opportunityId, mailId, recipientEmail }, "Email logged to opportunity chatter");
+    } catch (error) {
+      logger.warn({ error, opportunityId: data.opportunityId }, "Failed to post email to chatter, but email was sent");
     }
 
     return mailId;
