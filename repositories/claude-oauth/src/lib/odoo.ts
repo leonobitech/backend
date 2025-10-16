@@ -1025,17 +1025,46 @@ export class OdooClient {
   }
 
   /**
-   * Enviar propuesta comercial a una oportunidad
-   * Similar a email pero con progresión a Proposition
+   * Enviar propuesta comercial con template profesional
    */
   async sendProposal(data: {
     opportunityId: number;
-    subject: string;
-    body: string;
+    clientName: string;
+    proposalTitle: string;
+    introduction: string;
+    solution: string;
+    deliverables: string[];
+    timeline: string;
+    investment: number;
+    paymentTerms?: string;
+    nextSteps?: string;
+    demoUrl?: string;
+    validityPeriod?: string;
     emailTo?: string;
   }): Promise<number> {
-    // Reutilizar la lógica de envío de email
-    const mailId = await this.sendEmailToOpportunity(data);
+    // Generar HTML profesional con template
+    const proposalHtml = this.generateProposalTemplate({
+      clientName: data.clientName,
+      proposalTitle: data.proposalTitle,
+      introduction: data.introduction,
+      solution: data.solution,
+      deliverables: data.deliverables,
+      timeline: data.timeline,
+      investment: data.investment,
+      paymentTerms: data.paymentTerms,
+      nextSteps: data.nextSteps,
+      demoUrl: data.demoUrl,
+      validityPeriod: data.validityPeriod || "30 días"
+    });
+
+    // Enviar email con template
+    const subject = `Propuesta Comercial: ${data.proposalTitle}`;
+    const mailId = await this.sendEmailToOpportunity({
+      opportunityId: data.opportunityId,
+      subject,
+      body: proposalHtml,
+      emailTo: data.emailTo
+    });
 
     // Progresión automática a Proposition (New/Qualified → Proposition)
     try {
@@ -1051,6 +1080,8 @@ export class OdooClient {
           resId: data.opportunityId,
           body: `
             <p>📄 <strong>Propuesta comercial enviada</strong></p>
+            <p><strong>Título:</strong> ${data.proposalTitle}</p>
+            <p><strong>Monto:</strong> $${data.investment.toLocaleString()}</p>
             <p>La oportunidad ha avanzado automáticamente a etapa de Propuesta.</p>
             <p><em>Sistema automatizado Leonobitech</em></p>
           `,
@@ -1062,6 +1093,140 @@ export class OdooClient {
     }
 
     return mailId;
+  }
+
+  /**
+   * Generar template HTML profesional para propuestas
+   */
+  private generateProposalTemplate(data: {
+    clientName: string;
+    proposalTitle: string;
+    introduction: string;
+    solution: string;
+    deliverables: string[];
+    timeline: string;
+    investment: number;
+    paymentTerms?: string;
+    nextSteps?: string;
+    demoUrl?: string;
+    validityPeriod: string;
+  }): string {
+    const deliverablesHtml = data.deliverables.map(d => `<li style="margin: 8px 0; line-height: 1.6;">${d}</li>`).join("");
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
+          <tr>
+            <td align="center">
+              <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+
+                <!-- Header -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">Leonobitech</h1>
+                    <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Soluciones Tecnológicas Innovadoras</p>
+                  </td>
+                </tr>
+
+                <!-- Saludo -->
+                <tr>
+                  <td style="padding: 30px 30px 20px 30px;">
+                    <h2 style="color: #333333; margin: 0 0 10px 0; font-size: 24px;">Estimado/a ${data.clientName},</h2>
+                    <p style="color: #666666; margin: 0; font-size: 16px; line-height: 1.6;">${data.introduction}</p>
+                  </td>
+                </tr>
+
+                <!-- Título de Propuesta -->
+                <tr>
+                  <td style="padding: 20px 30px;">
+                    <div style="background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; border-radius: 4px;">
+                      <h3 style="color: #667eea; margin: 0 0 10px 0; font-size: 20px;">📋 ${data.proposalTitle}</h3>
+                      <p style="color: #666666; margin: 0; font-size: 14px;">Propuesta válida por ${data.validityPeriod}</p>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Solución Propuesta -->
+                <tr>
+                  <td style="padding: 20px 30px;">
+                    <h3 style="color: #333333; margin: 0 0 15px 0; font-size: 18px;">💡 Solución Propuesta</h3>
+                    <p style="color: #666666; margin: 0; font-size: 15px; line-height: 1.6;">${data.solution}</p>
+                  </td>
+                </tr>
+
+                <!-- Entregables -->
+                <tr>
+                  <td style="padding: 20px 30px;">
+                    <h3 style="color: #333333; margin: 0 0 15px 0; font-size: 18px;">✅ Entregables</h3>
+                    <ul style="color: #666666; margin: 0; padding-left: 20px; font-size: 15px;">
+                      ${deliverablesHtml}
+                    </ul>
+                  </td>
+                </tr>
+
+                <!-- Timeline -->
+                <tr>
+                  <td style="padding: 20px 30px;">
+                    <h3 style="color: #333333; margin: 0 0 15px 0; font-size: 18px;">⏱️ Cronograma</h3>
+                    <p style="color: #666666; margin: 0; font-size: 15px; line-height: 1.6;">${data.timeline}</p>
+                  </td>
+                </tr>
+
+                <!-- Inversión -->
+                <tr>
+                  <td style="padding: 20px 30px;">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 25px; border-radius: 8px; text-align: center;">
+                      <p style="color: #ffffff; margin: 0 0 10px 0; font-size: 16px; opacity: 0.9;">Inversión Total</p>
+                      <h2 style="color: #ffffff; margin: 0; font-size: 36px; font-weight: 700;">$${data.investment.toLocaleString()}</h2>
+                      ${data.paymentTerms ? `<p style="color: #ffffff; margin: 15px 0 0 0; font-size: 14px; opacity: 0.9;">${data.paymentTerms}</p>` : ""}
+                    </div>
+                  </td>
+                </tr>
+
+                ${data.demoUrl ? `
+                <!-- Demo/Recursos -->
+                <tr>
+                  <td style="padding: 20px 30px;">
+                    <div style="background-color: #e3f2fd; border: 2px solid #2196f3; padding: 20px; border-radius: 8px; text-align: center;">
+                      <p style="color: #1976d2; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;">🎥 Recursos Adicionales</p>
+                      <a href="${data.demoUrl}" style="display: inline-block; background-color: #2196f3; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 500;">Ver Demo / Documentación</a>
+                    </div>
+                  </td>
+                </tr>
+                ` : ""}
+
+                <!-- Próximos Pasos -->
+                ${data.nextSteps ? `
+                <tr>
+                  <td style="padding: 20px 30px;">
+                    <h3 style="color: #333333; margin: 0 0 15px 0; font-size: 18px;">🚀 Próximos Pasos</h3>
+                    <p style="color: #666666; margin: 0; font-size: 15px; line-height: 1.6;">${data.nextSteps}</p>
+                  </td>
+                </tr>
+                ` : ""}
+
+                <!-- Footer -->
+                <tr>
+                  <td style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                    <p style="color: #666666; margin: 0 0 10px 0; font-size: 14px;">Quedamos atentos a sus comentarios y consultas.</p>
+                    <p style="color: #666666; margin: 0; font-size: 14px; font-weight: 600;">Equipo Leonobitech</p>
+                    <p style="color: #999999; margin: 15px 0 0 0; font-size: 12px; font-style: italic;">Sistema automatizado Leonobitech</p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
   }
 
   /**

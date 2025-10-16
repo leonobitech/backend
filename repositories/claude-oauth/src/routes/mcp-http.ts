@@ -404,7 +404,7 @@ function createMcpServer(userId: string): Server {
         },
         {
           name: "odoo_send_proposal",
-          description: "Send a commercial proposal to an opportunity's contact. This automatically moves the opportunity from New/Qualified to Proposition stage, indicating formal proposal phase. The email is sent immediately and logged in the chatter.",
+          description: "Send a professional branded commercial proposal with a beautiful HTML template. Uses Leonobitech's corporate design with gradient header, structured sections, and call-to-action buttons. Automatically moves opportunity from New/Qualified to Proposition stage. Perfect for sending formal proposals with consistent branding.",
           inputSchema: {
             type: "object",
             properties: {
@@ -412,20 +412,57 @@ function createMcpServer(userId: string): Server {
                 type: "number",
                 description: "ID of the opportunity to send proposal to (required)"
               },
-              subject: {
+              client_name: {
                 type: "string",
-                description: "Email subject line (required)"
+                description: "Client's name for personalized greeting (e.g., 'María García' or 'Acme Corp') (required)"
               },
-              body: {
+              proposal_title: {
                 type: "string",
-                description: "Proposal content (can be HTML or plain text) (required)"
+                description: "Title of the proposal (e.g., 'Desarrollo de Plataforma E-Learning') (required)"
+              },
+              introduction: {
+                type: "string",
+                description: "Opening paragraph introducing the proposal context (required)"
+              },
+              solution: {
+                type: "string",
+                description: "Description of the proposed solution/approach (required)"
+              },
+              deliverables: {
+                type: "array",
+                items: { type: "string" },
+                description: "Array of deliverables/features included (e.g., ['Sistema de autenticación', 'Panel administrativo']) (required)"
+              },
+              timeline: {
+                type: "string",
+                description: "Project timeline/duration (e.g., '8 semanas divididas en 3 sprints') (required)"
+              },
+              investment: {
+                type: "number",
+                description: "Total investment amount in dollars (required)"
+              },
+              payment_terms: {
+                type: "string",
+                description: "Payment terms (e.g., '50% inicial, 50% al finalizar') (optional)"
+              },
+              next_steps: {
+                type: "string",
+                description: "Suggested next steps or call to action (optional)"
+              },
+              demo_url: {
+                type: "string",
+                description: "URL to demo, documentation, or additional resources (optional but recommended)"
+              },
+              validity_period: {
+                type: "string",
+                description: "How long the proposal is valid (default: '30 días') (optional)"
               },
               email_to: {
                 type: "string",
                 description: "Override recipient email address (optional)"
               }
             },
-            required: ["opportunity_id", "subject", "body"]
+            required: ["opportunity_id", "client_name", "proposal_title", "introduction", "solution", "deliverables", "timeline", "investment"]
           }
         },
         {
@@ -920,14 +957,32 @@ function createMcpServer(userId: string): Server {
 
         case "odoo_send_proposal": {
           const opportunityId = args.opportunity_id as number;
-          const subject = args.subject as string;
-          const body = args.body as string;
+          const clientName = args.client_name as string;
+          const proposalTitle = args.proposal_title as string;
+          const introduction = args.introduction as string;
+          const solution = args.solution as string;
+          const deliverables = args.deliverables as string[];
+          const timeline = args.timeline as string;
+          const investment = args.investment as number;
+          const paymentTerms = args.payment_terms as string | undefined;
+          const nextSteps = args.next_steps as string | undefined;
+          const demoUrl = args.demo_url as string | undefined;
+          const validityPeriod = args.validity_period as string | undefined;
           const emailTo = args.email_to as string | undefined;
 
           const mailId = await odoo.sendProposal({
             opportunityId,
-            subject,
-            body,
+            clientName,
+            proposalTitle,
+            introduction,
+            solution,
+            deliverables,
+            timeline,
+            investment,
+            paymentTerms,
+            nextSteps,
+            demoUrl,
+            validityPeriod,
             emailTo
           });
 
@@ -939,10 +994,14 @@ function createMcpServer(userId: string): Server {
                   {
                     success: true,
                     mail_id: mailId,
-                    message: `Commercial proposal sent successfully to opportunity #${opportunityId}`,
-                    subject: subject,
+                    message: `✅ Professional proposal sent successfully to opportunity #${opportunityId}`,
+                    proposal_title: proposalTitle,
+                    client_name: clientName,
+                    investment: `$${investment.toLocaleString()}`,
                     recipient: emailTo || "opportunity contact email",
-                    stage_progression: "Opportunity automatically moved to Proposition stage (if it was in New or Qualified)"
+                    demo_included: !!demoUrl,
+                    stage_progression: "Opportunity automatically moved to Proposition stage",
+                    note: "Proposal sent with Leonobitech branded template including gradient header, structured sections, and professional layout"
                   },
                   null,
                   2
