@@ -432,7 +432,7 @@ export class OdooClient {
 
     // Buscar eventos que se superpongan con el rango solicitado
     // Un evento se superpone si: (start1 < end2) AND (end1 > start2)
-    const domain = [
+    const domain: any[] = [
       "|",
       "&",
       ["start", "<=", data.start],
@@ -486,7 +486,7 @@ export class OdooClient {
 
     // Obtener todos los eventos en el rango de búsqueda
     const searchEndStr = endSearchDate.toISOString().replace("T", " ").substring(0, 19);
-    const domain = [["start", ">=", data.preferredStart], ["start", "<=", searchEndStr]];
+    const domain: any[] = [["start", ">=", data.preferredStart], ["start", "<=", searchEndStr]];
 
     if (data.partnerIds.length > 0) {
       domain.unshift(["partner_ids", "in", data.partnerIds]);
