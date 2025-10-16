@@ -316,6 +316,105 @@ export class OdooClient {
     return this.write("crm.lead", leadIds, { type: "opportunity" });
   }
 
+  /**
+   * Obtener el nombre de la etapa actual de una oportunidad
+   */
+  async getOpportunityStage(opportunityId: number): Promise<string | null> {
+    const opportunities = await this.read("crm.lead", [opportunityId], ["stage_id"]);
+
+    if (opportunities.length === 0 || !opportunities[0].stage_id) {
+      return null;
+    }
+
+    const stageData = opportunities[0].stage_id;
+    // stage_id viene como [id, "nombre"]
+    if (Array.isArray(stageData) && stageData.length > 1) {
+      return stageData[1] as string;
+    }
+
+    return null;
+  }
+
+  /**
+   * Progresión automática de etapa basada en acciones
+   * Solo mueve hacia adelante, nunca hacia atrás
+   */
+  async autoProgressStage(data: {
+    opportunityId: number;
+    action: "email_sent" | "meeting_scheduled" | "proposal_sent";
+    currentStage?: string;
+  }): Promise<{ moved: boolean; fromStage?: string; toStage?: string; reason?: string }> {
+    // Obtener stage actual si no se proporcionó
+    const currentStage = data.currentStage || (await this.getOpportunityStage(data.opportunityId));
+
+    if (!currentStage) {
+      return { moved: false, reason: "No se pudo determinar la etapa actual" };
+    }
+
+    const currentStageLower = currentStage.toLowerCase();
+
+    // Definir reglas de progresión
+    let targetStage: string | null = null;
+    let reason = "";
+
+    switch (data.action) {
+      case "email_sent":
+      case "meeting_scheduled":
+        // NEW → QUALIFIED (primer contacto significativo)
+        if (currentStageLower.includes("new")) {
+          targetStage = "Qualified";
+          reason = data.action === "meeting_scheduled"
+            ? "Primera reunión agendada - Lead calificado"
+            : "Primer contacto establecido - Lead calificado";
+        }
+        break;
+
+      case "proposal_sent":
+        // NEW → PROPOSITION o QUALIFIED → PROPOSITION
+        if (currentStageLower.includes("new") || currentStageLower.includes("qualified")) {
+          targetStage = "Proposition";
+          reason = "Propuesta comercial enviada";
+        }
+        break;
+    }
+
+    // Si no hay stage objetivo, no hacer nada
+    if (!targetStage) {
+      return { moved: false, reason: "La oportunidad ya está en una etapa avanzada" };
+    }
+
+    // Mover la oportunidad
+    try {
+      await this.updateDealStage(data.opportunityId, targetStage);
+
+      // Registrar en el chatter
+      await this.postMessageToChatter({
+        model: "crm.lead",
+        resId: data.opportunityId,
+        body: `
+          <p>🔄 <strong>Progresión automática de etapa</strong></p>
+          <ul>
+            <li><strong>De:</strong> ${currentStage}</li>
+            <li><strong>A:</strong> ${targetStage}</li>
+            <li><strong>Razón:</strong> ${reason}</li>
+          </ul>
+          <p><em>Sistema automatizado Leonobitech</em></p>
+        `,
+        messageType: "comment"
+      });
+
+      logger.info(
+        { opportunityId: data.opportunityId, fromStage: currentStage, toStage: targetStage, action: data.action },
+        "Opportunity stage auto-progressed"
+      );
+
+      return { moved: true, fromStage: currentStage, toStage: targetStage, reason };
+    } catch (error) {
+      logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage");
+      return { moved: false, reason: "Error al mover la etapa" };
+    }
+  }
+
   // ==================== CONTACTS ====================
 
   /**
@@ -692,6 +791,16 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to post meeting to chatter, but event was created");
     }
 
+    // Progresión automática de etapa (New → Qualified)
+    try {
+      await this.autoProgressStage({
+        opportunityId: data.opportunityId,
+        action: "meeting_scheduled"
+      });
+    } catch (error) {
+      logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
+    }
+
     return { eventId };
   }
 
@@ -902,7 +1011,101 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to post email to chatter, but email was sent");
     }
 
+    // Progresión automática de etapa (New → Qualified)
+    try {
+      await this.autoProgressStage({
+        opportunityId: data.opportunityId,
+        action: "email_sent"
+      });
+    } catch (error) {
+      logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after email sending");
+    }
+
     return mailId;
+  }
+
+  /**
+   * Enviar propuesta comercial a una oportunidad
+   * Similar a email pero con progresión a Proposition
+   */
+  async sendProposal(data: {
+    opportunityId: number;
+    subject: string;
+    body: string;
+    emailTo?: string;
+  }): Promise<number> {
+    // Reutilizar la lógica de envío de email
+    const mailId = await this.sendEmailToOpportunity(data);
+
+    // Progresión automática a Proposition (New/Qualified → Proposition)
+    try {
+      const progressResult = await this.autoProgressStage({
+        opportunityId: data.opportunityId,
+        action: "proposal_sent"
+      });
+
+      // Si se movió la etapa, agregar nota adicional al chatter
+      if (progressResult.moved) {
+        await this.postMessageToChatter({
+          model: "crm.lead",
+          resId: data.opportunityId,
+          body: `
+            <p>📄 <strong>Propuesta comercial enviada</strong></p>
+            <p>La oportunidad ha avanzado automáticamente a etapa de Propuesta.</p>
+            <p><em>Sistema automatizado Leonobitech</em></p>
+          `,
+          messageType: "comment"
+        });
+      }
+    } catch (error) {
+      logger.warn({ error, opportunityId: data.opportunityId }, "Failed to handle proposal stage progression");
+    }
+
+    return mailId;
+  }
+
+  /**
+   * Marcar una oportunidad como ganada
+   */
+  async markAsWon(data: {
+    opportunityId: number;
+    finalAmount?: number;
+    closingNotes?: string;
+  }): Promise<boolean> {
+    // Mover a etapa Won
+    await this.updateDealStage(data.opportunityId, "Won");
+
+    // Actualizar monto final si se proporciona
+    if (data.finalAmount) {
+      await this.write("crm.lead", [data.opportunityId], {
+        expected_revenue: data.finalAmount
+      });
+    }
+
+    // Registrar en chatter
+    const chatterMessage = `
+      <div style="margin: 10px 0; padding: 15px; background-color: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+        <p style="margin: 0 0 10px 0;">
+          <strong style="font-size: 14px; color: #155724;">🎉 Oportunidad ganada</strong>
+        </p>
+        ${data.finalAmount ? `<p><strong>Monto final:</strong> $${data.finalAmount.toLocaleString()}</p>` : ""}
+        ${data.closingNotes ? `<p><strong>Notas de cierre:</strong> ${data.closingNotes}</p>` : ""}
+        <p style="margin: 10px 0 0 0; font-size: 12px; color: #155724; font-style: italic;">
+          Sistema automatizado Leonobitech
+        </p>
+      </div>
+    `;
+
+    await this.postMessageToChatter({
+      model: "crm.lead",
+      resId: data.opportunityId,
+      body: chatterMessage,
+      messageType: "comment"
+    });
+
+    logger.info({ opportunityId: data.opportunityId, finalAmount: data.finalAmount }, "Opportunity marked as won");
+
+    return true;
   }
 
   /**

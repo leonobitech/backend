@@ -366,7 +366,7 @@ function createMcpServer(userId: string): Server {
         },
         {
           name: "odoo_schedule_meeting",
-          description: "Schedule a meeting in Odoo calendar linked to an opportunity. This tool automatically checks for calendar conflicts and suggests alternative time slots if needed. The meeting will appear in Odoo's calendar view and automatically invite the opportunity's contact and assigned salesperson.",
+          description: "Schedule a meeting in Odoo calendar linked to an opportunity. This tool automatically checks for calendar conflicts and suggests alternative time slots if needed. The meeting will appear in Odoo's calendar view and automatically invite the opportunity's contact and assigned salesperson. Automatically moves opportunity from New to Qualified stage.",
           inputSchema: {
             type: "object",
             properties: {
@@ -400,6 +400,54 @@ function createMcpServer(userId: string): Server {
               }
             },
             required: ["opportunity_id", "title", "start_datetime"]
+          }
+        },
+        {
+          name: "odoo_send_proposal",
+          description: "Send a commercial proposal to an opportunity's contact. This automatically moves the opportunity from New/Qualified to Proposition stage, indicating formal proposal phase. The email is sent immediately and logged in the chatter.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              opportunity_id: {
+                type: "number",
+                description: "ID of the opportunity to send proposal to (required)"
+              },
+              subject: {
+                type: "string",
+                description: "Email subject line (required)"
+              },
+              body: {
+                type: "string",
+                description: "Proposal content (can be HTML or plain text) (required)"
+              },
+              email_to: {
+                type: "string",
+                description: "Override recipient email address (optional)"
+              }
+            },
+            required: ["opportunity_id", "subject", "body"]
+          }
+        },
+        {
+          name: "odoo_mark_as_won",
+          description: "Mark an opportunity as won and move it to Won stage. Optionally update the final deal amount and add closing notes.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              opportunity_id: {
+                type: "number",
+                description: "ID of the opportunity to mark as won (required)"
+              },
+              final_amount: {
+                type: "number",
+                description: "Final deal amount/revenue (optional)"
+              },
+              closing_notes: {
+                type: "string",
+                description: "Notes about the closing (optional)"
+              }
+            },
+            required: ["opportunity_id"]
           }
         }
       ]
@@ -861,6 +909,72 @@ function createMcpServer(userId: string): Server {
                     duration: durationHours || 1,
                     location: location || "Not specified",
                     note: "The meeting is now visible in Odoo's calendar and linked to the opportunity"
+                  },
+                  null,
+                  2
+                )
+              }
+            ]
+          };
+        }
+
+        case "odoo_send_proposal": {
+          const opportunityId = args.opportunity_id as number;
+          const subject = args.subject as string;
+          const body = args.body as string;
+          const emailTo = args.email_to as string | undefined;
+
+          const mailId = await odoo.sendProposal({
+            opportunityId,
+            subject,
+            body,
+            emailTo
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    mail_id: mailId,
+                    message: `Commercial proposal sent successfully to opportunity #${opportunityId}`,
+                    subject: subject,
+                    recipient: emailTo || "opportunity contact email",
+                    stage_progression: "Opportunity automatically moved to Proposition stage (if it was in New or Qualified)"
+                  },
+                  null,
+                  2
+                )
+              }
+            ]
+          };
+        }
+
+        case "odoo_mark_as_won": {
+          const opportunityId = args.opportunity_id as number;
+          const finalAmount = args.final_amount as number | undefined;
+          const closingNotes = args.closing_notes as string | undefined;
+
+          await odoo.markAsWon({
+            opportunityId,
+            finalAmount,
+            closingNotes
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    message: `🎉 Opportunity #${opportunityId} marked as WON!`,
+                    opportunity_id: opportunityId,
+                    final_amount: finalAmount || "Not specified",
+                    closing_notes: closingNotes || "None",
+                    note: "The opportunity has been moved to Won stage and logged in chatter"
                   },
                   null,
                   2
