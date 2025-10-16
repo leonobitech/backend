@@ -461,6 +461,72 @@ export class OdooClient {
       order: "sequence asc"
     });
   }
+
+  // ==================== EMAIL ====================
+
+  /**
+   * Enviar un correo electrónico relacionado con una oportunidad
+   */
+  async sendEmailToOpportunity(data: {
+    opportunityId: number;
+    subject: string;
+    body: string;
+    emailTo?: string; // Si no se proporciona, usa el email del partner de la oportunidad
+  }): Promise<number> {
+    // Obtener información de la oportunidad para extraer el email si no se proporciona
+    let recipientEmail = data.emailTo;
+
+    if (!recipientEmail) {
+      const opportunities = await this.read("crm.lead", [data.opportunityId], [
+        "email_from",
+        "partner_id"
+      ]);
+
+      if (opportunities.length === 0) {
+        throw new Error(`Opportunity #${data.opportunityId} not found`);
+      }
+
+      const opp = opportunities[0];
+      recipientEmail = opp.email_from || (opp.partner_id ? await this.getPartnerEmail(opp.partner_id[0]) : null);
+
+      if (!recipientEmail) {
+        throw new Error(
+          `No email found for opportunity #${data.opportunityId}. Please provide an email_to parameter.`
+        );
+      }
+    }
+
+    // Crear el mensaje de correo usando mail.message (que se adjunta a la oportunidad)
+    await this.execute_kw("crm.lead", "message_post", [[data.opportunityId]], {
+      body: data.body,
+      subject: data.subject,
+      message_type: "comment",
+      subtype_xmlid: "mail.mt_comment"
+    });
+
+    // También enviar el correo usando mail.mail para que realmente se envíe por SMTP
+    const mailId = await this.create("mail.mail", {
+      subject: data.subject,
+      body_html: data.body,
+      email_to: recipientEmail,
+      auto_delete: false,
+      model: "crm.lead",
+      res_id: data.opportunityId
+    });
+
+    // Enviar el correo inmediatamente
+    await this.execute_kw("mail.mail", "send", [[mailId]], {});
+
+    return mailId;
+  }
+
+  /**
+   * Obtener el email de un partner por ID
+   */
+  private async getPartnerEmail(partnerId: number): Promise<string | null> {
+    const partners = await this.read("res.partner", [partnerId], ["email"]);
+    return partners.length > 0 ? partners[0].email : null;
+  }
 }
 
 // Instancia singleton del cliente Odoo

@@ -333,6 +333,32 @@ function createMcpServer(userId: string): Server {
             },
             required: ["activity_type", "summary"]
           }
+        },
+        {
+          name: "odoo_send_email",
+          description: "Send an email to an opportunity's contact in Odoo CRM. The email will be logged in the opportunity's chatter and sent via SMTP.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              opportunity_id: {
+                type: "number",
+                description: "ID of the opportunity to send email to (required)"
+              },
+              subject: {
+                type: "string",
+                description: "Email subject line (required)"
+              },
+              body: {
+                type: "string",
+                description: "Email body content (can be HTML or plain text) (required)"
+              },
+              email_to: {
+                type: "string",
+                description: "Override recipient email address (optional - if not provided, uses the opportunity's contact email)"
+              }
+            },
+            required: ["opportunity_id", "subject", "body"]
+          }
         }
       ]
     };
@@ -659,6 +685,39 @@ function createMcpServer(userId: string): Server {
                     message: `Activity "${args.summary}" scheduled successfully`,
                     type: activityData.activityType,
                     deadline: activityData.dateDeadline || "No deadline set"
+                  },
+                  null,
+                  2
+                )
+              }
+            ]
+          };
+        }
+
+        case "odoo_send_email": {
+          const opportunityId = args.opportunity_id as number;
+          const subject = args.subject as string;
+          const body = args.body as string;
+          const emailTo = args.email_to as string | undefined;
+
+          const mailId = await odoo.sendEmailToOpportunity({
+            opportunityId,
+            subject,
+            body,
+            emailTo
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    mail_id: mailId,
+                    message: `Email sent successfully to opportunity #${opportunityId}`,
+                    subject: subject,
+                    recipient: emailTo || "opportunity contact email"
                   },
                   null,
                   2
