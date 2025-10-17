@@ -210,18 +210,36 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     }
   });
 
-  // 10) Consumo de transcripciones del worker → WS
-  let out_tx_for_stt = out_tx.clone();
+  // 10) Consumo de transcripciones del worker → DataChannel chat
+  let session_for_stt = session.clone();
   tokio::spawn(async move {
     while let Some(msg) = stt_rx.recv().await {
       match msg {
         SttMsg::Partial { text } => {
-          let _ = out_tx_for_stt.try_send(OutMsg::SttPartial { text });
+          let payload = serde_json::json!({
+            "kind": "stt.partial",
+            "text": text
+          });
+          if let Ok(json_str) = serde_json::to_string(&payload) {
+            if let Err(e) = session_for_stt.send_chat(json_str).await {
+              tracing::warn!("Error enviando stt.partial por chat DC: {e:#}");
+            } else {
+              tracing::debug!("[dc:chat] → stt.partial: '{}'", text);
+            }
+          }
         }
         SttMsg::Final { text } => {
-          // Final es importante: garantizamos entrega (y si el writer murió, salimos)
-          if out_tx_for_stt.send(OutMsg::SttFinal { text }).await.is_err() {
-            break;
+          let payload = serde_json::json!({
+            "kind": "stt.final",
+            "text": text
+          });
+          if let Ok(json_str) = serde_json::to_string(&payload) {
+            if let Err(e) = session_for_stt.send_chat(json_str).await {
+              tracing::warn!("Error enviando stt.final por chat DC: {e:#}");
+              break;
+            } else {
+              tracing::info!("[dc:chat] → stt.final: '{}'", text);
+            }
           }
         }
       }

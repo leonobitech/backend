@@ -11,14 +11,14 @@ use crate::core::audio::resample::Resampler48kTo16k;
 use crate::core::audio::stt::SttMsg;
 
 // ===== Ventanas / hop a 16 kHz (reactivo) =====
-const WINDOW_SAMPLES_16K: usize = 16_000; // ~2.0 s
-const HOP_SAMPLES_16K: usize = 1_600; // ~0.32 s
-const TAIL_AFTER_FINAL_16K: usize = 8_000; // keep ~0.5 s after a FINAL for continuity
-const MIN_SAMPLES_FOR_INFER_16K: usize = 8_000; // ~1.0 s (evita invocar con muy poco audio)
+const WINDOW_SAMPLES_16K: usize = 48_000; // 3.0s (mejor contexto para Whisper)
+const HOP_SAMPLES_16K: usize = 8_000; // 0.5s (menos llamadas, menos overhead)
+const TAIL_AFTER_FINAL_16K: usize = 16_000; // 1.0s después de FINAL para continuidad
+const MIN_SAMPLES_FOR_INFER_16K: usize = 16_000; // 1.0s mínimo para invocar Whisper
 
 // ===== VAD simple por RMS =====
-const SILENCE_THRESHOLD_RMS: f32 = 6e-4;
-const SILENCE_HOLDOFF_MS: u64 = 450;
+const SILENCE_THRESHOLD_RMS: f32 = 0.015; // Más alto para ignorar ruido de fondo
+const SILENCE_HOLDOFF_MS: u64 = 800; // Esperar más antes de marcar como final
 
 fn is_silence(samples: &[f32], thr: f32) -> bool {
   if samples.is_empty() {
@@ -65,8 +65,16 @@ pub async fn run_whisper_worker(
   params.set_print_realtime(false);
   params.set_print_timestamps(false);
   params.set_token_timestamps(false);
-  params.set_audio_ctx(384);
-  params.set_max_len(64); // or set_max_tokens(64)
+
+  // Contexto más largo para mejor calidad (default 1500)
+  params.set_audio_ctx(1500); // Más contexto histórico
+
+  // Permitir frases más largas
+  params.set_max_len(1); // Sin límite de longitud (0 o 1 = sin límite)
+
+  // Mejoras adicionales para calidad
+  params.set_suppress_blank(true); // Eliminar blanks
+  params.set_suppress_non_speech_tokens(true); // Eliminar tokens no-speech
 
   // ---------- Buffer PCM16 compartido ----------
   let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(WINDOW_SAMPLES_16K)));

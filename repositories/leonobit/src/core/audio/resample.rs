@@ -2,10 +2,11 @@
 use anyhow::{Context, Result};
 use rubato::{FftFixedInOut, Resampler};
 
-/// Resampler 48k → 16k (mono). Alimentar en múltiplos de 480 frames.
+/// Resampler 48k → 16k (mono). Mantiene un buffer interno para no perder muestras.
 pub struct Resampler48kTo16k {
   inner: FftFixedInOut<f32>,
   in_buf: Vec<Vec<f32>>,
+  pending: Vec<f32>, // buffer para muestras que no alcanzan el chunk de 480
 }
 
 impl Resampler48kTo16k {
@@ -16,6 +17,7 @@ impl Resampler48kTo16k {
     Ok(Self {
       inner,
       in_buf: vec![Vec::new()],
+      pending: Vec::new(),
     })
   }
 
@@ -23,16 +25,28 @@ impl Resampler48kTo16k {
     let chunk = 480;
     let mut out = Vec::new();
 
+    // Combinar pending + nuevas muestras
+    self.pending.extend_from_slice(pcm48_mono);
+
+    // Procesar todos los chunks completos de 480 muestras
     let mut i = 0;
-    while i + chunk <= pcm48_mono.len() {
+    while i + chunk <= self.pending.len() {
       self.in_buf[0].clear();
-      self.in_buf[0].extend_from_slice(&pcm48_mono[i..i + chunk]);
+      self.in_buf[0].extend_from_slice(&self.pending[i..i + chunk]);
 
       // process: devuelve Vec<Vec<f32>> por canal
       let buf_out = self.inner.process(&self.in_buf, None).context("resample")?;
       out.extend_from_slice(&buf_out[0]);
       i += chunk;
     }
+
+    // Mantener las muestras sobrantes para el próximo frame
+    if i < self.pending.len() {
+      self.pending.drain(..i);
+    } else {
+      self.pending.clear();
+    }
+
     Ok(out)
   }
 }

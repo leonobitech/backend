@@ -27,10 +27,12 @@ pub enum SigOut {
   WebrtcCandidate { candidate: RTCIceCandidateInit },
 }
 
+#[derive(Clone)]
 pub struct WebRtcSession {
   pc: RTCPeerConnection,
   closing: Arc<AtomicBool>,
   dcs: Arc<Mutex<Vec<Arc<RTCDataChannel>>>>,
+  chat_dc: Arc<Mutex<Option<Arc<RTCDataChannel>>>>, // Canal chat para STT
 }
 
 impl WebRtcSession {
@@ -57,6 +59,7 @@ impl WebRtcSession {
     let pc = api.new_peer_connection(cfg).await?;
     let closing = Arc::new(AtomicBool::new(false));
     let dcs: Arc<Mutex<Vec<Arc<RTCDataChannel>>>> = Arc::new(Mutex::new(Vec::new()));
+    let chat_dc: Arc<Mutex<Option<Arc<RTCDataChannel>>>> = Arc::new(Mutex::new(None));
 
     // 4) AUDIO sendrecv
     pc.add_transceiver_from_kind(
@@ -112,6 +115,7 @@ impl WebRtcSession {
     // ===== DataChannels creados por el cliente =====
     {
       let dcs_list = Arc::clone(&dcs);
+      let chat_dc_ref = Arc::clone(&chat_dc);
       pc.on_data_channel(Box::new(move |dc| {
         let label = dc.label().to_string();
         tracing::info!("on_data_channel: {label}");
@@ -122,6 +126,16 @@ impl WebRtcSession {
           let dcs_list = Arc::clone(&dcs_list);
           tokio::spawn(async move {
             dcs_list.lock().await.push(dc_clone);
+          });
+        }
+
+        // Si es el canal chat, guardamos referencia para STT
+        if label == "chat" {
+          let dc_clone = dc.clone();
+          let chat_dc_ref = Arc::clone(&chat_dc_ref);
+          tokio::spawn(async move {
+            *chat_dc_ref.lock().await = Some(dc_clone);
+            tracing::info!("✅ DataChannel 'chat' guardado para STT");
           });
         }
 
@@ -205,7 +219,7 @@ impl WebRtcSession {
       })
     }));
 
-    Ok(Self { pc, closing, dcs })
+    Ok(Self { pc, closing, dcs, chat_dc })
   }
 
   pub async fn apply_offer_and_create_answer(&self, offer_sdp: String) -> Result<String> {
@@ -248,6 +262,17 @@ impl WebRtcSession {
     );
     self.pc.add_ice_candidate(cand).await.context("add_ice_candidate")?;
     Ok(())
+  }
+
+  /// Envía un mensaje de texto por el DataChannel 'chat' (para STT)
+  pub async fn send_chat(&self, text: String) -> Result<()> {
+    let guard = self.chat_dc.lock().await;
+    if let Some(dc) = guard.as_ref() {
+      dc.send_text(text).await.context("send_text on chat dc")?;
+      Ok(())
+    } else {
+      anyhow::bail!("DataChannel 'chat' no está disponible")
+    }
   }
 
   pub async fn close(&self) {

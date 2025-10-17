@@ -21,11 +21,12 @@ pub async fn run() -> anyhow::Result<()> {
   // Arranca el agregador y obtené el sender
   let metrics_tx = metrics::rtt::start_metrics_aggregator();
 
-  // Precargar el modelo al iniicar el proceso
+  // Precargar el modelo al iniciar el proceso
   let mut ctx_params = WhisperContextParameters::default();
-  ctx_params.dtw_parameters.mode = DtwMode::ModelPreset {
-    model_preset: DtwModelPreset::BaseEn,
-  };
+  // DTW desactivado por ahora (None) para evitar conflictos con idioma español
+  // Si usas modelo multilenguaje, esto funciona mejor
+  ctx_params.dtw_parameters.mode = DtwMode::None;
+
   let whisper_ctx = Arc::new(
     WhisperContext::new_with_params(&settings.whisper_model_path, ctx_params)
       .context("cargar modelo whisper al inicio")?,
