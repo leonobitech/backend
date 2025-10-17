@@ -27,12 +27,23 @@ pub enum SigOut {
   WebrtcCandidate { candidate: RTCIceCandidateInit },
 }
 
-#[derive(Clone)]
 pub struct WebRtcSession {
   pc: Arc<RTCPeerConnection>,
   closing: Arc<AtomicBool>,
   dcs: Arc<Mutex<Vec<Arc<RTCDataChannel>>>>,
   chat_dc: Arc<Mutex<Option<Arc<RTCDataChannel>>>>, // Canal chat para STT
+}
+
+// Implementación manual de Clone (Arc::clone solo incrementa el contador de referencias)
+impl Clone for WebRtcSession {
+  fn clone(&self) -> Self {
+    Self {
+      pc: Arc::clone(&self.pc),
+      closing: Arc::clone(&self.closing),
+      dcs: Arc::clone(&self.dcs),
+      chat_dc: Arc::clone(&self.chat_dc),
+    }
+  }
 }
 
 impl WebRtcSession {
