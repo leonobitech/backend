@@ -15,9 +15,9 @@ use crate::core::audio::stt::SttMsg;
 // ===== Configuración de segmentación de frases =====
 const VAD_CHECK_INTERVAL_MS: u64 = 100; // Chequear VAD cada 100ms (rápido)
 const VAD_WINDOW_SAMPLES: usize = 1_600; // 100ms de audio a 16kHz para VAD
-const PHRASE_END_SILENCE_MS: u64 = 400; // 400ms de silencio = fin de frase
-const MIN_PHRASE_DURATION_MS: u64 = 400; // Mínimo 400ms para considerar frase válida
-const MAX_PHRASE_DURATION_S: f32 = 3.0; // Máximo 3s por frase (fuerza envío frecuente)
+const PHRASE_END_SILENCE_MS: u64 = 800; // 800ms de silencio = fin de frase
+const MIN_PHRASE_DURATION_MS: u64 = 500; // Mínimo 500ms para considerar frase válida
+const MAX_PHRASE_DURATION_S: f32 = 30.0; // Máximo 30s por frase (safety)
 
 // ===== VAD Espectral con FFT =====
 const SPEECH_FREQ_MIN: f32 = 300.0; // Hz - Frecuencia mínima de voz humana
@@ -29,25 +29,12 @@ const FORMANT_F2_MAX: f32 = 2200.0;
 const FORMANT_F3_MIN: f32 = 2200.0; // Hz - Tercer formante (consonantes)
 const FORMANT_F3_MAX: f32 = 3200.0;
 
-const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.60; // Bajo = voz, Alto = ruido blanco
-const FORMANT_ENERGY_THRESHOLD: f32 = 0.05; // Mínima energía en formantes
-const SPEECH_BAND_THRESHOLD: f32 = 0.20; // Mínimo 20% energía en banda de voz (más permisivo post-filtrado)
+const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.25; // Bajo = voz, Alto = ruido blanco (más estricto)
+const FORMANT_ENERGY_THRESHOLD: f32 = 0.14; // Mínima energía en formantes (voz real > 0.14)
+const SPEECH_BAND_THRESHOLD: f32 = 0.70; // Mínimo 70% energía en banda de voz (más estricto)
 
-// ===== Sistema Adaptativo de Filtrado Espectral =====
-const SPECTRAL_FLUX_THRESHOLD: f32 = 0.02; // Umbral de cambio espectral (más permisivo)
-const NOISE_LEARN_RATE: f32 = 0.98; // Velocidad de adaptación del perfil de ruido (muy lento)
-const OVERSUBTRACTION_FACTOR: f32 = 1.0; // Factor de sobre-sustracción (desactivado - conservador)
-const NOISE_FLOOR: f32 = 0.001; // Piso de ruido mínimo para evitar división por cero
-const MIN_GAIN: f32 = 0.3; // Ganancia mínima más alta para preservar voz (-10dB)
-
-// ===== Gateo temporal y contexto =====
-const VAD_RMS_THRESHOLD: f32 = 0.015; // Fallback de energía RMS
-const SPEECH_GATE_ON_WINDOWS: usize = 3; // 3 ventanas consecutivas (~300ms) para activar
-const SPEECH_GATE_OFF_WINDOWS: usize = 4; // 4 ventanas de silencio (~400ms) para desactivar
-const MAX_GATE_MEMORY_WINDOWS: usize = 12; // Tope para los contadores (~1.2s)
-const PHRASE_CONTEXT_MS: usize = 300; // Contexto a conservar tras finalizar (ms)
-const PHRASE_CONTEXT_SAMPLES: usize = PHRASE_CONTEXT_MS * 16_000 / 1000;
-const MIN_PHRASE_SAMPLES: usize = MIN_PHRASE_DURATION_MS as usize * 16_000 / 1000;
+// ===== Detector de varianza espectral =====
+const SPECTRAL_FLUX_THRESHOLD: f32 = 0.15; // Umbral de cambio espectral (voz tiene alta varianza)
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
@@ -61,125 +48,33 @@ enum SpeechState {
   },
 }
 
-/// Estimador adaptativo del perfil de ruido de fondo
-struct NoiseProfileEstimator {
-  /// Espectro promedio del ruido (se actualiza durante silencio)
-  noise_spectrum: Vec<f32>,
-  /// Contador de frames de silencio para estabilizar estimación
-  silence_frames: u32,
-}
-
-impl NoiseProfileEstimator {
-  fn new(spectrum_size: usize) -> Self {
-    Self {
-      noise_spectrum: vec![NOISE_FLOOR; spectrum_size],
-      silence_frames: 0,
-    }
-  }
-
-  /// Actualiza perfil de ruido durante silencio (suavizado exponencial)
-  fn update(&mut self, spectrum: &[f32], is_silence: bool) {
-    if !is_silence || spectrum.len() != self.noise_spectrum.len() {
-      return;
-    }
-
-    self.silence_frames += 1;
-
-    // Actualización con suavizado exponencial: noise = α*noise + (1-α)*spectrum
-    for (noise, &signal) in self.noise_spectrum.iter_mut().zip(spectrum.iter()) {
-      *noise = NOISE_LEARN_RATE * (*noise) + (1.0 - NOISE_LEARN_RATE) * signal;
-    }
-  }
-
-  /// Aplica Wiener Filter adaptativo para suprimir ruido
-  /// Retorna espectro limpio con ganancia modulada por SNR
-  fn apply_filter(&self, spectrum: &[f32]) -> Vec<f32> {
-    spectrum
-      .iter()
-      .zip(&self.noise_spectrum)
-      .map(|(&signal, &noise)| {
-        // Estimar SNR local (Signal-to-Noise Ratio)
-        let noise_est = noise.max(NOISE_FLOOR);
-        let snr = (signal / noise_est).max(0.0);
-
-        // Wiener Filter: ganancia = SNR / (1 + SNR)
-        // Alta SNR (voz fuerte) → ganancia ≈ 1.0 (sin atenuación)
-        // Baja SNR (ruido) → ganancia ≈ 0.0 (máxima atenuación)
-        let gain = (snr / (1.0 + snr)).max(MIN_GAIN);
-
-        // Aplicar ganancia con over-subtraction para ruido persistente
-        let clean_magnitude = if snr < OVERSUBTRACTION_FACTOR {
-          (signal - OVERSUBTRACTION_FACTOR * noise_est).max(0.0)
-        } else {
-          signal * gain
-        };
-
-        clean_magnitude
-      })
-      .collect()
-  }
-}
-
 /// Cache del espectro anterior para detectar varianza temporal
 struct SpectralMemory {
   prev_spectrum: Option<Vec<f32>>,
-  noise_estimator: NoiseProfileEstimator,
 }
 
-/// VAD Espectral Adaptativo: Detecta voz humana vs ruido usando FFT + filtrado dinámico
+/// VAD Espectral: Detecta voz humana vs ruido usando análisis de frecuencias (FFT) + varianza temporal
 fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
   if samples.is_empty() {
-    tracing::trace!("🔇 is_silence: samples vacíos");
     return true;
   }
 
-  tracing::trace!("🔍 is_silence: procesando {} samples", samples.len());
-
-  // 1. FFT para análisis espectral (espectro RAW sin filtrar)
-  let raw_spectrum = compute_magnitude_spectrum(samples);
+  // 1. FFT para análisis espectral
+  let spectrum = compute_magnitude_spectrum(samples);
   let sample_rate = 16000.0; // Hz
 
-  // Inicializar estimador de ruido si es necesario
-  if memory.noise_estimator.noise_spectrum.len() != raw_spectrum.len() {
-    memory.noise_estimator = NoiseProfileEstimator::new(raw_spectrum.len());
-  }
-
-  // 2. Decisión preliminar de silencio (basada en espectro RAW)
-  let preliminary_silence = {
-    let raw_speech_band = measure_band_energy(&raw_spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
-    let raw_flux = if let Some(ref prev) = memory.prev_spectrum {
-      if prev.len() == raw_spectrum.len() {
-        let diff_sum: f32 = raw_spectrum
-          .iter()
-          .zip(prev.iter())
-          .map(|(curr, prev)| (curr - prev).powi(2))
-          .sum();
-        let total_energy: f32 = raw_spectrum.iter().map(|x| x * x).sum::<f32>();
-        if total_energy > 0.0 {
-          (diff_sum / total_energy).sqrt()
-        } else {
-          0.0
-        }
-      } else {
-        0.0
-      }
-    } else {
-      0.0
-    };
-
-    // Silencio preliminar: bajo flujo Y baja energía
-    raw_flux < SPECTRAL_FLUX_THRESHOLD && raw_speech_band < SPEECH_BAND_THRESHOLD
-  };
-
-  // 3. Calcular flujo espectral ANTES de filtrar (sobre espectro RAW para detectar cambios reales)
+  // 2. Calcular flujo espectral (spectral flux): cambio entre ventanas consecutivas
   let spectral_flux = if let Some(ref prev) = memory.prev_spectrum {
-    if prev.len() == raw_spectrum.len() {
-      let diff_sum: f32 = raw_spectrum
+    if prev.len() == spectrum.len() {
+      // Calcular diferencia cuadrática normalizada
+      let diff_sum: f32 = spectrum
         .iter()
         .zip(prev.iter())
         .map(|(curr, prev)| (curr - prev).powi(2))
         .sum();
-      let total_energy: f32 = raw_spectrum.iter().map(|x| x * x).sum::<f32>();
+
+      let total_energy: f32 = spectrum.iter().map(|x| x * x).sum::<f32>();
+
       if total_energy > 0.0 {
         (diff_sum / total_energy).sqrt()
       } else {
@@ -189,55 +84,48 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
       0.0
     }
   } else {
-    0.0
+    0.0 // Primera ventana, no hay comparación
   };
 
-  // Guardar espectro RAW para próxima comparación de flux
-  memory.prev_spectrum = Some(raw_spectrum.clone());
+  // Guardar espectro actual para próxima comparación
+  memory.prev_spectrum = Some(spectrum.clone());
 
-  // 4. Actualizar perfil de ruido durante silencio
-  memory.noise_estimator.update(&raw_spectrum, preliminary_silence);
+  // 3. Medir energía en banda de voz humana (300-3400 Hz)
+  let speech_band_energy = measure_band_energy(&spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
 
-  // 5. Aplicar filtro Wiener adaptativo para limpiar el espectro
-  let clean_spectrum = memory.noise_estimator.apply_filter(&raw_spectrum);
+  // 4. Medir energía en formantes (picos característicos de voz)
+  let f1_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F1_MIN, FORMANT_F1_MAX);
+  let f2_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F2_MIN, FORMANT_F2_MAX);
+  let f3_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F3_MIN, FORMANT_F3_MAX);
 
-  // 6. Análisis del espectro LIMPIO
-  let speech_band_energy = measure_band_energy(&clean_spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
-  let f1_energy = measure_band_energy(&clean_spectrum, sample_rate, FORMANT_F1_MIN, FORMANT_F1_MAX);
-  let f2_energy = measure_band_energy(&clean_spectrum, sample_rate, FORMANT_F2_MIN, FORMANT_F2_MAX);
-  let f3_energy = measure_band_energy(&clean_spectrum, sample_rate, FORMANT_F3_MIN, FORMANT_F3_MAX);
   let formant_energy = (f1_energy + f2_energy + f3_energy) / 3.0;
-  let flatness = spectral_flatness(&clean_spectrum);
 
-  // 7. Decisión final sobre espectro LIMPIO
+  // 5. Calcular spectral flatness (detecta ruido blanco)
+  let flatness = spectral_flatness(&spectrum);
+
+  // 6. Decisión: ¿Es voz humana?
+  // NUEVA LÓGICA: Requiere varianza espectral (cambio temporal) + criterios estáticos
   let has_spectral_change = spectral_flux > SPECTRAL_FLUX_THRESHOLD;
   let has_speech_band = speech_band_energy > SPEECH_BAND_THRESHOLD;
   let has_formants = formant_energy > FORMANT_ENERGY_THRESHOLD;
   let not_white_noise = flatness < SPECTRAL_FLATNESS_THRESHOLD;
 
+  // Voz = DEBE tener cambio espectral + criterios estáticos
   let is_speech = has_spectral_change && has_speech_band && (has_formants || not_white_noise);
 
   if is_speech {
     tracing::debug!(
-      "🎤 VOZ [limpia]: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}, noise_frames={}",
-      spectral_flux,
-      speech_band_energy,
-      formant_energy,
-      flatness,
-      memory.noise_estimator.silence_frames
+      "🎤 VOZ: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
+      spectral_flux, speech_band_energy, formant_energy, flatness
     );
   } else {
-    tracing::debug!(
-      "🔇 RUIDO: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}, noise_frames={}",
-      spectral_flux,
-      speech_band_energy,
-      formant_energy,
-      flatness,
-      memory.noise_estimator.silence_frames
+    tracing::trace!(
+      "🔇 RUIDO: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
+      spectral_flux, speech_band_energy, formant_energy, flatness
     );
   }
 
-  !is_speech
+  !is_speech // Retornar true si NO es voz (es silencio/ruido)
 }
 
 /// Calcula el espectro de magnitudes usando FFT
@@ -358,21 +246,6 @@ fn ms(d: Duration) -> f32 {
   (d.as_secs_f64() * 1000.0) as f32
 }
 
-fn root_mean_square(samples: &[f32]) -> f32 {
-  if samples.is_empty() {
-    return 0.0;
-  }
-  let sum_sq: f32 = samples.iter().map(|s| s * s).sum();
-  (sum_sq / samples.len() as f32).sqrt()
-}
-
-fn retain_trailing_context(buffer: &mut Vec<f32>) {
-  if buffer.len() > PHRASE_CONTEXT_SAMPLES {
-    let keep_from = buffer.len() - PHRASE_CONTEXT_SAMPLES;
-    buffer.drain(..keep_from);
-  }
-}
-
 /// Procesa una frase completa con Whisper (invocación única, no streaming)
 async fn process_complete_phrase(
   state: &mut whisper_rs::WhisperState,
@@ -381,7 +254,6 @@ async fn process_complete_phrase(
   stt_tx: &UnboundedSender<SttMsg>,
   first_audio_at: &Arc<Mutex<Option<Instant>>>,
   first_phrase_logged: &mut bool,
-  is_final: bool, // true = Final (último segmento), false = Partial (segmento intermedio)
 ) {
   let phrase_secs = phrase_audio.len() as f32 / 16_000.0;
 
@@ -434,14 +306,9 @@ async fn process_complete_phrase(
     *first_phrase_logged = true;
   }
 
-  // Enviar como Partial o Final según el contexto
-  if is_final {
-    tracing::info!("📝 Transcripción FINAL: '{}'", transcription);
-    let _ = stt_tx.send(SttMsg::Final { text: transcription });
-  } else {
-    tracing::info!("📝 Transcripción PARCIAL: '{}'", transcription);
-    let _ = stt_tx.send(SttMsg::Partial { text: transcription });
-  }
+  // Enviar como FINAL (frase completa procesada de una sola vez)
+  tracing::info!("📝 Transcripción: '{}'", transcription);
+  let _ = stt_tx.send(SttMsg::Final { text: transcription });
 }
 
 /// Task A (ingest): RTP Opus → 48k → 16k → buffer compartido
@@ -575,12 +442,7 @@ pub async fn run_whisper_worker(
   // ===== Task B: Segmentación y procesamiento de frases =====
   let mut speech_state = SpeechState::Silence;
   let mut first_phrase_logged = false;
-  let mut spectral_memory = SpectralMemory {
-    prev_spectrum: None,
-    noise_estimator: NoiseProfileEstimator::new(800), // 1600 samples / 2 = 800 bins FFT
-  };
-  let mut consecutive_speech_windows: usize = 0;
-  let mut consecutive_silence_windows: usize = 0;
+  let mut spectral_memory = SpectralMemory { prev_spectrum: None };
 
   // VAD check interval (100ms)
   let mut vad_tick = tokio::time::interval(Duration::from_millis(VAD_CHECK_INTERVAL_MS));
@@ -609,48 +471,13 @@ pub async fn run_whisper_worker(
             };
 
             // 2. Detectar si hay voz en esta ventana
-            let raw_has_speech = !is_silence(&vad_window, &mut spectral_memory);
-            let rms = root_mean_square(&vad_window);
-            let mut speech_candidate = raw_has_speech;
-            let mut rms_fallback = false;
-
-            if !speech_candidate && rms >= VAD_RMS_THRESHOLD {
-                speech_candidate = true;
-                rms_fallback = true;
-            }
-
-            if speech_candidate {
-                consecutive_speech_windows = (consecutive_speech_windows + 1).min(MAX_GATE_MEMORY_WINDOWS);
-                consecutive_silence_windows = 0;
-            } else {
-                consecutive_silence_windows = (consecutive_silence_windows + 1).min(MAX_GATE_MEMORY_WINDOWS);
-                consecutive_speech_windows = 0;
-            }
-
-            let speech_gate_ready = consecutive_speech_windows >= SPEECH_GATE_ON_WINDOWS;
-            let silence_gate_ready = consecutive_silence_windows >= SPEECH_GATE_OFF_WINDOWS;
-
-            if rms_fallback {
-                tracing::trace!(
-                    "🎚️ RMS fallback activado: rms={:.4} >= {:.4}",
-                    rms,
-                    VAD_RMS_THRESHOLD
-                );
-            }
-
-            tracing::trace!(
-                "📈 VAD window → raw_speech={} speech_windows={} silence_windows={} rms={:.4}",
-                raw_has_speech,
-                consecutive_speech_windows,
-                consecutive_silence_windows,
-                rms
-            );
+            let has_speech = !is_silence(&vad_window, &mut spectral_memory);
 
             // 3. Máquina de estados
             match speech_state {
                 // ===== ESTADO: SILENCIO =====
                 SpeechState::Silence => {
-                    if speech_gate_ready {
+                    if has_speech {
                         // Inicio de nueva frase detectado
                         let now = Instant::now();
                         tracing::info!("🎤 Inicio de frase detectado");
@@ -664,7 +491,7 @@ pub async fn run_whisper_worker(
 
                 // ===== ESTADO: ACUMULANDO VOZ =====
                 SpeechState::AccumulatingSpeech { phrase_start, mut last_speech_time } => {
-                    if speech_candidate {
+                    if has_speech {
                         // Actualizar tiempo de última voz
                         last_speech_time = Instant::now();
                         speech_state = SpeechState::AccumulatingSpeech {
@@ -686,7 +513,7 @@ pub async fn run_whisper_worker(
                             g.clone()
                         };
 
-                        // Procesar frase ahora (PARTIAL - segmento intermedio por exceder 30s)
+                        // Procesar frase ahora
                         if phrase_audio.len() as f32 / 16_000.0 >= MIN_PHRASE_DURATION_MS as f32 / 1000.0 {
                             process_complete_phrase(
                                 &mut state,
@@ -695,21 +522,20 @@ pub async fn run_whisper_worker(
                                 &stt_tx,
                                 &first_audio_at,
                                 &mut first_phrase_logged,
-                                false, // is_final = false (segmento intermedio)
                             ).await;
                         }
 
                         // Limpiar buffer y volver a silencio
                         {
                             let mut g = pcm_buf.lock().await;
-                            retain_trailing_context(&mut g);
+                            g.clear();
                         }
                         speech_state = SpeechState::Silence;
                         continue;
                     }
 
                     // Condición: Fin de frase (silencio > 800ms)
-                    if silence_gate_ready && silence_duration.as_millis() >= PHRASE_END_SILENCE_MS as u128 {
+                    if silence_duration.as_millis() >= PHRASE_END_SILENCE_MS as u128 {
                         // Capturar buffer acumulado
                         let phrase_audio = {
                             let g = pcm_buf.lock().await;
@@ -724,7 +550,7 @@ pub async fn run_whisper_worker(
                             silence_duration.as_millis()
                         );
 
-                        // Procesar solo si cumple duración mínima (PARTIAL - segmento por pausa de silencio)
+                        // Procesar solo si cumple duración mínima
                         if phrase_duration.as_millis() >= MIN_PHRASE_DURATION_MS as u128 {
                             process_complete_phrase(
                                 &mut state,
@@ -733,7 +559,6 @@ pub async fn run_whisper_worker(
                                 &stt_tx,
                                 &first_audio_at,
                                 &mut first_phrase_logged,
-                                false, // is_final = false (segmento intermedio)
                             ).await;
                         } else {
                             tracing::debug!("Frase muy corta ({:.0}ms) - ignorando", phrase_duration.as_millis());
@@ -742,7 +567,7 @@ pub async fn run_whisper_worker(
                         // Limpiar y volver a silencio
                         {
                             let mut g = pcm_buf.lock().await;
-                            retain_trailing_context(&mut g);
+                            g.clear();
                         }
                         speech_state = SpeechState::Silence;
                     }
@@ -750,50 +575,6 @@ pub async fn run_whisper_worker(
             }
         }
     }
-  }
-
-  let pending_audio = {
-    let mut buf = pcm_buf.lock().await;
-    if buf.is_empty() {
-      None
-    } else {
-      let samples = buf.len();
-      let phrase_duration = samples as f32 / 16_000.0;
-      let dur_ms = ms(Duration::from_secs_f64(phrase_duration as f64));
-
-      if samples >= MIN_PHRASE_SAMPLES {
-        tracing::info!(
-          "⏹️ Flush final: procesando frase pendiente al cierre ({:.2}s, ~{:.0}ms)",
-          phrase_duration,
-          dur_ms
-        );
-        let audio = buf.clone();
-        buf.clear();
-        Some(audio)
-      } else {
-        tracing::debug!(
-          "Flush final: descartando {:.0}ms pendientes (< {}ms mínimos)",
-          dur_ms,
-          MIN_PHRASE_DURATION_MS
-        );
-        buf.clear();
-        None
-      }
-    }
-  };
-
-  // FINAL - Último segmento al desconectar
-  if let Some(audio) = pending_audio {
-    process_complete_phrase(
-      &mut state,
-      &params,
-      &audio,
-      &stt_tx,
-      &first_audio_at,
-      &mut first_phrase_logged,
-      true, // is_final = true (último segmento)
-    )
-    .await;
   }
 
   Ok(())
