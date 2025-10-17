@@ -67,7 +67,12 @@ enum OutMsg {
     message: String,
   },
 
-  // NOTA: STT ahora se envía por DataChannel chat, no por WebSocket
+  // STT: Fallback cuando DataChannel no está disponible
+  #[serde(rename = "stt.partial")]
+  SttPartial { text: String },
+
+  #[serde(rename = "stt.final")]
+  SttFinal { text: String },
 }
 
 fn origin_allowed(allowed: &[String], origin: Option<&str>) -> bool {
@@ -113,6 +118,8 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
           OutMsg::Pong { .. } => debug!("[ws] → pong ({} bytes JSON)", size),
           OutMsg::Ready => debug!("[ws] → ready ({} bytes JSON)", size),
           OutMsg::Error { message } => warn!("[ws] → error: {}", message),
+          OutMsg::SttPartial { text } => info!("[ws] → stt.partial: '{}'", text),
+          OutMsg::SttFinal { text } => info!("[ws] → stt.final: '{}'", text),
         }
       }
     }
@@ -200,8 +207,9 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     }
   });
 
-  // 10) Consumo de transcripciones del worker → DataChannel chat
+  // 10) Consumo de transcripciones del worker → DataChannel chat (con fallback a WebSocket)
   let session_for_stt = session.clone();
+  let out_tx_for_stt = out_tx.clone();
   tokio::spawn(async move {
     while let Some(msg) = stt_rx.recv().await {
       match msg {
@@ -212,8 +220,11 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
             "text": text
           });
           if let Ok(json_str) = serde_json::to_string(&payload) {
+            // Intentar enviar por DataChannel primero
             if let Err(e) = session_for_stt.send_chat(json_str).await {
-              tracing::warn!("Error enviando stt.partial por chat DC: {e:#}");
+              tracing::warn!("⚠️ DataChannel no disponible para stt.partial, usando fallback WS: {e:#}");
+              // Fallback: enviar por WebSocket
+              let _ = out_tx_for_stt.send(OutMsg::SttPartial { text: text.clone() }).await;
             } else {
               let dt = t0.elapsed();
               tracing::info!("⚡ [dc:chat] → stt.partial ({:.2}ms): '{}'", dt.as_secs_f64() * 1000.0, text);
@@ -227,9 +238,14 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
             "text": text
           });
           if let Ok(json_str) = serde_json::to_string(&payload) {
+            // Intentar enviar por DataChannel primero
             if let Err(e) = session_for_stt.send_chat(json_str).await {
-              tracing::warn!("Error enviando stt.final por chat DC: {e:#}");
-              break;
+              tracing::warn!("⚠️ DataChannel no disponible para stt.final, usando fallback WS: {e:#}");
+              // Fallback: enviar por WebSocket
+              if out_tx_for_stt.send(OutMsg::SttFinal { text: text.clone() }).await.is_ok() {
+                tracing::info!("✅ [ws] → stt.final (fallback): '{}'", text);
+              }
+              // NO hacer break - continuar procesando mensajes
             } else {
               let dt = t0.elapsed();
               tracing::info!("✅ [dc:chat] → stt.final ({:.2}ms): '{}'", dt.as_secs_f64() * 1000.0, text);
