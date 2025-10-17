@@ -15,9 +15,9 @@ use crate::core::audio::stt::SttMsg;
 // ===== Configuración de segmentación de frases =====
 const VAD_CHECK_INTERVAL_MS: u64 = 100; // Chequear VAD cada 100ms (rápido)
 const VAD_WINDOW_SAMPLES: usize = 1_600; // 100ms de audio a 16kHz para VAD
-const PHRASE_END_SILENCE_MS: u64 = 800; // 800ms de silencio = fin de frase
-const MIN_PHRASE_DURATION_MS: u64 = 500; // Mínimo 500ms para considerar frase válida
-const MAX_PHRASE_DURATION_S: f32 = 30.0; // Máximo 30s por frase (safety)
+const PHRASE_END_SILENCE_MS: u64 = 400; // 400ms de silencio = fin de frase (reducido para respuesta más rápida)
+const MIN_PHRASE_DURATION_MS: u64 = 400; // Mínimo 400ms para considerar frase válida
+const MAX_PHRASE_DURATION_S: f32 = 5.0; // Máximo 5s por frase (envía parciales frecuentemente)
 
 // ===== VAD Espectral con FFT =====
 const SPEECH_FREQ_MIN: f32 = 300.0; // Hz - Frecuencia mínima de voz humana
