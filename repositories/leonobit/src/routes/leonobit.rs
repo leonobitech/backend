@@ -45,6 +45,7 @@ enum InMsg {
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
+#[allow(dead_code)] // Los variants STT se usan en tokio::spawn, rust-analyzer no los detecta
 enum OutMsg {
   Ready,
   Pong {
