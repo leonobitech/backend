@@ -29,9 +29,9 @@ const FORMANT_F2_MAX: f32 = 2200.0;
 const FORMANT_F3_MIN: f32 = 2200.0; // Hz - Tercer formante (consonantes)
 const FORMANT_F3_MAX: f32 = 3200.0;
 
-const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.5; // Bajo = voz, Alto = ruido blanco (más permisivo)
-const FORMANT_ENERGY_THRESHOLD: f32 = 0.15; // Mínima energía en formantes (más permisivo)
-const SPEECH_BAND_THRESHOLD: f32 = 0.15; // Mínimo % energía en banda de voz (más permisivo)
+const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.3; // Bajo = voz, Alto = ruido blanco
+const FORMANT_ENERGY_THRESHOLD: f32 = 0.13; // Mínima energía en formantes (voz real > 0.13)
+const SPEECH_BAND_THRESHOLD: f32 = 0.60; // Mínimo 60% energía en banda de voz (voz real > 0.60)
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
