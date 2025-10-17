@@ -68,18 +68,20 @@ fn is_silence(samples: &[f32]) -> bool {
   // 5. Calcular spectral flatness (detecta ruido blanco)
   let flatness = spectral_flatness(&spectrum);
 
-  // 6. Decisión: ¿Es voz humana? (lógica más permisiva)
+  // 6. Decisión: ¿Es voz humana?
+  // Lógica: speech_band es OBLIGATORIO (más confiable)
+  // Además debe cumplir AL MENOS 1 de los otros 2 criterios
   let has_speech_band = speech_band_energy > SPEECH_BAND_THRESHOLD;
   let has_formants = formant_energy > FORMANT_ENERGY_THRESHOLD;
   let not_white_noise = flatness < SPECTRAL_FLATNESS_THRESHOLD;
 
-  // Considerar voz si cumple AL MENOS 2 de 3 criterios (más permisivo que AND estricto)
+  // Criterio obligatorio + al menos 1 confirmación adicional
+  let is_speech = has_speech_band && (has_formants || not_white_noise);
+
   let criteria_met = [has_speech_band, has_formants, not_white_noise]
     .iter()
     .filter(|&&x| x)
     .count();
-
-  let is_speech = criteria_met >= 2;
 
   if is_speech {
     tracing::debug!(
