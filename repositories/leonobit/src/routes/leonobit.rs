@@ -204,32 +204,64 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     while let Some(msg) = stt_rx.recv().await {
       match msg {
         SttMsg::Partial { text } => {
-          let t0 = std::time::Instant::now();
-          let payload = serde_json::json!({
-            "kind": "stt.partial",
-            "text": text
-          });
-          if let Ok(json_str) = serde_json::to_string(&payload) {
-            if let Err(e) = session_for_stt.send_chat(json_str).await {
-              tracing::warn!("⚠️ No se pudo enviar stt.partial por DataChannel: {e:#}");
-            } else {
-              let dt = t0.elapsed();
-              tracing::info!("⚡ [dc:chat] → stt.partial ({:.2}ms): '{}'", dt.as_secs_f64() * 1000.0, text);
+          // Esperar hasta 5s a que DataChannel esté disponible
+          let mut retry_count = 0;
+          let max_retries = 50; // 50 * 100ms = 5s
+          loop {
+            let t0 = std::time::Instant::now();
+            let payload = serde_json::json!({
+              "kind": "stt.partial",
+              "text": text
+            });
+            if let Ok(json_str) = serde_json::to_string(&payload) {
+              match session_for_stt.send_chat(json_str).await {
+                Ok(_) => {
+                  let dt = t0.elapsed();
+                  tracing::info!("⚡ [dc:chat] → stt.partial ({:.2}ms, retries={}): '{}'", dt.as_secs_f64() * 1000.0, retry_count, text);
+                  break;
+                }
+                Err(e) => {
+                  if retry_count < max_retries {
+                    retry_count += 1;
+                    tracing::debug!("⏳ DataChannel no disponible aún (retry {}/{}), esperando...", retry_count, max_retries);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                  } else {
+                    tracing::warn!("⚠️ No se pudo enviar stt.partial por DataChannel después de {} intentos: {e:#}", max_retries);
+                    break;
+                  }
+                }
+              }
             }
           }
         }
         SttMsg::Final { text } => {
-          let t0 = std::time::Instant::now();
-          let payload = serde_json::json!({
-            "kind": "stt.final",
-            "text": text
-          });
-          if let Ok(json_str) = serde_json::to_string(&payload) {
-            if let Err(e) = session_for_stt.send_chat(json_str).await {
-              tracing::warn!("⚠️ No se pudo enviar stt.final por DataChannel: {e:#}");
-            } else {
-              let dt = t0.elapsed();
-              tracing::info!("✅ [dc:chat] → stt.final ({:.2}ms): '{}'", dt.as_secs_f64() * 1000.0, text);
+          // Para Final, también intentar con reintentos
+          let mut retry_count = 0;
+          let max_retries = 50;
+          loop {
+            let t0 = std::time::Instant::now();
+            let payload = serde_json::json!({
+              "kind": "stt.final",
+              "text": text
+            });
+            if let Ok(json_str) = serde_json::to_string(&payload) {
+              match session_for_stt.send_chat(json_str).await {
+                Ok(_) => {
+                  let dt = t0.elapsed();
+                  tracing::info!("✅ [dc:chat] → stt.final ({:.2}ms, retries={}): '{}'", dt.as_secs_f64() * 1000.0, retry_count, text);
+                  break;
+                }
+                Err(e) => {
+                  if retry_count < max_retries {
+                    retry_count += 1;
+                    tracing::debug!("⏳ DataChannel no disponible aún (retry {}/{}), esperando...", retry_count, max_retries);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                  } else {
+                    tracing::warn!("⚠️ No se pudo enviar stt.final por DataChannel después de {} intentos: {e:#}", max_retries);
+                    break;
+                  }
+                }
+              }
             }
           }
         }
