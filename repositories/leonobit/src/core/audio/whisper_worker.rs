@@ -33,8 +33,12 @@ const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.25; // Bajo = voz, Alto = ruido blanc
 const FORMANT_ENERGY_THRESHOLD: f32 = 0.14; // Mínima energía en formantes (voz real > 0.14)
 const SPEECH_BAND_THRESHOLD: f32 = 0.70; // Mínimo 70% energía en banda de voz (más estricto)
 
-// ===== Detector de varianza espectral =====
+// ===== Sistema Adaptativo de Filtrado Espectral =====
 const SPECTRAL_FLUX_THRESHOLD: f32 = 0.15; // Umbral de cambio espectral (voz tiene alta varianza)
+const NOISE_LEARN_RATE: f32 = 0.95; // Velocidad de adaptación del perfil de ruido (0.95 = lento y estable)
+const OVERSUBTRACTION_FACTOR: f32 = 2.0; // Factor de sobre-sustracción espectral
+const NOISE_FLOOR: f32 = 0.001; // Piso de ruido mínimo para evitar división por cero
+const MIN_GAIN: f32 = 0.05; // Ganancia mínima (evita silencio total = -26dB)
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
@@ -48,33 +52,131 @@ enum SpeechState {
   },
 }
 
+/// Estimador adaptativo del perfil de ruido de fondo
+struct NoiseProfileEstimator {
+  /// Espectro promedio del ruido (se actualiza durante silencio)
+  noise_spectrum: Vec<f32>,
+  /// Contador de frames de silencio para estabilizar estimación
+  silence_frames: u32,
+}
+
+impl NoiseProfileEstimator {
+  fn new(spectrum_size: usize) -> Self {
+    Self {
+      noise_spectrum: vec![NOISE_FLOOR; spectrum_size],
+      silence_frames: 0,
+    }
+  }
+
+  /// Actualiza perfil de ruido durante silencio (suavizado exponencial)
+  fn update(&mut self, spectrum: &[f32], is_silence: bool) {
+    if !is_silence || spectrum.len() != self.noise_spectrum.len() {
+      return;
+    }
+
+    self.silence_frames += 1;
+
+    // Actualización con suavizado exponencial: noise = α*noise + (1-α)*spectrum
+    for (noise, &signal) in self.noise_spectrum.iter_mut().zip(spectrum.iter()) {
+      *noise = NOISE_LEARN_RATE * (*noise) + (1.0 - NOISE_LEARN_RATE) * signal;
+    }
+  }
+
+  /// Aplica Wiener Filter adaptativo para suprimir ruido
+  /// Retorna espectro limpio con ganancia modulada por SNR
+  fn apply_filter(&self, spectrum: &[f32]) -> Vec<f32> {
+    spectrum
+      .iter()
+      .zip(&self.noise_spectrum)
+      .map(|(&signal, &noise)| {
+        // Estimar SNR local (Signal-to-Noise Ratio)
+        let noise_est = noise.max(NOISE_FLOOR);
+        let snr = (signal / noise_est).max(0.0);
+
+        // Wiener Filter: ganancia = SNR / (1 + SNR)
+        // Alta SNR (voz fuerte) → ganancia ≈ 1.0 (sin atenuación)
+        // Baja SNR (ruido) → ganancia ≈ 0.0 (máxima atenuación)
+        let gain = (snr / (1.0 + snr)).max(MIN_GAIN);
+
+        // Aplicar ganancia con over-subtraction para ruido persistente
+        let clean_magnitude = if snr < OVERSUBTRACTION_FACTOR {
+          (signal - OVERSUBTRACTION_FACTOR * noise_est).max(0.0)
+        } else {
+          signal * gain
+        };
+
+        clean_magnitude
+      })
+      .collect()
+  }
+}
+
 /// Cache del espectro anterior para detectar varianza temporal
 struct SpectralMemory {
   prev_spectrum: Option<Vec<f32>>,
+  noise_estimator: NoiseProfileEstimator,
 }
 
-/// VAD Espectral: Detecta voz humana vs ruido usando análisis de frecuencias (FFT) + varianza temporal
+/// VAD Espectral Adaptativo: Detecta voz humana vs ruido usando FFT + filtrado dinámico
 fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
   if samples.is_empty() {
     return true;
   }
 
-  // 1. FFT para análisis espectral
-  let spectrum = compute_magnitude_spectrum(samples);
+  // 1. FFT para análisis espectral (espectro RAW sin filtrar)
+  let raw_spectrum = compute_magnitude_spectrum(samples);
   let sample_rate = 16000.0; // Hz
 
-  // 2. Calcular flujo espectral (spectral flux): cambio entre ventanas consecutivas
+  // Inicializar estimador de ruido si es necesario
+  if memory.noise_estimator.noise_spectrum.len() != raw_spectrum.len() {
+    memory.noise_estimator = NoiseProfileEstimator::new(raw_spectrum.len());
+  }
+
+  // 2. Decisión preliminar de silencio (basada en espectro RAW)
+  let preliminary_silence = {
+    let raw_speech_band = measure_band_energy(&raw_spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
+    let raw_flux = if let Some(ref prev) = memory.prev_spectrum {
+      if prev.len() == raw_spectrum.len() {
+        let diff_sum: f32 = raw_spectrum
+          .iter()
+          .zip(prev.iter())
+          .map(|(curr, prev)| (curr - prev).powi(2))
+          .sum();
+        let total_energy: f32 = raw_spectrum.iter().map(|x| x * x).sum::<f32>();
+        if total_energy > 0.0 {
+          (diff_sum / total_energy).sqrt()
+        } else {
+          0.0
+        }
+      } else {
+        0.0
+      }
+    } else {
+      0.0
+    };
+
+    // Silencio preliminar: bajo flujo Y baja energía
+    raw_flux < SPECTRAL_FLUX_THRESHOLD && raw_speech_band < SPEECH_BAND_THRESHOLD
+  };
+
+  // 3. Actualizar perfil de ruido durante silencio
+  memory.noise_estimator.update(&raw_spectrum, preliminary_silence);
+
+  // 4. Aplicar filtro Wiener adaptativo para limpiar el espectro
+  let clean_spectrum = memory.noise_estimator.apply_filter(&raw_spectrum);
+
+  // Guardar espectro limpio para próxima comparación de flux
+  memory.prev_spectrum = Some(clean_spectrum.clone());
+
+  // 5. Calcular flujo espectral sobre espectro LIMPIO
   let spectral_flux = if let Some(ref prev) = memory.prev_spectrum {
-    if prev.len() == spectrum.len() {
-      // Calcular diferencia cuadrática normalizada
-      let diff_sum: f32 = spectrum
+    if prev.len() == clean_spectrum.len() {
+      let diff_sum: f32 = clean_spectrum
         .iter()
         .zip(prev.iter())
         .map(|(curr, prev)| (curr - prev).powi(2))
         .sum();
-
-      let total_energy: f32 = spectrum.iter().map(|x| x * x).sum::<f32>();
-
+      let total_energy: f32 = clean_spectrum.iter().map(|x| x * x).sum::<f32>();
       if total_energy > 0.0 {
         (diff_sum / total_energy).sqrt()
       } else {
@@ -84,48 +186,38 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
       0.0
     }
   } else {
-    0.0 // Primera ventana, no hay comparación
+    0.0
   };
 
-  // Guardar espectro actual para próxima comparación
-  memory.prev_spectrum = Some(spectrum.clone());
-
-  // 3. Medir energía en banda de voz humana (300-3400 Hz)
-  let speech_band_energy = measure_band_energy(&spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
-
-  // 4. Medir energía en formantes (picos característicos de voz)
-  let f1_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F1_MIN, FORMANT_F1_MAX);
-  let f2_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F2_MIN, FORMANT_F2_MAX);
-  let f3_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F3_MIN, FORMANT_F3_MAX);
-
+  // 6. Análisis del espectro LIMPIO
+  let speech_band_energy = measure_band_energy(&clean_spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
+  let f1_energy = measure_band_energy(&clean_spectrum, sample_rate, FORMANT_F1_MIN, FORMANT_F1_MAX);
+  let f2_energy = measure_band_energy(&clean_spectrum, sample_rate, FORMANT_F2_MIN, FORMANT_F2_MAX);
+  let f3_energy = measure_band_energy(&clean_spectrum, sample_rate, FORMANT_F3_MIN, FORMANT_F3_MAX);
   let formant_energy = (f1_energy + f2_energy + f3_energy) / 3.0;
+  let flatness = spectral_flatness(&clean_spectrum);
 
-  // 5. Calcular spectral flatness (detecta ruido blanco)
-  let flatness = spectral_flatness(&spectrum);
-
-  // 6. Decisión: ¿Es voz humana?
-  // NUEVA LÓGICA: Requiere varianza espectral (cambio temporal) + criterios estáticos
+  // 7. Decisión final sobre espectro LIMPIO
   let has_spectral_change = spectral_flux > SPECTRAL_FLUX_THRESHOLD;
   let has_speech_band = speech_band_energy > SPEECH_BAND_THRESHOLD;
   let has_formants = formant_energy > FORMANT_ENERGY_THRESHOLD;
   let not_white_noise = flatness < SPECTRAL_FLATNESS_THRESHOLD;
 
-  // Voz = DEBE tener cambio espectral + criterios estáticos
   let is_speech = has_spectral_change && has_speech_band && (has_formants || not_white_noise);
 
   if is_speech {
     tracing::debug!(
-      "🎤 VOZ: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      spectral_flux, speech_band_energy, formant_energy, flatness
+      "🎤 VOZ [limpia]: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}, noise_frames={}",
+      spectral_flux, speech_band_energy, formant_energy, flatness, memory.noise_estimator.silence_frames
     );
   } else {
     tracing::trace!(
-      "🔇 RUIDO: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      spectral_flux, speech_band_energy, formant_energy, flatness
+      "🔇 RUIDO: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}, noise_frames={}",
+      spectral_flux, speech_band_energy, formant_energy, flatness, memory.noise_estimator.silence_frames
     );
   }
 
-  !is_speech // Retornar true si NO es voz (es silencio/ruido)
+  !is_speech
 }
 
 /// Calcula el espectro de magnitudes usando FFT
@@ -442,7 +534,10 @@ pub async fn run_whisper_worker(
   // ===== Task B: Segmentación y procesamiento de frases =====
   let mut speech_state = SpeechState::Silence;
   let mut first_phrase_logged = false;
-  let mut spectral_memory = SpectralMemory { prev_spectrum: None };
+  let mut spectral_memory = SpectralMemory {
+    prev_spectrum: None,
+    noise_estimator: NoiseProfileEstimator::new(800), // 1600 samples / 2 = 800 bins FFT
+  };
 
   // VAD check interval (100ms)
   let mut vad_tick = tokio::time::interval(Duration::from_millis(VAD_CHECK_INTERVAL_MS));
