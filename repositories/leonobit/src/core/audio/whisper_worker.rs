@@ -29,16 +29,16 @@ const FORMANT_F2_MAX: f32 = 2200.0;
 const FORMANT_F3_MIN: f32 = 2200.0; // Hz - Tercer formante (consonantes)
 const FORMANT_F3_MAX: f32 = 3200.0;
 
-const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.25; // Bajo = voz, Alto = ruido blanco (más estricto)
-const FORMANT_ENERGY_THRESHOLD: f32 = 0.14; // Mínima energía en formantes (voz real > 0.14)
-const SPEECH_BAND_THRESHOLD: f32 = 0.70; // Mínimo 70% energía en banda de voz (más estricto)
+const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.35; // Bajo = voz, Alto = ruido blanco
+const FORMANT_ENERGY_THRESHOLD: f32 = 0.12; // Mínima energía en formantes
+const SPEECH_BAND_THRESHOLD: f32 = 0.50; // Mínimo 50% energía en banda de voz (más permisivo post-filtrado)
 
 // ===== Sistema Adaptativo de Filtrado Espectral =====
-const SPECTRAL_FLUX_THRESHOLD: f32 = 0.15; // Umbral de cambio espectral (voz tiene alta varianza)
-const NOISE_LEARN_RATE: f32 = 0.95; // Velocidad de adaptación del perfil de ruido (0.95 = lento y estable)
-const OVERSUBTRACTION_FACTOR: f32 = 2.0; // Factor de sobre-sustracción espectral
+const SPECTRAL_FLUX_THRESHOLD: f32 = 0.10; // Umbral de cambio espectral (más permisivo)
+const NOISE_LEARN_RATE: f32 = 0.98; // Velocidad de adaptación del perfil de ruido (muy lento)
+const OVERSUBTRACTION_FACTOR: f32 = 1.0; // Factor de sobre-sustracción (desactivado - conservador)
 const NOISE_FLOOR: f32 = 0.001; // Piso de ruido mínimo para evitar división por cero
-const MIN_GAIN: f32 = 0.05; // Ganancia mínima (evita silencio total = -26dB)
+const MIN_GAIN: f32 = 0.3; // Ganancia mínima más alta para preservar voz (-10dB)
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
