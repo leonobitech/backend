@@ -67,15 +67,7 @@ enum OutMsg {
     message: String,
   },
 
-  // STT (Whisper)
-  #[serde(rename = "stt.partial")]
-  SttPartial {
-    text: String,
-  },
-  #[serde(rename = "stt.final")]
-  SttFinal {
-    text: String,
-  },
+  // NOTA: STT ahora se envía por DataChannel chat, no por WebSocket
 }
 
 fn origin_allowed(allowed: &[String], origin: Option<&str>) -> bool {
@@ -120,8 +112,6 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
           OutMsg::WebrtcCandidate { .. } => debug!("[ws] → webrtc.candidate ({} bytes JSON)", size),
           OutMsg::Pong { .. } => debug!("[ws] → pong ({} bytes JSON)", size),
           OutMsg::Ready => debug!("[ws] → ready ({} bytes JSON)", size),
-          OutMsg::SttPartial { text } => debug!("[ws] → stt.partial len={} txt='{:.48}…'", size, text),
-          OutMsg::SttFinal { text } => info!("[ws] → stt.final len={} txt='{}'", size, text),
           OutMsg::Error { message } => warn!("[ws] → error: {}", message),
         }
       }

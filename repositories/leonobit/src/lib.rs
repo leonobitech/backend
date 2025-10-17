@@ -5,7 +5,7 @@ use anyhow::Context;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tracing::info;
-use whisper_rs::{DtwMode, DtwModelPreset, WhisperContext, WhisperContextParameters};
+use whisper_rs::{DtwMode, WhisperContext, WhisperContextParameters};
 
 pub mod auth;
 mod config;

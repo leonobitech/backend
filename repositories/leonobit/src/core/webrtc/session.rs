@@ -29,7 +29,7 @@ pub enum SigOut {
 
 #[derive(Clone)]
 pub struct WebRtcSession {
-  pc: RTCPeerConnection,
+  pc: Arc<RTCPeerConnection>,
   closing: Arc<AtomicBool>,
   dcs: Arc<Mutex<Vec<Arc<RTCDataChannel>>>>,
   chat_dc: Arc<Mutex<Option<Arc<RTCDataChannel>>>>, // Canal chat para STT
@@ -56,7 +56,7 @@ impl WebRtcSession {
     };
 
     // 3) PeerConnection
-    let pc = api.new_peer_connection(cfg).await?;
+    let pc = Arc::new(api.new_peer_connection(cfg).await?);
     let closing = Arc::new(AtomicBool::new(false));
     let dcs: Arc<Mutex<Vec<Arc<RTCDataChannel>>>> = Arc::new(Mutex::new(Vec::new()));
     let chat_dc: Arc<Mutex<Option<Arc<RTCDataChannel>>>> = Arc::new(Mutex::new(None));

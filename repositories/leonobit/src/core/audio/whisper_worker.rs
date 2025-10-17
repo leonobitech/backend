@@ -74,7 +74,7 @@ pub async fn run_whisper_worker(
 
   // Mejoras adicionales para calidad
   params.set_suppress_blank(true); // Eliminar blanks
-  params.set_suppress_non_speech_tokens(true); // Eliminar tokens no-speech
+  params.set_suppress_nst(true); // Eliminar tokens no-speech (NST = Non-Speech Tokens)
 
   // ---------- Buffer PCM16 compartido ----------
   let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(WINDOW_SAMPLES_16K)));
