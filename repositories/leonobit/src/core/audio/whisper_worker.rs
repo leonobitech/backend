@@ -414,7 +414,6 @@ pub async fn run_whisper_worker(
 
   // ===== Task B: Segmentación y procesamiento de frases =====
   let mut speech_state = SpeechState::Silence;
-  let mut phrase_buffer: Vec<f32> = Vec::new();
   let mut first_phrase_logged = false;
 
   // VAD check interval (100ms)
@@ -459,12 +458,6 @@ pub async fn run_whisper_worker(
                             phrase_start: now,
                             last_speech_time: now,
                         };
-
-                        // Iniciar buffer de frase con audio acumulado
-                        {
-                            let g = pcm_buf.lock().await;
-                            phrase_buffer = g.clone();
-                        }
                     }
                 }
 
@@ -479,12 +472,6 @@ pub async fn run_whisper_worker(
                         };
                     }
 
-                    // Actualizar phrase_buffer con todo el audio acumulado
-                    {
-                        let g = pcm_buf.lock().await;
-                        phrase_buffer = g.clone();
-                    }
-
                     let phrase_duration = phrase_start.elapsed();
                     let silence_duration = last_speech_time.elapsed();
 
@@ -492,12 +479,18 @@ pub async fn run_whisper_worker(
                     if phrase_duration.as_secs_f32() > MAX_PHRASE_DURATION_S {
                         tracing::warn!("⚠️  Frase demasiado larga ({:.1}s) - forzando procesamiento", phrase_duration.as_secs_f32());
 
+                        // Capturar buffer acumulado
+                        let phrase_audio = {
+                            let g = pcm_buf.lock().await;
+                            g.clone()
+                        };
+
                         // Procesar frase ahora
-                        if phrase_buffer.len() as f32 / 16_000.0 >= MIN_PHRASE_DURATION_MS as f32 / 1000.0 {
+                        if phrase_audio.len() as f32 / 16_000.0 >= MIN_PHRASE_DURATION_MS as f32 / 1000.0 {
                             process_complete_phrase(
                                 &mut state,
                                 &params,
-                                &phrase_buffer,
+                                &phrase_audio,
                                 &stt_tx,
                                 &first_audio_at,
                                 &mut first_phrase_logged,
@@ -505,7 +498,6 @@ pub async fn run_whisper_worker(
                         }
 
                         // Limpiar buffer y volver a silencio
-                        phrase_buffer.clear();
                         {
                             let mut g = pcm_buf.lock().await;
                             g.clear();
@@ -516,7 +508,13 @@ pub async fn run_whisper_worker(
 
                     // Condición: Fin de frase (silencio > 800ms)
                     if silence_duration.as_millis() >= PHRASE_END_SILENCE_MS as u128 {
-                        let phrase_secs = phrase_buffer.len() as f32 / 16_000.0;
+                        // Capturar buffer acumulado
+                        let phrase_audio = {
+                            let g = pcm_buf.lock().await;
+                            g.clone()
+                        };
+
+                        let phrase_secs = phrase_audio.len() as f32 / 16_000.0;
 
                         tracing::info!(
                             "✅ Fin de frase detectado (duración: {:.2}s, silencio: {:.0}ms)",
@@ -529,7 +527,7 @@ pub async fn run_whisper_worker(
                             process_complete_phrase(
                                 &mut state,
                                 &params,
-                                &phrase_buffer,
+                                &phrase_audio,
                                 &stt_tx,
                                 &first_audio_at,
                                 &mut first_phrase_logged,
@@ -539,7 +537,6 @@ pub async fn run_whisper_worker(
                         }
 
                         // Limpiar y volver a silencio
-                        phrase_buffer.clear();
                         {
                             let mut g = pcm_buf.lock().await;
                             g.clear();
