@@ -373,6 +373,7 @@ async fn process_complete_phrase(
   stt_tx: &UnboundedSender<SttMsg>,
   first_audio_at: &Arc<Mutex<Option<Instant>>>,
   first_phrase_logged: &mut bool,
+  is_final: bool, // true = Final (último segmento), false = Partial (segmento intermedio)
 ) {
   let phrase_secs = phrase_audio.len() as f32 / 16_000.0;
 
@@ -425,9 +426,14 @@ async fn process_complete_phrase(
     *first_phrase_logged = true;
   }
 
-  // Enviar como FINAL (frase completa procesada de una sola vez)
-  tracing::info!("📝 Transcripción: '{}'", transcription);
-  let _ = stt_tx.send(SttMsg::Final { text: transcription });
+  // Enviar como Partial o Final según el contexto
+  if is_final {
+    tracing::info!("📝 Transcripción FINAL: '{}'", transcription);
+    let _ = stt_tx.send(SttMsg::Final { text: transcription });
+  } else {
+    tracing::info!("📝 Transcripción PARCIAL: '{}'", transcription);
+    let _ = stt_tx.send(SttMsg::Partial { text: transcription });
+  }
 }
 
 /// Task A (ingest): RTP Opus → 48k → 16k → buffer compartido
@@ -672,7 +678,7 @@ pub async fn run_whisper_worker(
                             g.clone()
                         };
 
-                        // Procesar frase ahora
+                        // Procesar frase ahora (PARTIAL - segmento intermedio por exceder 30s)
                         if phrase_audio.len() as f32 / 16_000.0 >= MIN_PHRASE_DURATION_MS as f32 / 1000.0 {
                             process_complete_phrase(
                                 &mut state,
@@ -681,6 +687,7 @@ pub async fn run_whisper_worker(
                                 &stt_tx,
                                 &first_audio_at,
                                 &mut first_phrase_logged,
+                                false, // is_final = false (segmento intermedio)
                             ).await;
                         }
 
@@ -709,7 +716,7 @@ pub async fn run_whisper_worker(
                             silence_duration.as_millis()
                         );
 
-                        // Procesar solo si cumple duración mínima
+                        // Procesar solo si cumple duración mínima (PARTIAL - segmento por pausa de silencio)
                         if phrase_duration.as_millis() >= MIN_PHRASE_DURATION_MS as u128 {
                             process_complete_phrase(
                                 &mut state,
@@ -718,6 +725,7 @@ pub async fn run_whisper_worker(
                                 &stt_tx,
                                 &first_audio_at,
                                 &mut first_phrase_logged,
+                                false, // is_final = false (segmento intermedio)
                             ).await;
                         } else {
                             tracing::debug!("Frase muy corta ({:.0}ms) - ignorando", phrase_duration.as_millis());
@@ -767,6 +775,7 @@ pub async fn run_whisper_worker(
   };
 
   if let Some(audio) = pending_audio {
+    // FINAL - Último segmento al desconectar
     process_complete_phrase(
       &mut state,
       &params,
@@ -774,6 +783,7 @@ pub async fn run_whisper_worker(
       &stt_tx,
       &first_audio_at,
       &mut first_phrase_logged,
+      true, // is_final = true (último segmento)
     )
     .await;
   }
