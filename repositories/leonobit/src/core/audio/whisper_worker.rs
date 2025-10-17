@@ -29,9 +29,10 @@ const FORMANT_F2_MAX: f32 = 2200.0;
 const FORMANT_F3_MIN: f32 = 2200.0; // Hz - Tercer formante (consonantes)
 const FORMANT_F3_MAX: f32 = 3200.0;
 
-const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.3; // Bajo = voz, Alto = ruido blanco
-const FORMANT_ENERGY_THRESHOLD: f32 = 0.4; // Mínima energía en formantes para considerar voz
-const MIN_SPEECH_ENERGY: f32 = 0.005; // Umbral mínimo de energía total
+const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.5; // Bajo = voz, Alto = ruido blanco (más permisivo)
+const FORMANT_ENERGY_THRESHOLD: f32 = 0.15; // Mínima energía en formantes (más permisivo)
+const SPEECH_BAND_THRESHOLD: f32 = 0.15; // Mínimo % energía en banda de voz (más permisivo)
+const MIN_SPEECH_ENERGY: f32 = 0.003; // Umbral mínimo de energía total (más permisivo)
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
@@ -74,26 +75,28 @@ fn is_silence(samples: &[f32]) -> bool {
   // 5. Calcular spectral flatness (detecta ruido blanco)
   let flatness = spectral_flatness(&spectrum);
 
-  // 6. Decisión: ¿Es voz humana?
-  let has_speech_band = speech_band_energy > 0.3; // >30% energía en banda de voz
+  // 6. Decisión: ¿Es voz humana? (lógica más permisiva)
+  let has_speech_band = speech_band_energy > SPEECH_BAND_THRESHOLD;
   let has_formants = formant_energy > FORMANT_ENERGY_THRESHOLD;
   let not_white_noise = flatness < SPECTRAL_FLATNESS_THRESHOLD;
 
-  let is_speech = has_speech_band && has_formants && not_white_noise;
+  // Considerar voz si cumple AL MENOS 2 de 3 criterios (más permisivo que AND estricto)
+  let criteria_met = [has_speech_band, has_formants, not_white_noise]
+    .iter()
+    .filter(|&&x| x)
+    .count();
+
+  let is_speech = criteria_met >= 2;
 
   if is_speech {
-    tracing::trace!(
-      "🎤 VOZ: speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      speech_band_energy,
-      formant_energy,
-      flatness
+    tracing::debug!(
+      "🎤 VOZ: speech_band={:.2}, formants={:.2}, flatness={:.2} ({}/3 criterios)",
+      speech_band_energy, formant_energy, flatness, criteria_met
     );
   } else {
     tracing::trace!(
-      "🔇 RUIDO: speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      speech_band_energy,
-      formant_energy,
-      flatness
+      "🔇 RUIDO: speech_band={:.2}, formants={:.2}, flatness={:.2} ({}/3 criterios)",
+      speech_band_energy, formant_energy, flatness, criteria_met
     );
   }
 
