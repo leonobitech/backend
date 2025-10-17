@@ -1652,6 +1652,7 @@ dependencies = [
  "num_cpus",
  "reqwest",
  "rubato",
+ "rustfft",
  "serde",
  "serde_json",
  "thiserror 2.0.16",

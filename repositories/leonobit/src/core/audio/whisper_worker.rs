@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use tokio::sync::Mutex;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext};
+use rustfft::{FftPlanner, num_complex::Complex};
 
 use crate::core::audio::opus::Opus48k;
 use crate::core::audio::resample::Resampler48kTo16k;
@@ -17,10 +18,19 @@ const PHRASE_END_SILENCE_MS: u64 = 800; // 800ms de silencio = fin de frase
 const MIN_PHRASE_DURATION_MS: u64 = 500; // Mínimo 500ms para considerar frase válida
 const MAX_PHRASE_DURATION_S: f32 = 30.0; // Máximo 30s por frase (safety)
 
-// ===== VAD inteligente (múltiples criterios) =====
-const SILENCE_THRESHOLD_RMS: f32 = 0.005; // Umbral RMS muy permisivo
-const SILENCE_THRESHOLD_ZCR: f32 = 0.35; // Zero Crossing Rate (ruido blanco tiene ZCR alto)
-const SILENCE_THRESHOLD_ENERGY_RATIO: f32 = 2.5; // Ratio peak/mean energy permisivo
+// ===== VAD Espectral con FFT =====
+const SPEECH_FREQ_MIN: f32 = 300.0;   // Hz - Frecuencia mínima de voz humana
+const SPEECH_FREQ_MAX: f32 = 3400.0;  // Hz - Frecuencia máxima de voz humana
+const FORMANT_F1_MIN: f32 = 500.0;    // Hz - Primer formante (vocales)
+const FORMANT_F1_MAX: f32 = 900.0;
+const FORMANT_F2_MIN: f32 = 1400.0;   // Hz - Segundo formante (vocales)
+const FORMANT_F2_MAX: f32 = 2200.0;
+const FORMANT_F3_MIN: f32 = 2200.0;   // Hz - Tercer formante (consonantes)
+const FORMANT_F3_MAX: f32 = 3200.0;
+
+const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.3; // Bajo = voz, Alto = ruido blanco
+const FORMANT_ENERGY_THRESHOLD: f32 = 0.4;    // Mínima energía en formantes para considerar voz
+const MIN_SPEECH_ENERGY: f32 = 0.005;          // Umbral mínimo de energía total
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
@@ -34,54 +44,131 @@ enum SpeechState {
     },
 }
 
-/// VAD inteligente que usa múltiples criterios para distinguir voz de ruido
-/// Lógica: Solo marca silencio si TODOS los indicadores sugieren ausencia de voz
+/// VAD Espectral: Detecta voz humana vs ruido usando análisis de frecuencias (FFT)
 fn is_silence(samples: &[f32]) -> bool {
   if samples.is_empty() {
     return true;
   }
 
-  // 1) RMS (Root Mean Square) - energía general
-  let acc: f32 = samples.iter().map(|x| x * x).sum();
-  let rms = (acc / samples.len() as f32).sqrt();
-
-  tracing::trace!("VAD: rms={:.4}", rms);
-
-  let is_silent_rms = rms < SILENCE_THRESHOLD_RMS;
-
-  // 2) ZCR (Zero Crossing Rate) - frecuencia de cambios de signo
-  // Ruido blanco tiene ZCR muy alto, voz humana tiene ZCR moderado
-  let mut zero_crossings = 0;
-  for i in 1..samples.len() {
-    if (samples[i] >= 0.0) != (samples[i - 1] >= 0.0) {
-      zero_crossings += 1;
-    }
+  // 1. Chequeo rápido de energía mínima
+  let rms: f32 = (samples.iter().map(|x| x * x).sum::<f32>() / samples.len() as f32).sqrt();
+  if rms < MIN_SPEECH_ENERGY {
+    return true; // Muy bajo volumen = silencio garantizado
   }
-  let zcr = zero_crossings as f32 / samples.len() as f32;
 
-  let is_noise_zcr = zcr > SILENCE_THRESHOLD_ZCR;
+  // 2. FFT para análisis espectral
+  let spectrum = compute_magnitude_spectrum(samples);
+  let sample_rate = 16000.0; // Hz
 
-  // 3) Peak-to-mean energy ratio - voz tiene picos claros
-  let peak = samples.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
-  let mean = samples.iter().map(|x| x.abs()).sum::<f32>() / samples.len() as f32;
+  // 3. Medir energía en banda de voz humana (300-3400 Hz)
+  let speech_band_energy = measure_band_energy(&spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
 
-  let is_flat_energy = if mean > 0.0 {
-    let ratio = peak / mean;
-    tracing::trace!("VAD: peak/mean={:.2}", ratio);
-    ratio < SILENCE_THRESHOLD_ENERGY_RATIO
+  // 4. Medir energía en formantes (picos característicos de voz)
+  let f1_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F1_MIN, FORMANT_F1_MAX);
+  let f2_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F2_MIN, FORMANT_F2_MAX);
+  let f3_energy = measure_band_energy(&spectrum, sample_rate, FORMANT_F3_MIN, FORMANT_F3_MAX);
+
+  let formant_energy = (f1_energy + f2_energy + f3_energy) / 3.0;
+
+  // 5. Calcular spectral flatness (detecta ruido blanco)
+  let flatness = spectral_flatness(&spectrum);
+
+  // 6. Decisión: ¿Es voz humana?
+  let has_speech_band = speech_band_energy > 0.3; // >30% energía en banda de voz
+  let has_formants = formant_energy > FORMANT_ENERGY_THRESHOLD;
+  let not_white_noise = flatness < SPECTRAL_FLATNESS_THRESHOLD;
+
+  let is_speech = has_speech_band && has_formants && not_white_noise;
+
+  if is_speech {
+    tracing::trace!(
+      "🎤 VOZ: speech_band={:.2}, formants={:.2}, flatness={:.2}",
+      speech_band_energy, formant_energy, flatness
+    );
   } else {
-    true
-  };
-
-  // Solo marcar silencio si RMS es bajo Y (es ruido blanco O energía plana)
-  // Esto permite que voz real pase incluso si falla uno de los criterios
-  let is_silence = is_silent_rms && (is_noise_zcr || is_flat_energy);
-
-  if !is_silence {
-    tracing::trace!("VAD: ✅ VOZ DETECTADA (rms={:.4}, zcr={:.2}, ratio={:.2})", rms, zcr, peak/mean.max(0.0001));
+    tracing::trace!(
+      "🔇 RUIDO: speech_band={:.2}, formants={:.2}, flatness={:.2}",
+      speech_band_energy, formant_energy, flatness
+    );
   }
 
-  is_silence
+  !is_speech // Retornar true si NO es voz (es silencio/ruido)
+}
+
+/// Calcula el espectro de magnitudes usando FFT
+fn compute_magnitude_spectrum(samples: &[f32]) -> Vec<f32> {
+  let n = samples.len();
+
+  // Preparar buffer complejo para FFT
+  let mut buffer: Vec<Complex<f32>> = samples
+    .iter()
+    .map(|&x| Complex { re: x, im: 0.0 })
+    .collect();
+
+  // Aplicar ventana de Hanning para reducir artifacts espectrales
+  for (i, sample) in buffer.iter_mut().enumerate() {
+    let window = 0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / n as f32).cos());
+    sample.re *= window;
+  }
+
+  // Ejecutar FFT
+  let mut planner = FftPlanner::new();
+  let fft = planner.plan_fft_forward(n);
+  fft.process(&mut buffer);
+
+  // Calcular magnitudes (solo necesitamos primera mitad del espectro)
+  buffer[..n / 2]
+    .iter()
+    .map(|c| (c.re * c.re + c.im * c.im).sqrt())
+    .collect()
+}
+
+/// Mide la energía en una banda de frecuencias específica
+fn measure_band_energy(spectrum: &[f32], sample_rate: f32, freq_min: f32, freq_max: f32) -> f32 {
+  let n = spectrum.len();
+  let freq_resolution = sample_rate / (2.0 * n as f32);
+
+  let bin_min = (freq_min / freq_resolution) as usize;
+  let bin_max = ((freq_max / freq_resolution) as usize).min(n - 1);
+
+  if bin_min >= bin_max {
+    return 0.0;
+  }
+
+  let band_energy: f32 = spectrum[bin_min..=bin_max].iter().sum();
+  let total_energy: f32 = spectrum.iter().sum();
+
+  if total_energy > 0.0 {
+    band_energy / total_energy
+  } else {
+    0.0
+  }
+}
+
+/// Calcula spectral flatness (medida de "planitud" del espectro)
+/// Valores cercanos a 1.0 = ruido blanco
+/// Valores cercanos a 0.0 = señal tonal (voz)
+fn spectral_flatness(spectrum: &[f32]) -> f32 {
+  if spectrum.is_empty() {
+    return 1.0;
+  }
+
+  // Media geométrica
+  let geometric_mean = spectrum
+    .iter()
+    .map(|&x| (x + 1e-10).ln())
+    .sum::<f32>()
+    / spectrum.len() as f32;
+  let geometric_mean = geometric_mean.exp();
+
+  // Media aritmética
+  let arithmetic_mean = spectrum.iter().sum::<f32>() / spectrum.len() as f32;
+
+  if arithmetic_mean > 0.0 {
+    geometric_mean / arithmetic_mean
+  } else {
+    1.0
+  }
 }
 
 /// Valida que el texto transcrito sea coherente y no ruido
