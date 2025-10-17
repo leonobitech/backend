@@ -247,6 +247,11 @@ pub async fn run_whisper_worker(
   let mut last_partial_at = Instant::now();
   let mut first_partial_logged = false;
 
+  // Tracker de actividad de voz para prevenir conversaciones fantasma
+  let mut last_speech_detected_at: Option<Instant> = None;
+  let mut consecutive_silence_count = 0;
+  const MAX_SILENCE_BEFORE_CLEAR: usize = 4; // 4 hops sin voz = limpiar buffer
+
   let mut tick = tokio::time::interval(Duration::from_millis(
     (1000.0 * HOP_SAMPLES_16K as f32 / 16_000.0) as u64,
   ));
@@ -271,11 +276,43 @@ pub async fn run_whisper_worker(
 
             let tail_secs = tail.len() as f32 / 16_000.0;
 
-            // Evita invocar whisper con muy poco audio (reduce “ruido” y latencia por pasada)
+            // Evita invocar whisper con muy poco audio
             if tail.len() < MIN_SAMPLES_FOR_INFER_16K {
                 tracing::debug!("infer: tail demasiado corto ({:.2}s) — skip", tail_secs);
                 continue;
             }
+
+            // ===== DETECCIÓN DE VOZ ANTES DE WHISPER =====
+            // Analizar si hay voz real en el buffer (prevenir conversaciones fantasma)
+            let has_speech = !is_silence(&tail);
+
+            if !has_speech {
+                consecutive_silence_count += 1;
+                tracing::debug!("infer: solo silencio detectado ({}/{})", consecutive_silence_count, MAX_SILENCE_BEFORE_CLEAR);
+
+                // Si llevamos muchos hops sin voz, limpiar buffer agresivamente
+                if consecutive_silence_count >= MAX_SILENCE_BEFORE_CLEAR {
+                    tracing::info!("⚠️  Buffer limpiado: {} hops consecutivos sin voz detectada", consecutive_silence_count);
+                    {
+                        let mut g = pcm_buf.lock().await;
+                        g.clear(); // Limpiar completamente el buffer
+                    }
+                    consecutive_silence_count = 0;
+                    last_speech_detected_at = None;
+
+                    // Si había texto parcial, descartarlo (era fantasma)
+                    if !last_partial.is_empty() {
+                        tracing::warn!("🚫 Descartando parcial fantasma: '{}'", last_partial);
+                        last_partial.clear();
+                    }
+                }
+
+                continue; // No invocar Whisper si solo hay silencio
+            }
+
+            // Hay voz real, resetear contador de silencio
+            consecutive_silence_count = 0;
+            last_speech_detected_at = Some(Instant::now());
 
             // Cronometra modelo
             let t_model = Instant::now();
