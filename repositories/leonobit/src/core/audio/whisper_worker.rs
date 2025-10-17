@@ -774,8 +774,8 @@ pub async fn run_whisper_worker(
     }
   };
 
+  // FINAL - Último segmento al desconectar
   if let Some(audio) = pending_audio {
-    // FINAL - Último segmento al desconectar
     process_complete_phrase(
       &mut state,
       &params,
