@@ -29,16 +29,24 @@ const FORMANT_F2_MAX: f32 = 2200.0;
 const FORMANT_F3_MIN: f32 = 2200.0; // Hz - Tercer formante (consonantes)
 const FORMANT_F3_MAX: f32 = 3200.0;
 
-const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.35; // Bajo = voz, Alto = ruido blanco
-const FORMANT_ENERGY_THRESHOLD: f32 = 0.12; // Mínima energía en formantes
-const SPEECH_BAND_THRESHOLD: f32 = 0.50; // Mínimo 50% energía en banda de voz (más permisivo post-filtrado)
+const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.60; // Bajo = voz, Alto = ruido blanco
+const FORMANT_ENERGY_THRESHOLD: f32 = 0.05; // Mínima energía en formantes
+const SPEECH_BAND_THRESHOLD: f32 = 0.20; // Mínimo 20% energía en banda de voz (más permisivo post-filtrado)
 
 // ===== Sistema Adaptativo de Filtrado Espectral =====
-const SPECTRAL_FLUX_THRESHOLD: f32 = 0.10; // Umbral de cambio espectral (más permisivo)
+const SPECTRAL_FLUX_THRESHOLD: f32 = 0.02; // Umbral de cambio espectral (más permisivo)
 const NOISE_LEARN_RATE: f32 = 0.98; // Velocidad de adaptación del perfil de ruido (muy lento)
 const OVERSUBTRACTION_FACTOR: f32 = 1.0; // Factor de sobre-sustracción (desactivado - conservador)
 const NOISE_FLOOR: f32 = 0.001; // Piso de ruido mínimo para evitar división por cero
 const MIN_GAIN: f32 = 0.3; // Ganancia mínima más alta para preservar voz (-10dB)
+
+// ===== Gateo temporal y contexto =====
+const VAD_RMS_THRESHOLD: f32 = 0.015; // Fallback de energía RMS
+const SPEECH_GATE_ON_WINDOWS: usize = 3; // 3 ventanas consecutivas (~300ms) para activar
+const SPEECH_GATE_OFF_WINDOWS: usize = 4; // 4 ventanas de silencio (~400ms) para desactivar
+const MAX_GATE_MEMORY_WINDOWS: usize = 12; // Tope para los contadores (~1.2s)
+const PHRASE_CONTEXT_MS: usize = 300; // Contexto a conservar tras finalizar (ms)
+const PHRASE_CONTEXT_SAMPLES: usize = PHRASE_CONTEXT_MS * 16_000 / 1000;
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
@@ -341,6 +349,21 @@ fn ms(d: Duration) -> f32 {
   (d.as_secs_f64() * 1000.0) as f32
 }
 
+fn root_mean_square(samples: &[f32]) -> f32 {
+  if samples.is_empty() {
+    return 0.0;
+  }
+  let sum_sq: f32 = samples.iter().map(|s| s * s).sum();
+  (sum_sq / samples.len() as f32).sqrt()
+}
+
+fn retain_trailing_context(buffer: &mut Vec<f32>) {
+  if buffer.len() > PHRASE_CONTEXT_SAMPLES {
+    let keep_from = buffer.len() - PHRASE_CONTEXT_SAMPLES;
+    buffer.drain(..keep_from);
+  }
+}
+
 /// Procesa una frase completa con Whisper (invocación única, no streaming)
 async fn process_complete_phrase(
   state: &mut whisper_rs::WhisperState,
@@ -541,6 +564,8 @@ pub async fn run_whisper_worker(
     prev_spectrum: None,
     noise_estimator: NoiseProfileEstimator::new(800), // 1600 samples / 2 = 800 bins FFT
   };
+  let mut consecutive_speech_windows: usize = 0;
+  let mut consecutive_silence_windows: usize = 0;
 
   // VAD check interval (100ms)
   let mut vad_tick = tokio::time::interval(Duration::from_millis(VAD_CHECK_INTERVAL_MS));
@@ -569,13 +594,48 @@ pub async fn run_whisper_worker(
             };
 
             // 2. Detectar si hay voz en esta ventana
-            let has_speech = !is_silence(&vad_window, &mut spectral_memory);
+            let raw_has_speech = !is_silence(&vad_window, &mut spectral_memory);
+            let rms = root_mean_square(&vad_window);
+            let mut speech_candidate = raw_has_speech;
+            let mut rms_fallback = false;
+
+            if !speech_candidate && rms >= VAD_RMS_THRESHOLD {
+                speech_candidate = true;
+                rms_fallback = true;
+            }
+
+            if speech_candidate {
+                consecutive_speech_windows = (consecutive_speech_windows + 1).min(MAX_GATE_MEMORY_WINDOWS);
+                consecutive_silence_windows = 0;
+            } else {
+                consecutive_silence_windows = (consecutive_silence_windows + 1).min(MAX_GATE_MEMORY_WINDOWS);
+                consecutive_speech_windows = 0;
+            }
+
+            let speech_gate_ready = consecutive_speech_windows >= SPEECH_GATE_ON_WINDOWS;
+            let silence_gate_ready = consecutive_silence_windows >= SPEECH_GATE_OFF_WINDOWS;
+
+            if rms_fallback {
+                tracing::trace!(
+                    "🎚️ RMS fallback activado: rms={:.4} >= {:.4}",
+                    rms,
+                    VAD_RMS_THRESHOLD
+                );
+            }
+
+            tracing::trace!(
+                "📈 VAD window → raw_speech={} speech_windows={} silence_windows={} rms={:.4}",
+                raw_has_speech,
+                consecutive_speech_windows,
+                consecutive_silence_windows,
+                rms
+            );
 
             // 3. Máquina de estados
             match speech_state {
                 // ===== ESTADO: SILENCIO =====
                 SpeechState::Silence => {
-                    if has_speech {
+                    if speech_gate_ready {
                         // Inicio de nueva frase detectado
                         let now = Instant::now();
                         tracing::info!("🎤 Inicio de frase detectado");
@@ -589,7 +649,7 @@ pub async fn run_whisper_worker(
 
                 // ===== ESTADO: ACUMULANDO VOZ =====
                 SpeechState::AccumulatingSpeech { phrase_start, mut last_speech_time } => {
-                    if has_speech {
+                    if speech_candidate {
                         // Actualizar tiempo de última voz
                         last_speech_time = Instant::now();
                         speech_state = SpeechState::AccumulatingSpeech {
@@ -626,14 +686,14 @@ pub async fn run_whisper_worker(
                         // Limpiar buffer y volver a silencio
                         {
                             let mut g = pcm_buf.lock().await;
-                            g.clear();
+                            retain_trailing_context(&mut g);
                         }
                         speech_state = SpeechState::Silence;
                         continue;
                     }
 
                     // Condición: Fin de frase (silencio > 800ms)
-                    if silence_duration.as_millis() >= PHRASE_END_SILENCE_MS as u128 {
+                    if silence_gate_ready && silence_duration.as_millis() >= PHRASE_END_SILENCE_MS as u128 {
                         // Capturar buffer acumulado
                         let phrase_audio = {
                             let g = pcm_buf.lock().await;
@@ -665,7 +725,7 @@ pub async fn run_whisper_worker(
                         // Limpiar y volver a silencio
                         {
                             let mut g = pcm_buf.lock().await;
-                            g.clear();
+                            retain_trailing_context(&mut g);
                         }
                         speech_state = SpeechState::Silence;
                     }
