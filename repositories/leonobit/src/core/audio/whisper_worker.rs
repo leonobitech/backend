@@ -10,17 +10,29 @@ use crate::core::audio::opus::Opus48k;
 use crate::core::audio::resample::Resampler48kTo16k;
 use crate::core::audio::stt::SttMsg;
 
-// ===== Ventanas / hop a 16 kHz (más reactivo) =====
-const WINDOW_SAMPLES_16K: usize = 64_000; // 4.0s (mejor contexto para Whisper)
-const HOP_SAMPLES_16K: usize = 4_800; // 0.3s (más reactivo para tiempo real)
-const TAIL_AFTER_FINAL_16K: usize = 8_000; // 0.5s después de FINAL
-const MIN_SAMPLES_FOR_INFER_16K: usize = 12_000; // 0.75s mínimo para invocar Whisper
+// ===== Configuración de segmentación de frases =====
+const VAD_CHECK_INTERVAL_MS: u64 = 100; // Chequear VAD cada 100ms (rápido)
+const VAD_WINDOW_SAMPLES: usize = 1_600; // 100ms de audio a 16kHz para VAD
+const PHRASE_END_SILENCE_MS: u64 = 800; // 800ms de silencio = fin de frase
+const MIN_PHRASE_DURATION_MS: u64 = 500; // Mínimo 500ms para considerar frase válida
+const MAX_PHRASE_DURATION_S: f32 = 30.0; // Máximo 30s por frase (safety)
 
 // ===== VAD inteligente (múltiples criterios) =====
 const SILENCE_THRESHOLD_RMS: f32 = 0.005; // Umbral RMS muy permisivo
 const SILENCE_THRESHOLD_ZCR: f32 = 0.35; // Zero Crossing Rate (ruido blanco tiene ZCR alto)
 const SILENCE_THRESHOLD_ENERGY_RATIO: f32 = 2.5; // Ratio peak/mean energy permisivo
-const SILENCE_HOLDOFF_MS: u64 = 1200; // Esperar más tiempo antes de marcar final (1.2s)
+
+/// Estado de la máquina de detección de frases
+#[derive(Debug, Clone)]
+enum SpeechState {
+    /// Esperando inicio de voz
+    Silence,
+    /// Acumulando audio de una frase en progreso
+    AccumulatingSpeech {
+        phrase_start: Instant,
+        last_speech_time: Instant,
+    },
+}
 
 /// VAD inteligente que usa múltiples criterios para distinguir voz de ruido
 /// Lógica: Solo marca silencio si TODOS los indicadores sugieren ausencia de voz
@@ -118,8 +130,75 @@ fn ms(d: Duration) -> f32 {
   (d.as_secs_f64() * 1000.0) as f32
 }
 
+/// Procesa una frase completa con Whisper (invocación única, no streaming)
+async fn process_complete_phrase(
+  state: &mut whisper_rs::WhisperState,
+  params: &FullParams<'_, '_>,
+  phrase_audio: &[f32],
+  stt_tx: &UnboundedSender<SttMsg>,
+  first_audio_at: &Arc<Mutex<Option<Instant>>>,
+  first_phrase_logged: &mut bool,
+) {
+  let phrase_secs = phrase_audio.len() as f32 / 16_000.0;
+
+  tracing::info!("⏳ Procesando frase completa ({:.2}s de audio)...", phrase_secs);
+
+  // Cronometrar Whisper
+  let t0 = Instant::now();
+  let res = tokio::task::block_in_place(|| {
+    state.full(params.clone(), phrase_audio)
+  });
+  let dt = t0.elapsed();
+
+  if let Err(e) = res {
+    tracing::error!("whisper error: {e:#}");
+    return;
+  }
+
+  tracing::info!("⚡ Whisper completado en {:.0}ms", ms(dt));
+
+  // Construir transcripción final
+  let mut transcription = String::new();
+  for seg in state.as_iter() {
+    let mut seg_txt = seg.to_string();
+    seg_txt = seg_txt.trim().to_string();
+    if seg_txt.is_empty() || seg_txt == "[BLANK_AUDIO]" {
+      continue;
+    }
+    if !transcription.is_empty() {
+      transcription.push(' ');
+    }
+    transcription.push_str(&seg_txt);
+  }
+
+  // Validar y enviar
+  if transcription.is_empty() {
+    tracing::debug!("Transcripción vacía - ignorando");
+    return;
+  }
+
+  if !is_valid_transcription(&transcription) {
+    tracing::debug!("Transcripción inválida: '{}'", transcription);
+    return;
+  }
+
+  // Métricas E2E para primera frase
+  if !*first_phrase_logged {
+    let start_opt = { first_audio_at.lock().await.clone() };
+    if let Some(t_start) = start_opt {
+      let e2e = t_start.elapsed();
+      tracing::info!("📊 E2E latencia primera frase: {:.0}ms", ms(e2e));
+    }
+    *first_phrase_logged = true;
+  }
+
+  // Enviar como FINAL (frase completa procesada de una sola vez)
+  tracing::info!("📝 Transcripción: '{}'", transcription);
+  let _ = stt_tx.send(SttMsg::Final { text: transcription });
+}
+
 /// Task A (ingest): RTP Opus → 48k → 16k → buffer compartido
-/// Task B (infer): cada hop toma tail, corre Whisper y emite parciales/finales
+/// Task B (segmentación): VAD rápido + procesamiento de frases completas
 pub async fn run_whisper_worker(
   mut rx_opus: Receiver<Vec<u8>>,
   stt_tx: UnboundedSender<SttMsg>,
@@ -167,7 +246,7 @@ pub async fn run_whisper_worker(
   params.set_no_speech_thold(0.6); // Threshold para detectar no-speech (más estricto)
 
   // ---------- Buffer PCM16 compartido ----------
-  let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(WINDOW_SAMPLES_16K)));
+  let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(480_000))); // ~30s máximo
 
   // Para métricas simples por log:
   let first_audio_at: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
@@ -223,14 +302,10 @@ pub async fn run_whisper_worker(
         }
       }
 
-      // Append + recorte a ventana
+      // Append sin recortar (acumulación continua para frases completas)
       {
         let mut g = pcm_buf_ing.lock().await;
         g.extend_from_slice(&pcm16_chunk);
-        if g.len() > WINDOW_SAMPLES_16K {
-          let cut = g.len() - WINDOW_SAMPLES_16K;
-          g.drain(..cut);
-        }
 
         // Log ingest cada ~1s para no inundar
         let mut last = last_ingest_log_ing.lock().await;
@@ -250,21 +325,14 @@ pub async fn run_whisper_worker(
     tracing::info!("ingest task finished");
   });
 
-  // ===== Task B: Inferencia periódica =====
-  let mut last_partial = String::new();
-  let mut last_partial_at = Instant::now();
-  let mut first_partial_logged = false;
-  let mut last_partial_sent = false; // Indica si el parcial actual ya fue enviado al cliente
+  // ===== Task B: Segmentación y procesamiento de frases =====
+  let mut speech_state = SpeechState::Silence;
+  let mut phrase_buffer: Vec<f32> = Vec::new();
+  let mut first_phrase_logged = false;
 
-  // Tracker de actividad de voz para prevenir conversaciones fantasma
-  let mut last_speech_detected_at: Option<Instant> = None;
-  let mut consecutive_silence_count = 0;
-  const MAX_SILENCE_BEFORE_CLEAR: usize = 4; // 4 hops sin voz = limpiar buffer
-
-  let mut tick = tokio::time::interval(Duration::from_millis(
-    (1000.0 * HOP_SAMPLES_16K as f32 / 16_000.0) as u64,
-  ));
-  tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+  // VAD check interval (100ms)
+  let mut vad_tick = tokio::time::interval(Duration::from_millis(VAD_CHECK_INTERVAL_MS));
+  vad_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
   loop {
     tokio::select! {
@@ -275,129 +343,123 @@ pub async fn run_whisper_worker(
             break;
         }
 
-        _ = tick.tick() => {
-            // Snapshot del tail
-            let tail: Vec<f32> = {
+        _ = vad_tick.tick() => {
+            // ===== MÁQUINA DE ESTADOS PARA SEGMENTACIÓN DE FRASES =====
+
+            // 1. Obtener ventana de audio más reciente para VAD (100ms)
+            let vad_window: Vec<f32> = {
                 let g = pcm_buf.lock().await;
                 if g.is_empty() { continue; }
-                g.clone()
+
+                // Tomar última ventana de 100ms para VAD rápido
+                let start_idx = g.len().saturating_sub(VAD_WINDOW_SAMPLES);
+                g[start_idx..].to_vec()
             };
 
-            let tail_secs = tail.len() as f32 / 16_000.0;
+            // 2. Detectar si hay voz en esta ventana
+            let has_speech = !is_silence(&vad_window);
 
-            // Evita invocar whisper con muy poco audio
-            if tail.len() < MIN_SAMPLES_FOR_INFER_16K {
-                tracing::debug!("infer: tail demasiado corto ({:.2}s) — skip", tail_secs);
-                continue;
-            }
+            // 3. Máquina de estados
+            match speech_state {
+                // ===== ESTADO: SILENCIO =====
+                SpeechState::Silence => {
+                    if has_speech {
+                        // Inicio de nueva frase detectado
+                        let now = Instant::now();
+                        tracing::info!("🎤 Inicio de frase detectado");
 
-            // ===== DETECCIÓN DE VOZ ANTES DE WHISPER =====
-            // Analizar si hay voz real en el buffer (prevenir conversaciones fantasma)
-            let has_speech = !is_silence(&tail);
+                        speech_state = SpeechState::AccumulatingSpeech {
+                            phrase_start: now,
+                            last_speech_time: now,
+                        };
 
-            if !has_speech {
-                consecutive_silence_count += 1;
-                tracing::debug!("infer: solo silencio detectado ({}/{})", consecutive_silence_count, MAX_SILENCE_BEFORE_CLEAR);
+                        // Iniciar buffer de frase con audio acumulado
+                        {
+                            let g = pcm_buf.lock().await;
+                            phrase_buffer = g.clone();
+                        }
+                    }
+                }
 
-                // Si llevamos muchos hops sin voz, limpiar buffer agresivamente
-                if consecutive_silence_count >= MAX_SILENCE_BEFORE_CLEAR {
-                    tracing::info!("⚠️  Buffer limpiado: {} hops consecutivos sin voz detectada", consecutive_silence_count);
+                // ===== ESTADO: ACUMULANDO VOZ =====
+                SpeechState::AccumulatingSpeech { phrase_start, mut last_speech_time } => {
+                    if has_speech {
+                        // Actualizar tiempo de última voz
+                        last_speech_time = Instant::now();
+                        speech_state = SpeechState::AccumulatingSpeech {
+                            phrase_start,
+                            last_speech_time,
+                        };
+                    }
+
+                    // Actualizar phrase_buffer con todo el audio acumulado
                     {
-                        let mut g = pcm_buf.lock().await;
-                        g.clear(); // Limpiar completamente el buffer
+                        let g = pcm_buf.lock().await;
+                        phrase_buffer = g.clone();
                     }
-                    consecutive_silence_count = 0;
-                    last_speech_detected_at = None;
 
-                    // Solo descartar parcial si NUNCA fue enviado (conversación fantasma real)
-                    if !last_partial.is_empty() && !last_partial_sent {
-                        tracing::warn!("🚫 Descartando parcial fantasma (nunca enviado): '{}'", last_partial);
-                        last_partial.clear();
-                        last_partial_sent = false;
-                    } else if !last_partial.is_empty() && last_partial_sent {
-                        // Si ya fue enviado, solo limpiarlo para próxima frase
-                        tracing::debug!("🧹 Limpiando parcial ya enviado: '{}'", last_partial);
-                        last_partial.clear();
-                        last_partial_sent = false;
+                    let phrase_duration = phrase_start.elapsed();
+                    let silence_duration = last_speech_time.elapsed();
+
+                    // Safety: Frase demasiado larga (>30s)
+                    if phrase_duration.as_secs_f32() > MAX_PHRASE_DURATION_S {
+                        tracing::warn!("⚠️  Frase demasiado larga ({:.1}s) - forzando procesamiento", phrase_duration.as_secs_f32());
+
+                        // Procesar frase ahora
+                        if phrase_buffer.len() as f32 / 16_000.0 >= MIN_PHRASE_DURATION_MS as f32 / 1000.0 {
+                            process_complete_phrase(
+                                &mut state,
+                                &params,
+                                &phrase_buffer,
+                                &stt_tx,
+                                &first_audio_at,
+                                &mut first_phrase_logged,
+                            ).await;
+                        }
+
+                        // Limpiar buffer y volver a silencio
+                        phrase_buffer.clear();
+                        {
+                            let mut g = pcm_buf.lock().await;
+                            g.clear();
+                        }
+                        speech_state = SpeechState::Silence;
+                        continue;
+                    }
+
+                    // Condición: Fin de frase (silencio > 800ms)
+                    if silence_duration.as_millis() >= PHRASE_END_SILENCE_MS as u128 {
+                        let phrase_secs = phrase_buffer.len() as f32 / 16_000.0;
+
+                        tracing::info!(
+                            "✅ Fin de frase detectado (duración: {:.2}s, silencio: {:.0}ms)",
+                            phrase_secs,
+                            silence_duration.as_millis()
+                        );
+
+                        // Procesar solo si cumple duración mínima
+                        if phrase_duration.as_millis() >= MIN_PHRASE_DURATION_MS as u128 {
+                            process_complete_phrase(
+                                &mut state,
+                                &params,
+                                &phrase_buffer,
+                                &stt_tx,
+                                &first_audio_at,
+                                &mut first_phrase_logged,
+                            ).await;
+                        } else {
+                            tracing::debug!("Frase muy corta ({:.0}ms) - ignorando", phrase_duration.as_millis());
+                        }
+
+                        // Limpiar y volver a silencio
+                        phrase_buffer.clear();
+                        {
+                            let mut g = pcm_buf.lock().await;
+                            g.clear();
+                        }
+                        speech_state = SpeechState::Silence;
                     }
                 }
-
-                continue; // No invocar Whisper si solo hay silencio
-            }
-
-            // Hay voz real, resetear contador de silencio
-            consecutive_silence_count = 0;
-            last_speech_detected_at = Some(Instant::now());
-
-            // Cronometra modelo
-            let t_model = Instant::now();
-            let res = tokio::task::block_in_place(|| {
-                state.full(params.clone(), &tail[..])
-            });
-            let dt_model = t_model.elapsed();
-
-            if let Err(e) = res {
-                tracing::error!("whisper full error: {e:#} (tail={:.2}s)", tail_secs);
-                continue;
-            } else {
-                tracing::info!("infer: whisper_full={:.0}ms tail={:.2}s", ms(dt_model), tail_secs);
-            }
-
-            // Construye hipótesis
-            let mut hypo = String::new();
-            for seg in state.as_iter() {
-                let mut seg_txt = seg.to_string();
-                seg_txt = seg_txt.trim().to_string();
-                if seg_txt.is_empty() || seg_txt == "[BLANK_AUDIO]" { continue; }
-                if !hypo.is_empty() { hypo.push(' '); }
-                hypo.push_str(&seg_txt);
-            }
-
-            // Emitir PARCIAL si cambió y es válido
-            if !hypo.is_empty() && hypo != last_partial && is_valid_transcription(&hypo) {
-                // Latencia extremo a extremo (first audio → primer parcial)
-                if !first_partial_logged {
-                    let start_opt = { first_audio_at.lock().await.clone() };
-                    if let Some(t0) = start_opt {
-                        let e2e = t0.elapsed();
-                        tracing::info!("E2E: first_partial after {:.0}ms since first_audio", ms(e2e));
-                    }
-                    first_partial_logged = true;
-                }
-
-                tracing::info!("stt.partial: '{}'", hypo);
-                let _ = stt_tx.send(SttMsg::Partial { text: hypo.clone() });
-                last_partial = hypo;
-                last_partial_at = Instant::now();
-                last_partial_sent = true; // Marcar que fue enviado al cliente
-            } else if !hypo.is_empty() && !is_valid_transcription(&hypo) {
-                tracing::debug!("stt: rechazado texto inválido: '{}'", hypo);
-            }
-
-            // Confirmar FINAL por VAD (ventana más grande para mejor detección)
-            let vad_window = tail.get(tail.len().saturating_sub(8000)..).unwrap_or(&tail[..]); // ~0.5s
-            if is_silence(vad_window)
-                && !last_partial.is_empty()
-                && last_partial_at.elapsed() > Duration::from_millis(SILENCE_HOLDOFF_MS)
-            {
-                let final_text = std::mem::take(&mut last_partial);
-                last_partial_sent = false; // Resetear flag
-
-                // Solo enviar si es válido
-                if is_valid_transcription(&final_text) {
-                    tracing::info!("stt.final: '{}'", final_text);
-                    let _ = stt_tx.send(SttMsg::Final { text: final_text });
-                } else {
-                    tracing::debug!("stt: rechazado final inválido: '{}'", final_text);
-                }
-
-                // Mantener "cola" corta
-                let mut g = pcm_buf.lock().await;
-                if g.len() > TAIL_AFTER_FINAL_16K {
-                    let keep_from = g.len() - TAIL_AFTER_FINAL_16K;
-                    g.drain(..keep_from);
-                }
-                last_partial_at = Instant::now();
             }
         }
     }
