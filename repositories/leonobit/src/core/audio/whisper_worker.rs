@@ -17,12 +17,13 @@ const TAIL_AFTER_FINAL_16K: usize = 8_000; // 0.5s después de FINAL
 const MIN_SAMPLES_FOR_INFER_16K: usize = 12_000; // 0.75s mínimo para invocar Whisper
 
 // ===== VAD inteligente (múltiples criterios) =====
-const SILENCE_THRESHOLD_RMS: f32 = 0.01; // Umbral RMS relajado para captar voz normal
-const SILENCE_THRESHOLD_ZCR: f32 = 0.3; // Zero Crossing Rate (ruido blanco tiene ZCR alto)
-const SILENCE_THRESHOLD_ENERGY_RATIO: f32 = 3.0; // Ratio peak/mean energy más permisivo
+const SILENCE_THRESHOLD_RMS: f32 = 0.005; // Umbral RMS muy permisivo
+const SILENCE_THRESHOLD_ZCR: f32 = 0.35; // Zero Crossing Rate (ruido blanco tiene ZCR alto)
+const SILENCE_THRESHOLD_ENERGY_RATIO: f32 = 2.5; // Ratio peak/mean energy permisivo
 const SILENCE_HOLDOFF_MS: u64 = 1200; // Esperar más tiempo antes de marcar final (1.2s)
 
 /// VAD inteligente que usa múltiples criterios para distinguir voz de ruido
+/// Lógica: Solo marca silencio si TODOS los indicadores sugieren ausencia de voz
 fn is_silence(samples: &[f32]) -> bool {
   if samples.is_empty() {
     return true;
@@ -34,9 +35,7 @@ fn is_silence(samples: &[f32]) -> bool {
 
   tracing::trace!("VAD: rms={:.4}", rms);
 
-  if rms < SILENCE_THRESHOLD_RMS {
-    return true; // Muy bajo volumen = silencio
-  }
+  let is_silent_rms = rms < SILENCE_THRESHOLD_RMS;
 
   // 2) ZCR (Zero Crossing Rate) - frecuencia de cambios de signo
   // Ruido blanco tiene ZCR muy alto, voz humana tiene ZCR moderado
@@ -48,24 +47,29 @@ fn is_silence(samples: &[f32]) -> bool {
   }
   let zcr = zero_crossings as f32 / samples.len() as f32;
 
-  if zcr > SILENCE_THRESHOLD_ZCR {
-    return true; // ZCR muy alto = ruido blanco, no voz
-  }
+  let is_noise_zcr = zcr > SILENCE_THRESHOLD_ZCR;
 
   // 3) Peak-to-mean energy ratio - voz tiene picos claros
   let peak = samples.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
   let mean = samples.iter().map(|x| x.abs()).sum::<f32>() / samples.len() as f32;
 
-  if mean > 0.0 {
+  let is_flat_energy = if mean > 0.0 {
     let ratio = peak / mean;
     tracing::trace!("VAD: peak/mean={:.2}", ratio);
-    if ratio < SILENCE_THRESHOLD_ENERGY_RATIO {
-      return true; // Sin picos claros = ruido constante, no voz
-    }
+    ratio < SILENCE_THRESHOLD_ENERGY_RATIO
+  } else {
+    true
+  };
+
+  // Solo marcar silencio si RMS es bajo Y (es ruido blanco O energía plana)
+  // Esto permite que voz real pase incluso si falla uno de los criterios
+  let is_silence = is_silent_rms && (is_noise_zcr || is_flat_energy);
+
+  if !is_silence {
+    tracing::trace!("VAD: ✅ VOZ DETECTADA (rms={:.4}, zcr={:.2}, ratio={:.2})", rms, zcr, peak/mean.max(0.0001));
   }
 
-  tracing::trace!("VAD: ✅ VOZ DETECTADA");
-  false // Pasó todos los criterios = probablemente voz
+  is_silence
 }
 
 /// Valida que el texto transcrito sea coherente y no ruido
