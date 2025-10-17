@@ -162,24 +162,15 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
     raw_flux < SPECTRAL_FLUX_THRESHOLD && raw_speech_band < SPEECH_BAND_THRESHOLD
   };
 
-  // 3. Actualizar perfil de ruido durante silencio
-  memory.noise_estimator.update(&raw_spectrum, preliminary_silence);
-
-  // 4. Aplicar filtro Wiener adaptativo para limpiar el espectro
-  let clean_spectrum = memory.noise_estimator.apply_filter(&raw_spectrum);
-
-  // Guardar espectro limpio para próxima comparación de flux
-  memory.prev_spectrum = Some(clean_spectrum.clone());
-
-  // 5. Calcular flujo espectral sobre espectro LIMPIO
+  // 3. Calcular flujo espectral ANTES de filtrar (sobre espectro RAW para detectar cambios reales)
   let spectral_flux = if let Some(ref prev) = memory.prev_spectrum {
-    if prev.len() == clean_spectrum.len() {
-      let diff_sum: f32 = clean_spectrum
+    if prev.len() == raw_spectrum.len() {
+      let diff_sum: f32 = raw_spectrum
         .iter()
         .zip(prev.iter())
         .map(|(curr, prev)| (curr - prev).powi(2))
         .sum();
-      let total_energy: f32 = clean_spectrum.iter().map(|x| x * x).sum::<f32>();
+      let total_energy: f32 = raw_spectrum.iter().map(|x| x * x).sum::<f32>();
       if total_energy > 0.0 {
         (diff_sum / total_energy).sqrt()
       } else {
@@ -191,6 +182,15 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
   } else {
     0.0
   };
+
+  // Guardar espectro RAW para próxima comparación de flux
+  memory.prev_spectrum = Some(raw_spectrum.clone());
+
+  // 4. Actualizar perfil de ruido durante silencio
+  memory.noise_estimator.update(&raw_spectrum, preliminary_silence);
+
+  // 5. Aplicar filtro Wiener adaptativo para limpiar el espectro
+  let clean_spectrum = memory.noise_estimator.apply_filter(&raw_spectrum);
 
   // 6. Análisis del espectro LIMPIO
   let speech_band_energy = measure_band_energy(&clean_spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
