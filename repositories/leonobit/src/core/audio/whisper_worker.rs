@@ -33,6 +33,9 @@ const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.25; // Bajo = voz, Alto = ruido blanc
 const FORMANT_ENERGY_THRESHOLD: f32 = 0.14; // Mínima energía en formantes (voz real > 0.14)
 const SPEECH_BAND_THRESHOLD: f32 = 0.70; // Mínimo 70% energía en banda de voz (más estricto)
 
+// ===== Detector de varianza espectral =====
+const SPECTRAL_FLUX_THRESHOLD: f32 = 0.15; // Umbral de cambio espectral (voz tiene alta varianza)
+
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
 enum SpeechState {
@@ -45,15 +48,47 @@ enum SpeechState {
   },
 }
 
-/// VAD Espectral: Detecta voz humana vs ruido usando análisis de frecuencias (FFT)
-fn is_silence(samples: &[f32]) -> bool {
+/// Cache del espectro anterior para detectar varianza temporal
+struct SpectralMemory {
+  prev_spectrum: Option<Vec<f32>>,
+}
+
+/// VAD Espectral: Detecta voz humana vs ruido usando análisis de frecuencias (FFT) + varianza temporal
+fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
   if samples.is_empty() {
     return true;
   }
 
-  // 1. FFT para análisis espectral (sin chequeo previo de energía)
+  // 1. FFT para análisis espectral
   let spectrum = compute_magnitude_spectrum(samples);
   let sample_rate = 16000.0; // Hz
+
+  // 2. Calcular flujo espectral (spectral flux): cambio entre ventanas consecutivas
+  let spectral_flux = if let Some(ref prev) = memory.prev_spectrum {
+    if prev.len() == spectrum.len() {
+      // Calcular diferencia cuadrática normalizada
+      let diff_sum: f32 = spectrum
+        .iter()
+        .zip(prev.iter())
+        .map(|(curr, prev)| (curr - prev).powi(2))
+        .sum();
+
+      let total_energy: f32 = spectrum.iter().map(|x| x * x).sum::<f32>();
+
+      if total_energy > 0.0 {
+        (diff_sum / total_energy).sqrt()
+      } else {
+        0.0
+      }
+    } else {
+      0.0
+    }
+  } else {
+    0.0 // Primera ventana, no hay comparación
+  };
+
+  // Guardar espectro actual para próxima comparación
+  memory.prev_spectrum = Some(spectrum.clone());
 
   // 3. Medir energía en banda de voz humana (300-3400 Hz)
   let speech_band_energy = measure_band_energy(&spectrum, sample_rate, SPEECH_FREQ_MIN, SPEECH_FREQ_MAX);
@@ -69,29 +104,24 @@ fn is_silence(samples: &[f32]) -> bool {
   let flatness = spectral_flatness(&spectrum);
 
   // 6. Decisión: ¿Es voz humana?
-  // Lógica: speech_band es OBLIGATORIO (más confiable)
-  // Además debe cumplir AL MENOS 1 de los otros 2 criterios
+  // NUEVA LÓGICA: Requiere varianza espectral (cambio temporal) + criterios estáticos
+  let has_spectral_change = spectral_flux > SPECTRAL_FLUX_THRESHOLD;
   let has_speech_band = speech_band_energy > SPEECH_BAND_THRESHOLD;
   let has_formants = formant_energy > FORMANT_ENERGY_THRESHOLD;
   let not_white_noise = flatness < SPECTRAL_FLATNESS_THRESHOLD;
 
-  // Criterio obligatorio + al menos 1 confirmación adicional
-  let is_speech = has_speech_band && (has_formants || not_white_noise);
-
-  let criteria_met = [has_speech_band, has_formants, not_white_noise]
-    .iter()
-    .filter(|&&x| x)
-    .count();
+  // Voz = DEBE tener cambio espectral + criterios estáticos
+  let is_speech = has_spectral_change && has_speech_band && (has_formants || not_white_noise);
 
   if is_speech {
     tracing::debug!(
-      "🎤 VOZ: speech_band={:.2}, formants={:.2}, flatness={:.2} ({}/3 criterios)",
-      speech_band_energy, formant_energy, flatness, criteria_met
+      "🎤 VOZ: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
+      spectral_flux, speech_band_energy, formant_energy, flatness
     );
   } else {
     tracing::trace!(
-      "🔇 RUIDO: speech_band={:.2}, formants={:.2}, flatness={:.2} ({}/3 criterios)",
-      speech_band_energy, formant_energy, flatness, criteria_met
+      "🔇 RUIDO: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
+      spectral_flux, speech_band_energy, formant_energy, flatness
     );
   }
 
@@ -412,6 +442,7 @@ pub async fn run_whisper_worker(
   // ===== Task B: Segmentación y procesamiento de frases =====
   let mut speech_state = SpeechState::Silence;
   let mut first_phrase_logged = false;
+  let mut spectral_memory = SpectralMemory { prev_spectrum: None };
 
   // VAD check interval (100ms)
   let mut vad_tick = tokio::time::interval(Duration::from_millis(VAD_CHECK_INTERVAL_MS));
@@ -440,7 +471,7 @@ pub async fn run_whisper_worker(
             };
 
             // 2. Detectar si hay voz en esta ventana
-            let has_speech = !is_silence(&vad_window);
+            let has_speech = !is_silence(&vad_window, &mut spectral_memory);
 
             // 3. Máquina de estados
             match speech_state {
