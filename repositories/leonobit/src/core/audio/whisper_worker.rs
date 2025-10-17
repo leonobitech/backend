@@ -250,6 +250,7 @@ pub async fn run_whisper_worker(
   let mut last_partial = String::new();
   let mut last_partial_at = Instant::now();
   let mut first_partial_logged = false;
+  let mut last_partial_sent = false; // Indica si el parcial actual ya fue enviado al cliente
 
   // Tracker de actividad de voz para prevenir conversaciones fantasma
   let mut last_speech_detected_at: Option<Instant> = None;
@@ -304,10 +305,16 @@ pub async fn run_whisper_worker(
                     consecutive_silence_count = 0;
                     last_speech_detected_at = None;
 
-                    // Si había texto parcial, descartarlo (era fantasma)
-                    if !last_partial.is_empty() {
-                        tracing::warn!("🚫 Descartando parcial fantasma: '{}'", last_partial);
+                    // Solo descartar parcial si NUNCA fue enviado (conversación fantasma real)
+                    if !last_partial.is_empty() && !last_partial_sent {
+                        tracing::warn!("🚫 Descartando parcial fantasma (nunca enviado): '{}'", last_partial);
                         last_partial.clear();
+                        last_partial_sent = false;
+                    } else if !last_partial.is_empty() && last_partial_sent {
+                        // Si ya fue enviado, solo limpiarlo para próxima frase
+                        tracing::debug!("🧹 Limpiando parcial ya enviado: '{}'", last_partial);
+                        last_partial.clear();
+                        last_partial_sent = false;
                     }
                 }
 
@@ -358,6 +365,7 @@ pub async fn run_whisper_worker(
                 let _ = stt_tx.send(SttMsg::Partial { text: hypo.clone() });
                 last_partial = hypo;
                 last_partial_at = Instant::now();
+                last_partial_sent = true; // Marcar que fue enviado al cliente
             } else if !hypo.is_empty() && !is_valid_transcription(&hypo) {
                 tracing::debug!("stt: rechazado texto inválido: '{}'", hypo);
             }
@@ -369,6 +377,7 @@ pub async fn run_whisper_worker(
                 && last_partial_at.elapsed() > Duration::from_millis(SILENCE_HOLDOFF_MS)
             {
                 let final_text = std::mem::take(&mut last_partial);
+                last_partial_sent = false; // Resetear flag
 
                 // Solo enviar si es válido
                 if is_valid_transcription(&final_text) {

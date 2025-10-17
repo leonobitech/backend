@@ -206,6 +206,7 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
     while let Some(msg) = stt_rx.recv().await {
       match msg {
         SttMsg::Partial { text } => {
+          let t0 = std::time::Instant::now();
           let payload = serde_json::json!({
             "kind": "stt.partial",
             "text": text
@@ -214,11 +215,13 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
             if let Err(e) = session_for_stt.send_chat(json_str).await {
               tracing::warn!("Error enviando stt.partial por chat DC: {e:#}");
             } else {
-              tracing::debug!("[dc:chat] → stt.partial: '{}'", text);
+              let dt = t0.elapsed();
+              tracing::info!("⚡ [dc:chat] → stt.partial ({:.2}ms): '{}'", dt.as_secs_f64() * 1000.0, text);
             }
           }
         }
         SttMsg::Final { text } => {
+          let t0 = std::time::Instant::now();
           let payload = serde_json::json!({
             "kind": "stt.final",
             "text": text
@@ -228,7 +231,8 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
               tracing::warn!("Error enviando stt.final por chat DC: {e:#}");
               break;
             } else {
-              tracing::info!("[dc:chat] → stt.final: '{}'", text);
+              let dt = t0.elapsed();
+              tracing::info!("✅ [dc:chat] → stt.final ({:.2}ms): '{}'", dt.as_secs_f64() * 1000.0, text);
             }
           }
         }
