@@ -10,23 +10,99 @@ use crate::core::audio::opus::Opus48k;
 use crate::core::audio::resample::Resampler48kTo16k;
 use crate::core::audio::stt::SttMsg;
 
-// ===== Ventanas / hop a 16 kHz (reactivo) =====
-const WINDOW_SAMPLES_16K: usize = 48_000; // 3.0s (mejor contexto para Whisper)
-const HOP_SAMPLES_16K: usize = 8_000; // 0.5s (menos llamadas, menos overhead)
-const TAIL_AFTER_FINAL_16K: usize = 16_000; // 1.0s después de FINAL para continuidad
-const MIN_SAMPLES_FOR_INFER_16K: usize = 16_000; // 1.0s mínimo para invocar Whisper
+// ===== Ventanas / hop a 16 kHz (más reactivo) =====
+const WINDOW_SAMPLES_16K: usize = 64_000; // 4.0s (mejor contexto para Whisper)
+const HOP_SAMPLES_16K: usize = 4_800; // 0.3s (más reactivo para tiempo real)
+const TAIL_AFTER_FINAL_16K: usize = 8_000; // 0.5s después de FINAL
+const MIN_SAMPLES_FOR_INFER_16K: usize = 12_000; // 0.75s mínimo para invocar Whisper
 
-// ===== VAD simple por RMS =====
-const SILENCE_THRESHOLD_RMS: f32 = 0.015; // Más alto para ignorar ruido de fondo
-const SILENCE_HOLDOFF_MS: u64 = 800; // Esperar más antes de marcar como final
+// ===== VAD inteligente (múltiples criterios) =====
+const SILENCE_THRESHOLD_RMS: f32 = 0.025; // Umbral RMS más alto (ignorar ruido)
+const SILENCE_THRESHOLD_ZCR: f32 = 0.3; // Zero Crossing Rate (ruido blanco tiene ZCR alto)
+const SILENCE_THRESHOLD_ENERGY_RATIO: f32 = 5.0; // Ratio peak/mean energy
+const SILENCE_HOLDOFF_MS: u64 = 1200; // Esperar más tiempo antes de marcar final (1.2s)
 
-fn is_silence(samples: &[f32], thr: f32) -> bool {
+/// VAD inteligente que usa múltiples criterios para distinguir voz de ruido
+fn is_silence(samples: &[f32]) -> bool {
   if samples.is_empty() {
-    return false;
+    return true;
   }
+
+  // 1) RMS (Root Mean Square) - energía general
   let acc: f32 = samples.iter().map(|x| x * x).sum();
   let rms = (acc / samples.len() as f32).sqrt();
-  rms < thr
+
+  if rms < SILENCE_THRESHOLD_RMS {
+    return true; // Muy bajo volumen = silencio
+  }
+
+  // 2) ZCR (Zero Crossing Rate) - frecuencia de cambios de signo
+  // Ruido blanco tiene ZCR muy alto, voz humana tiene ZCR moderado
+  let mut zero_crossings = 0;
+  for i in 1..samples.len() {
+    if (samples[i] >= 0.0) != (samples[i - 1] >= 0.0) {
+      zero_crossings += 1;
+    }
+  }
+  let zcr = zero_crossings as f32 / samples.len() as f32;
+
+  if zcr > SILENCE_THRESHOLD_ZCR {
+    return true; // ZCR muy alto = ruido blanco, no voz
+  }
+
+  // 3) Peak-to-mean energy ratio - voz tiene picos claros
+  let peak = samples.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
+  let mean = samples.iter().map(|x| x.abs()).sum::<f32>() / samples.len() as f32;
+
+  if mean > 0.0 {
+    let ratio = peak / mean;
+    if ratio < SILENCE_THRESHOLD_ENERGY_RATIO {
+      return true; // Sin picos claros = ruido constante, no voz
+    }
+  }
+
+  false // Pasó todos los criterios = probablemente voz
+}
+
+/// Valida que el texto transcrito sea coherente y no ruido
+fn is_valid_transcription(text: &str) -> bool {
+  // Rechazar si es muy corto (menos de 2 caracteres)
+  if text.len() < 2 {
+    return false;
+  }
+
+  // Rechazar si solo tiene caracteres repetidos (ej: "aaaa", ".....")
+  let unique_chars: std::collections::HashSet<char> = text.chars().collect();
+  if unique_chars.len() == 1 {
+    return false;
+  }
+
+  // Rechazar si tiene muchos caracteres extraños consecutivos
+  let weird_chars = text.chars().filter(|c| !c.is_alphanumeric() && !c.is_whitespace()).count();
+  if weird_chars as f32 / text.len() as f32 > 0.5 {
+    return false;
+  }
+
+  // Rechazar patrones sospechosos comunes de ruido
+  let suspicious_patterns = [
+    "gracias por ver",
+    "subtítulos",
+    "subtítulos realizados por",
+    "traducción por",
+    "gracias por su atención",
+    "música",
+    "[música]",
+    "(música)",
+  ];
+
+  let text_lower = text.to_lowercase();
+  for pattern in &suspicious_patterns {
+    if text_lower.contains(pattern) {
+      return false;
+    }
+  }
+
+  true
 }
 
 // helper ms pretty
@@ -66,15 +142,21 @@ pub async fn run_whisper_worker(
   params.set_print_timestamps(false);
   params.set_token_timestamps(false);
 
-  // Contexto más largo para mejor calidad (default 1500)
-  params.set_audio_ctx(1500); // Más contexto histórico
+  // Contexto más largo para mejor calidad
+  params.set_audio_ctx(1500);
 
   // Permitir frases más largas
-  params.set_max_len(1); // Sin límite de longitud (0 o 1 = sin límite)
+  params.set_max_len(1);
 
-  // Mejoras adicionales para calidad
-  params.set_suppress_blank(true); // Eliminar blanks
-  params.set_suppress_nst(true); // Eliminar tokens no-speech (NST = Non-Speech Tokens)
+  // Eliminar ruido y tokens no deseados
+  params.set_suppress_blank(true);
+  params.set_suppress_nst(true);
+
+  // Parámetros críticos para filtrar ruido
+  params.set_temperature(0.0); // Sin sampling aleatorio = más determinístico
+  params.set_entropy_thold(2.0); // Rechazar segmentos con alta entropía (ruido)
+  params.set_logprob_thold(-1.0); // Rechazar segmentos con baja confianza
+  params.set_no_speech_thold(0.6); // Threshold para detectar no-speech (más estricto)
 
   // ---------- Buffer PCM16 compartido ----------
   let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(WINDOW_SAMPLES_16K)));
@@ -219,8 +301,8 @@ pub async fn run_whisper_worker(
                 hypo.push_str(&seg_txt);
             }
 
-            // Emitir PARCIAL si cambió
-            if !hypo.is_empty() && hypo != last_partial {
+            // Emitir PARCIAL si cambió y es válido
+            if !hypo.is_empty() && hypo != last_partial && is_valid_transcription(&hypo) {
                 // Latencia extremo a extremo (first audio → primer parcial)
                 if !first_partial_logged {
                     let start_opt = { first_audio_at.lock().await.clone() };
@@ -235,19 +317,27 @@ pub async fn run_whisper_worker(
                 let _ = stt_tx.send(SttMsg::Partial { text: hypo.clone() });
                 last_partial = hypo;
                 last_partial_at = Instant::now();
+            } else if !hypo.is_empty() && !is_valid_transcription(&hypo) {
+                tracing::debug!("stt: rechazado texto inválido: '{}'", hypo);
             }
 
-            // Confirmar FINAL por VAD
-            let vad_window = tail.get(tail.len().saturating_sub(4000)..).unwrap_or(&tail[..]); // ~0.25s
-            if is_silence(vad_window, SILENCE_THRESHOLD_RMS)
+            // Confirmar FINAL por VAD (ventana más grande para mejor detección)
+            let vad_window = tail.get(tail.len().saturating_sub(8000)..).unwrap_or(&tail[..]); // ~0.5s
+            if is_silence(vad_window)
                 && !last_partial.is_empty()
                 && last_partial_at.elapsed() > Duration::from_millis(SILENCE_HOLDOFF_MS)
             {
                 let final_text = std::mem::take(&mut last_partial);
-                tracing::info!("stt.final: '{}'", final_text);
-                let _ = stt_tx.send(SttMsg::Final { text: final_text });
 
-                // Mantener “cola” corta
+                // Solo enviar si es válido
+                if is_valid_transcription(&final_text) {
+                    tracing::info!("stt.final: '{}'", final_text);
+                    let _ = stt_tx.send(SttMsg::Final { text: final_text });
+                } else {
+                    tracing::debug!("stt: rechazado final inválido: '{}'", final_text);
+                }
+
+                // Mantener "cola" corta
                 let mut g = pcm_buf.lock().await;
                 if g.len() > TAIL_AFTER_FINAL_16K {
                     let keep_from = g.len() - TAIL_AFTER_FINAL_16K;
