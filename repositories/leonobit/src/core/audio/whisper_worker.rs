@@ -32,7 +32,6 @@ const FORMANT_F3_MAX: f32 = 3200.0;
 const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.5; // Bajo = voz, Alto = ruido blanco (más permisivo)
 const FORMANT_ENERGY_THRESHOLD: f32 = 0.15; // Mínima energía en formantes (más permisivo)
 const SPEECH_BAND_THRESHOLD: f32 = 0.15; // Mínimo % energía en banda de voz (más permisivo)
-const MIN_SPEECH_ENERGY: f32 = 0.003; // Umbral mínimo de energía total (más permisivo)
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
@@ -52,13 +51,7 @@ fn is_silence(samples: &[f32]) -> bool {
     return true;
   }
 
-  // 1. Chequeo rápido de energía mínima
-  let rms: f32 = (samples.iter().map(|x| x * x).sum::<f32>() / samples.len() as f32).sqrt();
-  if rms < MIN_SPEECH_ENERGY {
-    return true; // Muy bajo volumen = silencio garantizado
-  }
-
-  // 2. FFT para análisis espectral
+  // 1. FFT para análisis espectral (sin chequeo previo de energía)
   let spectrum = compute_magnitude_spectrum(samples);
   let sample_rate = 16000.0; // Hz
 
