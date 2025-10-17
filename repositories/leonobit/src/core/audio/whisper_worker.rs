@@ -17,9 +17,9 @@ const TAIL_AFTER_FINAL_16K: usize = 8_000; // 0.5s después de FINAL
 const MIN_SAMPLES_FOR_INFER_16K: usize = 12_000; // 0.75s mínimo para invocar Whisper
 
 // ===== VAD inteligente (múltiples criterios) =====
-const SILENCE_THRESHOLD_RMS: f32 = 0.025; // Umbral RMS más alto (ignorar ruido)
+const SILENCE_THRESHOLD_RMS: f32 = 0.01; // Umbral RMS relajado para captar voz normal
 const SILENCE_THRESHOLD_ZCR: f32 = 0.3; // Zero Crossing Rate (ruido blanco tiene ZCR alto)
-const SILENCE_THRESHOLD_ENERGY_RATIO: f32 = 5.0; // Ratio peak/mean energy
+const SILENCE_THRESHOLD_ENERGY_RATIO: f32 = 3.0; // Ratio peak/mean energy más permisivo
 const SILENCE_HOLDOFF_MS: u64 = 1200; // Esperar más tiempo antes de marcar final (1.2s)
 
 /// VAD inteligente que usa múltiples criterios para distinguir voz de ruido
@@ -31,6 +31,8 @@ fn is_silence(samples: &[f32]) -> bool {
   // 1) RMS (Root Mean Square) - energía general
   let acc: f32 = samples.iter().map(|x| x * x).sum();
   let rms = (acc / samples.len() as f32).sqrt();
+
+  tracing::trace!("VAD: rms={:.4}", rms);
 
   if rms < SILENCE_THRESHOLD_RMS {
     return true; // Muy bajo volumen = silencio
@@ -56,11 +58,13 @@ fn is_silence(samples: &[f32]) -> bool {
 
   if mean > 0.0 {
     let ratio = peak / mean;
+    tracing::trace!("VAD: peak/mean={:.2}", ratio);
     if ratio < SILENCE_THRESHOLD_ENERGY_RATIO {
       return true; // Sin picos claros = ruido constante, no voz
     }
   }
 
+  tracing::trace!("VAD: ✅ VOZ DETECTADA");
   false // Pasó todos los criterios = probablemente voz
 }
 
