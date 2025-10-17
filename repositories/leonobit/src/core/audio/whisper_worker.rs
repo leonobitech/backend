@@ -220,12 +220,20 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
   if is_speech {
     tracing::debug!(
       "🎤 VOZ [limpia]: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}, noise_frames={}",
-      spectral_flux, speech_band_energy, formant_energy, flatness, memory.noise_estimator.silence_frames
+      spectral_flux,
+      speech_band_energy,
+      formant_energy,
+      flatness,
+      memory.noise_estimator.silence_frames
     );
   } else {
     tracing::debug!(
       "🔇 RUIDO: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}, noise_frames={}",
-      spectral_flux, speech_band_energy, formant_energy, flatness, memory.noise_estimator.silence_frames
+      spectral_flux,
+      speech_band_energy,
+      formant_energy,
+      flatness,
+      memory.noise_estimator.silence_frames
     );
   }
 
