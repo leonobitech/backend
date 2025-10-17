@@ -120,8 +120,11 @@ struct SpectralMemory {
 /// VAD Espectral Adaptativo: Detecta voz humana vs ruido usando FFT + filtrado dinámico
 fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
   if samples.is_empty() {
+    tracing::trace!("🔇 is_silence: samples vacíos");
     return true;
   }
+
+  tracing::trace!("🔍 is_silence: procesando {} samples", samples.len());
 
   // 1. FFT para análisis espectral (espectro RAW sin filtrar)
   let raw_spectrum = compute_magnitude_spectrum(samples);
@@ -211,7 +214,7 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
       spectral_flux, speech_band_energy, formant_energy, flatness, memory.noise_estimator.silence_frames
     );
   } else {
-    tracing::trace!(
+    tracing::debug!(
       "🔇 RUIDO: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}, noise_frames={}",
       spectral_flux, speech_band_energy, formant_energy, flatness, memory.noise_estimator.silence_frames
     );
