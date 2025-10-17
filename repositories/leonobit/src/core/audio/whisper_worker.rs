@@ -47,6 +47,7 @@ const SPEECH_GATE_OFF_WINDOWS: usize = 4; // 4 ventanas de silencio (~400ms) par
 const MAX_GATE_MEMORY_WINDOWS: usize = 12; // Tope para los contadores (~1.2s)
 const PHRASE_CONTEXT_MS: usize = 300; // Contexto a conservar tras finalizar (ms)
 const PHRASE_CONTEXT_SAMPLES: usize = PHRASE_CONTEXT_MS * 16_000 / 1000;
+const MIN_PHRASE_SAMPLES: usize = MIN_PHRASE_DURATION_MS as usize * 16_000 / 1000;
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
@@ -733,6 +734,48 @@ pub async fn run_whisper_worker(
             }
         }
     }
+  }
+
+  let pending_audio = {
+    let mut buf = pcm_buf.lock().await;
+    if buf.is_empty() {
+      None
+    } else {
+      let samples = buf.len();
+      let phrase_duration = samples as f32 / 16_000.0;
+      let dur_ms = ms(Duration::from_secs_f64(phrase_duration as f64));
+
+      if samples >= MIN_PHRASE_SAMPLES {
+        tracing::info!(
+          "⏹️ Flush final: procesando frase pendiente al cierre ({:.2}s, ~{:.0}ms)",
+          phrase_duration,
+          dur_ms
+        );
+        let audio = buf.clone();
+        buf.clear();
+        Some(audio)
+      } else {
+        tracing::debug!(
+          "Flush final: descartando {:.0}ms pendientes (< {}ms mínimos)",
+          dur_ms,
+          MIN_PHRASE_DURATION_MS
+        );
+        buf.clear();
+        None
+      }
+    }
+  };
+
+  if let Some(audio) = pending_audio {
+    process_complete_phrase(
+      &mut state,
+      &params,
+      &audio,
+      &stt_tx,
+      &first_audio_at,
+      &mut first_phrase_logged,
+    )
+    .await;
   }
 
   Ok(())
