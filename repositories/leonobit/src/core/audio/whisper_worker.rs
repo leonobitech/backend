@@ -2,10 +2,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use rustfft::num_complex::Complex;
+use rustfft::FftPlanner;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use tokio::sync::Mutex;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext};
-use rustfft::{FftPlanner, num_complex::Complex};
 
 use crate::core::audio::opus::Opus48k;
 use crate::core::audio::resample::Resampler48kTo16k;
@@ -19,29 +20,29 @@ const MIN_PHRASE_DURATION_MS: u64 = 500; // Mínimo 500ms para considerar frase 
 const MAX_PHRASE_DURATION_S: f32 = 30.0; // Máximo 30s por frase (safety)
 
 // ===== VAD Espectral con FFT =====
-const SPEECH_FREQ_MIN: f32 = 300.0;   // Hz - Frecuencia mínima de voz humana
-const SPEECH_FREQ_MAX: f32 = 3400.0;  // Hz - Frecuencia máxima de voz humana
-const FORMANT_F1_MIN: f32 = 500.0;    // Hz - Primer formante (vocales)
+const SPEECH_FREQ_MIN: f32 = 300.0; // Hz - Frecuencia mínima de voz humana
+const SPEECH_FREQ_MAX: f32 = 3400.0; // Hz - Frecuencia máxima de voz humana
+const FORMANT_F1_MIN: f32 = 500.0; // Hz - Primer formante (vocales)
 const FORMANT_F1_MAX: f32 = 900.0;
-const FORMANT_F2_MIN: f32 = 1400.0;   // Hz - Segundo formante (vocales)
+const FORMANT_F2_MIN: f32 = 1400.0; // Hz - Segundo formante (vocales)
 const FORMANT_F2_MAX: f32 = 2200.0;
-const FORMANT_F3_MIN: f32 = 2200.0;   // Hz - Tercer formante (consonantes)
+const FORMANT_F3_MIN: f32 = 2200.0; // Hz - Tercer formante (consonantes)
 const FORMANT_F3_MAX: f32 = 3200.0;
 
 const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.3; // Bajo = voz, Alto = ruido blanco
-const FORMANT_ENERGY_THRESHOLD: f32 = 0.4;    // Mínima energía en formantes para considerar voz
-const MIN_SPEECH_ENERGY: f32 = 0.005;          // Umbral mínimo de energía total
+const FORMANT_ENERGY_THRESHOLD: f32 = 0.4; // Mínima energía en formantes para considerar voz
+const MIN_SPEECH_ENERGY: f32 = 0.005; // Umbral mínimo de energía total
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
 enum SpeechState {
-    /// Esperando inicio de voz
-    Silence,
-    /// Acumulando audio de una frase en progreso
-    AccumulatingSpeech {
-        phrase_start: Instant,
-        last_speech_time: Instant,
-    },
+  /// Esperando inicio de voz
+  Silence,
+  /// Acumulando audio de una frase en progreso
+  AccumulatingSpeech {
+    phrase_start: Instant,
+    last_speech_time: Instant,
+  },
 }
 
 /// VAD Espectral: Detecta voz humana vs ruido usando análisis de frecuencias (FFT)
@@ -83,12 +84,16 @@ fn is_silence(samples: &[f32]) -> bool {
   if is_speech {
     tracing::trace!(
       "🎤 VOZ: speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      speech_band_energy, formant_energy, flatness
+      speech_band_energy,
+      formant_energy,
+      flatness
     );
   } else {
     tracing::trace!(
       "🔇 RUIDO: speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      speech_band_energy, formant_energy, flatness
+      speech_band_energy,
+      formant_energy,
+      flatness
     );
   }
 
@@ -100,10 +105,7 @@ fn compute_magnitude_spectrum(samples: &[f32]) -> Vec<f32> {
   let n = samples.len();
 
   // Preparar buffer complejo para FFT
-  let mut buffer: Vec<Complex<f32>> = samples
-    .iter()
-    .map(|&x| Complex { re: x, im: 0.0 })
-    .collect();
+  let mut buffer: Vec<Complex<f32>> = samples.iter().map(|&x| Complex { re: x, im: 0.0 }).collect();
 
   // Aplicar ventana de Hanning para reducir artifacts espectrales
   for (i, sample) in buffer.iter_mut().enumerate() {
@@ -154,11 +156,7 @@ fn spectral_flatness(spectrum: &[f32]) -> f32 {
   }
 
   // Media geométrica
-  let geometric_mean = spectrum
-    .iter()
-    .map(|&x| (x + 1e-10).ln())
-    .sum::<f32>()
-    / spectrum.len() as f32;
+  let geometric_mean = spectrum.iter().map(|&x| (x + 1e-10).ln()).sum::<f32>() / spectrum.len() as f32;
   let geometric_mean = geometric_mean.exp();
 
   // Media aritmética
@@ -185,7 +183,10 @@ fn is_valid_transcription(text: &str) -> bool {
   }
 
   // Rechazar si tiene muchos caracteres extraños consecutivos
-  let weird_chars = text.chars().filter(|c| !c.is_alphanumeric() && !c.is_whitespace()).count();
+  let weird_chars = text
+    .chars()
+    .filter(|c| !c.is_alphanumeric() && !c.is_whitespace())
+    .count();
   if weird_chars as f32 / text.len() as f32 > 0.5 {
     return false;
   }
@@ -232,9 +233,7 @@ async fn process_complete_phrase(
 
   // Cronometrar Whisper
   let t0 = Instant::now();
-  let res = tokio::task::block_in_place(|| {
-    state.full(params.clone(), phrase_audio)
-  });
+  let res = tokio::task::block_in_place(|| state.full(params.clone(), phrase_audio));
   let dt = t0.elapsed();
 
   if let Err(e) = res {
@@ -327,7 +326,7 @@ pub async fn run_whisper_worker(
   params.set_suppress_nst(true);
 
   // Parámetros críticos para filtrar ruido
-  params.set_temperature(0.0); // Sin sampling aleatorio = más determinístico
+  // params.set_temperature(0.0); // Sin sampling aleatorio = más determinístico
   params.set_entropy_thold(2.0); // Rechazar segmentos con alta entropía (ruido)
   params.set_logprob_thold(-1.0); // Rechazar segmentos con baja confianza
   params.set_no_speech_thold(0.6); // Threshold para detectar no-speech (más estricto)
