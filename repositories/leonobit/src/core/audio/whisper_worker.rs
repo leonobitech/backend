@@ -43,7 +43,7 @@ const SPEECH_BAND_THRESHOLD: f32 = 0.70; // Mínimo 70% energía en banda de voz
 const SPECTRAL_FLUX_THRESHOLD: f32 = 0.25; // Umbral de cambio espectral (incrementado para reducir falsos positivos)
 
 // ===== Umbral de energía RMS (nuevo) =====
-const RMS_ENERGY_THRESHOLD: f32 = 0.015; // Energía RMS mínima para considerar audio (rechaza ruidos muy suaves)
+const RMS_ENERGY_THRESHOLD: f32 = 0.025; // Energía RMS mínima AUMENTADA para solo voz clara y fuerte (antes 0.015)
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug)]
@@ -276,8 +276,16 @@ fn spectral_flatness(spectrum: &[f32]) -> f32 {
 fn is_valid_transcription(text: &str) -> bool {
   let text_trimmed = text.trim();
 
-  // Rechazar si es muy corto (menos de 3 caracteres para evitar "ah", "mm", etc.)
-  if text_trimmed.len() < 3 {
+  // Rechazar si es muy corto (menos de 5 caracteres - MÁS ESTRICTO)
+  if text_trimmed.len() < 5 {
+    tracing::debug!("Rechazado por muy corto (< 5 chars): '{}'", text_trimmed);
+    return false;
+  }
+
+  // NUEVO: Rechazar si tiene menos de 2 palabras (queremos frases, no palabras sueltas)
+  let words: Vec<&str> = text_trimmed.split_whitespace().collect();
+  if words.len() < 2 {
+    tracing::debug!("Rechazado por < 2 palabras: '{}'", text_trimmed);
     return false;
   }
 
@@ -620,11 +628,11 @@ pub async fn run_whisper_worker(
   params.set_suppress_blank(true);
   params.set_suppress_nst(true);
 
-  // Parámetros críticos para filtrar ruido (MEJORADOS para MVP)
+  // Parámetros críticos para filtrar ruido (MUY ESTRICTOS para eliminar "locuras")
   params.set_temperature(0.0); // IMPORTANTE: Sin sampling aleatorio = más determinístico y confiable
-  params.set_entropy_thold(2.5); // Incrementado: Rechazar segmentos con alta entropía (ruido) - más estricto
-  params.set_logprob_thold(-0.8); // Mejorado: Solo aceptar segmentos con alta confianza (más estricto que -1.0)
-  params.set_no_speech_thold(0.65); // Incrementado: Threshold para detectar no-speech (aún más estricto)
+  params.set_entropy_thold(2.0); // MUY ESTRICTO: Rechazar segmentos con alta entropía (ruido)
+  params.set_logprob_thold(-0.5); // MUY ESTRICTO: Solo segmentos de MÁXIMA confianza (antes -0.8)
+  params.set_no_speech_thold(0.75); // MUY ESTRICTO: Umbral alto para detectar no-speech (antes 0.65)
 
   // ---------- Buffer PCM16 compartido ----------
   let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(480_000))); // ~30s máximo
