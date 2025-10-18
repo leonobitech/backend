@@ -19,6 +19,12 @@ const PHRASE_END_SILENCE_MS: u64 = 500; // 500ms de silencio = fin de frase (red
 const MIN_PHRASE_DURATION_MS: u64 = 400; // Mínimo 400ms para considerar frase válida (reducido de 500ms)
 const MAX_PHRASE_DURATION_S: f32 = 30.0; // Máximo 30s por frase (safety)
 
+// ===== Configuración de Streaming (NUEVO para demo MVP) =====
+const STREAMING_ENABLED: bool = true; // Enable/disable streaming parcials
+const STREAMING_UPDATE_INTERVAL_MS: u64 = 1500; // Enviar update cada 1.5s mientras habla
+const STREAMING_MIN_AUDIO_MS: u64 = 1000; // Mínimo 1s de audio para primera transcripción parcial
+const STREAMING_OVERLAP_MS: u64 = 300; // 300ms overlap para mantener contexto entre windows
+
 // ===== VAD Espectral con FFT =====
 const SPEECH_FREQ_MIN: f32 = 300.0; // Hz - Frecuencia mínima de voz humana
 const SPEECH_FREQ_MAX: f32 = 3400.0; // Hz - Frecuencia máxima de voz humana
@@ -40,7 +46,7 @@ const SPECTRAL_FLUX_THRESHOLD: f32 = 0.25; // Umbral de cambio espectral (increm
 const RMS_ENERGY_THRESHOLD: f32 = 0.015; // Energía RMS mínima para considerar audio (rechaza ruidos muy suaves)
 
 /// Estado de la máquina de detección de frases
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum SpeechState {
   /// Esperando inicio de voz
   Silence,
@@ -48,7 +54,42 @@ enum SpeechState {
   AccumulatingSpeech {
     phrase_start: Instant,
     last_speech_time: Instant,
+    streaming_ctx: StreamingContext,
   },
+}
+
+/// Contexto para transcripciones parciales en streaming (NUEVO)
+#[derive(Debug)]
+struct StreamingContext {
+  /// Última transcripción parcial enviada
+  last_partial_text: String,
+  /// Última vez que enviamos update parcial
+  last_update_time: Instant,
+  /// Contador de palabras en última transcripción (para detectar cambios significativos)
+  last_word_count: usize,
+}
+
+impl StreamingContext {
+  fn new() -> Self {
+    Self {
+      last_partial_text: String::new(),
+      last_update_time: Instant::now(),
+      last_word_count: 0,
+    }
+  }
+
+  /// Verifica si debemos enviar un update parcial
+  fn should_send_update(&self, current_word_count: usize) -> bool {
+    if !STREAMING_ENABLED {
+      return false;
+    }
+
+    let elapsed = self.last_update_time.elapsed();
+    let has_new_words = current_word_count > self.last_word_count;
+
+    // Enviar si pasó el intervalo Y hay palabras nuevas
+    elapsed.as_millis() >= STREAMING_UPDATE_INTERVAL_MS as u128 && has_new_words
+  }
 }
 
 /// Cache del espectro anterior para detectar varianza temporal
@@ -385,6 +426,82 @@ fn ms(d: Duration) -> f32 {
   (d.as_secs_f64() * 1000.0) as f32
 }
 
+/// Procesa un chunk de audio para transcripción parcial (streaming) - NUEVO
+async fn process_streaming_chunk(
+  state: &mut whisper_rs::WhisperState,
+  params: &FullParams<'_, '_>,
+  audio_chunk: &[f32],
+  ctx: &mut StreamingContext,
+  stt_tx: &UnboundedSender<SttMsg>,
+) -> Result<()> {
+  let chunk_secs = audio_chunk.len() as f32 / 16_000.0;
+
+  tracing::debug!("🎬 Procesando chunk parcial ({:.2}s de audio)...", chunk_secs);
+
+  // Cronometrar Whisper
+  let t0 = Instant::now();
+  let res = tokio::task::block_in_place(|| state.full(params.clone(), audio_chunk));
+  let dt = t0.elapsed();
+
+  if let Err(e) = res {
+    tracing::warn!("whisper chunk error: {e:#}");
+    return Ok(()); // No es fatal, continuamos
+  }
+
+  tracing::debug!("⚡ Whisper chunk completado en {:.0}ms", ms(dt));
+
+  // Construir transcripción parcial
+  let mut transcription = String::new();
+  for seg in state.as_iter() {
+    let mut seg_txt = seg.to_string();
+    seg_txt = seg_txt.trim().to_string();
+    if seg_txt.is_empty() || seg_txt == "[BLANK_AUDIO]" {
+      continue;
+    }
+    if !transcription.is_empty() {
+      transcription.push(' ');
+    }
+    transcription.push_str(&seg_txt);
+  }
+
+  // Validar
+  if transcription.is_empty() {
+    tracing::trace!("Transcripción parcial vacía - ignorando");
+    return Ok(());
+  }
+
+  // Contar palabras
+  let word_count = transcription.split_whitespace().count();
+
+  // Solo enviar si hay cambio significativo (al menos una palabra nueva)
+  if word_count > ctx.last_word_count {
+    // Post-procesar (sin punto final, es parcial)
+    let mut cleaned = transcription.trim().to_string();
+
+    // Capitalizar primera letra
+    if let Some(first_char) = cleaned.chars().next() {
+      if first_char.is_lowercase() {
+        let mut chars = cleaned.chars();
+        chars.next();
+        cleaned = first_char.to_uppercase().collect::<String>() + chars.as_str();
+      }
+    }
+
+    // Actualizar contexto
+    ctx.last_partial_text = cleaned.clone();
+    ctx.last_word_count = word_count;
+    ctx.last_update_time = Instant::now();
+
+    // Enviar como PARTIAL
+    tracing::info!("📨 Transcripción parcial ({} palabras): '{}'", word_count, cleaned);
+    let _ = stt_tx.send(SttMsg::Partial { text: cleaned });
+  } else {
+    tracing::trace!("Sin palabras nuevas ({} palabras), skip update", word_count);
+  }
+
+  Ok(())
+}
+
 /// Procesa una frase completa con Whisper (invocación única, no streaming)
 async fn process_complete_phrase(
   state: &mut whisper_rs::WhisperState,
@@ -635,19 +752,49 @@ pub async fn run_whisper_worker(
                         speech_state = SpeechState::AccumulatingSpeech {
                             phrase_start: now,
                             last_speech_time: now,
+                            streaming_ctx: StreamingContext::new(), // NUEVO: Inicializar contexto de streaming
                         };
                     }
                 }
 
                 // ===== ESTADO: ACUMULANDO VOZ =====
-                SpeechState::AccumulatingSpeech { phrase_start, mut last_speech_time } => {
+                SpeechState::AccumulatingSpeech { ref phrase_start, ref mut last_speech_time, ref mut streaming_ctx } => {
                     if has_speech {
                         // Actualizar tiempo de última voz
-                        last_speech_time = Instant::now();
-                        speech_state = SpeechState::AccumulatingSpeech {
-                            phrase_start,
-                            last_speech_time,
+                        *last_speech_time = Instant::now();
+                    }
+
+                    // NUEVO: Check si debemos enviar transcripción parcial (streaming)
+                    if STREAMING_ENABLED && has_speech {
+                        let audio_duration_ms = {
+                            let g = pcm_buf.lock().await;
+                            (g.len() as f32 / 16.0) as u64 // 16 samples/ms at 16kHz
                         };
+
+                        // Solo procesar si tenemos suficiente audio
+                        if audio_duration_ms >= STREAMING_MIN_AUDIO_MS {
+                            // Verificar si debemos enviar update
+                            if streaming_ctx.should_send_update(streaming_ctx.last_word_count + 1) {
+                                tracing::debug!("🔄 Streaming: Procesando chunk parcial...");
+
+                                // Clonar buffer actual para procesamiento
+                                let current_buffer = {
+                                    let g = pcm_buf.lock().await;
+                                    g.clone()
+                                };
+
+                                // Procesar chunk para transcripción parcial
+                                if let Err(e) = process_streaming_chunk(
+                                    &mut state,
+                                    &params,
+                                    &current_buffer,
+                                    streaming_ctx,
+                                    &stt_tx,
+                                ).await {
+                                    tracing::warn!("Error procesando chunk streaming: {e:#}");
+                                }
+                            }
+                        }
                     }
 
                     let phrase_duration = phrase_start.elapsed();
