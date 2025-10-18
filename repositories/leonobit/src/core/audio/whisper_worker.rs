@@ -34,7 +34,10 @@ const FORMANT_ENERGY_THRESHOLD: f32 = 0.14; // Mínima energía en formantes (vo
 const SPEECH_BAND_THRESHOLD: f32 = 0.70; // Mínimo 70% energía en banda de voz (más estricto)
 
 // ===== Detector de varianza espectral =====
-const SPECTRAL_FLUX_THRESHOLD: f32 = 0.15; // Umbral de cambio espectral (voz tiene alta varianza)
+const SPECTRAL_FLUX_THRESHOLD: f32 = 0.25; // Umbral de cambio espectral (incrementado para reducir falsos positivos)
+
+// ===== Umbral de energía RMS (nuevo) =====
+const RMS_ENERGY_THRESHOLD: f32 = 0.015; // Energía RMS mínima para considerar audio (rechaza ruidos muy suaves)
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug, Clone)]
@@ -57,6 +60,17 @@ struct SpectralMemory {
 fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
   if samples.is_empty() {
     return true;
+  }
+
+  // 0. Filtro RMS (energía total) - NUEVO: Rechazar audio muy suave
+  let rms_energy = compute_rms_energy(samples);
+  if rms_energy < RMS_ENERGY_THRESHOLD {
+    tracing::trace!(
+      "🔇 RMS muy bajo: {:.4} (umbral: {:.4})",
+      rms_energy,
+      RMS_ENERGY_THRESHOLD
+    );
+    return true; // Demasiado suave = silencio
   }
 
   // 1. FFT para análisis espectral
@@ -103,29 +117,49 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
   // 5. Calcular spectral flatness (detecta ruido blanco)
   let flatness = spectral_flatness(&spectrum);
 
-  // 6. Decisión: ¿Es voz humana?
-  // NUEVA LÓGICA: Requiere varianza espectral (cambio temporal) + criterios estáticos
+  // 6. Decisión mejorada: ¿Es voz humana?
   let has_spectral_change = spectral_flux > SPECTRAL_FLUX_THRESHOLD;
   let has_speech_band = speech_band_energy > SPEECH_BAND_THRESHOLD;
   let has_formants = formant_energy > FORMANT_ENERGY_THRESHOLD;
   let not_white_noise = flatness < SPECTRAL_FLATNESS_THRESHOLD;
 
-  // Voz = DEBE tener cambio espectral + criterios estáticos
-  let is_speech = has_spectral_change && has_speech_band && (has_formants || not_white_noise);
+  // MEJORA: Hacer el cambio espectral opcional si los otros criterios son muy fuertes
+  // Permite detectar voz continua/monótona sin perder robustez contra ruido constante
+  let strong_voice_indicators = has_speech_band && has_formants && not_white_noise;
+  let is_speech = (has_spectral_change && has_speech_band && (has_formants || not_white_noise))
+    || (strong_voice_indicators && rms_energy > RMS_ENERGY_THRESHOLD * 2.0); // Voz fuerte sin cambio espectral
 
   if is_speech {
     tracing::debug!(
-      "🎤 VOZ: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      spectral_flux, speech_band_energy, formant_energy, flatness
+      "🎤 VOZ: rms={:.4}, flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
+      rms_energy,
+      spectral_flux,
+      speech_band_energy,
+      formant_energy,
+      flatness
     );
   } else {
     tracing::trace!(
-      "🔇 RUIDO: flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      spectral_flux, speech_band_energy, formant_energy, flatness
+      "🔇 RUIDO: rms={:.4}, flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
+      rms_energy,
+      spectral_flux,
+      speech_band_energy,
+      formant_energy,
+      flatness
     );
   }
 
   !is_speech // Retornar true si NO es voz (es silencio/ruido)
+}
+
+/// Calcula la energía RMS (Root Mean Square) de una ventana de audio
+fn compute_rms_energy(samples: &[f32]) -> f32 {
+  if samples.is_empty() {
+    return 0.0;
+  }
+
+  let sum_of_squares: f32 = samples.iter().map(|&x| x * x).sum();
+  (sum_of_squares / samples.len() as f32).sqrt()
 }
 
 /// Calcula el espectro de magnitudes usando FFT
@@ -199,23 +233,75 @@ fn spectral_flatness(spectrum: &[f32]) -> f32 {
 
 /// Valida que el texto transcrito sea coherente y no ruido
 fn is_valid_transcription(text: &str) -> bool {
-  // Rechazar si es muy corto (menos de 2 caracteres)
-  if text.len() < 2 {
+  let text_trimmed = text.trim();
+
+  // Rechazar si es muy corto (menos de 3 caracteres para evitar "ah", "mm", etc.)
+  if text_trimmed.len() < 3 {
     return false;
   }
 
   // Rechazar si solo tiene caracteres repetidos (ej: "aaaa", ".....")
-  let unique_chars: std::collections::HashSet<char> = text.chars().collect();
+  let unique_chars: std::collections::HashSet<char> = text_trimmed.chars().collect();
   if unique_chars.len() == 1 {
     return false;
   }
 
+  // NUEVO: Rechazar repeticiones de la misma palabra/sílaba
+  let words: Vec<&str> = text_trimmed.split_whitespace().collect();
+  if words.len() > 2 {
+    // Si más del 60% son la misma palabra, rechazar
+    let mut word_counts = std::collections::HashMap::new();
+    for word in &words {
+      *word_counts.entry(word.to_lowercase()).or_insert(0) += 1;
+    }
+
+    for count in word_counts.values() {
+      if *count as f32 / words.len() as f32 > 0.6 {
+        tracing::debug!("Rechazado por repetición de palabras: '{}'", text_trimmed);
+        return false;
+      }
+    }
+  }
+
+  // NUEVO: Rechazar si tiene muy pocas vocales (ratio consonantes/vocales anormal)
+  let vowels = "aeiouáéíóúäëïöüAEIOUÁÉÍÓÚÄËÏÖÜ";
+  let vowel_count = text_trimmed.chars().filter(|c| vowels.contains(*c)).count();
+  let letter_count = text_trimmed.chars().filter(|c| c.is_alphabetic()).count();
+
+  if letter_count > 0 {
+    let vowel_ratio = vowel_count as f32 / letter_count as f32;
+    // El español tiene ~45% vocales, rechazar si es < 15% (ruido) o > 85% (repeticiones como "aaa")
+    if vowel_ratio < 0.15 || vowel_ratio > 0.85 {
+      tracing::debug!(
+        "Rechazado por ratio de vocales anormal ({:.2}): '{}'",
+        vowel_ratio,
+        text_trimmed
+      );
+      return false;
+    }
+  }
+
   // Rechazar si tiene muchos caracteres extraños consecutivos
-  let weird_chars = text
+  let weird_chars = text_trimmed
     .chars()
-    .filter(|c| !c.is_alphanumeric() && !c.is_whitespace())
+    .filter(|c| !c.is_alphanumeric() && !c.is_whitespace() && *c != ',' && *c != '.' && *c != '?' && *c != '!')
     .count();
-  if weird_chars as f32 / text.len() as f32 > 0.5 {
+  if weird_chars as f32 / text_trimmed.len() as f32 > 0.3 {
+    tracing::debug!("Rechazado por caracteres extraños: '{}'", text_trimmed);
+    return false;
+  }
+
+  // NUEVO: Rechazar interjecciones y sonidos sin sentido comunes
+  let noise_words = [
+    "ah", "eh", "mm", "mmm", "mmmm", "uh", "uhm", "em", "hmm", "hm", "aah", "eeh", "ooh", "ugh", "huh", "shh", "psst",
+    "aaah", "eeeh", "oooh", "uuuh",
+  ];
+
+  let text_lower = text_trimmed.to_lowercase();
+
+  // Si TODA la transcripción es solo una interjección, rechazar
+  if noise_words.contains(&text_lower.as_str()) {
+    tracing::debug!("Rechazado por interjección pura: '{}'", text_trimmed);
     return false;
   }
 
@@ -229,16 +315,69 @@ fn is_valid_transcription(text: &str) -> bool {
     "música",
     "[música]",
     "(música)",
+    "applause", // Whisper multilingüe a veces transcribe aplausos
+    "[applause]",
+    "(applause)",
+    "♪", // Notas musicales
   ];
 
-  let text_lower = text.to_lowercase();
   for pattern in &suspicious_patterns {
     if text_lower.contains(pattern) {
+      tracing::debug!("Rechazado por patrón sospechoso '{}': '{}'", pattern, text_trimmed);
       return false;
     }
   }
 
+  // NUEVO: Rechazar si parece ser solo puntuación repetida
+  let punct_count = text_trimmed.chars().filter(|c| c.is_ascii_punctuation()).count();
+  if punct_count > 0 && punct_count as f32 / text_trimmed.len() as f32 > 0.5 {
+    tracing::debug!("Rechazado por exceso de puntuación: '{}'", text_trimmed);
+    return false;
+  }
+
   true
+}
+
+/// Post-procesa la transcripción para limpiar artefactos comunes
+fn post_process_transcription(text: &str) -> String {
+  let mut result = text.trim().to_string();
+
+  // 1. Eliminar espacios múltiples
+  while result.contains("  ") {
+    result = result.replace("  ", " ");
+  }
+
+  // 2. Limpiar puntuación duplicada
+  result = result.replace("...", ".");
+  result = result.replace("..", ".");
+  result = result.replace(",,", ",");
+  result = result.replace("!!", "!");
+  result = result.replace("??", "?");
+
+  // 3. Capitalizar primera letra si es minúscula
+  if let Some(first_char) = result.chars().next() {
+    if first_char.is_lowercase() {
+      let mut chars = result.chars();
+      chars.next(); // Saltar primera
+      result = first_char.to_uppercase().collect::<String>() + chars.as_str();
+    }
+  }
+
+  // 4. Eliminar espacios antes de puntuación
+  result = result.replace(" .", ".");
+  result = result.replace(" ,", ",");
+  result = result.replace(" !", "!");
+  result = result.replace(" ?", "?");
+
+  // 5. Agregar punto final si no tiene puntuación terminal
+  if !result.is_empty() {
+    let last_char = result.chars().last().unwrap();
+    if !['.', '!', '?'].contains(&last_char) {
+      result.push('.');
+    }
+  }
+
+  result
 }
 
 // helper ms pretty
@@ -285,14 +424,23 @@ async fn process_complete_phrase(
     transcription.push_str(&seg_txt);
   }
 
-  // Validar y enviar
+  // Validar
   if transcription.is_empty() {
     tracing::debug!("Transcripción vacía - ignorando");
     return;
   }
 
   if !is_valid_transcription(&transcription) {
-    tracing::debug!("Transcripción inválida: '{}'", transcription);
+    tracing::debug!("Transcripción inválida (filtrada): '{}'", transcription);
+    return;
+  }
+
+  // Post-procesar para limpiar artefactos
+  let transcription_cleaned = post_process_transcription(&transcription);
+
+  // Validar nuevamente después del post-procesamiento (puede haber cambiado)
+  if !is_valid_transcription(&transcription_cleaned) {
+    tracing::debug!("Transcripción inválida post-limpieza: '{}'", transcription_cleaned);
     return;
   }
 
@@ -307,8 +455,10 @@ async fn process_complete_phrase(
   }
 
   // Enviar como FINAL (frase completa procesada de una sola vez)
-  tracing::info!("📝 Transcripción: '{}'", transcription);
-  let _ = stt_tx.send(SttMsg::Final { text: transcription });
+  tracing::info!("📝 Transcripción: '{}'", transcription_cleaned);
+  let _ = stt_tx.send(SttMsg::Final {
+    text: transcription_cleaned,
+  });
 }
 
 /// Task A (ingest): RTP Opus → 48k → 16k → buffer compartido
@@ -353,11 +503,11 @@ pub async fn run_whisper_worker(
   params.set_suppress_blank(true);
   params.set_suppress_nst(true);
 
-  // Parámetros críticos para filtrar ruido
-  // params.set_temperature(0.0); // Sin sampling aleatorio = más determinístico
-  params.set_entropy_thold(2.0); // Rechazar segmentos con alta entropía (ruido)
-  params.set_logprob_thold(-1.0); // Rechazar segmentos con baja confianza
-  params.set_no_speech_thold(0.6); // Threshold para detectar no-speech (más estricto)
+  // Parámetros críticos para filtrar ruido (MEJORADOS para MVP)
+  params.set_temperature(0.0); // IMPORTANTE: Sin sampling aleatorio = más determinístico y confiable
+  params.set_entropy_thold(2.5); // Incrementado: Rechazar segmentos con alta entropía (ruido) - más estricto
+  params.set_logprob_thold(-0.8); // Mejorado: Solo aceptar segmentos con alta confianza (más estricto que -1.0)
+  params.set_no_speech_thold(0.65); // Incrementado: Threshold para detectar no-speech (aún más estricto)
 
   // ---------- Buffer PCM16 compartido ----------
   let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(480_000))); // ~30s máximo
