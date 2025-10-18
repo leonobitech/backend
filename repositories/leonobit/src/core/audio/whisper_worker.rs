@@ -171,7 +171,7 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
     || (strong_voice_indicators && rms_energy > RMS_ENERGY_THRESHOLD * 2.0); // Voz fuerte sin cambio espectral
 
   if is_speech {
-    tracing::debug!(
+    tracing::info!(
       "🎤 VOZ: rms={:.4}, flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
       rms_energy,
       spectral_flux,
@@ -179,16 +179,8 @@ fn is_silence(samples: &[f32], memory: &mut SpectralMemory) -> bool {
       formant_energy,
       flatness
     );
-  } else {
-    tracing::trace!(
-      "🔇 RUIDO: rms={:.4}, flux={:.3}, speech_band={:.2}, formants={:.2}, flatness={:.2}",
-      rms_energy,
-      spectral_flux,
-      speech_band_energy,
-      formant_energy,
-      flatness
-    );
   }
+  // Note: No mostramos logs de RUIDO para no inundar, pero el VAD está funcionando
 
   !is_speech // Retornar true si NO es voz (es silencio/ruido)
 }
