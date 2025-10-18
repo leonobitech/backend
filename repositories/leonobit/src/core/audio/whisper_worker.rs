@@ -35,15 +35,15 @@ const FORMANT_F2_MAX: f32 = 2200.0;
 const FORMANT_F3_MIN: f32 = 2200.0; // Hz - Tercer formante (consonantes)
 const FORMANT_F3_MAX: f32 = 3200.0;
 
-const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.25; // Bajo = voz, Alto = ruido blanco (más estricto)
-const FORMANT_ENERGY_THRESHOLD: f32 = 0.14; // Mínima energía en formantes (voz real > 0.14)
-const SPEECH_BAND_THRESHOLD: f32 = 0.70; // Mínimo 70% energía en banda de voz (más estricto)
+const SPECTRAL_FLATNESS_THRESHOLD: f32 = 0.45; // Bajo = voz, Alto = ruido blanco (permisivo)
+const FORMANT_ENERGY_THRESHOLD: f32 = 0.08; // Mínima energía en formantes (permisivo)
+const SPEECH_BAND_THRESHOLD: f32 = 0.50; // Mínimo 50% energía en banda de voz (permisivo)
 
 // ===== Detector de varianza espectral =====
-const SPECTRAL_FLUX_THRESHOLD: f32 = 0.25; // Umbral de cambio espectral (incrementado para reducir falsos positivos)
+const SPECTRAL_FLUX_THRESHOLD: f32 = 0.08; // Umbral de cambio espectral (permisivo para detectar voz)
 
 // ===== Umbral de energía RMS (nuevo) =====
-const RMS_ENERGY_THRESHOLD: f32 = 0.018; // Energía RMS balanceada (ni muy bajo ni muy alto)
+const RMS_ENERGY_THRESHOLD: f32 = 0.008; // Energía RMS permisiva para detectar voz
 
 /// Estado de la máquina de detección de frases
 #[derive(Debug)]
@@ -268,62 +268,18 @@ fn spectral_flatness(spectrum: &[f32]) -> f32 {
 fn is_valid_transcription(text: &str) -> bool {
   let text_trimmed = text.trim();
 
-  // Rechazar si es muy corto (menos de 3 caracteres)
-  if text_trimmed.len() < 3 {
-    tracing::debug!("Rechazado por muy corto (< 3 chars): '{}'", text_trimmed);
+  // Validación PERMISIVA - Solo rechazar casos obvios de ruido
+
+  // Rechazar si es muy corto (menos de 2 caracteres)
+  if text_trimmed.len() < 2 {
+    tracing::debug!("Rechazado por muy corto (< 2 chars): '{}'", text_trimmed);
     return false;
   }
-
-  // Obtener palabras para validaciones
-  let words: Vec<&str> = text_trimmed.split_whitespace().collect();
 
   // Rechazar si solo tiene caracteres repetidos (ej: "aaaa", ".....")
   let unique_chars: std::collections::HashSet<char> = text_trimmed.chars().collect();
   if unique_chars.len() == 1 {
-    return false;
-  }
-
-  // NUEVO: Rechazar repeticiones de la misma palabra/sílaba
-  if words.len() > 2 {
-    // Si más del 60% son la misma palabra, rechazar
-    let mut word_counts = std::collections::HashMap::new();
-    for word in &words {
-      *word_counts.entry(word.to_lowercase()).or_insert(0) += 1;
-    }
-
-    for count in word_counts.values() {
-      if *count as f32 / words.len() as f32 > 0.6 {
-        tracing::debug!("Rechazado por repetición de palabras: '{}'", text_trimmed);
-        return false;
-      }
-    }
-  }
-
-  // NUEVO: Rechazar si tiene muy pocas vocales (ratio consonantes/vocales anormal)
-  let vowels = "aeiouáéíóúäëïöüAEIOUÁÉÍÓÚÄËÏÖÜ";
-  let vowel_count = text_trimmed.chars().filter(|c| vowels.contains(*c)).count();
-  let letter_count = text_trimmed.chars().filter(|c| c.is_alphabetic()).count();
-
-  if letter_count > 0 {
-    let vowel_ratio = vowel_count as f32 / letter_count as f32;
-    // El español tiene ~45% vocales, rechazar si es < 15% (ruido) o > 85% (repeticiones como "aaa")
-    if vowel_ratio < 0.15 || vowel_ratio > 0.85 {
-      tracing::debug!(
-        "Rechazado por ratio de vocales anormal ({:.2}): '{}'",
-        vowel_ratio,
-        text_trimmed
-      );
-      return false;
-    }
-  }
-
-  // Rechazar si tiene muchos caracteres extraños consecutivos
-  let weird_chars = text_trimmed
-    .chars()
-    .filter(|c| !c.is_alphanumeric() && !c.is_whitespace() && *c != ',' && *c != '.' && *c != '?' && *c != '!')
-    .count();
-  if weird_chars as f32 / text_trimmed.len() as f32 > 0.3 {
-    tracing::debug!("Rechazado por caracteres extraños: '{}'", text_trimmed);
+    tracing::debug!("Rechazado por caracteres repetidos: '{}'", text_trimmed);
     return false;
   }
 
@@ -608,11 +564,11 @@ pub async fn run_whisper_worker(
   params.set_suppress_blank(true);
   params.set_suppress_nst(true);
 
-  // Parámetros críticos para filtrar ruido (BALANCEADOS para MVP)
+  // Parámetros críticos para filtrar ruido (PERMISIVOS para detectar voz)
   params.set_temperature(0.0); // IMPORTANTE: Sin sampling aleatorio = más determinístico y confiable
-  params.set_entropy_thold(2.2); // BALANCEADO: Rechaza ruido pero acepta voz clara
-  params.set_logprob_thold(-0.7); // BALANCEADO: Buena confianza sin ser extremo
-  params.set_no_speech_thold(0.70); // BALANCEADO: Detecta bien el silencio
+  params.set_entropy_thold(1.8); // PERMISIVO: Acepta voz con algo de ruido
+  params.set_logprob_thold(-0.9); // PERMISIVO: Acepta confianza media-baja
+  params.set_no_speech_thold(0.75); // PERMISIVO: Menos agresivo detectando silencio
 
   // ---------- Buffer PCM16 compartido ----------
   let pcm_buf: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(480_000))); // ~30s máximo
