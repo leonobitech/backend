@@ -1,10 +1,10 @@
 {
-  "name": "@backend/claude-oauth",
-  "version": "0.1.0",
-  "description": "OAuth2 + JWKS service for Claude Desktop MCP integration",
+  "name": "@leonobitech/odoo-mcp",
+  "version": "2.0.0",
+  "description": "MCP server for Odoo with OAuth2 authentication - Control your Odoo CRM, contacts, calendar and more from Claude Desktop",
   "type": "module",
   "bin": {
-    "leonobitech-claude-mcp": "./dist/cli.mjs"
+    "odoo-mcp": "./dist/cli.mjs"
   },
   "files": [
     "dist",
@@ -39,9 +39,15 @@
     "generate:keys": "tsx src/scripts/generateKeys.ts"
   },
   "keywords": [
-    "leonobitech",
+    "mcp",
     "mcp-server",
-    "typescript"
+    "odoo",
+    "odoo-connector",
+    "claude-desktop",
+    "crm",
+    "oauth2",
+    "typescript",
+    "leonobitech"
   ],
   "author": "Leonobitech",
   "license": "MIT",

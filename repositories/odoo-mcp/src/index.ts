@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { ensureRedisConnection } from "@/lib/redis";
+import { initializeTools } from "@/tools/init";
 import { healthRouter } from "@/routes/health";
 import { mcpHttpRouter } from "@/routes/mcp-http";
 import { oauthRouter } from "@/routes/oauth";
@@ -59,9 +60,16 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 });
 
 async function start() {
+  // Initialize Redis connection
   await ensureRedisConnection();
+
+  // Initialize and register all tools
+  await initializeTools();
+  logger.info("[odoo-mcp] All tools registered");
+
+  // Start HTTP server
   app.listen(env.PORT, () => {
-    logger.info({ port: env.PORT }, "[claude-oauth] listening");
+    logger.info({ port: env.PORT }, "[odoo-mcp] MCP server listening");
   });
 }
 
