@@ -1,0 +1,56 @@
+# ./traefik/dynamic/router-protection.yaml
+#
+# 🛡️ Router protection against common exploit attempts
+# This creates catch-all routers that block malicious paths BEFORE they reach services
+# -----------------------------------------------------------------------------
+
+http:
+  routers:
+    # -------------------------------------------------------------------------
+    # 🚫 Block PHP exploitation attempts (WordPress, admin panels, etc.)
+    # Priority: 1000 (higher than normal routers)
+    # -------------------------------------------------------------------------
+    block-php-exploits:
+      rule: >-
+        PathPrefix(`/wp-`) ||
+        PathPrefix(`/xmlrpc`) ||
+        PathPrefix(`/phpmyadmin`) ||
+        PathPrefix(`/pma`) ||
+        PathPrefix(`/mysql`) ||
+        PathPrefix(`/sql`) ||
+        PathPrefix(`/.env`) ||
+        PathPrefix(`/.git`) ||
+        PathPrefix(`/config`) ||
+        PathPrefix(`/backup`) ||
+        PathPrefix(`/old`) ||
+        PathPrefix(`/temp`) ||
+        PathPrefix(`/vendor/phpunit`) ||
+        PathPrefix(`/api/jsonws`) ||
+        PathPrefix(`/console`) ||
+        PathPrefix(`/shell`) ||
+        PathPrefix(`/install`) ||
+        PathPrefix(`/setup`) ||
+        PathPrefix(`/admin.php`) ||
+        PathPrefix(`/about.php`) ||
+        PathPrefix(`/index.php`) ||
+        Path(`/admin`) ||
+        Path(`/administrator`) ||
+        Path(`/manager`) ||
+        Path(`/login.php`) ||
+        Path(`/wp-login.php`)
+      entryPoints:
+        - websecure
+        - web
+      service: blackhole
+      priority: 1000
+      middlewares:
+        - rate-limit-strict@file
+
+  # -------------------------------------------------------------------------
+  # 🕳️ Blackhole service - responds with 404 for blocked paths
+  # -------------------------------------------------------------------------
+  services:
+    blackhole:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:1"  # Invalid address returns error immediately

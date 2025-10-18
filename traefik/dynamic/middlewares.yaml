@@ -136,6 +136,24 @@ http:
         contentSecurityPolicy: "default-src 'self'; script-src 'self'; connect-src 'self';"
 
     # -------------------------------------------------------------------------
+    # 🛡️ Rate limiting para prevenir ataques de fuerza bruta
+    # -------------------------------------------------------------------------
+    rate-limit:
+      rateLimit:
+        average: 100         # 100 requests
+        period: 1m           # per minute
+        burst: 50            # allow burst of 50
+
+    # -------------------------------------------------------------------------
+    # 🛡️ Rate limiting estricto para rutas públicas
+    # -------------------------------------------------------------------------
+    rate-limit-strict:
+      rateLimit:
+        average: 20          # 20 requests
+        period: 1m           # per minute
+        burst: 10            # allow burst of 10
+
+    # -------------------------------------------------------------------------
     # 🧩 secure-odoo – Middleware especial para frontend de Odoo
     # -------------------------------------------------------------------------
     secure-odoo:
