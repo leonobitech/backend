@@ -1,0 +1,73 @@
+{
+  "name": "@backend/linkedin-mcp",
+  "version": "0.1.0",
+  "description": "LinkedIn HR/Recruiting MCP server for Claude Desktop - Search candidates, send InMails, manage pipeline",
+  "type": "module",
+  "bin": {
+    "leonobitech-claude-mcp": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pkgroll": {
+    "entries": [
+      "src/index.ts",
+      "src/cli.ts"
+    ],
+    "alias": {
+      "@": "./src"
+    },
+    "externals": [
+      "pino"
+    ]
+  },
+  "main": "dist/index.js",
+  "exports": "./dist/index.mjs",
+  "engines": {
+    "node": ">=22.20.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "pkgroll",
+    "start": "NODE_ENV=production node dist/index.mjs",
+    "lint": "tsc --noEmit",
+    "generate:keys": "tsx src/scripts/generateKeys.ts"
+  },
+  "keywords": [
+    "leonobitech",
+    "mcp-server",
+    "typescript"
+  ],
+  "author": "Leonobitech",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "5.1.0",
+    "helmet": "^8.1.0",
+    "jose": "^6.0.10",
+    "pino": "^10.0.0",
+    "qs": "^6.13.1",
+    "redis": "^4.7.0",
+    "uuid": "^11.1.0",
+    "xmlrpc": "^1.3.2",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.14.1",
+    "@types/qs": "^6.9.15",
+    "@types/uuid": "^10.0.0",
+    "pino-pretty": "^13.1.2",
+    "pkgroll": "^2.12.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

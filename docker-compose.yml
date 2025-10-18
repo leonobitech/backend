@@ -272,6 +272,54 @@ services:
       - "traefik.http.services.claude-oauth.loadbalancer.server.port=8100"
       - "traefik.http.routers.claude-oauth.middlewares=block-trackers@file,secure-strict@file"
 
+  linkedin_mcp:
+    container_name: linkedin_mcp
+    build:
+      context: ./repositories/linkedin-mcp
+    image: leonobitech/linkedin-mcp:v0.1
+    restart: unless-stopped
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/linkedin-mcp/.env
+
+    volumes:
+      - ./repositories/linkedin-mcp/keys:/app/keys:ro
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      redis_core:
+        condition: service_healthy
+      traefik:
+        condition: service_started
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''http'').get(''http://localhost:8200/healthz'', res => process.exit(res.statusCode === 200 ? 0 : 1))"'
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.linkedin-mcp.rule=Host(`${SUBDOMAINLINKEDINMCP}.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.linkedin-mcp.entrypoints=websecure"
+      - "traefik.http.routers.linkedin-mcp.tls.certresolver=le"
+      - "traefik.http.services.linkedin-mcp.loadbalancer.server.port=8200"
+      - "traefik.http.routers.linkedin-mcp.middlewares=block-trackers@file,secure-strict@file"
+
   n8n_main:
     image: n8nio/n8n:latest
     container_name: n8n_main
