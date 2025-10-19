@@ -7,45 +7,20 @@ export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
 
   async execute(input: unknown): Promise<SendEmailResponse> {
     const params = sendEmailSchema.parse(input);
-
-    let recipientEmail = params.emailTo;
-
-    if (!recipientEmail) {
-      const opportunities = await this.odooClient.read("crm.lead", [params.opportunityId], ["email_from", "partner_id"]);
-
-      if (opportunities.length === 0) {
-        throw new Error(`Opportunity #${params.opportunityId} not found`);
-      }
-
-      const opp = opportunities[0];
-
-      if (opp.email_from?.trim()) {
-        recipientEmail = opp.email_from.trim();
-      } else if (opp.partner_id?.[0]) {
-        const partners = await this.odooClient.read("res.partner", [opp.partner_id[0]], ["email"]);
-        if (partners[0]?.email) recipientEmail = partners[0].email;
-      }
-
-      if (!recipientEmail) {
-        throw new Error(`No email found for opportunity #${params.opportunityId}`);
-      }
-    }
-
-    const mailId = await this.odooClient.create("mail.mail", {
+    const result = await this.odooClient.sendEmailToOpportunity({
+      opportunityId: params.opportunityId,
       subject: params.subject,
-      body_html: params.body,
-      email_to: recipientEmail,
-      auto_delete: false,
-      model: "crm.lead",
-      res_id: params.opportunityId,
+      body: params.body,
+      emailTo: params.emailTo
     });
 
-    await this.odooClient.execute("mail.mail", "send", [[mailId]]);
+    const queueStatus = result.queueProcessed ? "Email queued for immediate delivery" : "Email enqueued; Odoo cron will deliver";
 
     return {
-      mailId,
-      message: `Email sent successfully to opportunity #${params.opportunityId}`,
-      recipient: recipientEmail
+      mailId: result.mailId,
+      message: `Email sent successfully to opportunity #${params.opportunityId}. ${queueStatus}.`,
+      recipient: result.recipientEmail,
+      queueProcessed: result.queueProcessed
     };
   }
 

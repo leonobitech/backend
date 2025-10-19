@@ -32,6 +32,12 @@ const objectClient = xmlrpc.createSecureClient({
 /**
  * Clase para interactuar con Odoo
  */
+export interface SendEmailResult {
+  mailId: number;
+  recipientEmail: string;
+  queueProcessed: boolean;
+}
+
 export class OdooClient {
   private uid: number | null = null;
 
@@ -921,7 +927,7 @@ export class OdooClient {
     subject: string;
     body: string;
     emailTo?: string; // Si no se proporciona, usa el email del partner de la oportunidad
-  }): Promise<number> {
+  }): Promise<SendEmailResult> {
     // Obtener información de la oportunidad para extraer el email si no se proporciona
     let recipientEmail = data.emailTo;
 
@@ -971,6 +977,7 @@ export class OdooClient {
 
     // Forzar el procesamiento inmediato de la cola de emails
     // En lugar de esperar al cron job (que puede tardar hasta 1 hora)
+    let queueProcessed = false;
     try {
       // Procesar la cola de emails inmediatamente usando el modelo ir.cron
       // Buscar el cron job de mail queue
@@ -981,6 +988,7 @@ export class OdooClient {
         {}
       );
       logger.info({ mailId }, "Email queue processed immediately");
+      queueProcessed = true;
     } catch (error) {
       // Si falla, no importa - el cron job lo enviará eventualmente
       logger.warn({ error, mailId }, "Could not force immediate email send, will be sent by cron");
@@ -1030,7 +1038,11 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after email sending");
     }
 
-    return mailId;
+    return {
+      mailId,
+      recipientEmail,
+      queueProcessed
+    };
   }
 
   /**
@@ -1068,7 +1080,7 @@ export class OdooClient {
 
     // Enviar email con template
     const subject = `Propuesta Comercial: ${data.proposalTitle}`;
-    const mailId = await this.sendEmailToOpportunity({
+    const { mailId } = await this.sendEmailToOpportunity({
       opportunityId: data.opportunityId,
       subject,
       body: proposalHtml,

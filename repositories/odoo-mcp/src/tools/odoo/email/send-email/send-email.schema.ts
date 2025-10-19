@@ -13,4 +13,5 @@ export interface SendEmailResponse {
   mailId: number;
   message: string;
   recipient: string;
+  queueProcessed: boolean;
 }
