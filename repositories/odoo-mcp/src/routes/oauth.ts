@@ -87,9 +87,18 @@ oauthRouter.get("/authorize", async (req, res) => {
 
   const normalizedScope = requestedScopes.join(" ");
 
-  // Use login_hint if provided, otherwise default to owner email
-  // TODO: Integrate with Core auth service for proper user authentication
+  // Whitelist of authorized users - only these can get authorization codes
+  const ALLOWED_USERS = ["felix@leonobitech.com"];
   const subject = login_hint || "felix@leonobitech.com";
+
+  // Validate user is in whitelist
+  if (!ALLOWED_USERS.includes(subject)) {
+    logger.warn({ subject, client_id }, "Unauthorized user attempted OAuth authorization");
+    return res.status(403).json({
+      error: "access_denied",
+      error_description: "User not authorized to access this resource"
+    });
+  }
 
   logger.info({
     subject,
