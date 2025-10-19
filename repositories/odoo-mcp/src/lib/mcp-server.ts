@@ -8,12 +8,18 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { logger } from "@/lib/logger";
 import { ToolRegistry } from "@/tools/base/ToolRegistry";
 import { ToolExecutor } from "@/tools/base/ToolExecutor";
+import { getPipelineStatus } from "@/resources/odoo-pipeline-status";
+import { salesAssistantPrompt } from "@/prompts/sales-assistant";
 
 /**
  * Create an MCP server instance with registered tools
@@ -32,6 +38,8 @@ export function createMcpServer(userId: string, registry: ToolRegistry): Server 
     {
       capabilities: {
         tools: {},
+        resources: {},
+        prompts: {},
       },
     }
   );
@@ -39,13 +47,65 @@ export function createMcpServer(userId: string, registry: ToolRegistry): Server 
   // Handler: List available tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     logger.info({ userId }, "[MCP] list_tools request");
-
-    // Get all Odoo tool definitions from registry
     const tools = registry.listDefinitions();
-
     logger.info({ userId, toolCount: tools.length }, "[MCP] Returning tool list");
-
     return { tools };
+  });
+
+  // Handler: List resources
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return {
+      resources: [
+        {
+          uri: "odoo://pipeline/status",
+          name: "CRM Pipeline Status",
+          description: "Real-time summary of Odoo CRM pipeline with revenue by stage",
+          mimeType: "text/markdown"
+        }
+      ]
+    };
+  });
+
+  // Handler: Read resource
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    if (request.params.uri === "odoo://pipeline/status") {
+      const content = await getPipelineStatus();
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/markdown",
+          text: content
+        }]
+      };
+    }
+    throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${request.params.uri}`);
+  });
+
+  // Handler: List prompts
+  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return {
+      prompts: [
+        {
+          name: salesAssistantPrompt.name,
+          description: salesAssistantPrompt.description,
+          arguments: [{ name: "context", description: "Optional context", required: false }]
+        }
+      ]
+    };
+  });
+
+  // Handler: Get prompt
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    if (request.params.name === "sales-assistant") {
+      const context = request.params.arguments?.context as string;
+      return {
+        messages: [{
+          role: "user",
+          content: { type: "text", text: salesAssistantPrompt.getPrompt({ context }) }
+        }]
+      };
+    }
+    throw new McpError(ErrorCode.InvalidRequest, `Unknown prompt: ${request.params.name}`);
   });
 
   // Handler: Execute tool
