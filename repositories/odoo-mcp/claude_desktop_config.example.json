@@ -3,12 +3,12 @@
     "leonobitech": {
       "transport": {
         "type": "sse",
-        "url": "https://claude-auth.leonobitech.com/mcp/sse",
+        "url": "https://odoo-mcp.leonobitech.com/mcp/sse",
         "message_url": "https://claude-auth.leonobitech.com/mcp/message"
       },
       "oauth": {
-        "authorizationUrl": "https://claude-auth.leonobitech.com/oauth/authorize",
-        "tokenUrl": "https://claude-auth.leonobitech.com/oauth/token",
+        "authorizationUrl": "https://odoo-mcp.leonobitech.com/oauth/authorize",
+        "tokenUrl": "https://odoo-mcp.leonobitech.com/oauth/token",
         "clientId": "claude-mcp",
         "clientSecret": "uper-secret-change-me",
         "scope": "claude.app"
