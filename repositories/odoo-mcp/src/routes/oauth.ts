@@ -27,7 +27,7 @@ const authorizeQuerySchema = z.object({
   prompt: z.string().optional()
 });
 
-const requiredScopes = Array.from(new Set(env.SCOPES.split(/\s+/).filter(Boolean)));
+const allowedScopes = Array.from(new Set(env.SCOPES.split(/\s+/).filter(Boolean)));
 const registrationBodySchema = z.object({
   redirect_uris: z.array(z.string().url()).min(1),
   client_name: z.string().optional(),
@@ -79,13 +79,13 @@ oauthRouter.get("/authorize", async (req, res) => {
     return res.status(400).json({ error: "invalid_scope" });
   }
 
-  const missingScopes = requiredScopes.filter((required) => !requestedScopes.includes(required));
-  if (missingScopes.length > 0) {
-    logger.warn({ requested: requestedScopes, missing: missingScopes }, "Invalid scope on authorize");
+  const invalidScopes = requestedScopes.filter((requested) => !allowedScopes.includes(requested));
+  if (invalidScopes.length > 0) {
+    logger.warn({ requested: requestedScopes, invalid: invalidScopes }, "Invalid scope on authorize");
     return res.status(400).json({ error: "invalid_scope" });
   }
 
-  const normalizedScope = requestedScopes.join(" ");
+  const normalizedScope = Array.from(new Set([...requestedScopes, ...allowedScopes])).join(" ");
 
   // Whitelist of authorized users - only these can get authorization codes
   const ALLOWED_USERS = ["felix@leonobitech.com"];
