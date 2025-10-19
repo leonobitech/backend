@@ -270,16 +270,57 @@ oauthRouter.post("/token", async (req, res) => {
 });
 
 oauthRouter.post("/register", (req, res) => {
-  logger.warn(
-    {
-      body: req.body,
-      ip: req.ip
-    },
-    "Dynamic client registration attempt blocked"
+  const parseResult = registrationBodySchema.safeParse(req.body);
+  if (!parseResult.success) {
+    logger.warn({ body: req.body, errors: parseResult.error.flatten() }, "Invalid client registration request");
+    return res.status(400).json({ error: "invalid_client_metadata", details: parseResult.error.flatten() });
+  }
+
+  const { redirect_uris, scope, grant_types, token_endpoint_auth_method } = parseResult.data;
+
+  const allowedRedirectUris = new Set(
+    [env.REDIRECT_URI, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/mcp/oauth/callback"].filter(
+      Boolean
+    )
   );
 
-  return res.status(403).json({
-    error: "registration_disabled",
-    error_description: "Dynamic client registration is disabled for this authorization server"
+  const hasAllowedRedirect = redirect_uris.some((uri) => allowedRedirectUris.has(uri));
+  if (!hasAllowedRedirect) {
+    logger.warn({ redirect_uris }, "Unsupported redirect_uri on registration");
+    return res.status(400).json({ error: "invalid_redirect_uri" });
+  }
+
+  if (scope) {
+    const requestedScopes = Array.from(new Set(scope.split(/\s+/).filter(Boolean)));
+    const invalidScopes = requestedScopes.filter((requested) => !allowedScopes.includes(requested));
+    if (invalidScopes.length > 0) {
+      logger.warn({ requestedScopes }, "Invalid scope on registration");
+      return res.status(400).json({ error: "invalid_scope" });
+    }
+  }
+
+  if (grant_types && !grant_types.includes("authorization_code")) {
+    logger.warn({ grant_types }, "Missing authorization_code grant on registration");
+    return res.status(400).json({ error: "invalid_client_metadata" });
+  }
+
+  if (token_endpoint_auth_method && token_endpoint_auth_method !== "client_secret_post") {
+    logger.warn({ token_endpoint_auth_method }, "Unsupported auth method on registration");
+    return res.status(400).json({ error: "invalid_client_metadata" });
+  }
+
+  const issuedAt = Math.floor(Date.now() / 1000);
+  logger.info("Served dynamic client registration (static configuration)");
+
+  return res.status(201).json({
+    client_id: env.CLIENT_ID,
+    client_secret: "dynamic-registration-not-required",
+    client_id_issued_at: issuedAt,
+    client_secret_expires_at: 0,
+    redirect_uris: Array.from(allowedRedirectUris),
+    scope: allowedScopes.join(" "),
+    token_endpoint_auth_method: "client_secret_post",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"]
   });
 });
