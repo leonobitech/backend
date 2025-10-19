@@ -4,8 +4,27 @@ import authenticate from "@middlewares/authenticate";
 import authorize from "@middlewares/authorize";
 import { UserRole } from "@constants/userRole";
 import { HTTP_CODE } from "@constants/httpCode";
+import prisma from "@config/prisma";
 
 const securityRoutes = Router();
+
+securityRoutes.get("/verify-session", authenticate, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { email: true }
+    });
+
+    res.status(HTTP_CODE.OK).json({
+      userId: req.userId,
+      role: req.role,
+      sessionId: req.sessionId,
+      email: user?.email ?? null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * 🔐 Endpoint utilizado por Traefik (ForwardAuth) para verificar que el usuario:

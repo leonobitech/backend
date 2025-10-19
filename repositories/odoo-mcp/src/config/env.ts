@@ -30,6 +30,9 @@ const envSchema = z.object({
   CORE_SERVICE_TOKEN_SECRET: z.string().optional(),
   SERVICE_TOKEN_AUDIENCE: z.string().optional().default("service"),
   CORE_SERVICE_TOKEN_ISSUER: z.string().optional(),
+  CORE_BASE_URL: z.string().url(),
+  CORE_LOGIN_URL: z.string().url(),
+  CORE_API_KEY: z.string().min(1),
 });
 
 export const env = envSchema.parse(process.env);
