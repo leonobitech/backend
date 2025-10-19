@@ -26,6 +26,7 @@ const envSchema = z.object({
   JWT_ISSUER: z.string().url(),
   JWT_AUDIENCE: z.string().min(1),
   CORS_ORIGINS: z.string().optional(),
+  APP_ORIGIN: z.string().url().optional().default("https://leonobitech.com"),
 });
 
 export const env = envSchema.parse(process.env);

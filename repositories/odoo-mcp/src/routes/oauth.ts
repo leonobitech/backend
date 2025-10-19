@@ -87,8 +87,22 @@ oauthRouter.get("/authorize", async (req, res) => {
 
   const normalizedScope = requestedScopes.join(" ");
 
-  // TODO: Integrar flujo real de login/consent. Por ahora usamos login_hint o un subject fijo.
-  const subject = login_hint ?? "claude-user";
+  // Basic auth: require login_hint with valid email format
+  if (!login_hint || !login_hint.includes("@")) {
+    logger.warn({ login_hint }, "Missing or invalid login_hint - redirecting to auth page");
+
+    // Redirect to frontend OAuth page for user authentication
+    const authUrl = `${env.APP_ORIGIN}/oauth/authorize?` + new URLSearchParams({
+      client_id, redirect_uri, response_type: "code", scope,
+      code_challenge, code_challenge_method,
+      ...(state && { state }), ...(nonce && { nonce })
+    }).toString();
+
+    return res.redirect(authUrl);
+  }
+
+  const subject = login_hint;
+  logger.info({ subject, client_id, scope: normalizedScope }, "OAuth authorized");
 
   const codePayload = await createAuthorizationCode({
     clientId: client_id,
