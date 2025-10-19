@@ -1,5 +1,5 @@
 import { getOpportunitiesSchema, type GetOpportunitiesInput, type GetOpportunitiesResponse } from "./get-opportunities.schema";
-import type { OdooClient } from "@/adapters/out/external/odoo/OdooClient";
+import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 
 export class GetOpportunitiesTool implements ITool<GetOpportunitiesInput, GetOpportunitiesResponse> {

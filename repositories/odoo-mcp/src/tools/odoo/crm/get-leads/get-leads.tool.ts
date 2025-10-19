@@ -7,7 +7,7 @@
  */
 
 import { getLeadsSchema, type GetLeadsInput, type GetLeadsResponse } from "./get-leads.schema";
-import type { OdooClient } from "@/adapters/out/external/odoo/OdooClient";
+import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 
 /**

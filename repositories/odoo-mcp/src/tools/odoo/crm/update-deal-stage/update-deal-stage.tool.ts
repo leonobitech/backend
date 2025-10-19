@@ -1,5 +1,5 @@
 import { updateDealStageSchema, type UpdateDealStageInput, type UpdateDealStageResponse } from "./update-deal-stage.schema";
-import type { OdooClient } from "@/adapters/out/external/odoo/OdooClient";
+import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 
 export class UpdateDealStageTool implements ITool<UpdateDealStageInput, UpdateDealStageResponse> {

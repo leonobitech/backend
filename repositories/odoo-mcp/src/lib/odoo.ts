@@ -124,6 +124,18 @@ export class OdooClient {
   }
 
   /**
+   * Ejecuta un método arbitrario de Odoo, útil para acciones manuales
+   */
+  async execute(
+    model: string,
+    method: string,
+    args: any[] = [],
+    kwargs: Record<string, any> = {}
+  ): Promise<any> {
+    return this.execute_kw(model, method, args, kwargs);
+  }
+
+  /**
    * Leer registros de un modelo
    */
   async read(model: string, ids: number[], fields: string[] = []): Promise<any[]> {

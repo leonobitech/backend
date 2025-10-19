@@ -1,5 +1,5 @@
 import { sendEmailSchema, type SendEmailInput, type SendEmailResponse } from "./send-email.schema";
-import type { OdooClient } from "@/adapters/out/external/odoo/OdooClient";
+import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 
 export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {

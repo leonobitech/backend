@@ -1,5 +1,5 @@
 import { scheduleMeetingSchema, type ScheduleMeetingInput, type ScheduleMeetingResponse } from "./schedule-meeting.schema";
-import type { OdooClient } from "@/adapters/out/external/odoo/OdooClient";
+import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 
 export class ScheduleMeetingTool implements ITool<ScheduleMeetingInput, ScheduleMeetingResponse> {
@@ -7,42 +7,28 @@ export class ScheduleMeetingTool implements ITool<ScheduleMeetingInput, Schedule
 
   async execute(input: unknown): Promise<ScheduleMeetingResponse> {
     const params = scheduleMeetingSchema.parse(input);
-
-    // Get opportunity info
-    const opportunities = await this.odooClient.read("crm.lead", [params.opportunityId], ["partner_id", "user_id"]);
-
-    if (opportunities.length === 0) {
-      throw new Error(`Opportunity #${params.opportunityId} not found`);
-    }
-
-    const opp = opportunities[0];
-    const partnerIds: number[] = [];
-
-    if (opp.partner_id?.[0]) partnerIds.push(opp.partner_id[0]);
-    if (opp.user_id?.[0]) {
-      const users = await this.odooClient.read("res.users", [opp.user_id[0]], ["partner_id"]);
-      if (users[0]?.partner_id?.[0]) partnerIds.push(users[0].partner_id[0]);
-    }
-
-    // Calculate end time
-    const startDate = new Date(params.startDatetime);
-    const endDate = new Date(startDate.getTime() + params.durationHours * 60 * 60 * 1000);
-
-    const eventValues: Record<string, any> = {
+    const result = await this.odooClient.scheduleMeeting({
       name: params.title,
+      opportunityId: params.opportunityId,
       start: params.startDatetime,
-      stop: endDate.toISOString().replace('T', ' ').substring(0, 19),
-      partner_ids: [[6, 0, partnerIds]],
-      opportunity_id: params.opportunityId,
-    };
+      duration: params.durationHours,
+      description: params.description,
+      location: params.location,
+      forceSchedule: params.forceSchedule
+    });
 
-    if (params.description) eventValues.description = params.description;
-    if (params.location) eventValues.location = params.location;
-
-    const eventId = await this.odooClient.create("calendar.event", eventValues);
+    if (result.conflict && !result.eventId) {
+      return {
+        message: "Conflictos detectados al agendar la reunión",
+        conflict: {
+          conflicts: result.conflict.conflicts,
+          availableSlots: result.conflict.availableSlots
+        }
+      };
+    }
 
     return {
-      eventId,
+      eventId: result.eventId,
       message: `Meeting "${params.title}" scheduled successfully`
     };
   }
