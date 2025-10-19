@@ -30,6 +30,7 @@ import sessionRoutes from "@routes/session.routes";
 import userRoutes from "@routes/user.routes";
 import adminRouter from "@routes/admin.routes";
 import passkeyRoutes from "@routes/passkey.routes";
+import serviceRoutes from "@routes/service.routes";
 
 // test route for error handling
 import testRouter from "@routes/test.routes";
@@ -107,6 +108,9 @@ app.use("/account/passkey", passkeyRoutes); // Passkey routes (mixed auth)
 
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
+
+// 🔑 Service-to-service OAuth style tokens
+app.use("/service", serviceRoutes);
 
 // Usar las rutas de account
 app.use("/account", accountRoutes);

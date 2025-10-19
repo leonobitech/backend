@@ -5,7 +5,7 @@ Esta guía te ayudará a conectar tu servidor MCP con OAuth a Claude Desktop par
 ## Prerrequisitos
 
 1. **Claude Desktop instalado** (disponible en [claude.ai/download](https://claude.ai/download))
-2. **Servidor desplegado** con URL HTTPS válida (ej: `https://claude-auth.leonobitech.com`)
+2. **Servidor desplegado** con URL HTTPS válida (ej: `https://odoo-mcp.leonobitech.com`)
 3. **Redis corriendo** en el servidor
 4. **Llaves RSA generadas** (`npm run generate:keys`)
 
@@ -58,15 +58,15 @@ Crea o edita el archivo con este contenido:
 {
   "mcpServers": {
     "leonobitech": {
-      "url": "https://claude-auth.leonobitech.com/mcp/sse",
+      "url": "https://odoo-mcp.leonobitech.com/mcp/sse",
       "transport": {
         "type": "sse",
-        "url": "https://claude-auth.leonobitech.com/mcp/sse",
-        "message_url": "https://claude-auth.leonobitech.com/mcp/message"
+        "url": "https://odoo-mcp.leonobitech.com/mcp/sse",
+        "message_url": "https://odoo-mcp.leonobitech.com/mcp/message"
       },
       "oauth": {
-        "authorizationUrl": "https://claude-auth.leonobitech.com/oauth/authorize",
-        "tokenUrl": "https://claude-auth.leonobitech.com/oauth/token",
+        "authorizationUrl": "https://odoo-mcp.leonobitech.com/oauth/authorize",
+        "tokenUrl": "https://odoo-mcp.leonobitech.com/oauth/token",
         "clientId": "claude-mcp",
         "clientSecret": "sd21qCA7S2KRSVzP1XkL0UiwWTeUoFKNS7WhGd4i1Uxg=",
         "scope": "claude.app"
@@ -79,7 +79,7 @@ Crea o edita el archivo con este contenido:
 **Importante:** Reemplaza los valores con los de tu `.env`:
 - `clientId`: El valor de `CLIENT_ID` (claude-mcp)
 - `clientSecret`: El valor de `CLIENT_SECRET`
-- URLs: Usa tu dominio configurado en `PUBLIC_URL` (claude-auth.leonobitech.com)
+- URLs: Usa tu dominio configurado en `PUBLIC_URL` (odoo-mcp.leonobitech.com)
 - `scope`: El valor de `SCOPES` (claude.app)
 
 ---
@@ -117,13 +117,13 @@ docker compose logs -f claude_oauth
 
 ```bash
 # Health check
-curl https://claude-auth.leonobitech.com/healthz
+curl https://odoo-mcp.leonobitech.com/healthz
 
 # JWKS público
-curl https://claude-auth.leonobitech.com/.well-known/jwks.json
+curl https://odoo-mcp.leonobitech.com/.well-known/jwks.json
 
 # OpenAPI spec
-curl https://claude-auth.leonobitech.com/.well-known/openapi.json
+curl https://odoo-mcp.leonobitech.com/.well-known/openapi.json
 ```
 
 ---
@@ -143,7 +143,7 @@ curl https://claude-auth.leonobitech.com/.well-known/openapi.json
 La primera vez que Claude intente usar el servidor MCP:
 
 1. **Se abrirá tu navegador** en la URL de autorización
-2. **Verás una redirección** a `https://claude-auth.leonobitech.com/oauth/authorize`
+2. **Verás una redirección** a `https://odoo-mcp.leonobitech.com/oauth/authorize`
 3. **El servidor emitirá un código** y redirigirá de vuelta
 4. **Claude intercambiará el código por tokens** automáticamente
 5. **Claude se conectará** al endpoint SSE con el access token
@@ -216,7 +216,7 @@ Claude invocará `get_user_info` y te mostrará:
 **Solución:**
 ```bash
 # Verifica que el servidor responda
-curl https://claude-auth.leonobitech.com/healthz
+curl https://odoo-mcp.leonobitech.com/healthz
 
 # Verifica logs del servidor
 docker compose logs claude_oauth | tail -50
@@ -284,7 +284,7 @@ Si quieres probar el flujo completo sin Claude Desktop:
 ### 1. Registro dinámico (opcional)
 
 ```bash
-curl -X POST https://claude-auth.leonobitech.com/oauth/register \
+curl -X POST https://odoo-mcp.leonobitech.com/oauth/register \
   -H "Content-Type: application/json" \
   -d '{
     "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
@@ -312,7 +312,7 @@ echo "Challenge: $CODE_CHALLENGE"
 Abre en tu navegador (reemplaza `CODE_CHALLENGE`):
 
 ```
-https://claude-auth.leonobitech.com/oauth/authorize?response_type=code&client_id=claude-mcp&redirect_uri=https://claude.ai/api/mcp/auth_callback&scope=claude.app&state=test123&code_challenge=PASTE_CODE_CHALLENGE_HERE&code_challenge_method=S256
+https://odoo-mcp.leonobitech.com/oauth/authorize?response_type=code&client_id=claude-mcp&redirect_uri=https://claude.ai/api/mcp/auth_callback&scope=claude.app&state=test123&code_challenge=PASTE_CODE_CHALLENGE_HERE&code_challenge_method=S256
 ```
 
 Copia el `code` de la URL de redirección.
@@ -320,7 +320,7 @@ Copia el `code` de la URL de redirección.
 ### 4. Token Exchange
 
 ```bash
-curl -X POST https://claude-auth.leonobitech.com/oauth/token \
+curl -X POST https://odoo-mcp.leonobitech.com/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "code=PASTE_CODE_HERE" \
@@ -334,7 +334,7 @@ Guarda el `access_token`.
 ### 5. Probar herramienta MCP (legacy endpoint)
 
 ```bash
-curl -X POST https://claude-auth.leonobitech.com/mcp/ping \
+curl -X POST https://odoo-mcp.leonobitech.com/mcp/ping \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}'

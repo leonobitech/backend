@@ -137,7 +137,7 @@ Once environment variables are confirmed:
 
 2. **Check the MCP manifest**:
    ```bash
-   curl https://claude-auth.leonobitech.com/.well-known/anthropic/manifest.json
+   curl https://odoo-mcp.leonobitech.com/.well-known/anthropic/manifest.json
    ```
 
 3. **Monitor logs while testing**:

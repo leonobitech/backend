@@ -13,7 +13,7 @@
 
 const https = require('https');
 
-const MCP_URL = 'claude-auth.leonobitech.com';
+const MCP_URL = 'odoo-mcp.leonobitech.com';
 const ACCESS_TOKEN = process.argv[2];
 
 if (!ACCESS_TOKEN) {

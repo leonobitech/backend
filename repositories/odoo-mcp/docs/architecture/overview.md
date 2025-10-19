@@ -170,7 +170,7 @@ Claude Desktop descubre las capacidades del servidor:
      "oauth": { ... },
      "api": {
        "type": "http",
-       "url": "https://claude-auth.leonobitech.com/mcp"
+       "url": "https://odoo-mcp.leonobitech.com/mcp"
      }
    }
 
@@ -1044,7 +1044,7 @@ POST /mcp
 
    // ✓ Correcto
    {
-     "resource": "https://claude-auth.leonobitech.com/mcp",  // ← NECESARIO
+     "resource": "https://odoo-mcp.leonobitech.com/mcp",  // ← NECESARIO
      "issuer": "...",
      "authorization_servers": ["..."],
      "resource_scopes_supported": ["claude.app"]
@@ -1124,7 +1124,7 @@ const server = new Server(
 
 **Síntomas:**
 ```
-Access to XMLHttpRequest at 'https://claude-auth.leonobitech.com/oauth/authorize'
+Access to XMLHttpRequest at 'https://odoo-mcp.leonobitech.com/oauth/authorize'
 from origin 'https://claude.ai' has been blocked by CORS policy
 ```
 
@@ -1164,14 +1164,14 @@ TTL authcode:xyz789
 
 # 5. Verificar firma JWT manualmente
 # Descargar jwks.json
-curl https://claude-auth.leonobitech.com/.well-known/jwks.json
+curl https://odoo-mcp.leonobitech.com/.well-known/jwks.json
 
 # Usar herramienta como https://jwt.io
 # Pegar token + clave pública
 
 # 6. Testear OAuth flow manualmente
 # a) Registro
-curl -X POST https://claude-auth.leonobitech.com/oauth/register \
+curl -X POST https://odoo-mcp.leonobitech.com/oauth/register \
   -H "Content-Type: application/json" \
   -d '{
     "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
@@ -1179,15 +1179,15 @@ curl -X POST https://claude-auth.leonobitech.com/oauth/register \
   }'
 
 # b) Autorización (en browser)
-# https://claude-auth.leonobitech.com/oauth/authorize?response_type=code&client_id=claude-mcp&redirect_uri=https://claude.ai/api/mcp/auth_callback&scope=claude.app&code_challenge=HASH&code_challenge_method=S256&state=RANDOM
+# https://odoo-mcp.leonobitech.com/oauth/authorize?response_type=code&client_id=claude-mcp&redirect_uri=https://claude.ai/api/mcp/auth_callback&scope=claude.app&code_challenge=HASH&code_challenge_method=S256&state=RANDOM
 
 # c) Token
-curl -X POST https://claude-auth.leonobitech.com/oauth/token \
+curl -X POST https://odoo-mcp.leonobitech.com/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code&code=ABC&code_verifier=VERIFIER&client_id=claude-mcp&client_secret=SECRET&redirect_uri=https://claude.ai/api/mcp/auth_callback"
 
 # d) Usar MCP
-curl -X POST https://claude-auth.leonobitech.com/mcp \
+curl -X POST https://odoo-mcp.leonobitech.com/mcp \
   -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

@@ -24,3 +24,10 @@ export const REDIS_PORT = getEnv("REDIS_PORT");
 export const REDIS_PASSWORD = getEnv("REDIS_PASSWORD", ""); // Empty string for local dev
 export const REDIS_DB = getEnv("REDIS_DB");
 export const CORE_API_KEY = getEnv("CORE_API_KEY");
+export const SERVICE_TOKEN_SECRET = getEnv("SERVICE_TOKEN_SECRET");
+export const SERVICE_TOKEN_AUDIENCE = getEnv("SERVICE_TOKEN_AUDIENCE", "service");
+export const SERVICE_TOKEN_TTL_SECONDS = Number.parseInt(
+  getEnv("SERVICE_TOKEN_TTL_SECONDS", "900"),
+  10
+);
+export const SERVICE_CLIENTS = getEnv("SERVICE_CLIENTS", "[]");

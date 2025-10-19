@@ -50,13 +50,13 @@ src/
 
 ```env
 PORT=8100
-PUBLIC_URL=https://claude-auth.leonobitech.com
+PUBLIC_URL=https://odoo-mcp.leonobitech.com
 CLIENT_ID=claude-mcp
 CLIENT_SECRET=super-secret-change-me
 REDIRECT_URI=https://claude.ai/api/mcp/auth_callback
 SCOPES=claude.app
 JWKS_KID=claude-key-1
-JWT_ISSUER=https://claude-auth.leonobitech.com
+JWT_ISSUER=https://odoo-mcp.leonobitech.com
 JWT_AUDIENCE=claude-mcp
 REDIS_HOST=redis_core
 REDIS_PORT=6379
@@ -66,7 +66,7 @@ ACCESS_TOKEN_TTL=300
 AUTH_CODE_TTL=180
 REFRESH_TOKEN_TTL=604800
 LOG_LEVEL=info
-CORS_ORIGINS=https://claude.ai,https://app.claude.ai,https://desktop.claude.ai,https://claude-auth.leonobitech.com
+CORS_ORIGINS=https://claude.ai,https://app.claude.ai,https://desktop.claude.ai,https://odoo-mcp.leonobitech.com
 ```
 
 > Nota: verifica en la documentación más reciente de Anthropic si el `REDIRECT_URI` cambia. Claude Desktop (>= 0.8.0) utiliza `https://claude.ai/api/mcp/auth_callback`.
@@ -152,15 +152,15 @@ Ver la guía completa en [CLAUDE_DESKTOP_SETUP.md](./CLAUDE_DESKTOP_SETUP.md).
 {
   "mcpServers": {
     "leonobitech": {
-      "url": "https://claude-auth.leonobitech.com/mcp/sse",
+      "url": "https://odoo-mcp.leonobitech.com/mcp/sse",
       "transport": {
         "type": "sse",
-        "url": "https://claude-auth.leonobitech.com/mcp/sse",
-        "message_url": "https://claude-auth.leonobitech.com/mcp/message"
+        "url": "https://odoo-mcp.leonobitech.com/mcp/sse",
+        "message_url": "https://odoo-mcp.leonobitech.com/mcp/message"
       },
       "oauth": {
-        "authorizationUrl": "https://claude-auth.leonobitech.com/oauth/authorize",
-        "tokenUrl": "https://claude-auth.leonobitech.com/oauth/token",
+        "authorizationUrl": "https://odoo-mcp.leonobitech.com/oauth/authorize",
+        "tokenUrl": "https://odoo-mcp.leonobitech.com/oauth/token",
         "clientId": "claude-mcp",
         "clientSecret": "tu-client-secret",
         "scope": "claude.app"
