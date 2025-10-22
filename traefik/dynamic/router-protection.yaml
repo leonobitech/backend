@@ -26,6 +26,7 @@ http:
         PathPrefix(`/temp`) ||
         PathPrefix(`/vendor/phpunit`) ||
         PathPrefix(`/api/jsonws`) ||
+        PathRegexp(`^/\.well-known/acme-challenge/.*\.php$`) ||
         PathPrefix(`/console`) ||
         PathPrefix(`/shell`) ||
         PathPrefix(`/install`) ||
