@@ -15,8 +15,8 @@ const extractServerIp = (req: Request): string => {
   const headers = req.headers;
 
   const realIp =
-    headers["x-real-ip"]?.toString() ||
     headers["cf-connecting-ip"]?.toString() ||
+    headers["x-real-ip"]?.toString() ||
     (() => {
       const forwarded = headers["x-forwarded-for"]?.toString();
       if (!forwarded) return "";
@@ -25,7 +25,7 @@ const extractServerIp = (req: Request): string => {
         .map((chunk) => chunk.trim())
         .filter(Boolean);
       if (parts.length === 0) return "";
-      return parts[parts.length - 1];
+      return parts[0];
     })() ||
     req.socket?.remoteAddress ||
     req.ip ||

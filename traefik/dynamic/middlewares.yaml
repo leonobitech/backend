@@ -144,7 +144,7 @@ http:
         period: 1m           # per minute
         burst: 50            # allow burst of 50
         sourceCriterion:
-          requestHeaderName: X-Real-IP
+          requestHeaderName: CF-Connecting-IP
 
     # -------------------------------------------------------------------------
     # 🛡️ Rate limiting estricto para rutas públicas
@@ -155,7 +155,7 @@ http:
         period: 1m           # per minute
         burst: 10            # allow burst of 10
         sourceCriterion:
-          requestHeaderName: X-Real-IP
+          requestHeaderName: CF-Connecting-IP
     # -------------------------------------------------------------------------
     # 🛡️ Rate limiting general para Core (REST + admin APIs)
     # -------------------------------------------------------------------------
@@ -165,7 +165,7 @@ http:
         period: 1m
         burst: 30
         sourceCriterion:
-          requestHeaderName: X-Real-IP
+          requestHeaderName: CF-Connecting-IP
 
     # -------------------------------------------------------------------------
     # 🧩 secure-odoo – Middleware especial para frontend de Odoo
