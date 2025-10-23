@@ -174,7 +174,7 @@ services:
       #########################################
       # 🧩 Middlewares globales aplicados al router
       #########################################
-      - "traefik.http.routers.core.middlewares=core-secure@file, block-trackers@file, api-nostore-vary@file"
+      - "traefik.http.routers.core.middlewares=core-rate-limit@file,core-secure@file,block-trackers@file,api-nostore-vary@file"
 
   chatgpt_oauth:
     container_name: chatgpt_oauth
