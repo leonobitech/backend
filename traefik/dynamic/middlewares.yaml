@@ -140,9 +140,9 @@ http:
     # -------------------------------------------------------------------------
     rate-limit:
       rateLimit:
-        average: 100         # 100 requests
-        period: 1m           # per minute
-        burst: 50            # allow burst of 50
+        average: 100 # 100 requests
+        period: 1m # per minute
+        burst: 50 # allow burst of 50
         sourceCriterion:
           requestHeaderName: CF-Connecting-IP
 
@@ -151,9 +151,9 @@ http:
     # -------------------------------------------------------------------------
     rate-limit-strict:
       rateLimit:
-        average: 20          # 20 requests
-        period: 1m           # per minute
-        burst: 10            # allow burst of 10
+        average: 20 # 20 requests
+        period: 1m # per minute
+        burst: 10 # allow burst of 10
         sourceCriterion:
           requestHeaderName: CF-Connecting-IP
     # -------------------------------------------------------------------------
@@ -172,28 +172,40 @@ http:
     # -------------------------------------------------------------------------
     secure-odoo:
       headers:
-        STSSeconds: 315360000
+        # HSTS correcto (en minúsculas)
+        stsSeconds: 315360000
         forceSTSHeader: true
         stsIncludeSubdomains: true
         stsPreload: true
-        SSLHost: "leonobitech.com"
+
+        # Traefik usa sslHost (no SSLHost). sslRedirect es opcional si ya tenés TLS-only.
+        sslHost: "leonobitech.com"
+
         browserXssFilter: true
         contentTypeNosniff: true
-        frameDeny: true
-        referrerPolicy: strict-origin-when-cross-origin
+
+        # IMPORTANTE: el builder usa iframe → NO negar frame
+        frameDeny: false
+
+        # Referrer/Permissions
+        referrerPolicy: "strict-origin-when-cross-origin"
         permissionsPolicy: >-
           geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()
+
+        # Si querés mantener XFO, SAMEORIGIN está bien (sin frameDeny)
         customResponseHeaders:
           X-Frame-Options: "SAMEORIGIN"
           X-Content-Type-Options: "nosniff"
           X-XSS-Protection: "1; mode=block"
+
+        # CSP compatible con Website Builder (iframe interno, inline css/js del builder)
         contentSecurityPolicy: >-
-          default-src 'self';
+          default-src 'self' data: blob:;
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline';
           font-src 'self' data:;
-          img-src * data: blob:;
-          connect-src * blob:;
+          img-src 'self' data: blob: https:;
+          connect-src 'self' https: wss: blob:;
           frame-ancestors 'self';
 
     # -------------------------------------------------------------------------
