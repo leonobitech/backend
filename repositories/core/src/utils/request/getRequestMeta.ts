@@ -115,12 +115,22 @@ export const getRequestMeta = (req: Request): RequestMeta => {
       throw new Error("❌ Metadatos del cliente incompletos o inválidos");
     }
 
-    return {
-      ...parsed.data,
+    const sanitized: RequestMeta = {
+      ipAddress: fallbackMeta.ipAddress,
+      deviceInfo: parsed.data.deviceInfo,
+      userAgent: fallbackMeta.userAgent,
+      language: parsed.data.language || fallbackMeta.language,
+      platform: parsed.data.platform || fallbackMeta.platform,
+      timezone: parsed.data.timezone || fallbackMeta.timezone,
+      screenResolution:
+        parsed.data.screenResolution || fallbackMeta.screenResolution,
+      label: parsed.data.label || fallbackMeta.label,
       path: fallbackMeta.path,
       method: fallbackMeta.method,
       host: fallbackMeta.host,
     };
+
+    return sanitized;
   }
 
   return fallbackMeta;
