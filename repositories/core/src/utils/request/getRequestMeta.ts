@@ -17,7 +17,16 @@ const extractServerIp = (req: Request): string => {
   const realIp =
     headers["x-real-ip"]?.toString() ||
     headers["cf-connecting-ip"]?.toString() ||
-    headers["x-forwarded-for"]?.toString()?.split(",")[0] ||
+    (() => {
+      const forwarded = headers["x-forwarded-for"]?.toString();
+      if (!forwarded) return "";
+      const parts = forwarded
+        .split(",")
+        .map((chunk) => chunk.trim())
+        .filter(Boolean);
+      if (parts.length === 0) return "";
+      return parts[parts.length - 1];
+    })() ||
     req.socket?.remoteAddress ||
     req.ip ||
     "";
