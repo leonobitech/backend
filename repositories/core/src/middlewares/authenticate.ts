@@ -88,7 +88,6 @@ const authenticate: RequestHandler = catchErrors(
         logger.warn("🧹 Token revocado - limpiando cookies y forzando re-login", {
           ...meta,
           errorCode: err.errorCode,
-          accessKeyAttempted: accessKey.substring(0, 16) + "...", // Log primeros 16 chars para debug
           event: "auth.token.revoked.cleanup",
         });
 

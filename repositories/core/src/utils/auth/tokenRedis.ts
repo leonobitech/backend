@@ -119,8 +119,6 @@ export const findAccessTokenOrThrow = async (
 
   // ⛓️ Fallback a DB si está habilitado
   if (useFallback) {
-    console.log(`🔍 Buscando token en DB fallback: ${accessKey.substring(0, 16)}...`);
-
     const record = await prisma.tokenRecord.findFirst({
       where: {
         jti: accessKey,
@@ -138,15 +136,12 @@ export const findAccessTokenOrThrow = async (
     });
 
     if (!record) {
-      console.log(`❌ Token NO encontrado en DB: ${accessKey.substring(0, 16)}...`);
       throw new HttpException(
         HTTP_CODE.UNAUTHORIZED,
         "Access token not found in Redis or DB.",
         ERROR_CODE.TOKEN_REVOKED
       );
     }
-
-    console.log(`✅ Token encontrado en DB: userId=${record.userId}, sessionId=${record.sessionId}`);
 
     // 🔐 Validación de huella digital con soporte para formato legacy
     const expectedClientKey = await generateClientKeyFromMeta(
