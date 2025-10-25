@@ -158,12 +158,13 @@ http:
           requestHeaderName: CF-Connecting-IP
     # -------------------------------------------------------------------------
     # 🛡️ Rate limiting general para Core (REST + admin APIs)
+    # Sincronizado con express-rate-limit del backend (100 req/min)
     # -------------------------------------------------------------------------
     core-rate-limit:
       rateLimit:
-        average: 60
+        average: 100  # Igualado con backend globalRateLimiter
         period: 1m
-        burst: 30
+        burst: 50
         sourceCriterion:
           requestHeaderName: CF-Connecting-IP
 
