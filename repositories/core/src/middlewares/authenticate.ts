@@ -23,7 +23,6 @@ import { clearAuthCookies } from "@utils/auth/cookies";
 import { refreshAccessTokenService } from "@services/account.service";
 import { refreshAuthCookies } from "@utils/auth/cookies";
 import { loggerEvent } from "@utils/logging/loggerEvent";
-import { prisma } from "@config/database";
 
 /**
  * 🛡️ Middleware para autenticar al usuario mediante Access Token válido.
@@ -363,51 +362,6 @@ const authenticate: RequestHandler = catchErrors(
           sessionId: tokenPayload.sessionId,
           event: "auth.clientkey.legacy_detected",
         });
-      }
-
-      // 🔐 VALIDACIÓN ADICIONAL: Verificar IP contra Device en DB
-      // Esta validación previene que un token en Redis siga siendo válido
-      // si la IP del dispositivo fue modificada en la base de datos
-      const session = await prisma.session.findUnique({
-        where: { id: tokenPayload.sessionId },
-        include: { device: true },
-      });
-
-      if (!session || !session.device) {
-        await loggerSecurityEvent({
-          meta,
-          type: "session_not_found",
-          userId: tokenPayload.userId,
-          sessionId: tokenPayload.sessionId,
-          details: { reason: "Session or device not found in DB" },
-        });
-
-        throw new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          "Session not found or device missing.",
-          ERROR_CODE.TOKEN_REVOKED
-        );
-      }
-
-      // Verificar que la IP actual coincide con la IP almacenada en Device
-      if (session.device.ipAddress !== meta.ipAddress) {
-        await loggerSecurityEvent({
-          meta,
-          type: "ip_mismatch",
-          userId: tokenPayload.userId,
-          sessionId: tokenPayload.sessionId,
-          details: {
-            requestIp: meta.ipAddress,
-            storedIp: session.device.ipAddress,
-            message: "IP address does not match stored device IP",
-          },
-        });
-
-        throw new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          "IP address does not match stored device. Session may have been compromised.",
-          ERROR_CODE.INVALID_CLIENT_KEY
-        );
       }
 
       payload = tokenPayload;
