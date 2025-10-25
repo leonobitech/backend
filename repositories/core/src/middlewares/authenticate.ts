@@ -17,6 +17,7 @@ import logger from "@utils/logging/logger";
 import { findAccessTokenOrThrow } from "@utils/auth/tokenRedis";
 import { createHash } from "crypto";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
+import { generateClientKeyLegacy } from "@utils/auth/generateClientKeyLegacy";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
 import { clearAuthCookies } from "@utils/auth/cookies";
 import { refreshAccessTokenService } from "@services/account.service";
@@ -257,18 +258,35 @@ const authenticate: RequestHandler = catchErrors(
         );
       }
 
+      // 🔐 Validación de huella digital con soporte para formato legacy
       const expectedClientKey = await generateClientKeyFromMeta(
         meta,
         tokenPayload.userId,
         tokenPayload.sessionId
       );
 
-      if (clientKey !== expectedClientKey) {
+      // 🔄 BACKWARD COMPATIBILITY: Intentar también con formato legacy (IP /24)
+      const expectedClientKeyLegacy = await generateClientKeyLegacy(
+        meta,
+        tokenPayload.userId,
+        tokenPayload.sessionId
+      );
+
+      const isValidFingerprint =
+        clientKey === expectedClientKey ||
+        clientKey === expectedClientKeyLegacy;
+
+      if (!isValidFingerprint) {
         await loggerSecurityEvent({
           meta,
           type: "client_key_mismatch",
           userId: tokenPayload.userId,
           sessionId: tokenPayload.sessionId,
+          details: {
+            receivedClientKey: clientKey,
+            expectedNew: expectedClientKey,
+            expectedLegacy: expectedClientKeyLegacy,
+          },
         });
 
         throw new HttpException(
@@ -276,6 +294,15 @@ const authenticate: RequestHandler = catchErrors(
           "This token was not generated from this device or IP address.",
           ERROR_CODE.INVALID_CLIENT_KEY
         );
+      }
+
+      // 📝 Si detectamos uso de formato legacy, registrar para monitoreo
+      if (clientKey === expectedClientKeyLegacy && clientKey !== expectedClientKey) {
+        logger.info("🔄 Cliente usando formato legacy de clientKey detectado", {
+          userId: tokenPayload.userId,
+          sessionId: tokenPayload.sessionId,
+          event: "auth.clientkey.legacy_detected",
+        });
       }
 
       payload = tokenPayload;

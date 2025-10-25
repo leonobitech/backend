@@ -4,6 +4,7 @@ import { HTTP_CODE } from "@constants/httpCode";
 import HttpException from "@utils/http/HttpException";
 import prisma from "@config/prisma";
 import { generateClientKeyFromMeta } from "./generateClientKey";
+import { generateClientKeyLegacy } from "./generateClientKeyLegacy";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
 import appAssert from "@utils/validation/appAssert";
 
@@ -138,18 +139,35 @@ export const findAccessTokenOrThrow = async (
       );
     }
 
+    // 🔐 Validación de huella digital con soporte para formato legacy
     const expectedClientKey = await generateClientKeyFromMeta(
       meta,
       record.userId,
       record.sessionId
     );
 
-    if (clientKey !== expectedClientKey) {
+    // 🔄 BACKWARD COMPATIBILITY: Intentar también con formato legacy (IP /24)
+    const expectedClientKeyLegacy = await generateClientKeyLegacy(
+      meta,
+      record.userId,
+      record.sessionId
+    );
+
+    const isValidFingerprint =
+      clientKey === expectedClientKey ||
+      clientKey === expectedClientKeyLegacy;
+
+    if (!isValidFingerprint) {
       await loggerSecurityEvent({
         meta,
         type: "client_key_mismatch",
         userId: record.userId,
         sessionId: record.sessionId,
+        details: {
+          receivedClientKey: clientKey,
+          expectedNew: expectedClientKey,
+          expectedLegacy: expectedClientKeyLegacy,
+        },
       });
 
       throw new HttpException(
@@ -159,8 +177,14 @@ export const findAccessTokenOrThrow = async (
       );
     }
 
+    // 🔄 Validar también contra session.clientKey (puede ser legacy)
+    const isValidSessionFingerprint =
+      record.session.clientKey === clientKey ||
+      record.session.clientKey === expectedClientKeyLegacy ||
+      record.session.clientKey === expectedClientKey;
+
     appAssert(
-      record.session.clientKey === clientKey,
+      isValidSessionFingerprint,
       HTTP_CODE.UNAUTHORIZED,
       "Client key does not match the session fingerprint.",
       ERROR_CODE.INVALID_CLIENT_KEY
