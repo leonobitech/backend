@@ -14,18 +14,22 @@ const baseCookieOptions: CookieOptions = {
   path: AUTH_COOKIE_PATH,
 };
 
-// 🍪 Configuración para el access token (30 días, igual que clientKey)
-// La expiración del JWT se maneja server-side, la cookie debe persistir
-// para permitir refresh automático incluso después de cerrar el navegador
+// 🍪 Configuración para el access token (sin expiración)
+// Sin maxAge = cookie de sesión que NO expira por tiempo
+// Se borra SOLO cuando:
+// 1. Usuario hace logout explícito
+// 2. Usuario cierra el navegador
+// La expiración del JWT se maneja server-side (15 min con refresh automático)
 export const accessTokenCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días en milisegundos (consistente con clientKey)
+  // NO maxAge - persiste hasta logout o cierre de navegador
 });
 
-// 🍪 Configuración para el clientKey (30 días, persiste con refresh)
+// 🍪 Configuración para el clientKey (sin expiración, consistente con accessKey)
+// Ambas cookies deben tener el mismo comportamiento
 export const clientKeyCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días en milisegundos
+  // NO maxAge - persiste hasta logout o cierre de navegador
 });
 
 // 🧼 Opciones para limpiar ambas cookies
