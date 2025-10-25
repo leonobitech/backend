@@ -165,9 +165,9 @@ const authenticate: RequestHandler = catchErrors(
     }
 
     // 🔁 Si el token fue refrescado desde DB Y está expirado, forzar regeneración
-    // ⚠️ IMPORTANTE: Solo refrescar si ttlSeconds < 0 (realmente expirado)
-    // Si ttlSeconds >= 0, el token de DB aún es válido → NO refrescar
-    if (refreshed && ttlSeconds < 0) {
+    // ⚠️ IMPORTANTE: Solo refrescar si ttl < 0 (realmente expirado)
+    // Si ttl >= 0, el token de DB aún es válido → NO refrescar
+    if (refreshed && ttl < 0) {
       const result = await refreshAccessTokenService(
         clientKey,
         meta,
@@ -239,11 +239,11 @@ const authenticate: RequestHandler = catchErrors(
       return next();
     }
 
-    // ✅ Si el token fue recuperado de DB pero AÚN ES VÁLIDO (ttlSeconds >= 0), usar sin refrescar
-    if (refreshed && ttlSeconds >= 0) {
+    // ✅ Si el token fue recuperado de DB pero AÚN ES VÁLIDO (ttl >= 0), usar sin refrescar
+    if (refreshed && ttl >= 0) {
       logger.info("♻️ Token recuperado de DB con TTL válido - usando sin refresh", {
         ...meta,
-        ttlRemaining: ttlSeconds,
+        ttlRemaining: ttl,
         event: "auth.token.db_recovery_valid",
       });
 
@@ -277,7 +277,7 @@ const authenticate: RequestHandler = catchErrors(
         userId: req.userId,
         sessionId: req.sessionId,
         role: req.role,
-        ttlRemaining: ttlSeconds,
+        ttlRemaining: ttl,
         event: "auth.token.verified.db_valid",
       });
 
