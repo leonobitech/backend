@@ -97,7 +97,6 @@ export const findAccessTokenOrThrow = async (
   if (data && ttl > 0) {
     const { token, clientKeyHash } = JSON.parse(data);
 
-    console.log(`✅ Token encontrado en Redis`, { ttl });
     // Retorna access token desde Redis
     return { token, clientKeyHash, ttl, refreshed: false };
   }
@@ -120,7 +119,6 @@ export const findAccessTokenOrThrow = async (
 
   // ⛓️ Fallback a DB si está habilitado
   if (useFallback) {
-    console.log(`🔍 Token no encontrado en Redis, buscando en DB...`, { accessKey });
 
     const record = await prisma.tokenRecord.findFirst({
       where: {
@@ -196,13 +194,6 @@ export const findAccessTokenOrThrow = async (
 
     const expiresAt = record.expiresAt.getTime();
     const ttlFromDb = Math.floor((expiresAt - Date.now()) / 1000);
-
-    console.log(`✅ Token recuperado de DB`, {
-      userId: record.userId,
-      sessionId: record.sessionId,
-      ttl: ttlFromDb,
-      expiresAt: new Date(expiresAt).toISOString(),
-    });
 
     return {
       token: record.token,
