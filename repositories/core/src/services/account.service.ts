@@ -50,6 +50,7 @@ import {
 import { API_STATUS } from "@constants/apiStatus";
 import { getJwtExpiration } from "@utils/auth/getJwtExpiration";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
+import { generateClientKeyLegacy } from "@utils/auth/generateClientKeyLegacy";
 import logger from "@utils/logging/logger";
 import { findOrCreateDevice } from "@utils/auth/findOrCreateDevice";
 import { findRefreshTokenByClientKey } from "@utils/auth/tokenDatabase";
@@ -508,23 +509,34 @@ export const refreshAccessTokenService = async (
     ERROR_CODE.TOKEN_EXPIRED
   );
 
-  // 🔐 Validación estricta de huella digital: Se reconstruye el fingerprint esperado
+  // 🔐 Validación de huella digital con soporte para formato legacy
   const expectedClientKey = await generateClientKeyFromMeta(
     meta,
     tokenRecord.user.id,
     tokenRecord.session.id
   );
 
-  // Si la huella generada no coincide con la registrada, se loguea el evento y se rechaza la solicitud.
-  if (expectedClientKey !== tokenRecord.publicKey) {
+  // 🔄 BACKWARD COMPATIBILITY: Intentar también con formato legacy (IP /24)
+  const expectedClientKeyLegacy = await generateClientKeyLegacy(
+    meta,
+    tokenRecord.user.id,
+    tokenRecord.session.id
+  );
+
+  const isValidFingerprint =
+    expectedClientKey === tokenRecord.publicKey ||
+    expectedClientKeyLegacy === tokenRecord.publicKey;
+
+  if (!isValidFingerprint) {
     await loggerSecurityEvent({
       meta,
       type: "auth.refresh.fingerprint.mismatch",
       userId: tokenRecord.user.id,
       sessionId: tokenRecord.session.id,
       details: {
-        expected: tokenRecord.publicKey,
-        received: expectedClientKey,
+        storedKey: tokenRecord.publicKey,
+        expectedNew: expectedClientKey,
+        expectedLegacy: expectedClientKeyLegacy,
         meta,
       },
     });
@@ -534,6 +546,26 @@ export const refreshAccessTokenService = async (
       "Fingerprint mismatch on refresh.",
       ERROR_CODE.FINGERPRINT_MISMATCH
     );
+  }
+
+  // 🔄 Si usó formato legacy, actualizar a nuevo formato automáticamente
+  if (expectedClientKeyLegacy === tokenRecord.publicKey && expectedClientKey !== tokenRecord.publicKey) {
+    logger.info("🔄 Migrando clientKey de formato legacy a nuevo formato", {
+      userId: tokenRecord.user.id,
+      sessionId: tokenRecord.session.id,
+      event: "auth.clientkey.auto_migration",
+    });
+
+    // Actualizar Session y TokenRecords con el nuevo formato
+    await prisma.session.update({
+      where: { id: tokenRecord.session.id },
+      data: { clientKey: expectedClientKey },
+    });
+
+    await prisma.tokenRecord.updateMany({
+      where: { sessionId: tokenRecord.session.id },
+      data: { publicKey: expectedClientKey },
+    });
   }
 
   // Verificación del token registrado
