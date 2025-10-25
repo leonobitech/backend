@@ -14,8 +14,9 @@ export const globalRateLimiter = rateLimit({
   statusCode: HTTP_CODE.TOO_MANY_REQUESTS,
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
-  // Skip successful requests (only count failures)
   skipSuccessfulRequests: false,
+  // FIX: Validar trust proxy para express-rate-limit
+  validate: { trustProxy: false }, // Deshabilita validación estricta
 });
 
 /**
@@ -33,8 +34,8 @@ export const loginRateLimiter = rateLimit({
   statusCode: HTTP_CODE.TOO_MANY_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
-  // Solo contar requests fallidos (status 4xx)
   skipSuccessfulRequests: true,
+  validate: { trustProxy: false },
 });
 
 /**
@@ -52,7 +53,8 @@ export const registerRateLimiter = rateLimit({
   statusCode: HTTP_CODE.TOO_MANY_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: false, // Contar todos los intentos
+  skipSuccessfulRequests: false,
+  validate: { trustProxy: false },
 });
 
 /**
@@ -71,6 +73,7 @@ export const passwordResetRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
+  validate: { trustProxy: false },
 });
 
 /**
@@ -89,6 +92,7 @@ export const emailVerificationRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
+  validate: { trustProxy: false },
 });
 
 /**
@@ -107,4 +111,5 @@ export const adminRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
+  validate: { trustProxy: false },
 });
