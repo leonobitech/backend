@@ -14,10 +14,12 @@ const baseCookieOptions: CookieOptions = {
   path: AUTH_COOKIE_PATH,
 };
 
-// 🍪 Configuración para el access token (15 minutos)
+// 🍪 Configuración para el access token
+// ⚠️ NO tiene maxAge para permitir que el backend refresque el token automáticamente
+// La expiración se maneja en el JWT dentro de la cookie, no en la cookie misma
 export const accessTokenCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  maxAge: 15 * 60 * 1000, // 15 minutos en milisegundos
+  // NO maxAge - persiste hasta que el navegador se cierre o logout explícito
 });
 
 // 🍪 Configuración para el clientKey (30 días, persiste con refresh)
