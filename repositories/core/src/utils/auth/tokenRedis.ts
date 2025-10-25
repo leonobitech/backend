@@ -128,7 +128,11 @@ export const findAccessTokenOrThrow = async (
       },
       include: {
         user: true,
-        session: true,
+        session: {
+          include: {
+            device: true,
+          },
+        },
       },
     });
 
