@@ -195,16 +195,17 @@ export const findAccessTokenOrThrow = async (
       );
     }
 
-    // 🔄 Validar también contra session.clientKey (puede ser legacy)
+    // 🔄 Validar también contra session.clientKey
+    // La session puede estar en nuevo formato mientras el cliente envía legacy
+    // Solo validamos que la session coincida con uno de los dos formatos esperados
     const isValidSessionFingerprint =
-      record.session.clientKey === clientKey ||
-      record.session.clientKey === expectedClientKeyLegacy ||
-      record.session.clientKey === expectedClientKey;
+      record.session.clientKey === expectedClientKey ||
+      record.session.clientKey === expectedClientKeyLegacy;
 
     appAssert(
       isValidSessionFingerprint,
       HTTP_CODE.UNAUTHORIZED,
-      "Client key does not match the session fingerprint.",
+      "Session fingerprint does not match expected format.",
       ERROR_CODE.INVALID_CLIENT_KEY
     );
 
