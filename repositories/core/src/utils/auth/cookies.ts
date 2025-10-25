@@ -7,7 +7,7 @@ export const AUTH_COOKIE_PATH = "/";
 
 // 🧱 Configuración base para todas las cookies de autenticación
 const baseCookieOptions: CookieOptions = {
-  sameSite: "strict", // ✅ ← Seguridad CSRF OK
+  sameSite: "lax", // ✅ ← Cambiado de "strict" a "lax" para mejor compatibilidad mobile
   httpOnly: true,
   secure: true,
   domain: "leonobitech.com", //  ✅ ← dominio para compartir entre subdominios las cookies
@@ -30,7 +30,7 @@ export const clientKeyCookieOptions = (): CookieOptions => ({
 const clearCookieOptions: CookieOptions = {
   domain: "leonobitech.com",
   path: AUTH_COOKIE_PATH,
-  sameSite: "strict",
+  sameSite: "lax",
   httpOnly: true,
   secure: true,
 };
