@@ -10,7 +10,7 @@ const baseCookieOptions: CookieOptions = {
   sameSite: "lax", // ✅ ← Cambiado de "strict" a "lax" para mejor compatibilidad mobile
   httpOnly: true,
   secure: true,
-  domain: "leonobitech.com", //  ✅ ← dominio para compartir entre subdominios las cookies
+  domain: ".leonobitech.com", //  ✅ ← punto inicial para compartir entre TODOS los subdominios (www, core, etc)
   path: AUTH_COOKIE_PATH,
 };
 
@@ -28,7 +28,7 @@ export const clientKeyCookieOptions = (): CookieOptions => ({
 
 // 🧼 Opciones para limpiar ambas cookies
 const clearCookieOptions: CookieOptions = {
-  domain: "leonobitech.com",
+  domain: ".leonobitech.com",
   path: AUTH_COOKIE_PATH,
   sameSite: "lax",
   httpOnly: true,
