@@ -607,6 +607,18 @@ export const refreshAccessTokenService = async (
   if (oldAccessTokenRecord) {
     const { moveTokenToGracePeriod } = await import("@utils/auth/tokenRedis");
     await moveTokenToGracePeriod(oldAccessTokenRecord.jti);
+
+    // 🕐 Mantener el token viejo en DB durante el grace period (120 segundos)
+    // Esto permite que los retries del browser con el JTI viejo funcionen desde DB fallback
+    const gracePeriodExpiration = new Date(Date.now() + 120 * 1000); // 120 segundos desde ahora
+
+    await prisma.tokenRecord.update({
+      where: { id: oldAccessTokenRecord.id },
+      data: {
+        expiresAt: gracePeriodExpiration,
+        // NO marcar como revoked durante grace period
+      },
+    });
   }
 
   // 🔐 Generar nuevos tokens utilizando el clientKey activo (nuevo si hubo migración)
@@ -623,22 +635,22 @@ export const refreshAccessTokenService = async (
     activeClientKey
   );
 
-  // 🔄 Sobrescribir registros existentes en DB (usando activeClientKey después de migración)
-  await prisma.tokenRecord.updateMany({
-    where: {
+  // 🔄 CREAR nuevos registros en DB en lugar de sobrescribir
+  // Esto permite que tanto el token viejo (en grace period) como el nuevo coexistan
+  await prisma.tokenRecord.create({
+    data: {
+      jti: newAccess.hashedJti,
+      type: "ACCESS",
+      token: newAccess.token,
       sessionId: session.id,
       userId: user.id,
       publicKey: activeClientKey,
-      type: "ACCESS",
-    },
-    data: {
-      jti: newAccess.hashedJti,
-      token: newAccess.token,
       expiresAt: await getJwtExpiration(newAccess.token),
       revoked: false,
     },
   });
 
+  // 🔄 Para refresh token, podemos sobrescribir porque no tiene grace period
   await prisma.tokenRecord.updateMany({
     where: {
       sessionId: session.id,
