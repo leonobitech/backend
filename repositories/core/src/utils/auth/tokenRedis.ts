@@ -46,20 +46,25 @@ export const cacheAccessToken = async (
 };
 
 /**
- * 🕐 Mueve un token a "período de gracia" (120 segundos) para permitir propagación de cookies.
+ * 🕐 Mueve un token a "período de gracia" (30 segundos) para permitir propagación de cookies.
  * Se usa durante el refresh para que el token viejo siga siendo válido brevemente.
+ *
+ * SECURITY: Reducido de 120s a 30s para minimizar ventana de ataque.
  */
 export const moveTokenToGracePeriod = async (
   hashedJti: string
 ): Promise<void> => {
   const oldKey = `access_token:${hashedJti}`;
   const graceKey = `access_token:${hashedJti}:grace`;
+  const GRACE_PERIOD_SECONDS = 30; // Reducido de 120s para mayor seguridad
 
   const data = await redis.get(oldKey);
   if (data) {
-    // Mover el token al período de gracia con 2 minutos de TTL
-    await redis.set(graceKey, data, { EX: 120 });
-    console.log(`⏳ Token ${hashedJti.substring(0, 8)}... movido a período de gracia (120s)`);
+    // Mover el token al período de gracia con TTL reducido
+    await redis.set(graceKey, data, { EX: GRACE_PERIOD_SECONDS });
+    if (process.env.NODE_ENV === "development") {
+      console.log(`⏳ Token movido a período de gracia (${GRACE_PERIOD_SECONDS}s)`);
+    }
   }
 
   // Eliminar el token original

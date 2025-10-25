@@ -7,20 +7,16 @@ export const generateClientKeyFromMeta = async (
   sessionId: string,
   verbose = NODE_ENV !== "production"
 ): Promise<string> => {
-  // 1️⃣ Masked IP: conservar solo primer /24
-  let ipSegment = "";
-  if (meta.ipAddress) {
-    const parts = meta.ipAddress.split(".");
-    if (parts.length === 4) {
-      ipSegment = parts.slice(0, 3).join("."); // ej. "172.69.138"
-    }
-  }
+  // 1️⃣ Usar IP completa (4 octetos) para mayor seguridad
+  // Esto previene ataques de usuarios en la misma subred /24
+  const ipAddress = meta.ipAddress || "0.0.0.0";
 
-  // 2️⃣ Campos inmutables (excluir host ya que puede variar entre frontend/backend)
+  // 2️⃣ Campos inmutables que identifican de forma única este dispositivo
+  // IMPORTANTE: Cualquier cambio en estos campos invalidará el clientKey
   const fields: Record<string, string> = {
     userId,
     sessionId,
-    ipAddress: ipSegment,
+    ipAddress, // IP completa (ej: "181.47.137.24")
     device: meta.deviceInfo.device,
     os: meta.deviceInfo.os,
     browser: meta.deviceInfo.browser,
@@ -42,25 +38,11 @@ export const generateClientKeyFromMeta = async (
 
   const fingerprint = hmacHash(raw, secret);
 
-  // 4️⃣ Logging en dev
-  if (verbose) {
-    const logLine = () =>
-      console.log("--------------------------------------------------");
-    logLine();
-    console.log(
-      "🧬 Generando clientKey (HMAC-SHA512) con los siguientes datos:"
-    );
-    Object.entries(fields).forEach(([key, value]) => {
-      const display = value === "" ? "(empty)" : value;
-      console.log(`  🔹 ${key.padEnd(18)}: ${display}`);
-    });
-    logLine();
-    console.log("🔗 Cadena para hashear:");
-    console.log(`  ${raw}`);
-    logLine();
-    console.log("🔐 Resultado del clientKey (hash):");
-    console.log(`  ${fingerprint}`);
-    logLine();
+  // 4️⃣ Logging solo en desarrollo (sin exponer datos sensibles)
+  if (verbose && NODE_ENV === "development") {
+    console.log("🧬 ClientKey generado para sesión:", sessionId.substring(0, 8) + "...");
+    console.log("  Dispositivo:", meta.deviceInfo.device, "-", meta.deviceInfo.os);
+    // NO logueamos el fingerprint completo ni la IP en producción
   }
 
   return fingerprint;

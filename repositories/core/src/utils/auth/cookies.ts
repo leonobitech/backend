@@ -14,16 +14,16 @@ const baseCookieOptions: CookieOptions = {
   path: AUTH_COOKIE_PATH,
 };
 
-// 🍪 Configuración para el access token (corto, temporal)
+// 🍪 Configuración para el access token (15 minutos)
 export const accessTokenCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  // expires: fifteenMinutesFromNow(),
+  maxAge: 15 * 60 * 1000, // 15 minutos en milisegundos
 });
 
-// 🍪 Configuración para el clientKey (más persistente, sirve para buscar el refresh token)
+// 🍪 Configuración para el clientKey (30 días, persiste con refresh)
 export const clientKeyCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  // expires: fifteenMinutesFromNow(),
+  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días en milisegundos
 });
 
 // 🧼 Opciones para limpiar ambas cookies

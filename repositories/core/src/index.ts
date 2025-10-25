@@ -57,9 +57,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(
   cors({
     origin: APP_ORIGIN, // allow to server to accept request from different origin
-    methods: ["GET", "POST", "PUT", "DELETE"], // allow to server to accept request from different method
-    allowedHeaders: ["Content-Type", "Authorization, X-Requested-With"], // allow to server to accept request from different headers
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"], // allow to server to accept request from different method
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "X-Request-ID",
+      "Idempotency-Key",
+      "x-core-access-key"
+    ], // FIXED: was malformed string, now proper array
     credentials: true, // allow session cookie from browser to pass through
+    maxAge: 86400, // Cache preflight requests for 24 hours
   })
 );
 // enable req.cookies.

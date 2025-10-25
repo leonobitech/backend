@@ -175,11 +175,7 @@ const authenticate: RequestHandler = catchErrors(
         req
       );
 
-      console.log("🍪 setAuthCookies ejecutado. Cookies seteadas:", {
-        accessKey: result.tokens.accessTokenId,
-        clientKey: result.tokens.hashedPublicKey,
-      });
-      // Actualizar cookies con nuevos tokens
+      // Actualizar cookies con nuevos tokens (tokens eliminados de logs por seguridad)
       refreshAuthCookies({
         res,
         accessKey: result.tokens.accessTokenId,
