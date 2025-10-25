@@ -132,7 +132,7 @@ export const getRequestMeta = (req: Request): RequestMeta => {
     const sanitized: RequestMeta = {
       ipAddress: finalIp,
       deviceInfo: parsed.data.deviceInfo,
-      userAgent: fallbackMeta.userAgent,
+      userAgent: parsed.data.userAgent, // CRITICAL FIX: Use client's User-Agent, not server's
       language: parsed.data.language || fallbackMeta.language,
       platform: parsed.data.platform || fallbackMeta.platform,
       timezone: parsed.data.timezone || fallbackMeta.timezone,
