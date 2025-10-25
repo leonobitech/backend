@@ -106,7 +106,10 @@ const authenticate: RequestHandler = catchErrors(
     } = tokenResult;
 
     // 🔐 Verificación básica contra Redis
-    if (clientKey !== clientKeyHash) {
+    // Si viene de DB (refreshed=true), el clientKeyHash puede estar en nuevo formato
+    // mientras el cliente envía legacy. En ese caso, la validación se hizo en tokenRedis.
+    // Solo validamos si NO viene de refresh o si coinciden exactamente.
+    if (!refreshed && clientKey !== clientKeyHash) {
       throw new HttpException(
         HTTP_CODE.UNAUTHORIZED,
         "Invalid client key (mismatch with stored key).",
