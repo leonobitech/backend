@@ -528,20 +528,6 @@ export const refreshAccessTokenService = async (
     tokenRecord.session.id
   );
 
-  // 🐛 DEBUG: Log detallado de comparación de clientKeys
-  logger.info("🔍 Validación de clientKey en refreshAccessTokenService", {
-    userId: tokenRecord.user.id,
-    sessionId: tokenRecord.session.id,
-    receivedClientKey: clientKey.substring(0, 16) + "...",
-    storedInDB: tokenRecord.publicKey.substring(0, 16) + "...",
-    expectedNew: expectedClientKey.substring(0, 16) + "...",
-    expectedLegacy: expectedClientKeyLegacy.substring(0, 16) + "...",
-    matchesNew: expectedClientKey === tokenRecord.publicKey,
-    matchesLegacy: expectedClientKeyLegacy === tokenRecord.publicKey,
-    receivedMatchesStored: clientKey === tokenRecord.publicKey,
-    event: "auth.clientkey.validation",
-  });
-
   const isValidFingerprint =
     expectedClientKey === tokenRecord.publicKey ||
     expectedClientKeyLegacy === tokenRecord.publicKey;
