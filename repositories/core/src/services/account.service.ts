@@ -549,10 +549,14 @@ export const refreshAccessTokenService = async (
   }
 
   // 🔄 Si usó formato legacy, actualizar a nuevo formato automáticamente
+  let activeClientKey = clientKey; // Por defecto, usar el clientKey recibido
+
   if (expectedClientKeyLegacy === tokenRecord.publicKey && expectedClientKey !== tokenRecord.publicKey) {
     logger.info("🔄 Migrando clientKey de formato legacy a nuevo formato", {
       userId: tokenRecord.user.id,
       sessionId: tokenRecord.session.id,
+      oldFormat: clientKey.substring(0, 16) + "...",
+      newFormat: expectedClientKey.substring(0, 16) + "...",
       event: "auth.clientkey.auto_migration",
     });
 
@@ -566,6 +570,9 @@ export const refreshAccessTokenService = async (
       where: { sessionId: tokenRecord.session.id },
       data: { publicKey: expectedClientKey },
     });
+
+    // 🔑 IMPORTANTE: Usar el nuevo clientKey para generar tokens
+    activeClientKey = expectedClientKey;
   }
 
   // Verificación del token registrado
@@ -586,7 +593,7 @@ export const refreshAccessTokenService = async (
     where: {
       sessionId: session.id,
       userId: user.id,
-      publicKey: clientKey,
+      publicKey: activeClientKey, // Buscar con el clientKey activo (nuevo si hubo migración)
       type: "ACCESS",
     },
   });
@@ -596,26 +603,26 @@ export const refreshAccessTokenService = async (
     await moveTokenToGracePeriod(oldAccessTokenRecord.jti);
   }
 
-  // 🔐 Generar nuevos tokens utilizando el clientKey recibido (que coincide con la huella original)
+  // 🔐 Generar nuevos tokens utilizando el clientKey activo (nuevo si hubo migración)
   const newAccess = await generateAccessToken(
     user.id,
     session.id,
     user.role as UserRole,
-    clientKey
+    activeClientKey
   );
   const newRefresh = await generateRefreshToken(
     user.id,
     session.id,
     user.role as UserRole,
-    clientKey
+    activeClientKey
   );
 
-  // 🔄 Sobrescribir registros existentes en DB
+  // 🔄 Sobrescribir registros existentes en DB (usando activeClientKey después de migración)
   await prisma.tokenRecord.updateMany({
     where: {
       sessionId: session.id,
       userId: user.id,
-      publicKey: clientKey,
+      publicKey: activeClientKey,
       type: "ACCESS",
     },
     data: {
@@ -630,7 +637,7 @@ export const refreshAccessTokenService = async (
     where: {
       sessionId: session.id,
       userId: user.id,
-      publicKey: clientKey,
+      publicKey: activeClientKey,
       type: "REFRESH",
     },
     data: {
@@ -651,7 +658,7 @@ export const refreshAccessTokenService = async (
     },
     tokens: {
       accessTokenId: newAccess.hashedJti,
-      hashedPublicKey: clientKey,
+      hashedPublicKey: activeClientKey, // Retornar el nuevo clientKey después de migración
       accessToken: newAccess.token,
     },
   };
