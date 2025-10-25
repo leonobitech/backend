@@ -23,6 +23,7 @@ import { clearAuthCookies } from "@utils/auth/cookies";
 import { refreshAccessTokenService } from "@services/account.service";
 import { refreshAuthCookies } from "@utils/auth/cookies";
 import { loggerEvent } from "@utils/logging/loggerEvent";
+import { prisma } from "@config/database";
 
 /**
  * 🛡️ Middleware para autenticar al usuario mediante Access Token válido.
@@ -367,7 +368,6 @@ const authenticate: RequestHandler = catchErrors(
       // 🔐 VALIDACIÓN ADICIONAL: Verificar IP contra Device en DB
       // Esta validación previene que un token en Redis siga siendo válido
       // si la IP del dispositivo fue modificada en la base de datos
-      const { prisma } = await import("@config/database");
       const session = await prisma.session.findUnique({
         where: { id: tokenPayload.sessionId },
         include: { device: true },
