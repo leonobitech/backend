@@ -124,8 +124,13 @@ export const getRequestMeta = (req: Request): RequestMeta => {
       throw new Error("❌ Metadatos del cliente incompletos o inválidos");
     }
 
+    // 🔍 Prioridad de IP:
+    // 1. Si cliente envió ipAddress en meta (proxy Next.js ya lo procesó) → usar esa
+    // 2. Si no, extraer de headers del servidor (request directo)
+    const finalIp = clientMeta.ipAddress || serverIp;
+
     const sanitized: RequestMeta = {
-      ipAddress: fallbackMeta.ipAddress,
+      ipAddress: finalIp,
       deviceInfo: parsed.data.deviceInfo,
       userAgent: fallbackMeta.userAgent,
       language: parsed.data.language || fallbackMeta.language,
