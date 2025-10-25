@@ -164,8 +164,10 @@ const authenticate: RequestHandler = catchErrors(
       return next();
     }
 
-    // 🔁 Si el token fue refrescado desde DB, forzar regeneración
-    if (refreshed) {
+    // 🔁 Si el token fue refrescado desde DB Y está expirado, forzar regeneración
+    // ⚠️ IMPORTANTE: Solo refrescar si ttlSeconds < 0 (realmente expirado)
+    // Si ttlSeconds >= 0, el token de DB aún es válido → NO refrescar
+    if (refreshed && ttlSeconds < 0) {
       const result = await refreshAccessTokenService(
         clientKey,
         meta,
@@ -232,6 +234,51 @@ const authenticate: RequestHandler = catchErrors(
         sessionId: req.sessionId,
         role: req.role,
         event: "auth.token.verified",
+      });
+
+      return next();
+    }
+
+    // ✅ Si el token fue recuperado de DB pero AÚN ES VÁLIDO (ttlSeconds >= 0), usar sin refrescar
+    if (refreshed && ttlSeconds >= 0) {
+      logger.info("♻️ Token recuperado de DB con TTL válido - usando sin refresh", {
+        ...meta,
+        ttlRemaining: ttlSeconds,
+        event: "auth.token.db_recovery_valid",
+      });
+
+      const { payload } = await verifyToken(accessToken, lang, req);
+
+      if (
+        payload.aud !== Audience.Access ||
+        !("userId" in payload) ||
+        !("role" in payload)
+      ) {
+        throw new HttpException(
+          HTTP_CODE.UNAUTHORIZED,
+          getErrorMessage("INVALID_AUDIENCE", lang),
+          ERROR_CODE.INVALID_AUDIENCE,
+          [`Expected Audience: ${Audience.Access}`]
+        );
+      }
+
+      req.user = payload;
+      req.userId = payload.userId;
+      req.sessionId = payload.sessionId;
+      req.role = payload.role;
+
+      res.locals.user = {
+        id: req.userId!,
+        role: req.role!,
+      };
+
+      logger.info("✅ Usuario autenticado desde DB sin refresh", {
+        ...meta,
+        userId: req.userId,
+        sessionId: req.sessionId,
+        role: req.role,
+        ttlRemaining: ttlSeconds,
+        event: "auth.token.verified.db_valid",
       });
 
       return next();
