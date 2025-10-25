@@ -371,6 +371,7 @@ const authenticate: RequestHandler = catchErrors(
           ...meta,
           errorCode: err.errorCode,
           message: err.message,
+          details: err.details, // Include details for debugging clientKey mismatches
           event:
             err.errorCode === ERROR_CODE.TOKEN_REVOKED
               ? "auth.token.revoked"
