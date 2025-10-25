@@ -170,7 +170,8 @@ const authenticate: RequestHandler = catchErrors(
         clientKey,
         meta,
         lang,
-        req
+        req,
+        clientKeyHash // Pasar el formato alternativo para backward compatibility
       );
 
       const { payload } = await verifyToken(

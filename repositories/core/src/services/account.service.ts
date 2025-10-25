@@ -490,10 +490,15 @@ export const refreshAccessTokenService = async (
   clientKey: string,
   meta: RequestMeta,
   lang: SupportedLang,
-  req: Request
+  req: Request,
+  alternativeClientKey?: string
 ): Promise<RefreshTokenResponse> => {
-  // Se busca el registro del refresh token usando la publicKey (clientKey)
-  const tokenRecord = await findRefreshTokenByClientKey(clientKey);
+  // 🔄 BACKWARD COMPATIBILITY: Buscar con ambos formatos (legacy y nuevo)
+  // Si alternativeClientKey está presente, buscar con ambos
+  const tokenRecord = await findRefreshTokenByClientKey(
+    clientKey,
+    alternativeClientKey
+  );
 
   appAssert(
     tokenRecord,
