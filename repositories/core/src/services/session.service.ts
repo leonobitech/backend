@@ -40,6 +40,7 @@ export const getUserSessions = async (
       browser: session.device.browser,
       os: session.device.os,
       ipAddress: session.device.ipAddress,
+      timezone: session.device.timezone,
     },
     createdAt: session.createdAt.toISOString(),
     lastUsedAt: session.lastUsedAt?.toISOString() || "",
