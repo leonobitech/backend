@@ -10,6 +10,12 @@ import {
   resetPasswordController,
 } from "@controllers/account.controllers";
 import authenticate from "@middlewares/authenticate";
+import {
+  loginRateLimiter,
+  registerRateLimiter,
+  passwordResetRateLimiter,
+  emailVerificationRateLimiter,
+} from "@middlewares/rateLimiter";
 
 const accountRoutes = Router();
 
@@ -18,27 +24,23 @@ const accountRoutes = Router();
 /**
  * @route   POST /account/register
  * @desc    Registra un nuevo usuario y envía un código de verificación por email
+ * @limit   3 registros por hora por IP
  */
-accountRoutes.post("/register", registerController);
+accountRoutes.post("/register", registerRateLimiter, registerController);
 
 /**
  * @route   POST /account/verify-email
  * @desc    Verifica el código de email y activa la cuenta del usuario
+ * @limit   5 intentos cada 15 minutos por IP
  */
-accountRoutes.post("/verify-email", verifyEmailController);
+accountRoutes.post("/verify-email", emailVerificationRateLimiter, verifyEmailController);
 
 /**
  * @route   POST /account/login
  * @desc    Inicia sesión y genera tokens de acceso + sesión persistente
+ * @limit   5 intentos cada 15 minutos por IP
  */
-accountRoutes.post(
-  "/login",
-  (req, res, next) => {
-    console.log("📩 Se llamó a /account/login"); // 💥 DEBUG opcional
-    next();
-  },
-  loginController
-);
+accountRoutes.post("/login", loginRateLimiter, loginController);
 
 /**
  * @route   POST /account/refresh-token
@@ -50,15 +52,17 @@ accountRoutes.post("/refresh", refreshAccessTokenController);
 /**
  * @route   POST /account/password/forgot
  * @desc    Solicita un restablecimiento de contraseña y envía un email con el código.
+ * @limit   3 solicitudes por hora por IP
  */
-accountRoutes.post("/password/forgot", requestPasswordResetController);
+accountRoutes.post("/password/forgot", passwordResetRateLimiter, requestPasswordResetController);
 
 /**
  * @route   POST /password/reset
  * @desc    Restablece la contraseña del usuario y activa la cuenta
  * @access  Público (solo con token de restablecimiento válido)
+ * @limit   3 intentos por hora por IP
  */
-accountRoutes.post("/password/reset", resetPasswordController);
+accountRoutes.post("/password/reset", passwordResetRateLimiter, resetPasswordController);
 
 /**
  * @route   POST /account/logout

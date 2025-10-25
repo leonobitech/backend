@@ -23,6 +23,7 @@ import errorHandler from "@middlewares/errorHandler";
 import authorize from "@middlewares/authorize";
 import { requestMeta } from "@middlewares/requestMeta";
 import { detectLanguage } from "@middlewares/detectLanguage";
+import { globalRateLimiter, adminRateLimiter } from "@middlewares/rateLimiter";
 
 // routes
 import accountRoutes from "@routes/account.routes";
@@ -79,6 +80,9 @@ app.use(cleanCookies);
 // Middleware global (si querés en toda la API)
 app.use(requestMeta);
 
+// 🛡️ Rate limiting global (100 req/min por IP)
+app.use(globalRateLimiter);
+
 // initialize the app
 app.get("/", (req, res) => {
   res.status(HTTP_CODE.OK).json({
@@ -126,7 +130,7 @@ app.use("/account", accountRoutes);
 // 🔐 Auth & protected routes
 app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
-app.use("/admin", authenticate, authorize(UserRole.Admin), adminRouter);
+app.use("/admin", authenticate, authorize(UserRole.Admin), adminRateLimiter, adminRouter);
 
 // Test route for error handling
 app.use("/api", testRouter);
