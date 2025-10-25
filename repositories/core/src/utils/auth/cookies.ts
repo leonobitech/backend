@@ -10,7 +10,9 @@ const baseCookieOptions: CookieOptions = {
   sameSite: "lax", // ✅ ← Cambiado de "strict" a "lax" para mejor compatibilidad mobile
   httpOnly: true,
   secure: true,
-  domain: ".leonobitech.com", //  ✅ ← punto inicial para compartir entre TODOS los subdominios (www, core, etc)
+  // ❌ NO setear domain para que la cookie se asocie al dominio exacto que la genera
+  // Esto permite que Next.js API routes reescriban las cookies correctamente
+  // domain: ".leonobitech.com",
   path: AUTH_COOKIE_PATH,
 };
 
@@ -28,7 +30,8 @@ export const clientKeyCookieOptions = (): CookieOptions => ({
 
 // 🧼 Opciones para limpiar ambas cookies
 const clearCookieOptions: CookieOptions = {
-  domain: ".leonobitech.com",
+  // ❌ NO setear domain para que coincida con baseCookieOptions
+  // domain: ".leonobitech.com",
   path: AUTH_COOKIE_PATH,
   sameSite: "lax",
   httpOnly: true,
