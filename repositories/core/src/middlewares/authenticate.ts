@@ -181,6 +181,14 @@ const authenticate: RequestHandler = catchErrors(
       );
 
       // Actualizar cookies con nuevos tokens (tokens eliminados de logs por seguridad)
+      logger.info("🍪 Actualizando cookies después de refresh", {
+        userId: result.data.userId,
+        sessionId: result.data.sessionId,
+        hasAccessKey: !!result.tokens.accessTokenId,
+        hasClientKey: !!result.tokens.hashedPublicKey,
+        event: "auth.cookies.refresh",
+      });
+
       refreshAuthCookies({
         res,
         accessKey: result.tokens.accessTokenId,
