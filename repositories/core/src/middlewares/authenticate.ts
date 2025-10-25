@@ -272,6 +272,18 @@ const authenticate: RequestHandler = catchErrors(
         tokenPayload.sessionId
       );
 
+      // 🐛 DEBUG: Log detallado de comparación de clientKeys en authenticate
+      logger.info("🔍 Validación de clientKey en authenticate middleware", {
+        userId: tokenPayload.userId,
+        sessionId: tokenPayload.sessionId,
+        receivedClientKey: clientKey.substring(0, 16) + "...",
+        expectedNew: expectedClientKey.substring(0, 16) + "...",
+        expectedLegacy: expectedClientKeyLegacy.substring(0, 16) + "...",
+        matchesNew: clientKey === expectedClientKey,
+        matchesLegacy: clientKey === expectedClientKeyLegacy,
+        event: "auth.authenticate.clientkey_validation",
+      });
+
       const isValidFingerprint =
         clientKey === expectedClientKey ||
         clientKey === expectedClientKeyLegacy;

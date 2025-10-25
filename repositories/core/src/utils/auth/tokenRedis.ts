@@ -153,6 +153,24 @@ export const findAccessTokenOrThrow = async (
       record.sessionId
     );
 
+    // 🐛 DEBUG: Log detallado de comparación de clientKeys en tokenRedis
+    console.log("🔍 Validación de clientKey en tokenRedis (DB fallback)", {
+      userId: record.userId,
+      sessionId: record.sessionId,
+      receivedClientKey: clientKey.substring(0, 16) + "...",
+      storedInTokenRecord: record.publicKey.substring(0, 16) + "...",
+      storedInSession: record.session.clientKey.substring(0, 16) + "...",
+      expectedNew: expectedClientKey.substring(0, 16) + "...",
+      expectedLegacy: expectedClientKeyLegacy.substring(0, 16) + "...",
+      receivedMatchesTokenRecord: clientKey === record.publicKey,
+      receivedMatchesSession: clientKey === record.session.clientKey,
+      matchesNew: clientKey === expectedClientKey,
+      matchesLegacy: clientKey === expectedClientKeyLegacy,
+      sessionMatchesNew: record.session.clientKey === expectedClientKey,
+      sessionMatchesLegacy: record.session.clientKey === expectedClientKeyLegacy,
+      event: "auth.tokenredis.clientkey_validation",
+    });
+
     const isValidFingerprint =
       clientKey === expectedClientKey ||
       clientKey === expectedClientKeyLegacy;
