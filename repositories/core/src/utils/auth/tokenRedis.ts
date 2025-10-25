@@ -192,6 +192,29 @@ export const findAccessTokenOrThrow = async (
       ERROR_CODE.INVALID_CLIENT_KEY
     );
 
+    // 🔐 VALIDACIÓN ADICIONAL: Verificar IP contra Device.ipAddress
+    // Esta validación previene que una sesión siga siendo válida si la IP
+    // del dispositivo fue modificada en la base de datos
+    if (record.session.device.ipAddress !== meta.ipAddress) {
+      await loggerSecurityEvent({
+        meta,
+        type: "ip_mismatch",
+        userId: record.userId,
+        sessionId: record.sessionId,
+        details: {
+          requestIp: meta.ipAddress,
+          storedIp: record.session.device.ipAddress,
+          message: "IP address does not match stored device IP",
+        },
+      });
+
+      throw new HttpException(
+        HTTP_CODE.UNAUTHORIZED,
+        "IP address does not match stored device. Session may have been compromised.",
+        ERROR_CODE.INVALID_CLIENT_KEY
+      );
+    }
+
     const expiresAt = record.expiresAt.getTime();
     const ttlFromDb = Math.floor((expiresAt - Date.now()) / 1000);
 
