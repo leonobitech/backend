@@ -2,9 +2,9 @@
   "keys": [
     {
       "kty": "RSA",
-      "n": "q8GK8eeMpc5ALrKFmU8Za43Rz3YGPCjd32RO3SeY5J4BOIcgvLtwV3eBFyHXQfvYT06XLke1zLxyw9L-WCT05GRh5q1aAaH25ctCiozWpP1dlygZprjPahTy2dClJh6lwSwuhrdvDKB7K_I45x_dm3YDfzA4a42QQMmlkfa7ak8H472YBCtweigw9g75leJvjTbD9IJDK8MH_ttkXtunFyA0F56ozdlt-PyCu4QQCVI0gq008HMwQB-4gTPY3J-ToCr0YyckC1FgBpDs5nmfPGj8TjbqPs0C5ylZpPxOrISnYsNRH5n7Bv-cK0ZFj21GyOjKHU4_W7bqzpwQ9g887w",
+      "n": "uDBeYZXMNbDirIgAa321hsTlMRvmaGiaOZ0aROH2E5t0OgUEgPC0V8DFSVHL_TseHWSXcr8ZVte1KpSUkq1paBg1uQk6ezeXuhRBaW6DveREC4L0P5hhtGCVY1YmXBxnYh8kL-ZqKlEbqaCqGtqIde3SpP9DDZa8vG8qWAG4iP5bbqvagtaAHI4AUJmR3jlE4NIlcwWQ-srcLMnzZVLCwcy9j_-FvXRB2P-IO_0r7nrdCv785UFir-alzIWDqpGQpYfvw0W4RKEwDAUIHnf6tmHxhfDhrNLXh8UPYbcFnzkNnf9m1CbxpYbRjmoTSgD1LRxP8S4qkzBm9DtKInUbGw",
       "e": "AQAB",
-      "kid": "claude-key-1",
+      "kid": "odoo-mcp-key-1",
       "use": "sig",
       "alg": "RS256"
     }
