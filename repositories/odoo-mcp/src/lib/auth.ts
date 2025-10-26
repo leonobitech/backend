@@ -27,25 +27,8 @@ async function getJwkSet(): Promise<JwksLoader> {
 }
 
 export async function verifyAccessToken(token: string) {
-  const header = decodeProtectedHeader(token);
-
-  if (header?.alg?.startsWith("HS")) {
-    if (!env.CORE_SERVICE_TOKEN_SECRET) {
-      logger.error("[auth] Service token received but CORE_SERVICE_TOKEN_SECRET is not configured");
-      throw new Error("Service token support not configured");
-    }
-
-    const { payload } = await jwtVerify(
-      token,
-      new TextEncoder().encode(env.CORE_SERVICE_TOKEN_SECRET),
-      {
-        issuer: env.CORE_SERVICE_TOKEN_ISSUER ?? env.JWT_ISSUER,
-        audience: env.SERVICE_TOKEN_AUDIENCE
-      }
-    );
-    return payload;
-  }
-
+  // Only support RSA tokens (RS256) for now
+  // Service tokens (HMAC) can be added later if needed for n8n integration
   const jwkSet = await getJwkSet();
   const { payload } = await jwtVerify(token, jwkSet, {
     issuer: env.JWT_ISSUER,

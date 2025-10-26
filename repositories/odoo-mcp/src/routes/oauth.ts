@@ -38,62 +38,6 @@ const registrationBodySchema = z.object({
     .optional()
 });
 
-interface CoreSessionValidation {
-  ok: boolean;
-  email?: string | null;
-  userId?: string;
-  role?: string;
-}
-
-async function validateCoreSession(req: Request): Promise<CoreSessionValidation> {
-  const cookies = req.headers.cookie;
-  if (!cookies) {
-    logger.warn("Missing cookies on OAuth authorize request");
-    return { ok: false };
-  }
-
-  try {
-    const verifyUrl = new URL("/security/verify-session", env.CORE_BASE_URL);
-    const response = await fetch(verifyUrl.toString(), {
-      method: "GET",
-      headers: {
-        "x-core-access-key": env.CORE_API_KEY,
-        cookie: cookies,
-        accept: "application/json"
-      }
-    });
-
-    if (!response.ok) {
-      logger.warn(
-        { status: response.status, statusText: response.statusText },
-        "Core session validation failed"
-      );
-      return { ok: false };
-    }
-
-    const data = (await response.json()) as {
-      userId?: string;
-      role?: string;
-      email?: string | null;
-    };
-
-    if (!data?.userId) {
-      logger.warn("Core session validation missing userId");
-      return { ok: false };
-    }
-
-    return {
-      ok: true,
-      email: data.email ?? null,
-      userId: data.userId,
-      role: data.role
-    };
-  } catch (error) {
-    logger.error({ err: error }, "Error while validating session with core service");
-    return { ok: false };
-  }
-}
-
 oauthRouter.get("/authorize", async (req, res) => {
   const parseResult = authorizeQuerySchema.safeParse(req.query);
   if (!parseResult.success) {
@@ -141,27 +85,10 @@ oauthRouter.get("/authorize", async (req, res) => {
     return res.status(400).json({ error: "invalid_scope" });
   }
 
-  const session = await validateCoreSession(req);
-  if (!session.ok) {
-    const loginUrl = new URL(env.CORE_LOGIN_URL);
-    loginUrl.searchParams.set("redirect", `${env.PUBLIC_URL}${req.originalUrl}`);
-    return res.redirect(loginUrl.toString());
-  }
-
   const normalizedScope = Array.from(new Set([...requestedScopes, ...allowedScopes])).join(" ");
 
-  // Whitelist of authorized users - only these can get authorization codes
-  const ALLOWED_USERS = ["felix@leonobitech.com"];
-  const subject = session.email || login_hint || session.userId || "unknown-user";
-
-  // Validate user is in whitelist
-  if (session.email && !ALLOWED_USERS.includes(session.email)) {
-    logger.warn({ subject, client_id }, "Unauthorized user attempted OAuth authorization");
-    return res.status(403).json({
-      error: "access_denied",
-      error_description: "User not authorized to access this resource"
-    });
-  }
+  // Use login_hint or generate a simple subject identifier
+  const subject = login_hint || `odoo-user-${Date.now()}`;
 
   logger.info({
     subject,
