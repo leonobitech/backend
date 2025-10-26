@@ -7,7 +7,13 @@ import { logger } from "@/lib/logger";
 const keysDir = resolve(process.cwd(), "keys");
 const scopes = Array.from(new Set(env.SCOPES.split(/\s+/).filter(Boolean)));
 const scopeDescriptions = scopes.reduce<Record<string, string>>((acc, scope) => {
-  acc[scope] = "Permite a Claude Desktop invocar herramientas Leonobitech MCP.";
+  if (scope === "odoo:read") {
+    acc[scope] = "Read data from Odoo (leads, contacts, opportunities, calendar)";
+  } else if (scope === "odoo:write") {
+    acc[scope] = "Create and modify data in Odoo (leads, contacts, calendar events, emails)";
+  } else {
+    acc[scope] = `Access to ${scope} resources`;
+  }
   return acc;
 }, {});
 
@@ -15,12 +21,12 @@ export const wellKnownRouter = Router();
 
 const baseManifest = {
   schema_version: "v1",
-  name_for_human: "Leonobitech Claude Desktop Connector",
-  name_for_model: "leonobitech_claude",
+  name_for_human: "Odoo MCP Server",
+  name_for_model: "odoo_mcp",
   description_for_human:
-    "Autentica y habilita la integración MCP de Leonobitech dentro de Claude Desktop.",
+    "Control your Odoo CRM, contacts, calendar and more from Claude Desktop.",
   description_for_model:
-    "Utiliza herramientas de Leonobitech mediante un servidor MCP autenticado con OAuth2 y tokens JWT.",
+    "Access Odoo CRM tools for managing leads, opportunities, contacts, calendar events and emails through MCP protocol.",
   auth: {
     type: "oauth",
     client_url: `${env.PUBLIC_URL}/oauth/authorize`,

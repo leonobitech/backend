@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "leonobitech": {
+    "odoo": {
       "transport": {
         "type": "sse",
         "url": "https://odoo-mcp.leonobitech.com/mcp/sse",
@@ -9,9 +9,9 @@
       "oauth": {
         "authorizationUrl": "https://odoo-mcp.leonobitech.com/oauth/authorize",
         "tokenUrl": "https://odoo-mcp.leonobitech.com/oauth/token",
-        "clientId": "claude-mcp",
-        "clientSecret": "uper-secret-change-me",
-        "scope": "claude.app"
+        "clientId": "odoo-mcp",
+        "clientSecret": "super-secret-change-me",
+        "scope": "odoo:read odoo:write"
       }
     }
   }
