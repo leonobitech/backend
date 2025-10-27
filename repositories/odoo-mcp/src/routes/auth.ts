@@ -169,24 +169,10 @@ authRouter.post("/register", async (req, res) => {
       metadata: { odooUrl: odoo.url, odooDb: odoo.db },
     });
 
-    // Auto-login: Create session
-    const { sessionToken } = await createSession({
-      userId: user.id,
-      ipAddress,
-      userAgent,
-    });
-
-    // Set session cookie
-    res.cookie(env.SESSION_COOKIE_NAME, sessionToken, {
-      httpOnly: true,
-      secure: env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: env.SESSION_TTL * 1000,
-      path: "/",
-    });
-
+    // No auto-login - user must login after registration
     return res.status(201).json({
       success: true,
+      message: "Registration successful. Please login to continue.",
       user: {
         id: user.id,
         email: user.email,
