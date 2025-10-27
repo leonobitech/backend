@@ -61,7 +61,7 @@ export async function createSession(
 
   // Store session token in Redis pointing to session ID
   const redis = await getRedisClient();
-  await redis.setex(
+  await redis.setEx(
     `session:${sessionToken}`,
     env.SESSION_TTL,
     session.id
