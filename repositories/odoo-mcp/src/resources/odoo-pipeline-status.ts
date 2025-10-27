@@ -2,27 +2,53 @@
  * Resource: odoo://pipeline/status
  *
  * Provides real-time CRM pipeline status summary
- *
- * TODO: This resource needs to be refactored to accept user credentials
- * Currently using dummy credentials - will fail when called
  */
 
 import { createOdooClient, type OdooCredentials } from "@/lib/odoo";
+import { prisma } from "@/config/database";
+import { decrypt } from "@/lib/encryption";
+import { logger } from "@/lib/logger";
 
 /**
- * TEMPORARY: Dummy credentials for compilation
- * This function should accept user credentials as parameter
+ * Load user's Odoo credentials from database
  */
-const DUMMY_CREDENTIALS: OdooCredentials = {
-  url: "https://odoo.example.com",
-  db: "dummy",
-  username: "dummy@example.com",
-  apiKey: "dummy_key"
-};
+async function loadUserCredentials(userId: string): Promise<OdooCredentials | null> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        odooUrl: true,
+        odooDb: true,
+        odooUsername: true,
+        odooApiKey: true,
+      },
+    });
 
-export async function getPipelineStatus(): Promise<string> {
-  // TODO: Get user credentials from authentication context
-  const odoo = createOdooClient(DUMMY_CREDENTIALS);
+    if (!user || !user.odooUrl || !user.odooDb || !user.odooUsername || !user.odooApiKey) {
+      return null;
+    }
+
+    return {
+      url: decrypt(user.odooUrl),
+      db: decrypt(user.odooDb),
+      username: decrypt(user.odooUsername),
+      apiKey: decrypt(user.odooApiKey),
+    };
+  } catch (error) {
+    logger.error({ userId, error }, "[getPipelineStatus] Failed to load credentials");
+    return null;
+  }
+}
+
+export async function getPipelineStatus(userId: string): Promise<string> {
+  // Load user's credentials
+  const credentials = await loadUserCredentials(userId);
+
+  if (!credentials) {
+    return `# Odoo CRM Pipeline Status\n\n**Error**: No Odoo credentials configured.\n\nPlease register with your Odoo credentials to use this resource.`;
+  }
+
+  const odoo = createOdooClient(credentials);
 
   const opportunities = await odoo.search("crm.lead", [["type", "=", "opportunity"]], {
     fields: ["stage_id", "expected_revenue"],

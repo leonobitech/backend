@@ -23,12 +23,12 @@ import { salesAssistantPrompt } from "@/prompts/sales-assistant";
 
 /**
  * Create an MCP server instance with registered tools
- * @param userId - User identifier for logging
+ * @param userId - User identifier for logging and credentials loading
  * @param registry - ToolRegistry with registered tools
  * @returns Configured MCP Server instance
  */
 export function createMcpServer(userId: string, registry: ToolRegistry): Server {
-  const executor = new ToolExecutor(registry);
+  const executor = new ToolExecutor(registry, userId);
 
   const server = new Server(
     {
@@ -69,7 +69,7 @@ export function createMcpServer(userId: string, registry: ToolRegistry): Server 
   // Handler: Read resource
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     if (request.params.uri === "odoo://pipeline/status") {
-      const content = await getPipelineStatus();
+      const content = await getPipelineStatus(userId);
       return {
         contents: [{
           uri: request.params.uri,

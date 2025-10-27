@@ -2,11 +2,16 @@ import { ToolRegistry } from "./ToolRegistry";
 import { ToolExecutionResult } from "./Tool.interface";
 import { logger } from "@/lib/logger";
 import { ZodError } from "zod";
+import { prisma } from "@/config/database";
+import { decrypt } from "@/lib/encryption";
+import { createOdooClient, type OdooCredentials } from "@/lib/odoo";
 
 /**
  * ToolExecutor
  *
  * Executes tools from the registry with:
+ * - User credential loading from database
+ * - Per-request OdooClient injection
  * - Input validation
  * - Error handling
  * - Execution logging
@@ -14,12 +19,51 @@ import { ZodError } from "zod";
  *
  * Usage:
  * ```ts
- * const executor = new ToolExecutor(registry);
+ * const executor = new ToolExecutor(registry, userId);
  * const result = await executor.execute("odoo_get_leads", { limit: 10 });
  * ```
  */
 export class ToolExecutor {
-  constructor(private readonly registry: ToolRegistry) {}
+  constructor(
+    private readonly registry: ToolRegistry,
+    private readonly userId: string
+  ) {}
+
+  /**
+   * Load user's Odoo credentials from database and decrypt them
+   * @returns OdooCredentials or null if not configured
+   */
+  private async loadUserCredentials(): Promise<OdooCredentials | null> {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: this.userId },
+        select: {
+          odooUrl: true,
+          odooDb: true,
+          odooUsername: true,
+          odooApiKey: true,
+        },
+      });
+
+      if (!user || !user.odooUrl || !user.odooDb || !user.odooUsername || !user.odooApiKey) {
+        logger.warn({ userId: this.userId }, "[ToolExecutor] User has no Odoo credentials configured");
+        return null;
+      }
+
+      // Decrypt credentials
+      const credentials: OdooCredentials = {
+        url: decrypt(user.odooUrl),
+        db: decrypt(user.odooDb),
+        username: decrypt(user.odooUsername),
+        apiKey: decrypt(user.odooApiKey),
+      };
+
+      return credentials;
+    } catch (error) {
+      logger.error({ userId: this.userId, error }, "[ToolExecutor] Failed to load user credentials");
+      return null;
+    }
+  }
 
   /**
    * Execute a tool by name
@@ -50,11 +94,34 @@ export class ToolExecutor {
         };
       }
 
+      // Load user's Odoo credentials
+      const credentials = await this.loadUserCredentials();
+      if (!credentials) {
+        return {
+          success: false,
+          error: {
+            code: "CREDENTIALS_NOT_CONFIGURED",
+            message: "User has not configured Odoo credentials. Please register with your Odoo credentials first.",
+            details: {
+              userId: this.userId,
+              hint: "Use the registration endpoint to provide your Odoo URL, database, username, and API key",
+            },
+          },
+        };
+      }
+
+      // Create OdooClient with user's credentials
+      const odooClient = createOdooClient(credentials);
+
+      // Inject OdooClient into tool (replace dummy client)
+      (tool as any).odooClient = odooClient;
+
       // Get metadata for logging
       const metadata = this.registry.getMetadata(toolName);
 
       logger.info(
         {
+          userId: this.userId,
           toolName,
           category: metadata?.category,
           input: this.sanitizeInput(input),
@@ -69,6 +136,7 @@ export class ToolExecutor {
 
       logger.info(
         {
+          userId: this.userId,
           toolName,
           duration,
           estimatedTime: metadata?.estimatedTime,
