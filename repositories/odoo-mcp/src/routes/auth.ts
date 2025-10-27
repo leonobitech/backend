@@ -19,7 +19,7 @@ import { validateOdooCredentials } from "@/services/odoo.service";
 import { createSession, revokeSession, revokeAllUserSessions, getUserActiveSessions } from "@/services/session.service";
 import { logSecurityEvent, isRateLimited } from "@/services/security-event.service";
 import { logger } from "@/lib/logger";
-import { getRedisClient } from "@/config/redis";
+import { getRedisClient } from "@/lib/redis";
 
 export const authRouter = Router();
 
