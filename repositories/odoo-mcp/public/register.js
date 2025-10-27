@@ -70,10 +70,10 @@ form.addEventListener('submit', async (e) => {
     password: form.password.value,
     name: form.name.value,
     odoo: {
-      url: form.odooUrl.value,
-      db: form.odooDb.value,
-      username: form.odooUsername.value,
-      apiKey: form.odooApiKey.value
+      url: form.odooUrl.value.trim(),
+      db: form.odooDb.value.trim(),
+      username: form.odooUsername.value.trim(),
+      apiKey: form.odooApiKey.value.trim()
     }
   };
 
