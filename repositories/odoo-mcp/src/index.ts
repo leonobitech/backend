@@ -1,18 +1,25 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { ensureRedisConnection } from "@/lib/redis";
+import { testDatabaseConnection } from "@/config/database";
 import { initializeTools } from "@/tools/init";
 import { healthRouter } from "@/routes/health";
 import { mcpHttpRouter } from "@/routes/mcp-http";
 import { oauthRouter } from "@/routes/oauth";
 import { wellKnownRouter } from "@/routes/well-known";
+import { authRouter } from "@/routes/auth";
+import { consentRouter } from "@/routes/consent";
+import { optionalAuth } from "@/middlewares/session.middleware";
 
 const app = express();
 
 app.set("trust proxy", true);
+
+// Request logging middleware
 app.use((req, _res, next) => {
   logger.info(
     {
@@ -30,7 +37,11 @@ app.use((req, _res, next) => {
   );
   next();
 });
+
+// Security headers
 app.use(helmet());
+
+// CORS configuration
 const corsOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -42,24 +53,45 @@ app.use(
     credentials: true
   })
 );
+
+// Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Cookie parsing (for session management)
+app.use(cookieParser());
+
+// Apply optional auth middleware globally (attaches session if exists)
+// This makes req.session available in OAuth routes
+app.use(optionalAuth);
+
+// Routes
 app.use("/healthz", healthRouter);
 app.use("/.well-known", wellKnownRouter);
+app.use("/auth", authRouter);
+app.use("/oauth/consent", consentRouter);
 app.use("/oauth", oauthRouter);
 app.use("/mcp", mcpHttpRouter);
 
+// 404 handler
 app.use((_req, res) => {
   res.status(404).json({ error: "Not Found" });
 });
 
+// Global error handler
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   logger.error({ err, path: req.path }, "Unhandled error");
   res.status(500).json({ error: "Internal Server Error" });
 });
 
 async function start() {
+  // Test database connection
+  const dbConnected = await testDatabaseConnection();
+  if (!dbConnected) {
+    logger.fatal("Database connection failed - cannot start server");
+    process.exit(1);
+  }
+
   // Initialize Redis connection
   await ensureRedisConnection();
 
@@ -69,7 +101,7 @@ async function start() {
 
   // Start HTTP server
   app.listen(env.PORT, () => {
-    logger.info({ port: env.PORT }, "[odoo-mcp] MCP server listening");
+    logger.info({ port: env.PORT }, "[odoo-mcp] MCP server with authentication ready");
   });
 }
 

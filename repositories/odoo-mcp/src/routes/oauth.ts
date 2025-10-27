@@ -38,6 +38,18 @@ const registrationBodySchema = z.object({
     .optional()
 });
 
+/**
+ * GET /oauth/authorize
+ * OAuth 2.1 Authorization Endpoint with Real Authentication
+ *
+ * Flow:
+ * 1. Validate OAuth parameters
+ * 2. Check if user is authenticated (has valid session)
+ * 3. If not authenticated → redirect to login page with return_to
+ * 4. If authenticated → check if user has previously consented
+ * 5. If not consented → show consent screen
+ * 6. If consented → issue authorization code
+ */
 oauthRouter.get("/authorize", async (req, res) => {
   const parseResult = authorizeQuerySchema.safeParse(req.query);
   if (!parseResult.success) {
@@ -53,14 +65,15 @@ oauthRouter.get("/authorize", async (req, res) => {
     code_challenge,
     code_challenge_method,
     nonce,
-    login_hint
   } = parseResult.data;
 
+  // Validate client_id
   if (client_id !== env.CLIENT_ID) {
     logger.warn({ client_id }, "Unauthorized client_id on authorize");
     return res.status(400).json({ error: "unauthorized_client" });
   }
 
+  // Validate redirect_uri
   const allowedRedirectUris = new Set(
     [env.REDIRECT_URI, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/mcp/oauth/callback"].filter(
       Boolean
@@ -72,6 +85,7 @@ oauthRouter.get("/authorize", async (req, res) => {
     return res.status(400).json({ error: "invalid_redirect_uri" });
   }
 
+  // Validate scopes
   const requestedScopes = Array.from(new Set(scope.split(/\s+/).filter(Boolean)));
 
   if (!requestedScopes.length) {
@@ -85,17 +99,68 @@ oauthRouter.get("/authorize", async (req, res) => {
     return res.status(400).json({ error: "invalid_scope" });
   }
 
-  const normalizedScope = Array.from(new Set([...requestedScopes, ...allowedScopes])).join(" ");
+  const normalizedScope = requestedScopes.join(" ");
 
-  // Use login_hint or generate a simple subject identifier
-  const subject = login_hint || `odoo-user-${Date.now()}`;
+  // ⚠️ CRITICAL SECURITY CHECK: Verify user is authenticated
+  if (!req.session || !req.session.userId) {
+    // User not authenticated → redirect to login page
+    const loginUrl = new URL("/auth/login", env.PUBLIC_URL);
 
+    // Preserve OAuth parameters in return_to
+    const authorizeUrl = new URL("/oauth/authorize", env.PUBLIC_URL);
+    authorizeUrl.searchParams.set("client_id", client_id);
+    authorizeUrl.searchParams.set("redirect_uri", redirect_uri);
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("scope", scope);
+    if (state) authorizeUrl.searchParams.set("state", state);
+    authorizeUrl.searchParams.set("code_challenge", code_challenge);
+    authorizeUrl.searchParams.set("code_challenge_method", code_challenge_method);
+    if (nonce) authorizeUrl.searchParams.set("nonce", nonce);
+
+    loginUrl.searchParams.set("return_to", authorizeUrl.toString());
+
+    logger.info({ client_id, scope }, "User not authenticated, redirecting to login");
+    return res.redirect(loginUrl.toString());
+  }
+
+  const userId = req.session.userId;
+
+  // Check if user has previously consented to this client + scopes
+  const existingConsent = await import("@/config/database").then(({ prisma }) =>
+    prisma.oAuthConsent.findUnique({
+      where: {
+        userId_clientId: {
+          userId,
+          clientId: client_id,
+        },
+      },
+    })
+  );
+
+  // If consent exists and hasn't been revoked, auto-approve
+  const hasValidConsent = existingConsent && !existingConsent.revokedAt;
+
+  if (!hasValidConsent) {
+    // No consent yet → redirect to consent screen
+    const consentUrl = new URL("/oauth/consent", env.PUBLIC_URL);
+    consentUrl.searchParams.set("client_id", client_id);
+    consentUrl.searchParams.set("redirect_uri", redirect_uri);
+    consentUrl.searchParams.set("scope", scope);
+    if (state) consentUrl.searchParams.set("state", state);
+    consentUrl.searchParams.set("code_challenge", code_challenge);
+    consentUrl.searchParams.set("code_challenge_method", code_challenge_method);
+    if (nonce) consentUrl.searchParams.set("nonce", nonce);
+
+    logger.info({ userId, client_id, scope }, "User needs to consent, redirecting to consent screen");
+    return res.redirect(consentUrl.toString());
+  }
+
+  // ✅ User is authenticated AND has consented → issue authorization code
   logger.info({
-    subject,
+    userId,
     client_id,
     scope: normalizedScope,
-    hasLoginHint: !!login_hint
-  }, "OAuth authorization granted");
+  }, "OAuth authorization granted (authenticated user with valid consent)");
 
   const codePayload = await createAuthorizationCode({
     clientId: client_id,
@@ -103,10 +168,22 @@ oauthRouter.get("/authorize", async (req, res) => {
     codeChallenge: code_challenge,
     codeChallengeMethod: code_challenge_method,
     scope: normalizedScope,
-    subject,
+    subject: userId, // Use real userId as subject
     state,
     nonce
   });
+
+  // Log security event
+  await import("@/services/security-event.service").then(({ logSecurityEvent }) =>
+    logSecurityEvent({
+      userId,
+      eventType: "oauth.token.issued",
+      severity: "info",
+      ipAddress: req.headers["x-forwarded-for"]?.toString() || req.socket.remoteAddress || "unknown",
+      userAgent: req.headers["user-agent"] || "unknown",
+      metadata: { client_id, scope: normalizedScope },
+    })
+  );
 
   const url = new URL(redirect_uri);
   url.searchParams.set("code", codePayload.code);
@@ -114,8 +191,9 @@ oauthRouter.get("/authorize", async (req, res) => {
     url.searchParams.set("state", state);
   }
   url.searchParams.set("client_id", client_id);
+
   res.redirect(url.toString());
-  logger.info({ subject, client_id, state }, "Issued authorization code");
+  logger.info({ userId, client_id, state }, "Issued authorization code");
 });
 
 const tokenBodySchema = z.object({
