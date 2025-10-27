@@ -3,34 +3,25 @@
  *
  * Proporciona una interfaz TypeScript para interactuar con Odoo 19 usando XML-RPC.
  * Soporta autenticación con API Keys.
+ *
+ * MULTI-TENANT: Cada usuario proporciona sus propias credenciales durante la creación del cliente.
  */
 
 import xmlrpc from "xmlrpc";
 import { logger } from "@/lib/logger";
 
-// Configuración de Odoo desde variables de entorno
-const ODOO_URL = process.env.ODOO_URL || "https://odoo.leonobitech.com";
-const ODOO_DB = process.env.ODOO_DB || "leonobitech";
-const ODOO_USERNAME = process.env.ODOO_USERNAME || "felix@leonobitech.com";
-const ODOO_API_KEY = process.env.ODOO_API_KEY || "";
-
-if (!ODOO_API_KEY) {
-  throw new Error("ODOO_API_KEY no está configurada en .env");
+/**
+ * Credenciales de Odoo proporcionadas por el usuario
+ */
+export interface OdooCredentials {
+  url: string;
+  db: string;
+  username: string;
+  apiKey: string;
 }
 
-// Clientes XML-RPC
-const commonClient = xmlrpc.createSecureClient({
-  url: `${ODOO_URL}/xmlrpc/2/common`,
-  rejectUnauthorized: true
-});
-
-const objectClient = xmlrpc.createSecureClient({
-  url: `${ODOO_URL}/xmlrpc/2/object`,
-  rejectUnauthorized: true
-});
-
 /**
- * Clase para interactuar con Odoo
+ * Resultado del envío de email
  */
 export interface SendEmailResult {
   mailId: number;
@@ -38,17 +29,53 @@ export interface SendEmailResult {
   queueProcessed: boolean;
 }
 
+/**
+ * Clase para interactuar con Odoo
+ */
 export class OdooClient {
   private uid: number | null = null;
+  private credentials: OdooCredentials;
+  private commonClient: xmlrpc.Client;
+  private objectClient: xmlrpc.Client;
+
+  /**
+   * Constructor - crea un cliente Odoo con credenciales específicas del usuario
+   */
+  constructor(credentials: OdooCredentials) {
+    this.credentials = credentials;
+
+    const urlObj = new URL(credentials.url);
+    const isHttps = urlObj.protocol === "https:";
+
+    // Crear cliente XML-RPC para common endpoint (autenticación)
+    this.commonClient = isHttps
+      ? xmlrpc.createSecureClient({
+          url: `${credentials.url}/xmlrpc/2/common`,
+          rejectUnauthorized: true
+        })
+      : xmlrpc.createClient({
+          url: `${credentials.url}/xmlrpc/2/common`,
+        });
+
+    // Crear cliente XML-RPC para object endpoint (operaciones CRUD)
+    this.objectClient = isHttps
+      ? xmlrpc.createSecureClient({
+          url: `${credentials.url}/xmlrpc/2/object`,
+          rejectUnauthorized: true
+        })
+      : xmlrpc.createClient({
+          url: `${credentials.url}/xmlrpc/2/object`,
+        });
+  }
 
   /**
    * Autentica con Odoo usando API Key
    */
   async authenticate(): Promise<number> {
     return new Promise((resolve, reject) => {
-      commonClient.methodCall(
+      this.commonClient.methodCall(
         "authenticate",
-        [ODOO_DB, ODOO_USERNAME, ODOO_API_KEY, {}],
+        [this.credentials.db, this.credentials.username, this.credentials.apiKey, {}],
         (error: Error | null, uid: number) => {
           if (error) {
             logger.error({ error }, "Error authenticating with Odoo");
@@ -62,7 +89,7 @@ export class OdooClient {
           }
 
           this.uid = uid;
-          logger.info({ uid, username: ODOO_USERNAME }, "Authenticated with Odoo");
+          logger.info({ uid, username: this.credentials.username }, "Authenticated with Odoo");
           resolve(uid);
         }
       );
@@ -83,9 +110,9 @@ export class OdooClient {
     }
 
     return new Promise((resolve, reject) => {
-      objectClient.methodCall(
+      this.objectClient.methodCall(
         "execute_kw",
-        [ODOO_DB, this.uid, ODOO_API_KEY, model, method, args, kwargs],
+        [this.credentials.db, this.uid, this.credentials.apiKey, model, method, args, kwargs],
         (error: Error | null, result: any) => {
           if (error) {
             logger.error({ error, model, method }, "Error executing Odoo method");
@@ -1303,30 +1330,34 @@ export class OdooClient {
   }
 }
 
-// Instancia singleton del cliente Odoo
-let odooClientInstance: OdooClient | null = null;
-
 /**
- * Obtener instancia del cliente Odoo (singleton)
+ * Factory function para crear un cliente Odoo con credenciales específicas del usuario
+ *
+ * IMPORTANTE: Esta función NO es singleton - cada usuario debe tener su propia instancia
+ * de OdooClient con sus credenciales específicas.
+ *
+ * Uso típico en MCP tools:
+ * 1. Obtener userId del token de autenticación
+ * 2. Buscar credenciales encriptadas del usuario en DB
+ * 3. Desencriptar credenciales con decrypt()
+ * 4. Crear cliente con createOdooClient(credentials)
+ * 5. Ejecutar operaciones del tool
  */
-export function getOdooClient(): OdooClient {
-  if (!odooClientInstance) {
-    odooClientInstance = new OdooClient();
-  }
-  return odooClientInstance;
+export function createOdooClient(credentials: OdooCredentials): OdooClient {
+  return new OdooClient(credentials);
 }
 
 /**
- * Test de conexión a Odoo
+ * Test de conexión a Odoo con credenciales específicas
  */
-export async function testOdooConnection(): Promise<boolean> {
+export async function testOdooConnection(credentials: OdooCredentials): Promise<boolean> {
   try {
-    const client = getOdooClient();
+    const client = createOdooClient(credentials);
     await client.authenticate();
-    logger.info("✅ Conexión a Odoo exitosa");
+    logger.info({ username: credentials.username, db: credentials.db }, "✅ Conexión a Odoo exitosa");
     return true;
   } catch (error) {
-    logger.error({ error }, "❌ Error conectando a Odoo");
+    logger.error({ error, username: credentials.username }, "❌ Error conectando a Odoo");
     return false;
   }
 }
