@@ -48,20 +48,27 @@ export function generateSecureToken(bytes: number = 32): string {
 
 /**
  * Extract IP address from request, considering proxies
+ * Priority: CF-Connecting-IP (Cloudflare) > X-Real-IP > X-Forwarded-For > Socket
  */
 export function extractIpAddress(req: any): string {
-  // Check X-Forwarded-For header (from proxies/load balancers)
+  // Priority 1: CF-Connecting-IP (Cloudflare's real client IP)
+  const cfIp = req.headers["cf-connecting-ip"];
+  if (cfIp) {
+    return cfIp.trim();
+  }
+
+  // Priority 2: X-Real-IP header (from nginx/Traefik)
+  const realIp = req.headers["x-real-ip"];
+  if (realIp) {
+    return realIp.trim();
+  }
+
+  // Priority 3: X-Forwarded-For header (from proxies/load balancers)
   const forwardedFor = req.headers["x-forwarded-for"];
   if (forwardedFor) {
     // X-Forwarded-For can contain multiple IPs, take the first one
     const ips = forwardedFor.split(",");
     return ips[0].trim();
-  }
-
-  // Check X-Real-IP header (from nginx)
-  const realIp = req.headers["x-real-ip"];
-  if (realIp) {
-    return realIp.trim();
   }
 
   // Fallback to connection remote address
