@@ -43,22 +43,10 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Security headers - configure helmet to allow inline styles for UI pages
+// Security headers - disable CSP for UI pages to avoid blocking styles/scripts
 app.use(
   helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for UI
-        scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for UI
-        imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
-        objectSrc: ["'none'"],
-        mediaSrc: ["'self'"],
-        frameSrc: ["'none'"],
-      },
-    },
+    contentSecurityPolicy: false, // Disable CSP to allow UI pages to work properly
   })
 );
 
