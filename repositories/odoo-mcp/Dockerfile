@@ -22,6 +22,7 @@ FROM base AS build
 COPY package*.json tsconfig.json tsup.config.ts ./
 COPY src ./src
 COPY prisma ./prisma
+COPY public ./public
 RUN npm install
 RUN npm run db:generate
 RUN npm run build
@@ -37,6 +38,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
 COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/public ./public
 
 EXPOSE 8100
 

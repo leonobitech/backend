@@ -2,6 +2,8 @@ import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import path from "path";
+import { fileURLToPath } from "url";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { ensureRedisConnection } from "@/lib/redis";
@@ -14,6 +16,9 @@ import { wellKnownRouter } from "@/routes/well-known";
 import { authRouter } from "@/routes/auth";
 import { consentRouter } from "@/routes/consent";
 import { optionalAuth } from "@/middlewares/session.middleware";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -65,6 +70,9 @@ app.use(cookieParser());
 // This makes req.session available in OAuth routes
 app.use(optionalAuth);
 
+// Static files (for login/register pages)
+app.use(express.static(path.join(__dirname, "../public")));
+
 // Routes
 app.use("/healthz", healthRouter);
 app.use("/.well-known", wellKnownRouter);
@@ -72,6 +80,20 @@ app.use("/auth", authRouter);
 app.use("/oauth/consent", consentRouter);
 app.use("/oauth", oauthRouter);
 app.use("/mcp", mcpHttpRouter);
+
+// Serve HTML pages
+app.get("/register", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../public/register.html"));
+});
+
+app.get("/login", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../public/login.html"));
+});
+
+// Redirect root to register
+app.get("/", (_req, res) => {
+  res.redirect("/register");
+});
 
 // 404 handler
 app.use((_req, res) => {
