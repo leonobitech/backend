@@ -19,9 +19,11 @@ RUN npm install --omit=dev
 # Build stage - compiles TypeScript
 # ============================================
 FROM base AS build
-COPY package*.json tsconfig.json ./
+COPY package*.json tsconfig.json tsup.config.ts ./
 COPY src ./src
+COPY prisma ./prisma
 RUN npm install
+RUN npm run db:generate
 RUN npm run build
 
 # ============================================
@@ -31,9 +33,10 @@ FROM base AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
+COPY --from=build /app/prisma ./prisma
 
 EXPOSE 8100
 
