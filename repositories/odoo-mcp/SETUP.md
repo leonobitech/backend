@@ -20,7 +20,7 @@ odoo-mcp is a **production-ready** MCP (Model Context Protocol) server that prov
 ## Prerequisites
 
 - Node.js >= 22.20.0
-- PostgreSQL database
+- MongoDB database
 - Redis server
 - Odoo instance with API access
 
@@ -92,8 +92,8 @@ ACCESS_TOKEN_TTL=300
 AUTH_CODE_TTL=180
 REFRESH_TOKEN_TTL=604800
 
-# Database (PostgreSQL)
-DATABASE_URL=postgresql://user:password@host:5432/odoo_mcp?schema=public
+# Database (MongoDB)
+DATABASE_URL=mongodb://user:password@host:27017/odoo_mcp?authSource=admin
 
 # Redis
 REDIS_HOST=redis_core

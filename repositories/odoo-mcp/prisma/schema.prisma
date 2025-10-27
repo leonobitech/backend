@@ -1,18 +1,18 @@
 // Prisma schema for odoo-mcp authentication system
-// This provides a complete, production-ready user management system
+// MongoDB version - Production-ready user management system
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 // User accounts with Odoo credentials
 model User {
-  id           String   @id @default(cuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   email        String   @unique
   passwordHash String   @map("password_hash")
   name         String?
@@ -42,8 +42,8 @@ model User {
 
 // Active sessions with device fingerprinting
 model Session {
-  id                String   @id @default(cuid())
-  userId            String   @map("user_id")
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String   @map("user_id") @db.ObjectId
 
   // Device fingerprinting for security
   deviceFingerprint String   @map("device_fingerprint") // SHA-256 hash of IP + UserAgent + userId
@@ -63,16 +63,13 @@ model Session {
   // Relations
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([deviceFingerprint])
-  @@index([expiresAt])
   @@map("sessions")
 }
 
 // OAuth consent tracking (GDPR compliant)
 model OAuthConsent {
-  id          String    @id @default(cuid())
-  userId      String    @map("user_id")
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @map("user_id") @db.ObjectId
   clientId    String    @map("client_id")
 
   // Granted scopes (space-separated)
@@ -91,14 +88,13 @@ model OAuthConsent {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientId])
-  @@index([userId])
   @@map("oauth_consents")
 }
 
 // Security event logging for audit and anomaly detection
 model SecurityEvent {
-  id          String   @id @default(cuid())
-  userId      String?  @map("user_id") // nullable for pre-auth events
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String?  @map("user_id") @db.ObjectId // nullable for pre-auth events
 
   // Event classification
   eventType   String   @map("event_type") // login.success, login.failed, oauth.consent.granted, etc.
@@ -107,7 +103,7 @@ model SecurityEvent {
   // Event details
   ipAddress   String   @map("ip_address")
   userAgent   String   @map("user_agent")
-  metadata    String?  @db.Text // JSON string with additional context
+  metadata    String?  // JSON string with additional context
 
   // Timestamp
   createdAt   DateTime @default(now()) @map("created_at")
@@ -115,8 +111,5 @@ model SecurityEvent {
   // Relations
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([userId])
-  @@index([eventType])
-  @@index([createdAt])
   @@map("security_events")
 }
