@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authorization Required - Odoo MCP</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>Authorization Required</h1>
+      <p id="client-name">Odoo MCP Server</p>
+    </div>
+
+    <div class="consent-info">
+      <p><strong id="user-name"></strong> (<span id="user-email"></span>)</p>
+      <p>wants to access your Odoo data with the following permissions:</p>
+
+      <ul id="scopes-list" class="scopes-list">
+        <!-- Scopes will be populated by JavaScript -->
+      </ul>
+    </div>
+
+    <form id="consent-form" class="form">
+      <input type="hidden" id="client-id" name="client_id">
+      <input type="hidden" id="redirect-uri" name="redirect_uri">
+      <input type="hidden" id="scope" name="scope">
+      <input type="hidden" id="state" name="state">
+      <input type="hidden" id="code-challenge" name="code_challenge">
+      <input type="hidden" id="code-challenge-method" name="code_challenge_method">
+      <input type="hidden" id="nonce" name="nonce">
+
+      <div class="form-group" style="display: flex; gap: 10px;">
+        <button type="submit" name="action" value="allow" class="btn btn-primary" style="flex: 1;">
+          Allow
+        </button>
+        <button type="submit" name="action" value="deny" class="btn" style="flex: 1; background: #6c757d;">
+          Deny
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script src="/consent.js"></script>
+</body>
+</html>

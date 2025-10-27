@@ -42,9 +42,10 @@ consentRouter.get("/", async (req, res) => {
 
   const { client_id, scope } = parseResult.data;
 
-  // Return consent screen data
-  // Frontend will render a UI asking user to allow/deny
-  return res.json({
+  // Check if request accepts HTML (browser) or JSON (API)
+  const acceptsHtml = req.headers.accept?.includes('text/html');
+
+  const consentData = {
     clientId: client_id,
     clientName: "Odoo MCP Server",
     scopes: scope.split(/\s+/),
@@ -56,7 +57,15 @@ consentRouter.get("/", async (req, res) => {
       email: req.session.user?.email,
       name: req.session.user?.name,
     },
-  });
+  };
+
+  // If browser request, serve HTML page
+  if (acceptsHtml) {
+    return res.sendFile("consent.html", { root: "./public" });
+  }
+
+  // Otherwise return JSON for API clients
+  return res.json(consentData);
 });
 
 const consentActionSchema = z.object({
