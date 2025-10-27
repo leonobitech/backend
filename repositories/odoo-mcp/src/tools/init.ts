@@ -14,14 +14,36 @@ import { SearchContactsTool } from "./odoo/contacts/search-contacts/search-conta
 import { CreateContactTool } from "./odoo/contacts/create-contact/create-contact.tool";
 import { ScheduleMeetingTool } from "./odoo/calendar/schedule-meeting/schedule-meeting.tool";
 import { SendEmailTool } from "./odoo/email/send-email/send-email.tool";
-import { getOdooClient } from "@/lib/odoo";
+import { createOdooClient, type OdooCredentials } from "@/lib/odoo";
 import { logger } from "@/lib/logger";
+
+/**
+ * TEMPORARY SOLUTION: Use dummy credentials for tool initialization
+ *
+ * TODO: Refactor tool architecture to inject credentials per-request instead of at init
+ *
+ * Current flow:
+ * 1. Tools are initialized once at startup with dummy client
+ * 2. When a tool is called, we need to:
+ *    - Get userId from OAuth token
+ *    - Load user's Odoo credentials from DB
+ *    - Create new OdooClient with user's credentials
+ *    - Execute the tool with user-specific client
+ */
+const DUMMY_CREDENTIALS: OdooCredentials = {
+  url: "https://odoo.example.com",
+  db: "dummy",
+  username: "dummy@example.com",
+  apiKey: "dummy_key"
+};
 
 export async function initializeTools(): Promise<ToolRegistry> {
   const registry = ToolRegistry.getInstance();
   logger.info("[ToolRegistry] Initializing tools...");
 
-  const odooClient = getOdooClient();
+  // IMPORTANT: This is a dummy client just for initialization
+  // Each tool execution should create a new client with user-specific credentials
+  const odooClient = createOdooClient(DUMMY_CREDENTIALS);
 
   // CRM Tools
   registry.register(new GetLeadsTool(odooClient), {

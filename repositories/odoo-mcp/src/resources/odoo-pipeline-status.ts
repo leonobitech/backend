@@ -2,12 +2,27 @@
  * Resource: odoo://pipeline/status
  *
  * Provides real-time CRM pipeline status summary
+ *
+ * TODO: This resource needs to be refactored to accept user credentials
+ * Currently using dummy credentials - will fail when called
  */
 
-import { getOdooClient } from "@/lib/odoo";
+import { createOdooClient, type OdooCredentials } from "@/lib/odoo";
+
+/**
+ * TEMPORARY: Dummy credentials for compilation
+ * This function should accept user credentials as parameter
+ */
+const DUMMY_CREDENTIALS: OdooCredentials = {
+  url: "https://odoo.example.com",
+  db: "dummy",
+  username: "dummy@example.com",
+  apiKey: "dummy_key"
+};
 
 export async function getPipelineStatus(): Promise<string> {
-  const odoo = getOdooClient();
+  // TODO: Get user credentials from authentication context
+  const odoo = createOdooClient(DUMMY_CREDENTIALS);
 
   const opportunities = await odoo.search("crm.lead", [["type", "=", "opportunity"]], {
     fields: ["stage_id", "expected_revenue"],
