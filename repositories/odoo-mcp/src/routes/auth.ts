@@ -316,6 +316,7 @@ authRouter.post("/login", async (req, res) => {
       severity: "info",
       ipAddress,
       userAgent,
+      metadata: { sessionId: sessionToken, endpoint: "/auth/login" },
     });
 
     // Set session cookie
