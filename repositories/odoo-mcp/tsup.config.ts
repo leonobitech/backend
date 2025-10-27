@@ -9,23 +9,8 @@ export default defineConfig({
   clean: true,
   outDir: "dist",
   outExtension: () => ({ js: ".mjs" }),
-  external: ["pino"],
-  noExternal: [
-    "@prisma/client",
-    "bcrypt",
-    "cookie-parser",
-    "cors",
-    "dotenv",
-    "express",
-    "express-rate-limit",
-    "helmet",
-    "jose",
-    "qs",
-    "redis",
-    "uuid",
-    "xmlrpc",
-    "zod",
-  ],
+  // Mark all node_modules as external - don't bundle them
+  external: [/node_modules/],
   esbuildOptions(options) {
     options.alias = {
       "@": "./src",
