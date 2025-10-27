@@ -14,18 +14,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "pkgroll": {
-    "entries": [
-      "src/index.ts",
-      "src/cli.ts"
-    ],
-    "alias": {
-      "@": "./src"
-    },
-    "externals": [
-      "pino"
-    ]
-  },
   "main": "dist/index.js",
   "exports": "./dist/index.mjs",
   "engines": {
@@ -33,7 +21,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "pkgroll",
+    "build": "tsup",
     "start": "NODE_ENV=production node dist/index.mjs",
     "lint": "tsc --noEmit",
     "generate:keys": "tsx src/scripts/generateKeys.ts",
@@ -85,6 +73,7 @@
     "@types/uuid": "^10.0.0",
     "pino-pretty": "^13.1.2",
     "pkgroll": "^2.12.1",
+    "tsup": "^8.5.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
   }

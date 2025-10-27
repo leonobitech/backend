@@ -1,5 +1,5 @@
 import { prisma } from "@/config/database";
-import { getRedisClient } from "@/config/redis";
+import { getRedisClient } from "@/lib/redis";
 import { env } from "@/config/env";
 import { generateDeviceFingerprint, generateSecureToken } from "@/lib/security";
 import { logger } from "@/lib/logger";

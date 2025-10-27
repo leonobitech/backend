@@ -23,3 +23,8 @@ export async function ensureRedisConnection() {
     logger.info({ host: env.REDIS_HOST, db: env.REDIS_DB }, "Redis connection established");
   }
 }
+
+export async function getRedisClient() {
+  await ensureRedisConnection();
+  return redis;
+}
