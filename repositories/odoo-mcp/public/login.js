@@ -94,5 +94,25 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-// Expose copyConfig to window for onclick handler
+async function logout() {
+  try {
+    const response = await fetch('/auth/logout', {
+      method: 'POST',
+      credentials: 'include'
+    });
+
+    if (response.ok) {
+      // Redirect to login page
+      window.location.href = '/login';
+    } else {
+      alert('Logout failed. Please try again.');
+    }
+  } catch (error) {
+    console.error('Logout error:', error);
+    alert('Logout failed. Please try again.');
+  }
+}
+
+// Expose functions to window for onclick handlers
 window.copyConfig = copyConfig;
+window.logout = logout;

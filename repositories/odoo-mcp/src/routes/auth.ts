@@ -19,6 +19,7 @@ import { validateOdooCredentials } from "@/services/odoo.service";
 import { createSession, revokeSession, revokeAllUserSessions, getUserActiveSessions } from "@/services/session.service";
 import { logSecurityEvent, isRateLimited } from "@/services/security-event.service";
 import { logger } from "@/lib/logger";
+import { getRedisClient } from "@/config/redis";
 
 export const authRouter = Router();
 
@@ -361,8 +362,29 @@ authRouter.post("/logout", async (req, res) => {
       });
     }
 
-    // Get session from token (through middleware - we'll add this)
-    // For now, clear cookie
+    // Get session ID from Redis
+    const redis = await getRedisClient();
+    const sessionId = await redis.get(`session:${sessionToken}`);
+
+    if (sessionId) {
+      // Get session from DB for logging
+      const session = await prisma.session.findUnique({
+        where: { id: sessionId },
+      });
+
+      // Revoke session in DB
+      await revokeSession(sessionId, "User logout");
+
+      // Delete from Redis
+      await redis.del(`session:${sessionToken}`);
+
+      logger.info(
+        { userId: session?.userId, sessionId },
+        "User logged out successfully"
+      );
+    }
+
+    // Clear session cookie
     res.clearCookie(env.SESSION_COOKIE_NAME, { path: "/" });
 
     return res.json({ success: true, message: "Logged out successfully" });
