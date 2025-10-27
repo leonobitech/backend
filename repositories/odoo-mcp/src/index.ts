@@ -50,6 +50,15 @@ app.use(
   })
 );
 
+// Override Cloudflare CSP for UI routes
+app.use((req, res, next) => {
+  if (req.path === '/register' || req.path === '/login' || req.path === '/' || req.path.startsWith('/styles') || req.path.endsWith('.js') || req.path.endsWith('.css')) {
+    res.removeHeader('Content-Security-Policy');
+    res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline';");
+  }
+  next();
+});
+
 // CORS configuration
 const corsOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
