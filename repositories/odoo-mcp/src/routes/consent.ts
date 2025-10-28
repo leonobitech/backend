@@ -72,10 +72,10 @@ const consentActionSchema = z.object({
   client_id: z.string(),
   redirect_uri: z.string().url(),
   scope: z.string(),
-  state: z.string().optional(),
+  state: z.string().optional().transform(val => val === '' ? undefined : val),
   code_challenge: z.string(),
   code_challenge_method: z.enum(["S256", "plain"]),
-  nonce: z.string().optional(),
+  nonce: z.string().optional().transform(val => val === '' ? undefined : val),
   action: z.enum(["allow", "deny"]),
 });
 

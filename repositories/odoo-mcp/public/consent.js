@@ -50,51 +50,38 @@ async function loadConsentData() {
   }
 }
 
-// Handle form submission
-document.getElementById('consent-form').addEventListener('submit', async (e) => {
+// Handle form submission - Use native form submit to allow cross-origin redirect
+document.getElementById('consent-form').addEventListener('submit', (e) => {
   e.preventDefault();
 
-  const formData = new FormData(e.target);
+  const form = e.target;
   const action = e.submitter.value; // 'allow' or 'deny'
 
-  // Convert FormData to JSON
-  const data = {
-    client_id: formData.get('client_id'),
-    redirect_uri: formData.get('redirect_uri'),
-    scope: formData.get('scope'),
-    state: formData.get('state'),
-    code_challenge: formData.get('code_challenge'),
-    code_challenge_method: formData.get('code_challenge_method'),
-    nonce: formData.get('nonce'),
-    action: action
-  };
+  // Create a new form that will be submitted
+  const submitForm = document.createElement('form');
+  submitForm.method = 'POST';
+  submitForm.action = '/oauth/consent';
 
-  try {
-    const response = await fetch('/oauth/consent', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    });
+  // Copy all hidden fields
+  const fields = ['client_id', 'redirect_uri', 'scope', 'state', 'code_challenge', 'code_challenge_method', 'nonce'];
+  fields.forEach(fieldName => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = fieldName;
+    input.value = form.elements[fieldName].value;
+    submitForm.appendChild(input);
+  });
 
-    // Backend will redirect, so we follow it
-    if (response.redirected) {
-      window.location.href = response.url;
-    } else if (response.ok) {
-      const result = await response.json();
-      if (result.redirect) {
-        window.location.href = result.redirect;
-      }
-    } else {
-      const error = await response.json();
-      alert(`Error: ${error.message || 'Failed to process consent'}`);
-    }
-  } catch (error) {
-    console.error('Error submitting consent:', error);
-    alert('Failed to submit authorization. Please try again.');
-  }
+  // Add action field
+  const actionInput = document.createElement('input');
+  actionInput.type = 'hidden';
+  actionInput.name = 'action';
+  actionInput.value = action;
+  submitForm.appendChild(actionInput);
+
+  // Append to body and submit
+  document.body.appendChild(submitForm);
+  submitForm.submit();
 });
 
 // Load consent data when page loads
