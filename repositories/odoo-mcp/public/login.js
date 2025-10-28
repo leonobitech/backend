@@ -34,11 +34,12 @@ function clearErrors() {
 function copyConfig() {
   const text = configCode.value;
   navigator.clipboard.writeText(text).then(() => {
-    const btn = event.target;
-    btn.textContent = '✓';
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
     btn.style.color = '#10b981';
     setTimeout(() => {
-      btn.textContent = '📋';
+      btn.innerHTML = originalHTML;
       btn.style.color = '#9ca3af';
     }, 1500);
   });
