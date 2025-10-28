@@ -5,6 +5,7 @@ const urlParams = new URLSearchParams(window.location.search);
 async function loadConsentData() {
   try {
     const response = await fetch(`/oauth/consent${window.location.search}`, {
+      credentials: 'include',
       headers: {
         'Accept': 'application/json'
       }
@@ -71,6 +72,7 @@ document.getElementById('consent-form').addEventListener('submit', async (e) => 
   try {
     const response = await fetch('/oauth/consent', {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json'
       },

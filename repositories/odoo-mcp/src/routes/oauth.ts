@@ -104,7 +104,7 @@ oauthRouter.get("/authorize", async (req, res) => {
   // ⚠️ CRITICAL SECURITY CHECK: Verify user is authenticated
   if (!req.session || !req.session.userId) {
     // User not authenticated → redirect to login page
-    const loginUrl = new URL("/auth/login", env.PUBLIC_URL);
+    const loginUrl = new URL("/login", env.PUBLIC_URL);
 
     // Preserve OAuth parameters in return_to
     const authorizeUrl = new URL("/oauth/authorize", env.PUBLIC_URL);
