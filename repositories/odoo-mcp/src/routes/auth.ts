@@ -356,10 +356,8 @@ authRouter.post("/logout", async (req, res) => {
   try {
     const sessionToken = req.cookies[env.SESSION_COOKIE_NAME];
     if (!sessionToken) {
-      return res.status(401).json({
-        error: "not_authenticated",
-        message: "No active session",
-      });
+      // No session, just redirect to login
+      return res.redirect("/login");
     }
 
     // Get session ID from Redis
@@ -387,13 +385,12 @@ authRouter.post("/logout", async (req, res) => {
     // Clear session cookie
     res.clearCookie(env.SESSION_COOKIE_NAME, { path: "/" });
 
-    return res.json({ success: true, message: "Logged out successfully" });
+    // Redirect to login page
+    return res.redirect("/login");
   } catch (error) {
     logger.error({ err: error }, "Logout error");
-    return res.status(500).json({
-      error: "internal_error",
-      message: "An error occurred during logout",
-    });
+    // On error, still redirect to login
+    return res.redirect("/login");
   }
 });
 

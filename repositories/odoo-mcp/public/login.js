@@ -94,23 +94,13 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-async function logout() {
-  try {
-    const response = await fetch('/auth/logout', {
-      method: 'POST',
-      credentials: 'include'
-    });
-
-    if (response.ok) {
-      // Redirect to login page
-      window.location.href = '/login';
-    } else {
-      alert('Logout failed. Please try again.');
-    }
-  } catch (error) {
-    console.error('Logout error:', error);
-    alert('Logout failed. Please try again.');
-  }
+function logout() {
+  // Create a form and submit it (avoids CORS issues)
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/auth/logout';
+  document.body.appendChild(form);
+  form.submit();
 }
 
 // Expose functions to window for onclick handlers
