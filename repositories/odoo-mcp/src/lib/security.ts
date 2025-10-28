@@ -47,32 +47,82 @@ export function generateSecureToken(bytes: number = 32): string {
 }
 
 /**
+ * Normalize IPv6-mapped IPv4 addresses to pure IPv4
+ * Example: ::ffff:192.168.0.1 → 192.168.0.1
+ */
+function normalizeIpAddress(ip: string): string {
+  if (!ip) return "0.0.0.0";
+  // Remove IPv6-mapped IPv4 prefix
+  return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+}
+
+/**
+ * Check if an IP address is IPv6
+ */
+function isIPv6(ip: string): boolean {
+  return ip.includes(":");
+}
+
+/**
+ * Normalize IPv6 to /64 prefix for stable identification
+ * IPv6 privacy extensions change the last 64 bits frequently
+ * Example: 2800:810:5e7:dd6:58a1:5a54:a49c:37ff → 2800:810:5e7:dd6::
+ */
+function normalizeIPv6ToPrefix(ip: string): string {
+  if (!isIPv6(ip)) {
+    return ip; // Already IPv4, return as-is
+  }
+
+  // Split IPv6 into segments
+  const segments = ip.split(":");
+
+  // Take first 4 segments (64 bits / 16 bits per segment = 4 segments)
+  // This is the network prefix that stays stable
+  const prefix = segments.slice(0, 4).join(":");
+
+  return `${prefix}::`; // Add :: to indicate it's a prefix
+}
+
+/**
  * Extract IP address from request, considering proxies
  * Priority: CF-Connecting-IP (Cloudflare) > X-Real-IP > X-Forwarded-For > Socket
+ * Note: Prefers IPv4 over IPv6 when available for consistency
  */
 export function extractIpAddress(req: any): string {
+  let ip: string;
+
   // Priority 1: CF-Connecting-IP (Cloudflare's real client IP)
   const cfIp = req.headers["cf-connecting-ip"];
   if (cfIp) {
-    return cfIp.trim();
+    ip = cfIp.trim();
   }
-
   // Priority 2: X-Real-IP header (from nginx/Traefik)
-  const realIp = req.headers["x-real-ip"];
-  if (realIp) {
-    return realIp.trim();
+  else {
+    const realIp = req.headers["x-real-ip"];
+    if (realIp) {
+      ip = realIp.trim();
+    }
+    // Priority 3: X-Forwarded-For header (from proxies/load balancers)
+    else {
+      const forwardedFor = req.headers["x-forwarded-for"];
+      if (forwardedFor) {
+        // X-Forwarded-For can contain multiple IPs, take the first one
+        const ips = forwardedFor.split(",");
+        ip = ips[0].trim();
+      } else {
+        // Fallback to connection remote address
+        ip = req.socket.remoteAddress || "unknown";
+      }
+    }
   }
 
-  // Priority 3: X-Forwarded-For header (from proxies/load balancers)
-  const forwardedFor = req.headers["x-forwarded-for"];
-  if (forwardedFor) {
-    // X-Forwarded-For can contain multiple IPs, take the first one
-    const ips = forwardedFor.split(",");
-    return ips[0].trim();
-  }
+  // Normalize IPv6-mapped IPv4
+  ip = normalizeIpAddress(ip);
 
-  // Fallback to connection remote address
-  return req.socket.remoteAddress || "unknown";
+  // Normalize IPv6 to stable /64 prefix
+  ip = normalizeIPv6ToPrefix(ip);
+
+  return ip;
 }
 
 /**
