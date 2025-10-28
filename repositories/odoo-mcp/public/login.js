@@ -109,15 +109,18 @@ async function checkSession() {
       // User has active session, show success card
       const manifestUrl = 'https://odoo-mcp.leonobitech.com/.well-known/anthropic/manifest.json';
 
-      configCode.value = manifestUrl;
+      // Update success card with session info FIRST (before setting input value)
+      const h2 = successCard.querySelector('h2');
+      if (h2 && h2.textContent === 'Login Successful!') {
+        h2.textContent = 'Session Active';
+        const emailP = document.createElement('p');
+        emailP.style.cssText = 'font-size: 14px; color: #666; margin-bottom: 24px;';
+        emailP.textContent = `Logged in as: ${data.email || 'Unknown'}`;
+        h2.after(emailP);
+      }
 
-      // Update success card with session info
-      const successCardContent = successCard.innerHTML;
-      const updatedContent = successCardContent.replace(
-        '<h2>Login Successful!</h2>',
-        `<h2>Session Active</h2><p style="font-size: 14px; color: #666;">Logged in as: ${data.email || 'Unknown'}</p>`
-      );
-      successCard.innerHTML = updatedContent;
+      // Now set the input value (after DOM is stable)
+      configCode.value = manifestUrl;
 
       // Add connector status badge
       if (data.connectorActive) {
