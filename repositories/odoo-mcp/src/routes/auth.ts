@@ -323,8 +323,9 @@ authRouter.post("/login", async (req, res) => {
     // Set session cookie
     res.cookie(env.SESSION_COOKIE_NAME, sessionToken, {
       httpOnly: true,
-      secure: env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax",
+      domain: ".leonobitech.com",
       maxAge: env.SESSION_TTL * 1000,
       path: "/",
     });
@@ -383,7 +384,10 @@ authRouter.post("/logout", async (req, res) => {
     }
 
     // Clear session cookie
-    res.clearCookie(env.SESSION_COOKIE_NAME, { path: "/" });
+    res.clearCookie(env.SESSION_COOKIE_NAME, {
+      domain: ".leonobitech.com",
+      path: "/",
+    });
 
     // Redirect to login page
     return res.redirect("/login");
