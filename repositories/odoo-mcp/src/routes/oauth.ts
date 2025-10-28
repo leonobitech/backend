@@ -11,6 +11,7 @@ import {
   getRefreshToken,
   revokeRefreshToken
 } from "@/lib/store";
+import { optionalAuth } from "@/middlewares/session.middleware";
 
 export const oauthRouter = Router();
 
@@ -50,7 +51,7 @@ const registrationBodySchema = z.object({
  * 5. If not consented → show consent screen
  * 6. If consented → issue authorization code
  */
-oauthRouter.get("/authorize", async (req, res) => {
+oauthRouter.get("/authorize", optionalAuth, async (req, res) => {
   const parseResult = authorizeQuerySchema.safeParse(req.query);
   if (!parseResult.success) {
     logger.warn({ query: req.query, errors: parseResult.error.flatten() }, "Invalid authorize request");
