@@ -55,13 +55,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // enable cors
-// Allow both www and non-www versions of the frontend
-const allowedOrigins = [
-  APP_ORIGIN,
-  APP_ORIGIN.replace('https://', 'https://www.'), // Add www version
-  'https://leonobitech.com',
-  'https://www.leonobitech.com'
-].filter((origin, index, self) => self.indexOf(origin) === index); // Remove duplicates
+// Parse allowed origins from environment variable (comma-separated)
+const corsOrigins = (process.env.CORS_ORIGINS || APP_ORIGIN)
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
@@ -69,7 +67,7 @@ app.use(
       // Allow requests with no origin (like mobile apps or curl)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      if (corsOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`Origin ${origin} not allowed by CORS`));
