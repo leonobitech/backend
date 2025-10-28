@@ -443,8 +443,16 @@ authRouter.get("/status", async (req, res) => {
       where: { id: sessionId },
       include: { user: { select: { email: true } } },
     });
+    logger.info({
+      sessionId,
+      found: !!session,
+      isActive: session?.isActive,
+      userId: session?.userId,
+      email: session?.user?.email
+    }, "🗄️ [/auth/status] MongoDB lookup");
 
     if (!session || !session.isActive) {
+      logger.warn({ sessionId, found: !!session, isActive: session?.isActive }, "⚠️ [/auth/status] Session invalid or inactive in MongoDB");
       return res.json({
         authenticated: false,
         hasSession: false,
