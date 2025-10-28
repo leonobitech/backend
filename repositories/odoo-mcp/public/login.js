@@ -35,9 +35,10 @@ function copyConfig() {
   const text = configCode.textContent;
   navigator.clipboard.writeText(text).then(() => {
     const btn = event.target;
-    btn.textContent = 'Copied!';
+    const originalText = btn.textContent;
+    btn.textContent = '✓ Copiado!';
     setTimeout(() => {
-      btn.textContent = 'Copy Configuration';
+      btn.textContent = originalText;
     }, 2000);
   });
 }
@@ -71,18 +72,10 @@ form.addEventListener('submit', async (e) => {
       throw new Error(data.message || 'Login failed');
     }
 
-    // Show success card with Claude Desktop config
-    const claudeConfig = {
-      "mcpServers": {
-        "odoo-mcp": {
-          "command": "node",
-          "args": ["-e", "require('@modelcontextprotocol/sdk').createHttpClient({ url: 'https://odoo-mcp.leonobitech.com/mcp', headers: { Authorization: 'Bearer YOUR_ACCESS_TOKEN' } })"],
-          "env": {}
-        }
-      }
-    };
+    // Show success card with just the URL
+    const mcpUrl = 'https://odoo-mcp.leonobitech.com/mcp';
 
-    configCode.textContent = JSON.stringify(claudeConfig, null, 2);
+    configCode.textContent = mcpUrl;
     loginFormDiv.style.display = 'none';
     successCard.classList.add('show');
 
@@ -114,20 +107,9 @@ async function checkSession() {
 
     if (data.authenticated && data.hasSession) {
       // User has active session, show success card
-      const claudeConfig = {
-        "mcpServers": {
-          "odoo-mcp": {
-            "url": "https://odoo-mcp.leonobitech.com/mcp",
-            "auth": {
-              "type": "oauth2",
-              "authorization_url": "https://odoo-mcp.leonobitech.com/oauth/authorize",
-              "token_url": "https://odoo-mcp.leonobitech.com/oauth/token"
-            }
-          }
-        }
-      };
+      const mcpUrl = 'https://odoo-mcp.leonobitech.com/mcp';
 
-      configCode.textContent = JSON.stringify(claudeConfig, null, 2);
+      configCode.textContent = mcpUrl;
 
       // Update success card with session info
       const successCardContent = successCard.innerHTML;
