@@ -24,7 +24,9 @@ export const requestMeta = (
   res: Response,
   next: NextFunction
 ) => {
-  const isForwardAuth = req.path === "/security/verify-admin";
+  const isForwardAuth =
+    req.path === "/security/verify-admin" ||
+    req.path === "/security/verify-user";
 
   req.meta = isForwardAuth
     ? (getClientMeta(req) ?? getRequestMeta(req))
