@@ -56,4 +56,15 @@ router.post(
   })
 );
 
+/**
+ * POST /service/odoo-mcp
+ * Retorna URL del conector Odoo MCP
+ * Disponible para todos los usuarios autenticados (no solo admins)
+ *
+ * Esta ruta está protegida solo con authenticate (no authorize)
+ */
+router.post("/odoo-mcp", (req, res) => {
+  res.status(HTTP_CODE.OK).json({ url: "https://odoo-mcp.leonobitech.com/login" });
+});
+
 export default router;

@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
-import { ensureRedisConnection } from "@/lib/redis";
+import { ensureRedisConnection, getRedisClient } from "@/lib/redis";
 import { testDatabaseConnection } from "@/config/database";
 import { initializeTools } from "@/tools/init";
 import { healthRouter } from "@/routes/health";
@@ -94,18 +94,32 @@ app.use("/oauth/consent", consentRouter);
 app.use("/oauth", oauthRouter);
 app.use("/mcp", mcpHttpRouter);
 
-// Serve HTML pages
-app.get("/register", (_req, res) => {
+// Serve HTML pages with session check
+app.get("/register", async (req, res) => {
+  // Check if user already has active session
+  const sessionToken = req.cookies[env.SESSION_COOKIE_NAME];
+
+  if (sessionToken) {
+    const redis = await getRedisClient();
+    const sessionId = await redis.get(`session:${sessionToken}`);
+
+    if (sessionId) {
+      // User already has session, redirect to login page (which shows status)
+      return res.redirect("/login");
+    }
+  }
+
   res.sendFile(path.join(__dirname, "../public/register.html"));
 });
 
-app.get("/login", (_req, res) => {
+app.get("/login", async (req, res) => {
+  // Always serve login page (it will show session status or login form)
   res.sendFile(path.join(__dirname, "../public/login.html"));
 });
 
-// Redirect root to register
+// Redirect root to login (which will handle session detection)
 app.get("/", (_req, res) => {
-  res.redirect("/register");
+  res.redirect("/login");
 });
 
 // Debug: Show ALL headers to understand IP detection

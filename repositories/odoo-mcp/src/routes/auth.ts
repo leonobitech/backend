@@ -403,6 +403,79 @@ authRouter.post("/logout", async (req, res) => {
 });
 
 /**
+ * GET /auth/status
+ * Check if user has active session (for UI feedback)
+ */
+authRouter.get("/status", async (req, res) => {
+  try {
+    const sessionToken = req.cookies[env.SESSION_COOKIE_NAME];
+
+    if (!sessionToken) {
+      return res.json({
+        authenticated: false,
+        hasSession: false,
+      });
+    }
+
+    // Check if session exists in Redis
+    const redis = await getRedisClient();
+    const sessionId = await redis.get(`session:${sessionToken}`);
+
+    if (!sessionId) {
+      return res.json({
+        authenticated: false,
+        hasSession: false,
+      });
+    }
+
+    // Get session from DB
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { user: { select: { email: true } } },
+    });
+
+    if (!session || !session.isActive) {
+      return res.json({
+        authenticated: false,
+        hasSession: false,
+      });
+    }
+
+    // Check if user has OAuth tokens (connector active in Claude Desktop)
+    const accessTokenKeys = await redis.keys(`access_token:*`);
+    const userTokens = [];
+
+    for (const key of accessTokenKeys) {
+      const tokenData = await redis.get(key);
+      if (tokenData) {
+        try {
+          const parsed = JSON.parse(tokenData);
+          if (parsed.subject === session.userId) {
+            userTokens.push(key);
+          }
+        } catch (e) {
+          // Skip invalid JSON
+        }
+      }
+    }
+
+    return res.json({
+      authenticated: true,
+      hasSession: true,
+      email: session.user?.email || null,
+      connectorActive: userTokens.length > 0,
+      sessionCreatedAt: session.createdAt,
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Error checking session status");
+    return res.status(500).json({
+      error: "internal_error",
+      message: "Failed to check session status",
+    });
+  }
+});
+
+/**
  * GET /auth/me
  * Get current user info (requires session)
  */

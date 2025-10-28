@@ -121,8 +121,11 @@ app.use("/account/passkey", passkeyRoutes); // Passkey routes (mixed auth)
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
 
-// 🔑 Service-to-service OAuth style tokens
-app.use("/service", serviceRoutes);
+// 🔑 Service-to-service OAuth style tokens (sin auth)
+app.use("/service/token", serviceRoutes);
+
+// 🔐 User services (requiere authenticate pero NO admin)
+app.use("/service", authenticate, serviceRoutes);
 
 // Usar las rutas de account
 app.use("/account", accountRoutes);

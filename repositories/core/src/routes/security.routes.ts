@@ -58,4 +58,24 @@ securityRoutes.get(
   }
 );
 
+/**
+ * 🔐 Endpoint utilizado por Traefik (ForwardAuth) para verificar que el usuario:
+ * 1. Esté autenticado (accessKey + clientKey)
+ * 2. NO requiere ser administrador (solo autenticado)
+ *
+ * Usado por: odoo-mcp y otros microservicios que no requieren rol admin
+ */
+securityRoutes.get(
+  "/verify-user",
+  authenticate,
+  (req, res) => {
+    // Usuario autenticado → inyectar headers para Traefik
+    res.setHeader("X-User-Id", req.userId);
+    res.setHeader("X-User-Role", req.role);
+    res.setHeader("X-Session-Id", req.sessionId);
+
+    res.status(HTTP_CODE.OK).send("✅ OK");
+  }
+);
+
 export default securityRoutes;

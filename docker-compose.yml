@@ -270,7 +270,8 @@ services:
       - "traefik.http.routers.odoo-mcp.entrypoints=websecure"
       - "traefik.http.routers.odoo-mcp.tls.certresolver=le"
       - "traefik.http.services.odoo-mcp.loadbalancer.server.port=8100"
-      # No middlewares - odoo-mcp maneja su propia seguridad con Helmet
+      # 🔐 Protected by ForwardAuth - requires authenticated user (not admin)
+      - "traefik.http.routers.odoo-mcp.middlewares=user-auth@file,secure-relaxed@file"
 
   linkedin_mcp:
     container_name: linkedin_mcp
