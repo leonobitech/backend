@@ -42,43 +42,59 @@
     <div id="successCard" class="success-card">
       <div class="checkmark">✓</div>
       <h2>Login Successful!</h2>
-      <p>You're now authenticated with Odoo MCP Server.</p>
+      <p style="margin-bottom: 24px;">You're now authenticated with Odoo MCP Server.</p>
 
-      <div style="margin-top: 32px; padding: 20px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #3b82f6;">
-        <h3 style="margin-top: 0; font-size: 16px; color: #1e293b;">📋 Cómo conectar con Claude Desktop</h3>
+      <div style="background: #f9fafb; border-radius: 12px; padding: 24px; border: 1px solid #e5e7eb;">
+        <h3 style="margin: 0 0 16px 0; font-size: 15px; font-weight: 600; color: #111827;">Connect to Claude Desktop</h3>
 
-        <p style="font-size: 14px; margin: 16px 0 8px 0;"><strong>Paso 1:</strong> Copia esta URL para tu conector personalizado</p>
-        <div class="code-block" id="configCode" style="margin-bottom: 8px;"></div>
-        <button class="copy-btn" onclick="copyConfig()">Copiar URL</button>
+        <p style="font-size: 13px; color: #6b7280; margin-bottom: 16px;">
+          In Claude Desktop, go to <strong>Menu → Settings → Connectors</strong> and click <strong>"Add custom connector"</strong>.
+          Then fill in the form as shown below:
+        </p>
 
-        <p style="font-size: 14px; margin: 24px 0 12px 0;"><strong>Paso 2:</strong> Abre Claude Desktop y ve a:</p>
-        <ul style="font-size: 13px; line-height: 1.8; margin: 8px 0; padding-left: 20px;">
-          <li><strong>Menú</strong> → <strong>Ajustes</strong> → <strong>Funciones para desarrolladores</strong></li>
-          <li>Haz clic en <strong>"Agregar conector personalizado"</strong></li>
-        </ul>
+        <!-- Mock Claude Desktop Form -->
+        <div style="background: white; border-radius: 8px; padding: 20px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;">Name</label>
+            <input type="text" value="Odoo" readonly style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; background: #f9fafb; color: #6b7280; cursor: not-allowed;">
+          </div>
 
-        <div style="margin: 20px 0; padding: 16px; background: white; border-radius: 8px; border: 1px solid #e2e8f0;">
-          <p style="font-size: 13px; margin: 0 0 12px 0; color: #64748b;"><strong>Completa el formulario así:</strong></p>
-          <ul style="font-size: 13px; line-height: 2; margin: 0; padding-left: 20px; list-style: none;">
-            <li>📝 <strong>Nombre:</strong> Odoo MCP (o el que prefieras)</li>
-            <li>🔗 <strong>URL del servidor MCP remoto:</strong> <em>Pega la URL copiada arriba</em></li>
-            <li>🔐 <strong>OAuth Client ID:</strong> <em>Déjalo vacío</em></li>
-            <li>🔑 <strong>Secreto del cliente OAuth:</strong> <em>Déjalo vacío</em></li>
-          </ul>
-          <p style="font-size: 12px; margin: 12px 0 0 0; color: #94a3b8;">
-            ℹ️ No necesitas Client ID ni Secret porque este conector usa OAuth 2.1 con PKCE (más seguro para apps de escritorio)
-          </p>
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;">Remote MCP server URL</label>
+            <div style="position: relative;">
+              <input type="text" id="configCode" readonly style="width: 100%; padding: 8px 32px 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; background: #f9fafb; color: #111827;">
+              <button onclick="copyConfig()" style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px 8px; font-size: 18px;" title="Copy URL">📋</button>
+            </div>
+          </div>
+
+          <details style="margin-bottom: 16px;">
+            <summary style="font-size: 13px; font-weight: 500; color: #374151; cursor: pointer; user-select: none;">Advanced configuration</summary>
+            <div style="margin-top: 12px; padding: 12px; background: #f9fafb; border-radius: 6px; border-left: 3px solid #3b82f6;">
+              <p style="font-size: 12px; color: #6b7280; margin: 0;">
+                <strong>OAuth Client ID</strong> and <strong>Client Secret</strong> are not required.
+                This connector uses OAuth 2.1 with PKCE, which is more secure for desktop applications.
+              </p>
+            </div>
+          </details>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <div style="padding: 8px 16px; background: #e5e7eb; color: #9ca3af; border-radius: 6px; font-size: 13px; font-weight: 500;">
+              Add
+            </div>
+          </div>
         </div>
 
-        <p style="font-size: 14px; margin: 20px 0 8px 0;"><strong>Paso 3:</strong> Haz clic en <strong>"Agregar"</strong> y listo! 🎉</p>
+        <p style="font-size: 12px; color: #9ca3af; margin-top: 16px; text-align: center;">
+          After adding the connector, Claude Desktop will handle the OAuth flow automatically.
+        </p>
       </div>
 
       <button class="btn" onclick="logout()" style="margin-top: 24px; background: #ef4444; width: 100%;">
-        Cerrar Sesión
+        Log Out
       </button>
     </div>
   </div>
 
-  <script src="/login.js?v=6"></script>
+  <script src="/login.js?v=7"></script>
 </body>
 </html>

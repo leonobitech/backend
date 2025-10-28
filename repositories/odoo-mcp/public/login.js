@@ -32,11 +32,11 @@ function clearErrors() {
 }
 
 function copyConfig() {
-  const text = configCode.textContent;
+  const text = configCode.value;
   navigator.clipboard.writeText(text).then(() => {
     const btn = event.target;
     const originalText = btn.textContent;
-    btn.textContent = '✓ Copiado!';
+    btn.textContent = '✓';
     setTimeout(() => {
       btn.textContent = originalText;
     }, 2000);
@@ -72,10 +72,10 @@ form.addEventListener('submit', async (e) => {
       throw new Error(data.message || 'Login failed');
     }
 
-    // Show success card with the server URL
-    const serverUrl = 'https://odoo-mcp.leonobitech.com';
+    // Show success card with the manifest URL
+    const manifestUrl = 'https://odoo-mcp.leonobitech.com/.well-known/anthropic/manifest.json';
 
-    configCode.textContent = serverUrl;
+    configCode.value = manifestUrl;
     loginFormDiv.style.display = 'none';
     successCard.classList.add('show');
 
@@ -107,9 +107,9 @@ async function checkSession() {
 
     if (data.authenticated && data.hasSession) {
       // User has active session, show success card
-      const serverUrl = 'https://odoo-mcp.leonobitech.com';
+      const manifestUrl = 'https://odoo-mcp.leonobitech.com/.well-known/anthropic/manifest.json';
 
-      configCode.textContent = serverUrl;
+      configCode.value = manifestUrl;
 
       // Update success card with session info
       const successCardContent = successCard.innerHTML;
