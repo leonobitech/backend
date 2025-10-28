@@ -446,13 +446,13 @@ authRouter.get("/status", async (req, res) => {
     logger.info({
       sessionId,
       found: !!session,
-      isActive: session?.isActive,
+      isRevoked: session?.isRevoked,
       userId: session?.userId,
       email: session?.user?.email
     }, "🗄️ [/auth/status] MongoDB lookup");
 
-    if (!session || !session.isActive) {
-      logger.warn({ sessionId, found: !!session, isActive: session?.isActive }, "⚠️ [/auth/status] Session invalid or inactive in MongoDB");
+    if (!session || session.isRevoked) {
+      logger.warn({ sessionId, found: !!session, isRevoked: session?.isRevoked }, "⚠️ [/auth/status] Session not found or revoked");
       return res.json({
         authenticated: false,
         hasSession: false,
