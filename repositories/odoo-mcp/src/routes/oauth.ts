@@ -125,75 +125,19 @@ oauthRouter.get("/authorize", async (req, res) => {
 
   const userId = req.session.userId;
 
-  // Check if user has previously consented to this client + scopes
-  const existingConsent = await import("@/config/database").then(({ prisma }) =>
-    prisma.oAuthConsent.findUnique({
-      where: {
-        userId_clientId: {
-          userId,
-          clientId: client_id,
-        },
-      },
-    })
-  );
+  // ✅ User is authenticated → ALWAYS show consent screen
+  // This ensures user explicitly authorizes each OAuth connection
+  const consentUrl = new URL("/oauth/consent", env.PUBLIC_URL);
+  consentUrl.searchParams.set("client_id", client_id);
+  consentUrl.searchParams.set("redirect_uri", redirect_uri);
+  consentUrl.searchParams.set("scope", scope);
+  if (state) consentUrl.searchParams.set("state", state);
+  consentUrl.searchParams.set("code_challenge", code_challenge);
+  consentUrl.searchParams.set("code_challenge_method", code_challenge_method);
+  if (nonce) consentUrl.searchParams.set("nonce", nonce);
 
-  // If consent exists and hasn't been revoked, auto-approve
-  const hasValidConsent = existingConsent && !existingConsent.revokedAt;
-
-  if (!hasValidConsent) {
-    // No consent yet → redirect to consent screen
-    const consentUrl = new URL("/oauth/consent", env.PUBLIC_URL);
-    consentUrl.searchParams.set("client_id", client_id);
-    consentUrl.searchParams.set("redirect_uri", redirect_uri);
-    consentUrl.searchParams.set("scope", scope);
-    if (state) consentUrl.searchParams.set("state", state);
-    consentUrl.searchParams.set("code_challenge", code_challenge);
-    consentUrl.searchParams.set("code_challenge_method", code_challenge_method);
-    if (nonce) consentUrl.searchParams.set("nonce", nonce);
-
-    logger.info({ userId, client_id, scope }, "User needs to consent, redirecting to consent screen");
-    return res.redirect(consentUrl.toString());
-  }
-
-  // ✅ User is authenticated AND has consented → issue authorization code
-  logger.info({
-    userId,
-    client_id,
-    scope: normalizedScope,
-  }, "OAuth authorization granted (authenticated user with valid consent)");
-
-  const codePayload = await createAuthorizationCode({
-    clientId: client_id,
-    redirectUri: redirect_uri,
-    codeChallenge: code_challenge,
-    codeChallengeMethod: code_challenge_method,
-    scope: normalizedScope,
-    subject: userId, // Use real userId as subject
-    state,
-    nonce
-  });
-
-  // Log security event
-  await import("@/services/security-event.service").then(({ logSecurityEvent }) =>
-    logSecurityEvent({
-      userId,
-      eventType: "oauth.token.issued",
-      severity: "info",
-      ipAddress: req.headers["x-forwarded-for"]?.toString() || req.socket.remoteAddress || "unknown",
-      userAgent: req.headers["user-agent"] || "unknown",
-      metadata: { client_id, scope: normalizedScope },
-    })
-  );
-
-  const url = new URL(redirect_uri);
-  url.searchParams.set("code", codePayload.code);
-  if (state) {
-    url.searchParams.set("state", state);
-  }
-  url.searchParams.set("client_id", client_id);
-
-  res.redirect(url.toString());
-  logger.info({ userId, client_id, state }, "Issued authorization code");
+  logger.info({ userId, client_id, scope }, "Redirecting to consent screen");
+  return res.redirect(consentUrl.toString());
 });
 
 const tokenBodySchema = z.object({
