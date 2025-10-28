@@ -325,7 +325,7 @@ authRouter.post("/login", async (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: "lax",
-      domain: "odoo-mcp.leonobitech.com",
+      domain: ".leonobitech.com",
       maxAge: env.SESSION_TTL * 1000,
       path: "/",
     });
@@ -385,7 +385,7 @@ authRouter.post("/logout", async (req, res) => {
 
     // Clear session cookie
     res.clearCookie(env.SESSION_COOKIE_NAME, {
-      domain: "odoo-mcp.leonobitech.com",
+      domain: ".leonobitech.com",
       path: "/",
     });
 

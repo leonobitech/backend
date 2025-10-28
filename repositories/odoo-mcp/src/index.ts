@@ -108,35 +108,6 @@ app.get("/", (_req, res) => {
   res.redirect("/register");
 });
 
-// Debug endpoint - shows all headers and IP detection
-app.get("/debug/headers", (req, res) => {
-  const headers = req.headers;
-  const ipDetection = {
-    "cf-connecting-ip": headers["cf-connecting-ip"] || "NOT PRESENT",
-    "x-real-ip": headers["x-real-ip"] || "NOT PRESENT",
-    "x-forwarded-for": headers["x-forwarded-for"] || "NOT PRESENT",
-    "socket-remote-address": req.socket.remoteAddress || "NOT PRESENT",
-  };
-
-  res.json({
-    message: "Headers Debug Info",
-    ipDetection,
-    allHeaders: headers,
-    detectedIP: require("./lib/security").extractIpAddress(req),
-  });
-});
-
-// Debug endpoint - shows cookies received from browser
-app.get("/debug/cookies", (req, res) => {
-  res.json({
-    message: "Cookies Debug Info",
-    cookies: req.cookies,
-    rawCookieHeader: req.headers.cookie || "NO COOKIE HEADER",
-    sessionCookieName: env.SESSION_COOKIE_NAME,
-    hasCookie: !!req.cookies[env.SESSION_COOKIE_NAME],
-  });
-});
-
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ error: "Not Found" });
