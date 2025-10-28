@@ -108,6 +108,21 @@ app.get("/", (_req, res) => {
   res.redirect("/register");
 });
 
+// Debug: Show ALL headers to understand IP detection
+app.get("/debug/all-headers", (req, res) => {
+  res.json({
+    message: "Complete Headers Debug",
+    headers: req.headers,
+    connection: {
+      remoteAddress: req.socket.remoteAddress,
+      remotePort: req.socket.remotePort,
+      localAddress: req.socket.localAddress,
+    },
+    expressIp: req.ip,
+    expressIps: req.ips,
+  });
+});
+
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ error: "Not Found" });
