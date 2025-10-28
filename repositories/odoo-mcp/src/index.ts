@@ -126,6 +126,17 @@ app.get("/debug/headers", (req, res) => {
   });
 });
 
+// Debug endpoint - shows cookies received from browser
+app.get("/debug/cookies", (req, res) => {
+  res.json({
+    message: "Cookies Debug Info",
+    cookies: req.cookies,
+    rawCookieHeader: req.headers.cookie || "NO COOKIE HEADER",
+    sessionCookieName: env.SESSION_COOKIE_NAME,
+    hasCookie: !!req.cookies[env.SESSION_COOKIE_NAME],
+  });
+});
+
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ error: "Not Found" });
