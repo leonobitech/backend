@@ -61,9 +61,9 @@
 
           <div style="margin-bottom: 16px;">
             <label style="display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;">Remote MCP server URL</label>
-            <div style="position: relative;">
-              <input type="text" id="configCode" readonly style="width: 100%; padding: 8px 32px 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; background: #f9fafb; color: #111827;">
-              <button onclick="copyConfig()" style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px 8px; font-size: 18px;" title="Copy URL">📋</button>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="configCode" readonly style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; background: #f9fafb; color: #111827;">
+              <button onclick="copyConfig()" style="flex-shrink: 0; background: #f3f4f6; border: 1px solid #d1d5db; color: #374151; cursor: pointer; padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; transition: all 0.2s;" onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'" title="Copy URL">Copy</button>
             </div>
           </div>
 
@@ -95,6 +95,6 @@
     </div>
   </div>
 
-  <script src="/login.js?v=8"></script>
+  <script src="/login.js?v=9"></script>
 </body>
 </html>

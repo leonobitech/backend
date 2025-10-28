@@ -35,10 +35,15 @@ function copyConfig() {
   const text = configCode.value;
   navigator.clipboard.writeText(text).then(() => {
     const btn = event.target;
-    const originalText = btn.textContent;
-    btn.textContent = '✓';
+    btn.textContent = 'Copied!';
+    btn.style.background = '#10b981';
+    btn.style.color = 'white';
+    btn.style.borderColor = '#10b981';
     setTimeout(() => {
-      btn.textContent = originalText;
+      btn.textContent = 'Copy';
+      btn.style.background = '#f3f4f6';
+      btn.style.color = '#374151';
+      btn.style.borderColor = '#d1d5db';
     }, 2000);
   });
 }
