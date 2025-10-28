@@ -414,8 +414,10 @@ authRouter.get("/status", async (req, res) => {
 
   try {
     const sessionToken = req.cookies[env.SESSION_COOKIE_NAME];
+    logger.info({ sessionToken: sessionToken ? sessionToken.substring(0, 16) + "..." : null }, "🔍 [/auth/status] Checking session");
 
     if (!sessionToken) {
+      logger.info("❌ [/auth/status] No session token in cookies");
       return res.json({
         authenticated: false,
         hasSession: false,
@@ -424,9 +426,12 @@ authRouter.get("/status", async (req, res) => {
 
     // Check if session exists in Redis
     const redis = await getRedisClient();
-    const sessionId = await redis.get(`session:${sessionToken}`);
+    const redisKey = `session:${sessionToken}`;
+    const sessionId = await redis.get(redisKey);
+    logger.info({ redisKey, sessionId }, "📦 [/auth/status] Redis lookup");
 
     if (!sessionId) {
+      logger.warn({ redisKey }, "⚠️ [/auth/status] Session not found in Redis");
       return res.json({
         authenticated: false,
         hasSession: false,
