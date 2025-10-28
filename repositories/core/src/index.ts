@@ -55,9 +55,26 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // enable cors
+// Allow both www and non-www versions of the frontend
+const allowedOrigins = [
+  APP_ORIGIN,
+  APP_ORIGIN.replace('https://', 'https://www.'), // Add www version
+  'https://leonobitech.com',
+  'https://www.leonobitech.com'
+].filter((origin, index, self) => self.indexOf(origin) === index); // Remove duplicates
+
 app.use(
   cors({
-    origin: APP_ORIGIN, // allow to server to accept request from different origin
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"], // allow to server to accept request from different method
     allowedHeaders: [
       "Content-Type",
