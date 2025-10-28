@@ -57,6 +57,23 @@ document.getElementById('consent-form').addEventListener('submit', (e) => {
   const form = e.target;
   const action = e.submitter.value; // 'allow' or 'deny'
 
+  // Disable form to prevent double submission
+  const buttons = form.querySelectorAll('button');
+  buttons.forEach(btn => {
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'not-allowed';
+  });
+
+  // Show loading message
+  const container = document.querySelector('.container');
+  const loadingDiv = document.createElement('div');
+  loadingDiv.style.cssText = 'margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; text-align: center; color: #1976d2;';
+  loadingDiv.innerHTML = action === 'allow'
+    ? '<strong>✓ Authorization granted!</strong><br/>Redirecting to Claude Desktop...<br/><small style="color: #666; margin-top: 8px; display: block;">You can close this window.</small>'
+    : '<strong>Authorization denied</strong><br/>Redirecting...<br/><small style="color: #666; margin-top: 8px; display: block;">You can close this window.</small>';
+  container.appendChild(loadingDiv);
+
   // Create a new form that will be submitted
   const submitForm = document.createElement('form');
   submitForm.method = 'POST';
@@ -82,6 +99,11 @@ document.getElementById('consent-form').addEventListener('submit', (e) => {
   // Append to body and submit
   document.body.appendChild(submitForm);
   submitForm.submit();
+
+  // Try to close the window after a delay (may not work in all browsers)
+  setTimeout(() => {
+    window.close();
+  }, 2000);
 });
 
 // Load consent data when page loads
