@@ -407,6 +407,11 @@ authRouter.post("/logout", async (req, res) => {
  * Check if user has active session (for UI feedback)
  */
 authRouter.get("/status", async (req, res) => {
+  // Disable caching for this endpoint - it needs to be real-time
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
   try {
     const sessionToken = req.cookies[env.SESSION_COOKIE_NAME];
 
