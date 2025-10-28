@@ -383,9 +383,13 @@ authRouter.post("/logout", async (req, res) => {
       );
     }
 
-    // Clear session cookie
+    // Clear session cookie (both wildcard and specific domain)
     res.clearCookie(env.SESSION_COOKIE_NAME, {
       domain: ".leonobitech.com",
+      path: "/",
+    });
+    res.clearCookie(env.SESSION_COOKIE_NAME, {
+      domain: "odoo-mcp.leonobitech.com",
       path: "/",
     });
 
