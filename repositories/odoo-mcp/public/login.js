@@ -72,10 +72,10 @@ form.addEventListener('submit', async (e) => {
       throw new Error(data.message || 'Login failed');
     }
 
-    // Show success card with the manifest URL
-    const manifestUrl = 'https://odoo-mcp.leonobitech.com/.well-known/anthropic/manifest.json';
+    // Show success card with the server URL
+    const serverUrl = 'https://odoo-mcp.leonobitech.com';
 
-    configCode.textContent = manifestUrl;
+    configCode.textContent = serverUrl;
     loginFormDiv.style.display = 'none';
     successCard.classList.add('show');
 
@@ -107,9 +107,9 @@ async function checkSession() {
 
     if (data.authenticated && data.hasSession) {
       // User has active session, show success card
-      const manifestUrl = 'https://odoo-mcp.leonobitech.com/.well-known/anthropic/manifest.json';
+      const serverUrl = 'https://odoo-mcp.leonobitech.com';
 
-      configCode.textContent = manifestUrl;
+      configCode.textContent = serverUrl;
 
       // Update success card with session info
       const successCardContent = successCard.innerHTML;
