@@ -60,6 +60,10 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
+// Required origins:
+// - claude.ai, app.claude.ai, desktop.claude.ai → Claude Desktop OAuth flow
+// - odoo-mcp.leonobitech.com → Self-origin for UI
+// - leonobitech.com → Frontend needs to fetch /auth/status for OdooMcpConnector component
 const corsOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
