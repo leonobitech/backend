@@ -36,10 +36,10 @@ function copyConfig() {
   navigator.clipboard.writeText(text).then(() => {
     const btn = event.target;
     btn.textContent = '✓';
-    btn.style.background = '#10b981';
+    btn.style.color = '#10b981';
     setTimeout(() => {
-      btn.textContent = 'Copy';
-      btn.style.background = '#3b82f6';
+      btn.textContent = '📋';
+      btn.style.color = '#9ca3af';
     }, 1500);
   });
 }

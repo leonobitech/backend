@@ -61,14 +61,14 @@
 
           <div style="margin-bottom: 16px;">
             <label style="display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;">Remote MCP server URL</label>
-            <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;">
-              <input type="text" id="configCode" readonly style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; font-family: monospace; background: #f9fafb; color: #111827; overflow: hidden; text-overflow: ellipsis;">
-              <button onclick="copyConfig()" style="background: #3b82f6; border: none; color: white; cursor: pointer; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'" title="Copy URL">Copy</button>
+            <div style="position: relative;">
+              <input type="text" id="configCode" readonly style="width: 100%; padding: 8px 36px 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; font-family: monospace; background: #f9fafb; color: #111827;">
+              <button onclick="copyConfig()" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: #9ca3af; cursor: pointer; padding: 4px; font-size: 16px; line-height: 1; transition: color 0.2s;" onmouseover="this.style.color='#6b7280'" onmouseout="this.style.color='#9ca3af'" title="Copy URL">📋</button>
             </div>
           </div>
 
-          <details style="margin-bottom: 16px;">
-            <summary style="font-size: 13px; font-weight: 500; color: #374151; cursor: pointer; user-select: none;">Advanced configuration</summary>
+          <details style="margin-bottom: 16px; text-align: left;">
+            <summary style="font-size: 13px; font-weight: 500; color: #374151; cursor: pointer; user-select: none; list-style-position: inside;">Advanced configuration</summary>
             <div style="margin-top: 12px; padding: 12px; background: #f9fafb; border-radius: 6px; border-left: 3px solid #3b82f6;">
               <p style="font-size: 12px; color: #6b7280; margin: 0;">
                 <strong>OAuth Client ID</strong> and <strong>Client Secret</strong> are not required.
@@ -95,6 +95,6 @@
     </div>
   </div>
 
-  <script src="/login.js?v=11"></script>
+  <script src="/login.js?v=12"></script>
 </body>
 </html>
