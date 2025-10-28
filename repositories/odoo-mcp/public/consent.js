@@ -100,10 +100,8 @@ document.getElementById('consent-form').addEventListener('submit', (e) => {
   document.body.appendChild(submitForm);
   submitForm.submit();
 
-  // Try to close the window after a delay (may not work in all browsers)
-  setTimeout(() => {
-    window.close();
-  }, 2000);
+  // Note: We don't close the window automatically
+  // The backend will redirect to Claude Desktop, and the window can be closed manually
 });
 
 // Load consent data when page loads
