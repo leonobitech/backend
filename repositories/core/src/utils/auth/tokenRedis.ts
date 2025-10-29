@@ -123,7 +123,14 @@ export const findAccessTokenOrThrow = async (
       where: {
         jti: accessKey,
         type: "ACCESS",
-        revoked: false,
+        // ✅ Permitir tokens revocados SI aún no han expirado (grace period)
+        OR: [
+          { revoked: false },
+          {
+            revoked: true,
+            expiresAt: { gt: new Date() } // Solo si aún está en grace period
+          }
+        ]
       },
       include: {
         user: true,

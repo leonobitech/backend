@@ -616,7 +616,7 @@ export const refreshAccessTokenService = async (
       where: { id: oldAccessTokenRecord.id },
       data: {
         expiresAt: gracePeriodExpiration,
-        // NO marcar como revoked durante grace period
+        revoked: true, // ✅ Marcar como revocado pero mantener disponible durante grace period
       },
     });
   }
