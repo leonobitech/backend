@@ -518,7 +518,8 @@ authRouter.get("/status", async (req, res) => {
       if (tokenData) {
         try {
           const parsed = JSON.parse(tokenData);
-          if (parsed.subject === session.userId) {
+          // Access token metadata uses 'userId' field, not 'subject'
+          if (parsed.userId === session.userId) {
             userTokens.push(key);
           }
         } catch (e) {
