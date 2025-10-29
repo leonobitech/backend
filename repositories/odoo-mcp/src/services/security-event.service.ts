@@ -20,6 +20,7 @@ export type SecurityEventType =
   | "oauth.token.issued"
   | "oauth.token.refreshed"
   | "oauth.token.revoked"
+  | "oauth.tokens_revoked_all"
   // Session events
   | "session.created"
   | "session.expired"

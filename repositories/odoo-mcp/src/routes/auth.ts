@@ -381,6 +381,22 @@ authRouter.post("/logout", async (req, res) => {
           "Revoked all OAuth refresh tokens for user"
         );
 
+        // Revoke ALL OAuth consents in database
+        const consentsResult = await prisma.oAuthConsent.updateMany({
+          where: {
+            userId: session.userId,
+            revokedAt: null, // Only update active consents
+          },
+          data: {
+            revokedAt: new Date(),
+          },
+        });
+
+        logger.info(
+          { userId: session.userId, revokedConsents: consentsResult.count },
+          "Revoked all OAuth consents for user"
+        );
+
         // Log security event
         await logSecurityEvent({
           userId: session.userId,
@@ -388,7 +404,11 @@ authRouter.post("/logout", async (req, res) => {
           severity: "info",
           ipAddress: extractIpAddress(req),
           userAgent: extractUserAgent(req),
-          metadata: { revokedCount, reason: "User logout" },
+          metadata: {
+            revokedTokens: revokedCount,
+            revokedConsents: consentsResult.count,
+            reason: "User logout"
+          },
         });
       }
 
