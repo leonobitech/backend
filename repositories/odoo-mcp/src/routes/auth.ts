@@ -18,6 +18,7 @@ import {
 import { validateOdooCredentials } from "@/services/odoo.service";
 import { createSession, revokeSession, revokeAllUserSessions, getUserActiveSessions } from "@/services/session.service";
 import { logSecurityEvent, isRateLimited } from "@/services/security-event.service";
+import { revokeAllUserRefreshTokens } from "@/lib/store";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
 
@@ -370,6 +371,26 @@ authRouter.post("/logout", async (req, res) => {
       const session = await prisma.session.findUnique({
         where: { id: sessionId },
       });
+
+      if (session) {
+        // Revoke ALL refresh tokens for this user (disconnects Claude Desktop)
+        const revokedCount = await revokeAllUserRefreshTokens(session.userId);
+
+        logger.info(
+          { userId: session.userId, sessionId, revokedTokens: revokedCount },
+          "Revoked all OAuth refresh tokens for user"
+        );
+
+        // Log security event
+        await logSecurityEvent({
+          userId: session.userId,
+          eventType: "oauth.tokens_revoked_all",
+          severity: "info",
+          ipAddress: extractIpAddress(req),
+          userAgent: extractUserAgent(req),
+          metadata: { revokedCount, reason: "User logout" },
+        });
+      }
 
       // Revoke session in DB
       await revokeSession(sessionId, "User logout");

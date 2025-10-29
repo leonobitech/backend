@@ -73,6 +73,37 @@ export async function revokeRefreshToken(token: string) {
   await redis.del(refreshKey(token));
 }
 
+export async function revokeAllUserRefreshTokens(userId: string) {
+  await ensureRedisConnection();
+
+  // Scan all refresh_token:* keys
+  const pattern = "refresh_token:*";
+  const keys: string[] = [];
+
+  for await (const key of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+    keys.push(key);
+  }
+
+  // Filter keys that belong to this user
+  const tokensToRevoke: string[] = [];
+  for (const key of keys) {
+    const value = await redis.get(key);
+    if (value) {
+      const payload = JSON.parse(value) as RefreshTokenPayload;
+      if (payload.subject === userId) {
+        tokensToRevoke.push(key);
+      }
+    }
+  }
+
+  // Delete all user's refresh tokens
+  if (tokensToRevoke.length > 0) {
+    await redis.del(tokensToRevoke);
+  }
+
+  return tokensToRevoke.length;
+}
+
 export async function storeNonce(nonce: string, ttlSeconds = 300) {
   await ensureRedisConnection();
   await redis.set(nonceKey(nonce), "1", { EX: ttlSeconds });
