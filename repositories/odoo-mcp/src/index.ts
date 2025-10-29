@@ -16,6 +16,7 @@ import { wellKnownRouter } from "@/routes/well-known";
 import { authRouter } from "@/routes/auth";
 import { consentRouter } from "@/routes/consent";
 import { optionalAuth } from "@/middlewares/session.middleware";
+import { scheduleSessionCleanup, cleanupZombieSessions } from "@/services/session-cleanup.service";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -166,6 +167,13 @@ async function start() {
   // Initialize and register all tools
   await initializeTools();
   logger.info("[odoo-mcp] All tools registered");
+
+  // Clean up zombie sessions on startup
+  logger.info("[Cleanup] Running initial zombie session cleanup...");
+  await cleanupZombieSessions();
+
+  // Schedule automatic cleanup every hour
+  scheduleSessionCleanup();
 
   // Start HTTP server
   app.listen(env.PORT, () => {
