@@ -159,6 +159,7 @@ consentRouter.post("/", async (req, res) => {
         userId,
         clientId: client_id,
         scopes: scope,
+        revokedAt: null, // Explicitly set to null for clarity
         ipAddress,
         userAgent,
       },
