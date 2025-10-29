@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
+import { isTokenRevoked } from "@/lib/store";
 
 const keysDir = resolve(process.cwd(), "keys");
 
@@ -34,5 +35,11 @@ export async function verifyAccessToken(token: string) {
     issuer: env.JWT_ISSUER,
     audience: env.JWT_AUDIENCE
   });
+
+  // Check if token has been revoked (blacklist check)
+  if (payload.jti && await isTokenRevoked(payload.jti as string)) {
+    throw new Error("Token has been revoked");
+  }
+
   return payload;
 }

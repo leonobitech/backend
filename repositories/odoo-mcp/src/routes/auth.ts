@@ -18,7 +18,7 @@ import {
 import { validateOdooCredentials } from "@/services/odoo.service";
 import { createSession, revokeSession, revokeAllUserSessions, getUserActiveSessions } from "@/services/session.service";
 import { logSecurityEvent, isRateLimited } from "@/services/security-event.service";
-import { revokeAllUserRefreshTokens } from "@/lib/store";
+import { revokeAllUserRefreshTokens, revokeAllUserAccessTokens } from "@/lib/store";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
 
@@ -373,11 +373,19 @@ authRouter.post("/logout", async (req, res) => {
       });
 
       if (session) {
-        // Revoke ALL refresh tokens for this user (disconnects Claude Desktop)
-        const revokedCount = await revokeAllUserRefreshTokens(session.userId);
+        // Revoke ALL access tokens for this user (immediate disconnection)
+        const revokedAccessCount = await revokeAllUserAccessTokens(session.userId);
 
         logger.info(
-          { userId: session.userId, sessionId, revokedTokens: revokedCount },
+          { userId: session.userId, sessionId, revokedAccessTokens: revokedAccessCount },
+          "Revoked all OAuth access tokens for user"
+        );
+
+        // Revoke ALL refresh tokens for this user (prevents new access tokens)
+        const revokedRefreshCount = await revokeAllUserRefreshTokens(session.userId);
+
+        logger.info(
+          { userId: session.userId, sessionId, revokedRefreshTokens: revokedRefreshCount },
           "Revoked all OAuth refresh tokens for user"
         );
 
@@ -405,7 +413,8 @@ authRouter.post("/logout", async (req, res) => {
           ipAddress: extractIpAddress(req),
           userAgent: extractUserAgent(req),
           metadata: {
-            revokedTokens: revokedCount,
+            revokedAccessTokens: revokedAccessCount,
+            revokedRefreshTokens: revokedRefreshCount,
             revokedConsents: consentsResult.count,
             reason: "User logout"
           },

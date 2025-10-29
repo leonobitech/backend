@@ -28,6 +28,8 @@ export interface RefreshTokenPayload {
 const codeKey = (code: string) => `auth_code:${code}`;
 const refreshKey = (token: string) => `refresh_token:${token}`;
 const nonceKey = (nonce: string) => `nonce:${nonce}`;
+const accessTokenKey = (jti: string) => `access_token:${jti}`;
+const revokedTokenKey = (jti: string) => `revoked_token:${jti}`;
 
 export async function createAuthorizationCode(data: Omit<AuthorizationCodePayload, "code" | "createdAt">) {
   await ensureRedisConnection();
@@ -115,4 +117,72 @@ export async function consumeNonce(nonce: string) {
   if (!exists) return false;
   await redis.del(nonceKey(nonce));
   return true;
+}
+
+// Access token tracking (for revocation)
+export interface AccessTokenMetadata {
+  jti: string;
+  userId: string;
+  scope: string;
+  issuedAt: number;
+}
+
+export async function storeAccessToken(metadata: AccessTokenMetadata, ttl: number) {
+  await ensureRedisConnection();
+  await redis.set(
+    accessTokenKey(metadata.jti),
+    JSON.stringify(metadata),
+    { EX: ttl }
+  );
+}
+
+export async function isTokenRevoked(jti: string): Promise<boolean> {
+  await ensureRedisConnection();
+  const revoked = await redis.get(revokedTokenKey(jti));
+  return revoked !== null;
+}
+
+export async function revokeAccessToken(jti: string, ttl: number) {
+  await ensureRedisConnection();
+  // Add to revocation blacklist with same TTL as token
+  await redis.set(revokedTokenKey(jti), "1", { EX: ttl });
+  // Remove from active tokens
+  await redis.del(accessTokenKey(jti));
+}
+
+export async function revokeAllUserAccessTokens(userId: string) {
+  await ensureRedisConnection();
+
+  // Scan all access_token:* keys
+  const pattern = "access_token:*";
+  const keys: string[] = [];
+
+  for await (const key of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+    keys.push(key);
+  }
+
+  // Filter keys that belong to this user and revoke them
+  const tokensToRevoke: Array<{ jti: string; metadata: AccessTokenMetadata }> = [];
+  for (const key of keys) {
+    const value = await redis.get(key);
+    if (value) {
+      const metadata = JSON.parse(value) as AccessTokenMetadata;
+      if (metadata.userId === userId) {
+        const jti = key.replace("access_token:", "");
+        tokensToRevoke.push({ jti, metadata });
+      }
+    }
+  }
+
+  // Revoke all user's access tokens
+  for (const { jti, metadata } of tokensToRevoke) {
+    // Calculate remaining TTL based on token age
+    const now = Math.floor(Date.now() / 1000);
+    const age = now - Math.floor(metadata.issuedAt / 1000);
+    const remainingTTL = Math.max(0, 3600 - age); // Assuming 1 hour token lifetime
+
+    await revokeAccessToken(jti, remainingTTL);
+  }
+
+  return tokensToRevoke.length;
 }

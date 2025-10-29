@@ -21,11 +21,12 @@ export async function getPrivateKey() {
   }
 }
 
-export async function signAccessToken(payload: JWTPayload) {
+export async function signAccessToken(payload: JWTPayload & { jti: string }) {
   const key = await getPrivateKey();
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "RS256", kid: env.JWKS_KID, typ: "JWT" })
+    .setJti(payload.jti) // JWT ID for revocation tracking
     .setIssuedAt(now)
     .setIssuer(env.JWT_ISSUER)
     .setAudience(env.JWT_AUDIENCE)

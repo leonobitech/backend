@@ -1,4 +1,5 @@
 import { Router, Request } from "express";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
@@ -9,7 +10,8 @@ import {
   createAuthorizationCode,
   createRefreshToken,
   getRefreshToken,
-  revokeRefreshToken
+  revokeRefreshToken,
+  storeAccessToken
 } from "@/lib/store";
 import { optionalAuth } from "@/middlewares/session.middleware";
 
@@ -210,11 +212,21 @@ oauthRouter.post("/token", async (req, res) => {
       return res.status(400).json({ error: "invalid_grant", message: "PKCE verification failed" });
     }
 
+    const jti = randomUUID();
     const accessToken = await signAccessToken({
       sub: storedCode.subject,
       scope: storedCode.scope,
-      nonce: storedCode.nonce
+      nonce: storedCode.nonce,
+      jti
     });
+
+    // Store access token metadata for revocation tracking
+    await storeAccessToken({
+      jti,
+      userId: storedCode.subject,
+      scope: storedCode.scope,
+      issuedAt: Date.now()
+    }, env.ACCESS_TOKEN_TTL);
 
     const refresh = await createRefreshToken({
       clientId: env.CLIENT_ID,
@@ -222,7 +234,7 @@ oauthRouter.post("/token", async (req, res) => {
       subject: storedCode.subject
     });
 
-    logger.info({ sub: storedCode.subject }, "Access token issued via authorization_code");
+    logger.info({ sub: storedCode.subject, jti }, "Access token issued via authorization_code");
     return res.json({
       token_type: "Bearer",
       access_token: accessToken,
@@ -256,10 +268,20 @@ oauthRouter.post("/token", async (req, res) => {
       return res.status(400).json({ error: "invalid_grant" });
     }
 
+    const jti = randomUUID();
     const accessToken = await signAccessToken({
       sub: storedRefresh.subject,
-      scope: storedRefresh.scope
+      scope: storedRefresh.scope,
+      jti
     });
+
+    // Store access token metadata for revocation tracking
+    await storeAccessToken({
+      jti,
+      userId: storedRefresh.subject,
+      scope: storedRefresh.scope,
+      issuedAt: Date.now()
+    }, env.ACCESS_TOKEN_TTL);
 
     // Rotación de refresh token
     await revokeRefreshToken(body.refresh_token);
@@ -269,7 +291,7 @@ oauthRouter.post("/token", async (req, res) => {
       subject: storedRefresh.subject
     });
 
-    logger.info({ sub: storedRefresh.subject }, "Access token refreshed");
+    logger.info({ sub: storedRefresh.subject, jti }, "Access token refreshed");
     return res.json({
       token_type: "Bearer",
       access_token: accessToken,
