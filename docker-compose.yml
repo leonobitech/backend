@@ -371,12 +371,23 @@ services:
       - "traefik.http.routers.n8n_ui.middlewares=core-auth@file, secure-relaxed@file"
 
       #########################################
-      # 🔧 API / Webhooks / Assets (públicos pero con headers seguros)
+      # 🎨 Assets estáticos (sin auth, mayor prioridad)
+      #########################################
+      - "traefik.http.routers.n8n_assets.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/assets/`)"
+      - "traefik.http.routers.n8n_assets.entrypoints=websecure"
+      - "traefik.http.routers.n8n_assets.tls.certresolver=le"
+      - "traefik.http.routers.n8n_assets.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_assets.priority=30"
+      - "traefik.http.routers.n8n_assets.middlewares=secure-basic@file"
+
+      #########################################
+      # 🔧 API / Webhooks (públicos pero con headers seguros)
       #########################################
       - "traefik.http.routers.n8n_rest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && (PathPrefix(`/rest/`) || PathPrefix(`/webhook/`) || PathPrefix(`/api/`) || PathPrefix(`/executions/`) || PathPrefix(`/workflows/`) || PathPrefix(`/js/`) || PathPrefix(`/css/`) || PathPrefix(`/fonts/`))"
       - "traefik.http.routers.n8n_rest.entrypoints=websecure"
       - "traefik.http.routers.n8n_rest.tls.certresolver=le"
       - "traefik.http.routers.n8n_rest.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_rest.priority=20"
       - "traefik.http.routers.n8n_rest.middlewares=secure-relaxed@file, api-nostore-vary@file"
 
       #########################################
