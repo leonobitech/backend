@@ -10,6 +10,7 @@ import { GetLeadsTool } from "./odoo/crm/get-leads/get-leads.tool";
 import { CreateLeadTool } from "./odoo/crm/create-lead/create-lead.tool";
 import { GetOpportunitiesTool } from "./odoo/crm/get-opportunities/get-opportunities.tool";
 import { UpdateDealStageTool } from "./odoo/crm/update-deal-stage/update-deal-stage.tool";
+import { AnalyzeOpportunityTool } from "./odoo/crm/analyze-opportunity/analyze-opportunity.tool";
 import { SearchContactsTool } from "./odoo/contacts/search-contacts/search-contacts.tool";
 import { CreateContactTool } from "./odoo/contacts/create-contact/create-contact.tool";
 import { ScheduleMeetingTool } from "./odoo/calendar/schedule-meeting/schedule-meeting.tool";
@@ -72,6 +73,13 @@ export async function initializeTools(): Promise<ToolRegistry> {
     version: "2.0.0",
     requiredScopes: ["odoo:write"],
     estimatedTime: 800,
+  });
+
+  registry.register(new AnalyzeOpportunityTool(odooClient), {
+    category: "odoo/crm",
+    version: "2.0.0",
+    requiredScopes: ["odoo:read"],
+    estimatedTime: 3000,
   });
 
   // Contacts Tools
