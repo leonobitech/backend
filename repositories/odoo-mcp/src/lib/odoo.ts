@@ -1060,6 +1060,7 @@ export class OdooClient {
     subject: string;
     body: string;
     emailTo?: string; // Si no se proporciona, usa el email del partner de la oportunidad
+    templateType?: string; // Tipo de template para determinar progresión de stage
   }): Promise<SendEmailResult> {
     // PASO 1: Obtener información de la oportunidad para extraer el email si no se proporciona
     let recipientEmail = data.emailTo;
@@ -1161,11 +1162,14 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to post email to chatter, but email was sent");
     }
 
-    // Progresión automática de etapa (New → Qualified)
+    // Progresión automática de etapa
+    // - proposal/demo: New/Qualified → Proposition
+    // - otros: New → Qualified
     try {
+      const isProposalOrDemo = data.templateType === 'proposal' || data.templateType === 'demo';
       await this.autoProgressStage({
         opportunityId: data.opportunityId,
-        action: "email_sent"
+        action: isProposalOrDemo ? "proposal_sent" : "email_sent"
       });
     } catch (error) {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after email sending");

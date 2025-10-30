@@ -35,7 +35,8 @@ export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
       opportunityId: params.opportunityId,
       subject: params.subject,
       body: emailBody,
-      emailTo: params.emailTo
+      emailTo: params.emailTo,
+      templateType: templateUsed // Pasar templateType para correcta progresión de stage
     });
 
     const queueStatus = result.queueProcessed ? "Email queued for immediate delivery" : "Email enqueued; Odoo cron will deliver";
