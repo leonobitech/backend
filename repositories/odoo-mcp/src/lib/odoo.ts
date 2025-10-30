@@ -735,7 +735,10 @@ export class OdooClient {
       availableSlots: Array<{ start: string; end: string }>;
     };
   }> {
-    // Obtener información de la oportunidad para vincular partner
+    // PASO 1: Asegurar que la oportunidad tenga un contacto vinculado
+    await this.ensureOpportunityHasPartner(data.opportunityId);
+
+    // PASO 2: Obtener información de la oportunidad para vincular partner
     const opportunities = await this.read("crm.lead", [data.opportunityId], ["partner_id", "user_id"]);
 
     if (opportunities.length === 0) {
@@ -944,6 +947,90 @@ export class OdooClient {
     });
   }
 
+  /**
+   * Asegurar que la oportunidad tenga un contacto (partner) vinculado
+   * Si no tiene, lo crea basándose en los datos del lead
+   *
+   * @returns partnerId del contacto vinculado (existente o recién creado)
+   */
+  private async ensureOpportunityHasPartner(opportunityId: number): Promise<number> {
+    // Obtener datos de la oportunidad
+    const opportunities = await this.read("crm.lead", [opportunityId], [
+      "partner_id",
+      "partner_name",
+      "contact_name",
+      "email_from",
+      "phone",
+      "name"
+    ]);
+
+    if (opportunities.length === 0) {
+      throw new Error(`Opportunity #${opportunityId} not found`);
+    }
+
+    const opp = opportunities[0];
+
+    // Si ya tiene partner_id, retornarlo
+    if (opp.partner_id && Array.isArray(opp.partner_id) && opp.partner_id[0]) {
+      logger.info({ opportunityId, partnerId: opp.partner_id[0] }, "Opportunity already has partner linked");
+      return opp.partner_id[0];
+    }
+
+    // No tiene partner, necesitamos crear uno
+    logger.info({ opportunityId }, "Opportunity has no partner, creating one automatically");
+
+    // Determinar nombre del contacto
+    const contactName = opp.partner_name || opp.contact_name || opp.name || "Cliente";
+
+    // Verificar si ya existe un partner con el mismo email
+    let partnerId: number | null = null;
+
+    if (opp.email_from && typeof opp.email_from === "string") {
+      const existingPartners = await this.search("res.partner", [["email", "=", opp.email_from.trim()]], {
+        fields: ["id"],
+        limit: 1
+      });
+
+      if (existingPartners.length > 0) {
+        partnerId = existingPartners[0].id;
+        logger.info({ opportunityId, partnerId, email: opp.email_from }, "Found existing partner with same email");
+      }
+    }
+
+    // Si no existe, crear nuevo partner
+    if (!partnerId) {
+      const partnerData: Record<string, any> = {
+        name: contactName,
+        is_company: !!opp.partner_name // Si hay partner_name, asumimos que es empresa
+      };
+
+      if (opp.email_from) partnerData.email = opp.email_from;
+      if (opp.phone) partnerData.phone = opp.phone;
+
+      partnerId = await this.create("res.partner", partnerData);
+      logger.info({ opportunityId, partnerId, name: contactName }, "Created new partner for opportunity");
+    }
+
+    // Vincular el partner a la oportunidad
+    await this.update("crm.lead", [opportunityId], { partner_id: partnerId });
+
+    // Registrar en el chatter
+    await this.postMessageToChatter({
+      model: "crm.lead",
+      resId: opportunityId,
+      body: `
+        <p>👤 <strong>Contacto vinculado automáticamente</strong></p>
+        <p>Se ha creado y vinculado el contacto <strong>${contactName}</strong> a esta oportunidad.</p>
+        <p><em>Sistema automatizado Leonobitech</em></p>
+      `,
+      messageType: "comment"
+    });
+
+    logger.info({ opportunityId, partnerId }, "Partner linked to opportunity successfully");
+
+    return partnerId;
+  }
+
   // ==================== EMAIL ====================
 
   /**
@@ -955,7 +1042,10 @@ export class OdooClient {
     body: string;
     emailTo?: string; // Si no se proporciona, usa el email del partner de la oportunidad
   }): Promise<SendEmailResult> {
-    // Obtener información de la oportunidad para extraer el email si no se proporciona
+    // PASO 1: Asegurar que la oportunidad tenga un contacto vinculado
+    await this.ensureOpportunityHasPartner(data.opportunityId);
+
+    // PASO 2: Obtener información de la oportunidad para extraer el email si no se proporciona
     let recipientEmail = data.emailTo;
 
     if (!recipientEmail) {
