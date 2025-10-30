@@ -789,6 +789,9 @@ export class OdooClient {
     }
 
     // Si está disponible o se fuerza el agendamiento, crear el evento
+    // IMPORTANTE: Incluir user_id del vendedor para que Odoo cree la actividad automáticamente
+    const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
+
     const values: Record<string, any> = {
       name: data.name,
       start: data.start,
@@ -796,7 +799,8 @@ export class OdooClient {
       duration,
       res_model: "crm.lead",
       res_id: data.opportunityId,
-      partner_ids: [[6, 0, partnerIds]] // Odoo many2many format
+      partner_ids: [[6, 0, partnerIds]], // Odoo many2many format
+      user_id: vendorUserId // Usuario responsable (vendedor) - Odoo crea actividad automáticamente
     };
 
     if (data.description) values.description = data.description;
@@ -804,30 +808,9 @@ export class OdooClient {
 
     const eventId = await this.create("calendar.event", values);
 
-    // PASO 3: Crear actividad (mail.activity) vinculada a la oportunidad Y al evento
-    // IMPORTANTE: La actividad se asigna al vendedor (user_id) de la oportunidad
-    let activityId: number | undefined;
-    const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
-
-    try {
-      // Formatear la fecha para la actividad (solo fecha, sin hora)
-      const deadlineDate = new Date(data.start).toISOString().split('T')[0];
-
-      activityId = await this.createActivity({
-        activityType: "meeting",
-        summary: data.name,
-        resModel: "crm.lead",
-        resId: data.opportunityId,
-        dateDeadline: deadlineDate,
-        calendarEventId: eventId, // Vincular al evento de calendario
-        userId: vendorUserId, // CRÍTICO: Asignar al vendedor, no al usuario de API
-        note: data.description || `Reunión agendada en calendario.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
-      });
-
-      logger.info({ opportunityId: data.opportunityId, eventId, activityId, vendorUserId }, "Activity created, linked to calendar event, and assigned to salesperson");
-    } catch (error) {
-      logger.warn({ error, opportunityId: data.opportunityId, eventId }, "Failed to create activity, but calendar event was created");
-    }
+    // NOTA: Odoo crea automáticamente la actividad (mail.activity) cuando el calendar.event
+    // tiene res_model, res_id y user_id configurados. No necesitamos crearla manualmente.
+    logger.info({ opportunityId: data.opportunityId, eventId, vendorUserId }, "Calendar event created with automatic activity linking");
 
     // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
     // El contacto ya recibe email automáticamente por estar en partner_ids del evento
@@ -960,7 +943,8 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
     }
 
-    return { eventId, activityId };
+    // Odoo crea la actividad automáticamente, no retornamos activityId
+    return { eventId };
   }
 
   /**
