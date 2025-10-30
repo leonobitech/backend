@@ -190,11 +190,12 @@ Agenda una reunión en el calendario y **automáticamente crea una actividad vin
 - `attendeeEmails`: Array de emails de asistentes
 
 **Comportamiento automático:**
-- ✅ Verifica que la oportunidad tenga un contacto vinculado (si no, lo crea automáticamente)
+- ✅ **Crea y vincula contacto automáticamente** (si no existe, busca o crea partner)
 - ✅ Crea el evento en el calendario
 - ✅ Crea una actividad de tipo "meeting" vinculada a la oportunidad
 - ✅ Envía email de confirmación al contacto con detalles de la reunión
 - ✅ Avanza la oportunidad a etapa "proposition" si está en "qualified"
+- ✅ Registra la acción en el chatter
 
 **Retorna:** `eventId` y `activityId` creados
 
@@ -223,12 +224,12 @@ Envía un email profesional usando plantillas predefinidas o contenido personali
 - `body`: Cuerpo HTML del email (requerido si templateType es 'custom')
 
 **Comportamiento automático:**
-- ✅ Verifica que la oportunidad tenga un contacto vinculado (si no, lo crea automáticamente)
+- ✅ **SOLO para `proposal` y `demo`**: Crea y vincula contacto automáticamente (busca o crea partner)
 - ✅ Registra el email enviado en el chatter
 - ✅ Avanza la oportunidad según el tipo:
-  - `proposal` → mueve a "proposition"
-  - `demo` → mueve a "proposition"
-  - `followup` → no cambia etapa
+  - `proposal` → crea contacto + mueve a "proposition"
+  - `demo` → crea contacto + mueve a "proposition"
+  - `followup`, `welcome`, `custom` → NO crea contacto, no cambia etapa
 
 **Retorna:** Confirmación con messageId y template usado
 
@@ -465,13 +466,24 @@ Si ninguna plantilla se ajusta, puedes usar `templateType: "custom"` y proporcio
 
 ## Flujos Automáticos Implementados
 
-### 1. Auto-vinculación de Contactos
+### 1. Auto-vinculación de Contactos (Solo Acciones Formales)
 
-Cuando se usa `odoo_send_email` o `odoo_schedule_meeting` en una oportunidad sin contacto vinculado:
-- ✅ Busca si existe un contacto con el mismo email
+**Cuándo se activa:**
+- `odoo_send_email` con `templateType: 'proposal'` o `'demo'`
+- `odoo_schedule_meeting` (cualquier reunión)
+
+**Qué hace:**
+- ✅ Verifica si la oportunidad ya tiene contacto vinculado
+- ✅ Busca si existe un contacto con el mismo email (evita duplicados)
 - ✅ Si existe, lo vincula a la oportunidad
 - ✅ Si no existe, crea un nuevo contacto con los datos del lead
 - ✅ Registra la acción en el chatter
+
+**Por qué solo en acciones formales:**
+- Los leads (Nuevo) son prospectos sin contacto formal
+- Las oportunidades (Calificado) todavía no requieren contacto
+- Solo al enviar propuestas/demos o agendar reuniones se crea el contacto
+- Esto respeta el flujo natural de ventas: Lead → Opportunity → Proposition
 
 ### 2. Auto-creación de Actividades
 
@@ -483,10 +495,20 @@ Cuando se agenda una reunión con `odoo_schedule_meeting`:
 
 ### 3. Progresión Automática de Pipeline
 
-Las herramientas mueven oportunidades automáticamente:
-- `send_email` con template `proposal` → "proposition"
-- `send_email` con template `demo` → "proposition"
-- `schedule_meeting` desde "qualified" → "proposition"
+Las herramientas mueven oportunidades automáticamente cuando hay acciones formales:
+
+| Acción | Condición | Resultado |
+|--------|-----------|-----------|
+| `send_email` con `proposal` | Cualquier etapa | → "proposition" + crea contacto |
+| `send_email` con `demo` | Cualquier etapa | → "proposition" + crea contacto |
+| `schedule_meeting` | Desde "qualified" | → "proposition" + crea contacto |
+| `send_email` otros templates | Cualquier etapa | Sin cambios, NO crea contacto |
+
+**Flujo completo:**
+1. **Lead (Nuevo)**: Prospecto inicial, sin contacto
+2. **Opportunity (Calificado)**: Oportunidad calificada, todavía sin contacto
+3. **Proposition (Propuesta)**: Se envía propuesta/demo o agenda reunión → **AQUÍ se crea el contacto**
+4. **Won/Lost**: Cierre de la oportunidad
 
 ---
 
