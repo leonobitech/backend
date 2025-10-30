@@ -804,6 +804,27 @@ export class OdooClient {
 
     const eventId = await this.create("calendar.event", values);
 
+    // PASO 3: Crear actividad (mail.activity) vinculada a la oportunidad
+    // Esto hace que la reunión aparezca en la columna de "Actividades" de la oportunidad
+    let activityId: number | undefined;
+    try {
+      // Formatear la fecha para la actividad (solo fecha, sin hora)
+      const deadlineDate = new Date(data.start).toISOString().split('T')[0];
+
+      activityId = await this.createActivity({
+        activityType: "meeting",
+        summary: data.name,
+        resModel: "crm.lead",
+        resId: data.opportunityId,
+        dateDeadline: deadlineDate,
+        note: data.description || `Reunión agendada en calendario.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
+      });
+
+      logger.info({ opportunityId: data.opportunityId, eventId, activityId }, "Activity created for meeting");
+    } catch (error) {
+      logger.warn({ error, opportunityId: data.opportunityId, eventId }, "Failed to create activity, but calendar event was created");
+    }
+
     // Publicar mensaje en el chatter de la oportunidad
     const startDate = new Date(data.start);
     const formattedDate = startDate.toLocaleString("es-ES", {
@@ -824,6 +845,7 @@ export class OdooClient {
         ${data.location ? `<li><strong>Ubicación:</strong> ${data.location}</li>` : ""}
         ${data.description ? `<li><strong>Descripción:</strong> ${data.description}</li>` : ""}
       </ul>
+      <p>✅ <strong>Actividad creada:</strong> Esta reunión aparecerá en la columna de actividades.</p>
       <p><em>Sistema automatizado Leonobitech</em></p>
     `;
 
@@ -834,7 +856,7 @@ export class OdooClient {
         body: chatterMessage,
         messageType: "comment"
       });
-      logger.info({ opportunityId: data.opportunityId, eventId }, "Meeting logged to opportunity chatter");
+      logger.info({ opportunityId: data.opportunityId, eventId, activityId }, "Meeting logged to opportunity chatter");
     } catch (error) {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to post meeting to chatter, but event was created");
     }
@@ -849,7 +871,7 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
     }
 
-    return { eventId };
+    return { eventId, activityId };
   }
 
   /**
