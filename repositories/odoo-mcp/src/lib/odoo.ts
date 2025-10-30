@@ -530,6 +530,7 @@ export class OdooClient {
     resId?: number;
     dateDeadline?: string;
     note?: string;
+    calendarEventId?: number; // Vincular a evento de calendario
   }): Promise<number> {
     // Mapear tipo de actividad a ID (estos son los IDs por defecto en Odoo)
     const activityTypeMap: Record<string, number> = {
@@ -551,6 +552,7 @@ export class OdooClient {
     if (data.resId) values.res_id = data.resId;
     if (data.dateDeadline) values.date_deadline = data.dateDeadline;
     if (data.note) values.note = data.note;
+    if (data.calendarEventId) values.calendar_event_id = data.calendarEventId;
 
     return this.create("mail.activity", values);
   }
@@ -801,7 +803,7 @@ export class OdooClient {
 
     const eventId = await this.create("calendar.event", values);
 
-    // PASO 3: Crear actividad (mail.activity) vinculada a la oportunidad
+    // PASO 3: Crear actividad (mail.activity) vinculada a la oportunidad Y al evento
     // Esto hace que la reunión aparezca en la columna de "Actividades" de la oportunidad
     let activityId: number | undefined;
     try {
@@ -814,12 +816,90 @@ export class OdooClient {
         resModel: "crm.lead",
         resId: data.opportunityId,
         dateDeadline: deadlineDate,
+        calendarEventId: eventId, // IMPORTANTE: Vincular al evento de calendario
         note: data.description || `Reunión agendada en calendario.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
       });
 
-      logger.info({ opportunityId: data.opportunityId, eventId, activityId }, "Activity created for meeting");
+      logger.info({ opportunityId: data.opportunityId, eventId, activityId }, "Activity created and linked to calendar event");
     } catch (error) {
       logger.warn({ error, opportunityId: data.opportunityId, eventId }, "Failed to create activity, but calendar event was created");
+    }
+
+    // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
+    // El contacto ya recibe email automáticamente por estar en partner_ids del evento
+    if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
+      try {
+        const userId = opp.user_id[0];
+        const users = await this.read("res.users", [userId], ["partner_id", "name", "email"]);
+
+        if (users.length > 0 && users[0].email) {
+          const vendorName = users[0].name || "Vendedor";
+          const vendorEmail = users[0].email;
+
+          const startDate = new Date(data.start);
+          const formattedDate = startDate.toLocaleString("es-ES", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+          });
+
+          const emailBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #2c3e50;">📅 Reunión Agendada - Confirmación</h2>
+              <p>Hola <strong>${vendorName}</strong>,</p>
+              <p>Se ha agendado una nueva reunión para la oportunidad <strong>#${data.opportunityId}</strong>:</p>
+
+              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <table style="width: 100%;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #666;"><strong>Título:</strong></td>
+                    <td style="padding: 8px 0;">${data.name}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #666;"><strong>Fecha:</strong></td>
+                    <td style="padding: 8px 0;">${formattedDate}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #666;"><strong>Duración:</strong></td>
+                    <td style="padding: 8px 0;">${duration} hora(s)</td>
+                  </tr>
+                  ${data.location ? `
+                  <tr>
+                    <td style="padding: 8px 0; color: #666;"><strong>Ubicación:</strong></td>
+                    <td style="padding: 8px 0;">${data.location}</td>
+                  </tr>
+                  ` : ''}
+                  ${data.description ? `
+                  <tr>
+                    <td style="padding: 8px 0; color: #666;"><strong>Descripción:</strong></td>
+                    <td style="padding: 8px 0;">${data.description}</td>
+                  </tr>
+                  ` : ''}
+                </table>
+              </div>
+
+              <p style="color: #666; font-size: 14px;">Este evento ha sido agregado a tu calendario de Odoo.</p>
+              <p style="color: #999; font-size: 12px; font-style: italic;">Sistema automatizado Leonobitech</p>
+            </div>
+          `;
+
+          // Enviar email al vendedor
+          await this.create("mail.mail", {
+            subject: `📅 Reunión agendada: ${data.name}`,
+            body_html: emailBody,
+            email_to: vendorEmail,
+            auto_delete: false,
+            state: "outgoing"
+          });
+
+          logger.info({ opportunityId: data.opportunityId, eventId, vendorEmail }, "Confirmation email sent to salesperson");
+        }
+      } catch (error) {
+        logger.warn({ error, opportunityId: data.opportunityId }, "Failed to send confirmation email to salesperson");
+      }
     }
 
     // Publicar mensaje en el chatter de la oportunidad
