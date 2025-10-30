@@ -808,9 +808,28 @@ export class OdooClient {
 
     const eventId = await this.create("calendar.event", values);
 
-    // NOTA: Odoo crea automáticamente la actividad (mail.activity) cuando el calendar.event
-    // tiene res_model, res_id y user_id configurados. No necesitamos crearla manualmente.
-    logger.info({ opportunityId: data.opportunityId, eventId, vendorUserId }, "Calendar event created with automatic activity linking");
+    // PASO 3: Crear actividad manualmente vinculada SOLO a la oportunidad
+    // NO vincular calendar_event_id porque eso la dirige al contacto en lugar de la oportunidad
+    let activityId: number | undefined;
+    try {
+      // Formatear la fecha para la actividad (solo fecha, sin hora)
+      const deadlineDate = new Date(data.start).toISOString().split('T')[0];
+
+      activityId = await this.createActivity({
+        activityType: "meeting",
+        summary: data.name,
+        resModel: "crm.lead",
+        resId: data.opportunityId,
+        dateDeadline: deadlineDate,
+        userId: vendorUserId,
+        // NO incluir calendarEventId - eso la vincula al contacto
+        note: data.description || `Reunión agendada en calendario.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
+      });
+
+      logger.info({ opportunityId: data.opportunityId, eventId, activityId, vendorUserId }, "Activity created and linked to CRM opportunity (not to calendar event)");
+    } catch (error) {
+      logger.warn({ error, opportunityId: data.opportunityId, eventId }, "Failed to create activity, but calendar event was created");
+    }
 
     // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
     // El contacto ya recibe email automáticamente por estar en partner_ids del evento
@@ -943,8 +962,7 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
     }
 
-    // Odoo crea la actividad automáticamente, no retornamos activityId
-    return { eventId };
+    return { eventId, activityId };
   }
 
   /**
