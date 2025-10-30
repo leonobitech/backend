@@ -52,6 +52,7 @@ export class GetLeadsTool implements ITool<GetLeadsInput, GetLeadsResponse> {
       fields: [
         "id",
         "name",
+        "partner_id",
         "partner_name",
         "contact_name",
         "email_from",
