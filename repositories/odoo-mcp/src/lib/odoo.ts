@@ -1034,7 +1034,7 @@ export class OdooClient {
     }
 
     // Vincular el partner a la oportunidad
-    await this.update("crm.lead", [opportunityId], { partner_id: partnerId });
+    await this.write("crm.lead", [opportunityId], { partner_id: partnerId });
 
     // Registrar en el chatter
     await this.postMessageToChatter({
