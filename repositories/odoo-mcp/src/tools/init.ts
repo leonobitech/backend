@@ -15,6 +15,8 @@ import { SearchContactsTool } from "./odoo/contacts/search-contacts/search-conta
 import { CreateContactTool } from "./odoo/contacts/create-contact/create-contact.tool";
 import { ScheduleMeetingTool } from "./odoo/calendar/schedule-meeting/schedule-meeting.tool";
 import { SendEmailTool } from "./odoo/email/send-email/send-email.tool";
+import { CompleteActivityTool } from "./odoo/activities/complete-activity/complete-activity.tool";
+import { SendReminderTool } from "./odoo/activities/send-reminder/send-reminder.tool";
 import { createOdooClient, type OdooCredentials } from "@/lib/odoo";
 import { logger } from "@/lib/logger";
 
@@ -108,6 +110,21 @@ export async function initializeTools(): Promise<ToolRegistry> {
   // Email Tools
   registry.register(new SendEmailTool(odooClient), {
     category: "odoo/email",
+    version: "2.0.0",
+    requiredScopes: ["odoo:email"],
+    estimatedTime: 1500,
+  });
+
+  // Activity Management Tools
+  registry.register(new CompleteActivityTool(odooClient), {
+    category: "odoo/activities",
+    version: "2.0.0",
+    requiredScopes: ["odoo:write"],
+    estimatedTime: 1000,
+  });
+
+  registry.register(new SendReminderTool(odooClient), {
+    category: "odoo/activities",
     version: "2.0.0",
     requiredScopes: ["odoo:email"],
     estimatedTime: 1500,
