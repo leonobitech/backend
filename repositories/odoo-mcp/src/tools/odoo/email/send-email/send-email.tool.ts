@@ -25,6 +25,12 @@ export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
       throw new Error('Either templateType or body must be provided');
     }
 
+    // IMPORTANTE: Solo crear y vincular contacto cuando se envía propuesta o demo
+    // Esto mueve la oportunidad de "Qualified" → "Proposition"
+    if (params.templateType === 'proposal' || params.templateType === 'demo') {
+      await this.odooClient.ensureOpportunityHasPartner(params.opportunityId);
+    }
+
     const result = await this.odooClient.sendEmailToOpportunity({
       opportunityId: params.opportunityId,
       subject: params.subject,

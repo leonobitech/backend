@@ -735,10 +735,7 @@ export class OdooClient {
       availableSlots: Array<{ start: string; end: string }>;
     };
   }> {
-    // PASO 1: Asegurar que la oportunidad tenga un contacto vinculado
-    await this.ensureOpportunityHasPartner(data.opportunityId);
-
-    // PASO 2: Obtener información de la oportunidad para vincular partner
+    // PASO 1: Obtener información de la oportunidad para vincular partner
     const opportunities = await this.read("crm.lead", [data.opportunityId], ["partner_id", "user_id"]);
 
     if (opportunities.length === 0) {
@@ -975,7 +972,7 @@ export class OdooClient {
    *
    * @returns partnerId del contacto vinculado (existente o recién creado)
    */
-  private async ensureOpportunityHasPartner(opportunityId: number): Promise<number> {
+  async ensureOpportunityHasPartner(opportunityId: number): Promise<number> {
     // Obtener datos de la oportunidad
     const opportunities = await this.read("crm.lead", [opportunityId], [
       "partner_id",
@@ -1064,10 +1061,7 @@ export class OdooClient {
     body: string;
     emailTo?: string; // Si no se proporciona, usa el email del partner de la oportunidad
   }): Promise<SendEmailResult> {
-    // PASO 1: Asegurar que la oportunidad tenga un contacto vinculado
-    await this.ensureOpportunityHasPartner(data.opportunityId);
-
-    // PASO 2: Obtener información de la oportunidad para extraer el email si no se proporciona
+    // PASO 1: Obtener información de la oportunidad para extraer el email si no se proporciona
     let recipientEmail = data.emailTo;
 
     if (!recipientEmail) {
