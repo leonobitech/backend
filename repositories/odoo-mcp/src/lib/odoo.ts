@@ -531,6 +531,7 @@ export class OdooClient {
     dateDeadline?: string;
     note?: string;
     calendarEventId?: number; // Vincular a evento de calendario
+    userId?: number; // Usuario al que se asigna la actividad (vendedor)
   }): Promise<number> {
     // Mapear tipo de actividad a ID (estos son los IDs por defecto en Odoo)
     const activityTypeMap: Record<string, number> = {
@@ -546,7 +547,7 @@ export class OdooClient {
       activity_type_id: activityTypeId,
       summary: data.summary,
       res_model: data.resModel || "crm.lead",
-      user_id: this.uid // Asignar al usuario actual
+      user_id: data.userId || this.uid // Asignar al userId especificado o al usuario actual
     };
 
     if (data.resId) values.res_id = data.resId;
@@ -804,8 +805,10 @@ export class OdooClient {
     const eventId = await this.create("calendar.event", values);
 
     // PASO 3: Crear actividad (mail.activity) vinculada a la oportunidad Y al evento
-    // Esto hace que la reunión aparezca en la columna de "Actividades" de la oportunidad
+    // IMPORTANTE: La actividad se asigna al vendedor (user_id) de la oportunidad
     let activityId: number | undefined;
+    const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
+
     try {
       // Formatear la fecha para la actividad (solo fecha, sin hora)
       const deadlineDate = new Date(data.start).toISOString().split('T')[0];
@@ -816,11 +819,12 @@ export class OdooClient {
         resModel: "crm.lead",
         resId: data.opportunityId,
         dateDeadline: deadlineDate,
-        calendarEventId: eventId, // IMPORTANTE: Vincular al evento de calendario
+        calendarEventId: eventId, // Vincular al evento de calendario
+        userId: vendorUserId, // CRÍTICO: Asignar al vendedor, no al usuario de API
         note: data.description || `Reunión agendada en calendario.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
       });
 
-      logger.info({ opportunityId: data.opportunityId, eventId, activityId }, "Activity created and linked to calendar event");
+      logger.info({ opportunityId: data.opportunityId, eventId, activityId, vendorUserId }, "Activity created, linked to calendar event, and assigned to salesperson");
     } catch (error) {
       logger.warn({ error, opportunityId: data.opportunityId, eventId }, "Failed to create activity, but calendar event was created");
     }
@@ -887,7 +891,7 @@ export class OdooClient {
           `;
 
           // Enviar email al vendedor
-          await this.create("mail.mail", {
+          const mailId = await this.create("mail.mail", {
             subject: `📅 Reunión agendada: ${data.name}`,
             body_html: emailBody,
             email_to: vendorEmail,
@@ -895,7 +899,15 @@ export class OdooClient {
             state: "outgoing"
           });
 
-          logger.info({ opportunityId: data.opportunityId, eventId, vendorEmail }, "Confirmation email sent to salesperson");
+          // Forzar procesamiento inmediato de la cola de emails
+          try {
+            await this.execute_kw("mail.mail", "process_email_queue", [], {});
+            logger.info({ mailId, vendorEmail }, "Vendor email queue processed immediately");
+          } catch (queueError) {
+            logger.warn({ queueError, mailId }, "Could not force immediate vendor email send, will be sent by cron");
+          }
+
+          logger.info({ opportunityId: data.opportunityId, eventId, mailId, vendorEmail }, "Confirmation email sent to salesperson");
         }
       } catch (error) {
         logger.warn({ error, opportunityId: data.opportunityId }, "Failed to send confirmation email to salesperson");
