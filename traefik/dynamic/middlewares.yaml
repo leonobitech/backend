@@ -286,34 +286,6 @@ http:
         referrerPolicy: "no-referrer"
 
     # -------------------------------------------------------------------------
-    # 🔧 n8n-secure – Middleware específico para n8n con CSP permisiva
-    # -------------------------------------------------------------------------
-    n8n-secure:
-      headers:
-        stsSeconds: 315360000
-        forceSTSHeader: true
-        stsIncludeSubdomains: true
-        stsPreload: true
-        SSLHost: "leonobitech.com"
-        browserXssFilter: true
-        contentTypeNosniff: true
-        frameDeny: false  # n8n usa iframes internos
-        referrerPolicy: "no-referrer"
-
-        accessControlAllowHeaders: "Origin,Content-Type,Accept,Authorization,X-CSRF-Token,X-Requested-With,Cookie"
-
-        # CSP muy permisiva para n8n - permite todos sus recursos
-        contentSecurityPolicy: >-
-          default-src 'self' data: blob: https:;
-          script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io https://sentry.com;
-          style-src 'self' 'unsafe-inline' https:;
-          img-src 'self' data: blob: https:;
-          connect-src 'self' blob: data: https://*.leonobitech.com wss://*.leonobitech.com https://static.cloudflareinsights.com https://sentry.com;
-          font-src 'self' data: https:;
-          frame-ancestors 'self';
-          worker-src 'self' blob:;
-
-    # -------------------------------------------------------------------------
     # 🧬 Combinado: Autenticación + headers relajados para frontends
     # -------------------------------------------------------------------------
     combined-auth-relaxed:

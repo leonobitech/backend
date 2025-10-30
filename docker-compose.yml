@@ -272,7 +272,7 @@ services:
       - "traefik.http.routers.n8n_ui.entrypoints=websecure"
       - "traefik.http.routers.n8n_ui.tls.certresolver=le"
       - "traefik.http.routers.n8n_ui.service=n8n_main@docker"
-      - "traefik.http.routers.n8n_ui.middlewares=core-auth@file,n8n-secure@file"
+      - "traefik.http.routers.n8n_ui.middlewares=core-auth@file, secure-relaxed@file"
 
       #########################################
       # 🎨 Assets estáticos (sin auth, mayor prioridad)
@@ -282,7 +282,7 @@ services:
       - "traefik.http.routers.n8n_assets.tls.certresolver=le"
       - "traefik.http.routers.n8n_assets.service=n8n_main@docker"
       - "traefik.http.routers.n8n_assets.priority=30"
-      - "traefik.http.routers.n8n_assets.middlewares=n8n-secure@file"
+      - "traefik.http.routers.n8n_assets.middlewares=secure-basic@file"
 
       #########################################
       # 🔧 API / Webhooks (públicos pero con headers seguros)
@@ -292,7 +292,7 @@ services:
       - "traefik.http.routers.n8n_rest.tls.certresolver=le"
       - "traefik.http.routers.n8n_rest.service=n8n_main@docker"
       - "traefik.http.routers.n8n_rest.priority=20"
-      - "traefik.http.routers.n8n_rest.middlewares=n8n-secure@file,api-nostore-vary@file"
+      - "traefik.http.routers.n8n_rest.middlewares=secure-relaxed@file, api-nostore-vary@file"
 
       #########################################
       # 🖼️ Rutas estáticas (íconos, sin auth)
@@ -301,7 +301,7 @@ services:
       - "traefik.http.routers.n8n_icons.entrypoints=websecure"
       - "traefik.http.routers.n8n_icons.tls.certresolver=le"
       - "traefik.http.routers.n8n_icons.service=n8n_main@docker"
-      - "traefik.http.routers.n8n_icons.middlewares=n8n-secure@file"
+      - "traefik.http.routers.n8n_icons.middlewares=secure-relaxed@file"
 
       #########################################
       # 🎯 Webhook público de test (libre pero con headers mínimos)
