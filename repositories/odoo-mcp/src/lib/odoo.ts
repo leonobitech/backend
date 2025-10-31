@@ -843,19 +843,21 @@ export class OdooClient {
       };
     }
 
-    // FLUJO CORRECTO: Crear calendar.event con opportunity_id
-    // Odoo automáticamente crea la actividad vinculada cuando creamos el evento
-    // El evento tiene toda la info: fecha, hora, duración, ubicación
-    // La actividad es solo un recordatorio/tarea vinculada
+    // FLUJO DEFINITIVO: Crear AMBOS (evento + actividad) y vincularlos
+    // 1. Crear calendar.event (con hora, duración, ubicación)
+    // 2. Crear mail.activity (para que aparezca en "Actividades planeadas")
+    // 3. Vincularlos con calendar_event_id
 
     const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
+    const deadlineDate = new Date(data.start).toISOString().split('T')[0];
 
+    // PASO 1: Crear evento de calendario con TODA la información
     logger.info({
       opportunityId: data.opportunityId,
       vendorUserId,
       start: data.start,
       duration
-    }, "Creating calendar event - Odoo will auto-create linked activity");
+    }, "Step 1: Creating calendar event with full details");
 
     const eventValues: Record<string, any> = {
       name: data.name,
@@ -872,19 +874,43 @@ export class OdooClient {
 
     const eventId = await this.create("calendar.event", eventValues);
 
+    logger.info({ eventId, opportunityId: data.opportunityId }, "Step 1 completed: Calendar event created");
+
+    // PASO 2: Crear actividad de reunión para que aparezca en "Actividades planeadas"
     logger.info({
       eventId,
       opportunityId: data.opportunityId,
-      partnerIds
-    }, "Calendar event created - Odoo will auto-create activity and send invitations");
+      deadlineDate
+    }, "Step 2: Creating meeting activity");
+
+    const activityId = await this.createActivity({
+      activityType: "meeting",
+      summary: data.name,
+      resModel: "crm.lead",
+      resId: data.opportunityId,
+      dateDeadline: deadlineDate,
+      userId: vendorUserId,
+      note: data.description || `Reunión: ${data.name}`
+    });
+
+    logger.info({ activityId, eventId }, "Step 2 completed: Activity created");
+
+    // PASO 3: Vincular la actividad con el evento de calendario
+    try {
+      await this.write("mail.activity", [activityId], {
+        calendar_event_id: eventId
+      });
+      logger.info({ activityId, eventId }, "Step 3 completed: Activity linked to calendar event");
+    } catch (error) {
+      logger.warn({ error, activityId, eventId }, "Could not link activity to event");
+    }
 
     // Odoo automáticamente:
-    // - Crea la actividad vinculada (mail.activity)
     // - Envía invitaciones por email al contacto Y al vendedor
     // - Registra el evento en el chatter
     // - Muestra en todos los calendarios
 
-    // PASO 2: Progresión automática de etapa (New → Qualified)
+    // PASO 4: Progresión automática de etapa (New → Qualified)
     try {
       await this.autoProgressStage({
         opportunityId: data.opportunityId,
@@ -894,7 +920,7 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
     }
 
-    return { eventId };
+    return { eventId, activityId };
   }
 
   /**
