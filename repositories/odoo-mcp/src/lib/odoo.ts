@@ -543,17 +543,25 @@ export class OdooClient {
 
     const activityTypeId = activityTypeMap[data.activityType] || 1;
 
+    // Validar res_id PRIMERO
+    if (!data.resId || data.resId <= 0) {
+      throw new Error(`Invalid res_id for mail.activity: ${data.resId}. Must be a positive integer.`);
+    }
+
+    // Construir values con res_id PRIMERO (orden puede importar en XML-RPC)
     const values: Record<string, any> = {
+      res_model: data.resModel || "crm.lead",
+      res_id: data.resId, // PRIMERO: el ID del registro
       activity_type_id: activityTypeId,
       summary: data.summary,
-      res_model: data.resModel || "crm.lead",
-      res_id: data.resId, // OBLIGATORIO: ID del registro vinculado
-      user_id: data.userId || this.uid // Asignar al userId especificado o al usuario actual
+      user_id: data.userId || this.uid
     };
 
+    // Campos opcionales
     if (data.dateDeadline) values.date_deadline = data.dateDeadline;
     if (data.note) values.note = data.note;
-    if (data.calendarEventId) values.calendar_event_id = data.calendarEventId;
+    // NO incluir calendar_event_id porque causa que la actividad se vincule al contacto
+    // if (data.calendarEventId) values.calendar_event_id = data.calendarEventId;
 
     // Log para debugging
     logger.info({
