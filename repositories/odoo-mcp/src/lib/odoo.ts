@@ -843,75 +843,46 @@ export class OdooClient {
       };
     }
 
-    // FLUJO CORRECTO EN ODOO:
-    // 1. Crear actividad de reunión (pendiente)
-    // 2. Crear evento de calendario vinculado a la actividad
-    // 3. Vincular ambos (actividad queda PENDIENTE hasta que ocurra la reunión)
+    // FLUJO SIMPLIFICADO EN ODOO:
+    // Solo crear el evento de calendario con opportunity_id
+    // Odoo automáticamente:
+    // - Crea la actividad vinculada
+    // - Muestra el evento en el calendario del contacto vinculado
+    // - Envía invitaciones a los participantes
 
     const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
-
-    // PASO 1: Crear actividad de reunión PRIMERO (quedará pendiente)
-    const deadlineDate = new Date(data.start).toISOString().split('T')[0];
 
     logger.info({
       opportunityId: data.opportunityId,
       vendorUserId,
-      deadlineDate,
-      resModel: "crm.lead"
-    }, "Step 1: Creating activity for CRM opportunity");
+      partnerIds,
+      start: data.start
+    }, "Creating calendar event for CRM opportunity");
 
-    const activityId = await this.createActivity({
-      activityType: "meeting",
-      summary: data.name,
-      resModel: "crm.lead",
-      resId: data.opportunityId,
-      dateDeadline: deadlineDate,
-      userId: vendorUserId,
-      note: data.description || `Reunión agendada.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
-    });
-
-    logger.info({ activityId, opportunityId: data.opportunityId }, "Step 1 completed: Activity created (pending)");
-
-    // PASO 2: Crear evento de calendario vinculado a la actividad
+    // Crear evento de calendario vinculado directamente a la oportunidad
     const values: Record<string, any> = {
       name: data.name,
       start: data.start,
       stop: this.calculateEndTime(data.start, duration),
       duration,
-      res_model: "crm.lead",
-      res_id: data.opportunityId,
-      partner_ids: [[6, 0, partnerIds]], // Odoo many2many format
-      user_id: vendorUserId,
-      activity_ids: [[6, 0, [activityId]]] // Vincular el evento a la actividad
+      opportunity_id: data.opportunityId, // Campo específico para vincular al CRM lead/opportunity
+      partner_ids: [[6, 0, partnerIds]], // Participantes (contacto + vendedor)
+      user_id: vendorUserId // Usuario responsable
     };
 
     if (data.description) values.description = data.description;
     if (data.location) values.location = data.location;
 
-    logger.info({ activityId, opportunityId: data.opportunityId }, "Step 2: Creating calendar event");
-
     const eventId = await this.create("calendar.event", values);
 
-    logger.info({ eventId, activityId, opportunityId: data.opportunityId }, "Step 2 completed: Calendar event created");
+    logger.info({
+      eventId,
+      opportunityId: data.opportunityId,
+      partnerIds,
+      vendorUserId
+    }, "Calendar event created and linked to CRM opportunity - Odoo will handle activity creation automatically");
 
-    // PASO 3: Vincular el evento a la actividad (PERO NO completarla - debe quedar pendiente)
-    try {
-      // Actualizar la actividad con el calendar_event_id
-      await this.write("mail.activity", [activityId], {
-        calendar_event_id: eventId
-      });
-
-      logger.info({ activityId, eventId, opportunityId: data.opportunityId }, "Step 3 completed: Activity linked to calendar event and remains PENDING until meeting occurs");
-    } catch (error) {
-      logger.error({
-        error,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        activityId,
-        eventId
-      }, "Failed to link activity to calendar event, but both were created successfully");
-    }
-
-    // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
+    // PASO 2: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
     // El contacto ya recibe email automáticamente por estar en partner_ids del evento
     if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
       try {
