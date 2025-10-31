@@ -846,7 +846,16 @@ export class OdooClient {
 
       logger.info({ opportunityId: data.opportunityId, eventId, activityId, vendorUserId }, "Activity created and linked to CRM opportunity (not to calendar event)");
     } catch (error) {
-      logger.warn({ error, opportunityId: data.opportunityId, eventId }, "Failed to create activity, but calendar event was created");
+      logger.error({
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        opportunityId: data.opportunityId,
+        eventId,
+        vendorUserId,
+        attemptedResModel: "crm.lead",
+        attemptedResId: data.opportunityId
+      }, "CRITICAL: Failed to create activity for CRM opportunity");
     }
 
     // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
