@@ -794,7 +794,7 @@ export class OdooClient {
     };
   }> {
     // PASO 1: Obtener información de la oportunidad para vincular partner
-    const opportunities = await this.read("crm.lead", [data.opportunityId], ["partner_id", "user_id"]);
+    const opportunities = await this.read("crm.lead", [data.opportunityId], ["partner_id", "partner_name", "user_id"]);
 
     if (opportunities.length === 0) {
       throw new Error(`Opportunity #${data.opportunityId} not found`);
