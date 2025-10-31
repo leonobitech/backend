@@ -547,13 +547,24 @@ export class OdooClient {
       activity_type_id: activityTypeId,
       summary: data.summary,
       res_model: data.resModel || "crm.lead",
+      res_id: data.resId, // OBLIGATORIO: ID del registro vinculado
       user_id: data.userId || this.uid // Asignar al userId especificado o al usuario actual
     };
 
-    if (data.resId) values.res_id = data.resId;
     if (data.dateDeadline) values.date_deadline = data.dateDeadline;
     if (data.note) values.note = data.note;
     if (data.calendarEventId) values.calendar_event_id = data.calendarEventId;
+
+    // Log para debugging
+    logger.info({
+      activityValues: {
+        activity_type_id: values.activity_type_id,
+        summary: values.summary,
+        res_model: values.res_model,
+        res_id: values.res_id,
+        user_id: values.user_id
+      }
+    }, "Creating mail.activity with these values");
 
     return this.create("mail.activity", values);
   }
@@ -814,6 +825,13 @@ export class OdooClient {
     try {
       // Formatear la fecha para la actividad (solo fecha, sin hora)
       const deadlineDate = new Date(data.start).toISOString().split('T')[0];
+
+      logger.info({
+        opportunityId: data.opportunityId,
+        vendorUserId,
+        deadlineDate,
+        resModel: "crm.lead"
+      }, "About to create activity for CRM opportunity");
 
       activityId = await this.createActivity({
         activityType: "meeting",
