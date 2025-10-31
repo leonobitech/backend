@@ -959,12 +959,12 @@ export class OdooClient {
             state: "outgoing"
           });
 
-          // Forzar envío inmediato del email
+          // Forzar procesamiento inmediato de la cola de emails
           try {
-            await this.execute_kw("mail.mail", "send", [[mailId]], {});
-            logger.info({ mailId, vendorEmail }, "Vendor notification email sent immediately");
+            await this.execute_kw("mail.mail", "process_email_queue", [], {});
+            logger.info({ mailId, vendorEmail }, "Email queue processed - vendor notification sent immediately");
           } catch (sendError) {
-            logger.warn({ sendError, mailId }, "Could not force send immediately, will be sent by cron");
+            logger.warn({ sendError, mailId }, "Could not force email queue processing, will be sent by cron");
           }
         }
       } catch (error) {
