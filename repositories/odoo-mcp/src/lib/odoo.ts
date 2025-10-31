@@ -906,11 +906,93 @@ export class OdooClient {
     }
 
     // Odoo automáticamente:
-    // - Envía invitaciones por email al contacto Y al vendedor
+    // - Envía invitaciones por email al contacto (externo)
     // - Registra el evento en el chatter
     // - Muestra en todos los calendarios
 
-    // PASO 4: Progresión automática de etapa (New → Qualified)
+    // PASO 4: Enviar invitación por email al vendedor (SMTP directo, sin IMAP)
+    if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
+      try {
+        const userId = opp.user_id[0];
+        const users = await this.read("res.users", [userId], ["name", "email"]);
+
+        if (users.length > 0 && users[0].email) {
+          const vendorName = users[0].name || "Vendedor";
+          const vendorEmail = users[0].email;
+
+          const startDate = new Date(data.start);
+          const formattedDate = startDate.toLocaleString("es-ES", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "America/Bogota"
+          });
+
+          const emailBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #875A7B;">📅 Invitación a Reunión</h2>
+              <p>Hola <strong>${vendorName}</strong>,</p>
+              <p>Has sido invitado a la siguiente reunión:</p>
+
+              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #875A7B;">
+                <h3 style="margin-top: 0; color: #875A7B;">${data.name}</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #666; width: 120px;"><strong>📅 Fecha:</strong></td>
+                    <td style="padding: 8px 0;">${formattedDate}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #666;"><strong>⏱️ Duración:</strong></td>
+                    <td style="padding: 8px 0;">${duration} hora(s)</td>
+                  </tr>
+                  ${data.location ? `
+                  <tr>
+                    <td style="padding: 8px 0; color: #666;"><strong>📍 Ubicación:</strong></td>
+                    <td style="padding: 8px 0;">${data.location}</td>
+                  </tr>
+                  ` : ''}
+                </table>
+              </div>
+
+              ${data.description ? `
+              <div style="padding: 15px; background-color: #fff; border: 1px solid #e0e0e0; border-radius: 5px; margin: 20px 0;">
+                <strong>Descripción:</strong>
+                <p style="margin: 10px 0 0 0; color: #555;">${data.description}</p>
+              </div>
+              ` : ''}
+
+              <p style="margin-top: 20px;">
+                <strong>Asistentes:</strong><br>
+                • ${vendorName} (Organizador)<br>
+                ${opp.partner_name ? `• ${opp.partner_name}` : ''}
+              </p>
+
+              <p style="color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #e0e0e0; padding-top: 15px;">
+                Este evento ha sido agregado automáticamente a tu calendario de Odoo.<br>
+                <em>Sistema automatizado Leonobitech</em>
+              </p>
+            </div>
+          `;
+
+          const mailId = await this.create("mail.mail", {
+            subject: `📅 Invitación: ${data.name}`,
+            body_html: emailBody,
+            email_to: vendorEmail,
+            auto_delete: false,
+            state: "outgoing"
+          });
+
+          logger.info({ mailId, vendorEmail, eventId, activityId }, "Vendor invitation email queued for sending");
+        }
+      } catch (error) {
+        logger.warn({ error, opportunityId: data.opportunityId }, "Failed to send invitation email to vendor");
+      }
+    }
+
+    // PASO 5: Progresión automática de etapa (New → Qualified)
     try {
       await this.autoProgressStage({
         opportunityId: data.opportunityId,
