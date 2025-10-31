@@ -959,7 +959,13 @@ export class OdooClient {
             state: "outgoing"
           });
 
-          logger.info({ mailId, vendorEmail, eventId, activityId }, "Vendor notification email queued");
+          // Forzar envío inmediato del email
+          try {
+            await this.execute_kw("mail.mail", "send", [[mailId]], {});
+            logger.info({ mailId, vendorEmail }, "Vendor notification email sent immediately");
+          } catch (sendError) {
+            logger.warn({ sendError, mailId }, "Could not force send immediately, will be sent by cron");
+          }
         }
       } catch (error) {
         logger.warn({ error, opportunityId: data.opportunityId }, "Failed to send notification to vendor");
