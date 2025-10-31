@@ -910,7 +910,7 @@ export class OdooClient {
     // - Registra el evento en el chatter
     // - Muestra en todos los calendarios
 
-    // PASO 4: Crear calendar.attendee para el vendedor usando plantilla nativa de Odoo
+    // PASO 4: Forzar envío de invitación al vendedor (ya está en partner_ids del evento)
     if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
       try {
         const userId = opp.user_id[0];
@@ -919,23 +919,28 @@ export class OdooClient {
         if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
           const vendorPartnerId = users[0].partner_id[0];
 
-          // Crear attendee para el vendedor (esto dispara invitación con plantilla nativa)
-          const attendeeId = await this.create("calendar.attendee", {
-            event_id: eventId,
-            partner_id: vendorPartnerId,
-            state: "needsAction" // Pendiente de respuesta (Accept/Decline/Tentative)
-          });
+          // Buscar el attendee que ya se creó automáticamente (porque está en partner_ids)
+          const attendees = await this.search("calendar.attendee", [
+            ["event_id", "=", eventId],
+            ["partner_id", "=", vendorPartnerId]
+          ], { limit: 1 });
 
-          // Forzar envío de invitación usando método nativo de Odoo
-          try {
-            await this.execute_kw("calendar.attendee", "do_send_mail", [[attendeeId]], {});
-            logger.info({ attendeeId, vendorPartnerId, eventId }, "Vendor invitation sent using Odoo native calendar template");
-          } catch (sendError) {
-            logger.warn({ sendError, attendeeId }, "Could not force send invitation immediately, will be sent by cron");
+          if (attendees.length > 0) {
+            const attendeeId = attendees[0];
+
+            // Forzar envío de invitación usando método nativo de Odoo
+            try {
+              await this.execute_kw("calendar.attendee", "do_send_mail", [[attendeeId]], {});
+              logger.info({ attendeeId, vendorPartnerId, eventId }, "Vendor invitation sent using Odoo native calendar template");
+            } catch (sendError) {
+              logger.warn({ sendError, attendeeId }, "Could not force send invitation, will be sent by cron");
+            }
+          } else {
+            logger.warn({ vendorPartnerId, eventId }, "No attendee found for vendor - may not be in partner_ids");
           }
         }
       } catch (error) {
-        logger.warn({ error, opportunityId: data.opportunityId }, "Failed to create calendar attendee for vendor");
+        logger.warn({ error, opportunityId: data.opportunityId }, "Failed to send invitation to vendor");
       }
     }
 
