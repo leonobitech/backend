@@ -548,14 +548,35 @@ export class OdooClient {
       throw new Error(`Invalid res_id for mail.activity: ${data.resId}. Must be a positive integer.`);
     }
 
-    // Construir values con res_id PRIMERO (orden puede importar en XML-RPC)
+    // CRITICAL: Obtener res_model_id (el ID del modelo ir.model)
+    // Odoo requiere esto para vincular correctamente la actividad
+    let resModelId: number | undefined;
+    try {
+      const models = await this.search("ir.model", [["model", "=", data.resModel || "crm.lead"]], {
+        fields: ["id"],
+        limit: 1
+      });
+      if (models.length > 0) {
+        resModelId = models[0].id;
+        logger.info({ resModel: data.resModel, resModelId }, "Found res_model_id for activity");
+      }
+    } catch (error) {
+      logger.warn({ error }, "Could not fetch res_model_id");
+    }
+
+    // Construir values con TODOS los campos necesarios
     const values: Record<string, any> = {
       res_model: data.resModel || "crm.lead",
-      res_id: data.resId, // PRIMERO: el ID del registro
+      res_id: data.resId,
       activity_type_id: activityTypeId,
       summary: data.summary,
       user_id: data.userId || this.uid
     };
+
+    // Agregar res_model_id si lo encontramos
+    if (resModelId) {
+      values.res_model_id = resModelId;
+    }
 
     // Campos opcionales
     if (data.dateDeadline) values.date_deadline = data.dateDeadline;
