@@ -581,8 +581,7 @@ export class OdooClient {
     // Campos opcionales
     if (data.dateDeadline) values.date_deadline = data.dateDeadline;
     if (data.note) values.note = data.note;
-    // NO incluir calendar_event_id porque causa que la actividad se vincule al contacto
-    // if (data.calendarEventId) values.calendar_event_id = data.calendarEventId;
+    if (data.calendarEventId) values.calendar_event_id = data.calendarEventId;
 
     // Log para debugging
     logger.info({
@@ -596,6 +595,22 @@ export class OdooClient {
     }, "Creating mail.activity with these values");
 
     return this.create("mail.activity", values);
+  }
+
+  /**
+   * Completar/cerrar una actividad (marcarla como hecha)
+   */
+  async completeActivity(activityId: number, feedback?: string): Promise<void> {
+    try {
+      // Odoo usa el método action_done para completar actividades
+      await this.execute_kw("mail.activity", "action_done", [[activityId]], {
+        feedback: feedback || ""
+      });
+      logger.info({ activityId, feedback }, "Activity marked as done");
+    } catch (error) {
+      logger.error({ activityId, error }, "Failed to complete activity");
+      throw error;
+    }
   }
 
   /**
@@ -828,10 +843,36 @@ export class OdooClient {
       };
     }
 
-    // Si está disponible o se fuerza el agendamiento, crear el evento
-    // IMPORTANTE: Incluir user_id del vendedor para que Odoo cree la actividad automáticamente
+    // FLUJO CORRECTO EN ODOO:
+    // 1. Crear actividad de reunión (pendiente)
+    // 2. Crear evento de calendario vinculado a la actividad
+    // 3. Completar la actividad (action_done) para que aparezca el icono 📅 en CRM
+
     const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
 
+    // PASO 1: Crear actividad de reunión PRIMERO (quedará pendiente)
+    const deadlineDate = new Date(data.start).toISOString().split('T')[0];
+
+    logger.info({
+      opportunityId: data.opportunityId,
+      vendorUserId,
+      deadlineDate,
+      resModel: "crm.lead"
+    }, "Step 1: Creating activity for CRM opportunity");
+
+    const activityId = await this.createActivity({
+      activityType: "meeting",
+      summary: data.name,
+      resModel: "crm.lead",
+      resId: data.opportunityId,
+      dateDeadline: deadlineDate,
+      userId: vendorUserId,
+      note: data.description || `Reunión agendada.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
+    });
+
+    logger.info({ activityId, opportunityId: data.opportunityId }, "Step 1 completed: Activity created (pending)");
+
+    // PASO 2: Crear evento de calendario vinculado a la actividad
     const values: Record<string, any> = {
       name: data.name,
       start: data.start,
@@ -840,51 +881,39 @@ export class OdooClient {
       res_model: "crm.lead",
       res_id: data.opportunityId,
       partner_ids: [[6, 0, partnerIds]], // Odoo many2many format
-      user_id: vendorUserId // Usuario responsable (vendedor) - Odoo crea actividad automáticamente
+      user_id: vendorUserId,
+      activity_ids: [[6, 0, [activityId]]] // Vincular el evento a la actividad
     };
 
     if (data.description) values.description = data.description;
     if (data.location) values.location = data.location;
 
+    logger.info({ activityId, opportunityId: data.opportunityId }, "Step 2: Creating calendar event");
+
     const eventId = await this.create("calendar.event", values);
 
-    // PASO 3: Crear actividad manualmente vinculada SOLO a la oportunidad
-    // NO vincular calendar_event_id porque eso la dirige al contacto en lugar de la oportunidad
-    let activityId: number | undefined;
+    logger.info({ eventId, activityId, opportunityId: data.opportunityId }, "Step 2 completed: Calendar event created");
+
+    // PASO 3: Vincular el evento a la actividad y completarla
     try {
-      // Formatear la fecha para la actividad (solo fecha, sin hora)
-      const deadlineDate = new Date(data.start).toISOString().split('T')[0];
-
-      logger.info({
-        opportunityId: data.opportunityId,
-        vendorUserId,
-        deadlineDate,
-        resModel: "crm.lead"
-      }, "About to create activity for CRM opportunity");
-
-      activityId = await this.createActivity({
-        activityType: "meeting",
-        summary: data.name,
-        resModel: "crm.lead",
-        resId: data.opportunityId,
-        dateDeadline: deadlineDate,
-        userId: vendorUserId,
-        // NO incluir calendarEventId - eso la vincula al contacto
-        note: data.description || `Reunión agendada en calendario.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
+      // Actualizar la actividad con el calendar_event_id
+      await this.write("mail.activity", [activityId], {
+        calendar_event_id: eventId
       });
 
-      logger.info({ opportunityId: data.opportunityId, eventId, activityId, vendorUserId }, "Activity created and linked to CRM opportunity (not to calendar event)");
+      logger.info({ activityId, eventId }, "Step 3a: Activity linked to calendar event");
+
+      // Completar la actividad (esto hace que aparezca el icono 📅 en el CRM)
+      await this.completeActivity(activityId, `Reunión programada en calendario para ${deadlineDate}`);
+
+      logger.info({ activityId, eventId, opportunityId: data.opportunityId }, "Step 3b completed: Activity marked as done - Calendar icon should appear in CRM");
     } catch (error) {
       logger.error({
         error,
         errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined,
-        opportunityId: data.opportunityId,
-        eventId,
-        vendorUserId,
-        attemptedResModel: "crm.lead",
-        attemptedResId: data.opportunityId
-      }, "CRITICAL: Failed to create activity for CRM opportunity");
+        activityId,
+        eventId
+      }, "Failed to complete activity, but event was created successfully");
     }
 
     // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
