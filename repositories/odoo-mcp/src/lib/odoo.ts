@@ -910,37 +910,59 @@ export class OdooClient {
     // - Registra el evento en el chatter
     // - Muestra en todos los calendarios
 
-    // PASO 4: Forzar envío de invitación al vendedor (ya está en partner_ids del evento)
+    // PASO 4: Enviar notificación por email al vendedor (usuarios internos no reciben invitaciones nativas)
+    // Odoo solo envía invitaciones automáticas a contactos externos, no a usuarios internos
     if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
       try {
         const userId = opp.user_id[0];
-        const users = await this.read("res.users", [userId], ["partner_id"]);
+        const users = await this.read("res.users", [userId], ["name", "email"]);
 
-        if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
-          const vendorPartnerId = users[0].partner_id[0];
+        if (users.length > 0 && users[0].email) {
+          const vendorName = users[0].name || "Usuario";
+          const vendorEmail = users[0].email;
 
-          // Buscar el attendee que ya se creó automáticamente (porque está en partner_ids)
-          const attendees = await this.search("calendar.attendee", [
-            ["event_id", "=", eventId],
-            ["partner_id", "=", vendorPartnerId]
-          ], { limit: 1 });
+          const startDate = new Date(data.start);
+          const formattedDate = startDate.toLocaleString("es-ES", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+          });
 
-          if (attendees.length > 0) {
-            const attendeeId = attendees[0];
+          const emailBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+              <h2 style="color: #875A7B;">📅 Reunión Programada</h2>
+              <p>Hola <strong>${vendorName}</strong>,</p>
+              <p>Se ha programado la siguiente reunión en tu calendario:</p>
 
-            // Forzar envío de invitación usando método nativo de Odoo
-            try {
-              await this.execute_kw("calendar.attendee", "do_send_mail", [[attendeeId]], {});
-              logger.info({ attendeeId, vendorPartnerId, eventId }, "Vendor invitation sent using Odoo native calendar template");
-            } catch (sendError) {
-              logger.warn({ sendError, attendeeId }, "Could not force send invitation, will be sent by cron");
-            }
-          } else {
-            logger.warn({ vendorPartnerId, eventId }, "No attendee found for vendor - may not be in partner_ids");
-          }
+              <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #875A7B;">
+                <h3 style="margin: 0 0 15px 0; color: #875A7B;">${data.name}</h3>
+                <p style="margin: 5px 0;"><strong>📅 Fecha:</strong> ${formattedDate}</p>
+                <p style="margin: 5px 0;"><strong>⏱️ Duración:</strong> ${duration} hora(s)</p>
+                ${data.location ? `<p style="margin: 5px 0;"><strong>📍 Ubicación:</strong> ${data.location}</p>` : ''}
+                ${data.description ? `<p style="margin: 5px 0;"><strong>📝 Descripción:</strong> ${data.description}</p>` : ''}
+                ${opp.partner_name ? `<p style="margin: 5px 0;"><strong>👤 Con:</strong> ${opp.partner_name}</p>` : ''}
+              </div>
+
+              <p style="color: #666; font-size: 14px;">Este evento está disponible en tu calendario de Odoo.</p>
+              <p style="color: #999; font-size: 12px; margin-top: 20px;"><em>Sistema automatizado Leonobitech</em></p>
+            </div>
+          `;
+
+          const mailId = await this.create("mail.mail", {
+            subject: `📅 Reunión programada: ${data.name}`,
+            body_html: emailBody,
+            email_to: vendorEmail,
+            auto_delete: false,
+            state: "outgoing"
+          });
+
+          logger.info({ mailId, vendorEmail, eventId, activityId }, "Vendor notification email queued");
         }
       } catch (error) {
-        logger.warn({ error, opportunityId: data.opportunityId }, "Failed to send invitation to vendor");
+        logger.warn({ error, opportunityId: data.opportunityId }, "Failed to send notification to vendor");
       }
     }
 
