@@ -967,43 +967,9 @@ export class OdooClient {
       }
     }
 
-    // Publicar mensaje en el chatter de la oportunidad
-    const startDate = new Date(data.start);
-    const formattedDate = startDate.toLocaleString("es-ES", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
+    // Odoo automáticamente registra el evento en el chatter, no necesitamos hacerlo manualmente
 
-    const chatterMessage = `
-      <p>📅 <strong>Reunión agendada</strong></p>
-      <ul>
-        <li><strong>Título:</strong> ${data.name}</li>
-        <li><strong>Fecha:</strong> ${formattedDate}</li>
-        <li><strong>Duración:</strong> ${duration} hora(s)</li>
-        ${data.location ? `<li><strong>Ubicación:</strong> ${data.location}</li>` : ""}
-        ${data.description ? `<li><strong>Descripción:</strong> ${data.description}</li>` : ""}
-      </ul>
-      <p>✅ <strong>Actividad creada:</strong> Esta reunión aparecerá en la columna de actividades.</p>
-      <p><em>Sistema automatizado Leonobitech</em></p>
-    `;
-
-    try {
-      await this.postMessageToChatter({
-        model: "crm.lead",
-        resId: data.opportunityId,
-        body: chatterMessage,
-        messageType: "comment"
-      });
-      logger.info({ opportunityId: data.opportunityId, eventId, activityId }, "Meeting logged to opportunity chatter");
-    } catch (error) {
-      logger.warn({ error, opportunityId: data.opportunityId }, "Failed to post meeting to chatter, but event was created");
-    }
-
-    // Progresión automática de etapa (New → Qualified)
+    // PASO 3: Progresión automática de etapa (New → Qualified)
     try {
       await this.autoProgressStage({
         opportunityId: data.opportunityId,
@@ -1013,7 +979,7 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
     }
 
-    return { eventId, activityId };
+    return { eventId };
   }
 
   /**
