@@ -846,7 +846,7 @@ export class OdooClient {
     // FLUJO CORRECTO EN ODOO:
     // 1. Crear actividad de reunión (pendiente)
     // 2. Crear evento de calendario vinculado a la actividad
-    // 3. Completar la actividad (action_done) para que aparezca el icono 📅 en CRM
+    // 3. Vincular ambos (actividad queda PENDIENTE hasta que ocurra la reunión)
 
     const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
 
@@ -894,26 +894,21 @@ export class OdooClient {
 
     logger.info({ eventId, activityId, opportunityId: data.opportunityId }, "Step 2 completed: Calendar event created");
 
-    // PASO 3: Vincular el evento a la actividad y completarla
+    // PASO 3: Vincular el evento a la actividad (PERO NO completarla - debe quedar pendiente)
     try {
       // Actualizar la actividad con el calendar_event_id
       await this.write("mail.activity", [activityId], {
         calendar_event_id: eventId
       });
 
-      logger.info({ activityId, eventId }, "Step 3a: Activity linked to calendar event");
-
-      // Completar la actividad (esto hace que aparezca el icono 📅 en el CRM)
-      await this.completeActivity(activityId, `Reunión programada en calendario para ${deadlineDate}`);
-
-      logger.info({ activityId, eventId, opportunityId: data.opportunityId }, "Step 3b completed: Activity marked as done - Calendar icon should appear in CRM");
+      logger.info({ activityId, eventId, opportunityId: data.opportunityId }, "Step 3 completed: Activity linked to calendar event and remains PENDING until meeting occurs");
     } catch (error) {
       logger.error({
         error,
         errorMessage: error instanceof Error ? error.message : String(error),
         activityId,
         eventId
-      }, "Failed to complete activity, but event was created successfully");
+      }, "Failed to link activity to calendar event, but both were created successfully");
     }
 
     // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
