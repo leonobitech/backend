@@ -870,96 +870,15 @@ export class OdooClient {
     logger.info({
       activityId,
       opportunityId: data.opportunityId
-    }, "Meeting activity created - Odoo should auto-create calendar event and send invitations");
+    }, "Meeting activity created - Odoo will auto-create calendar event and send invitations to all participants");
 
-    // PASO 2: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
-    // El contacto ya recibe email automáticamente si Odoo crea el calendar.event
-    if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
-      try {
-        const userId = opp.user_id[0];
-        const users = await this.read("res.users", [userId], ["partner_id", "name", "email"]);
+    // Odoo automáticamente:
+    // - Crea el calendar.event
+    // - Envía invitaciones por email al contacto Y al vendedor
+    // - Registra el evento en el chatter
+    // - Muestra en todos los calendarios
 
-        if (users.length > 0 && users[0].email) {
-          const vendorName = users[0].name || "Vendedor";
-          const vendorEmail = users[0].email;
-
-          const startDate = new Date(data.start);
-          const formattedDate = startDate.toLocaleString("es-ES", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit"
-          });
-
-          const emailBody = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #2c3e50;">📅 Reunión Agendada - Confirmación</h2>
-              <p>Hola <strong>${vendorName}</strong>,</p>
-              <p>Se ha agendado una nueva reunión para la oportunidad <strong>#${data.opportunityId}</strong>:</p>
-
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <table style="width: 100%;">
-                  <tr>
-                    <td style="padding: 8px 0; color: #666;"><strong>Título:</strong></td>
-                    <td style="padding: 8px 0;">${data.name}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px 0; color: #666;"><strong>Fecha:</strong></td>
-                    <td style="padding: 8px 0;">${formattedDate}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px 0; color: #666;"><strong>Duración:</strong></td>
-                    <td style="padding: 8px 0;">${duration} hora(s)</td>
-                  </tr>
-                  ${data.location ? `
-                  <tr>
-                    <td style="padding: 8px 0; color: #666;"><strong>Ubicación:</strong></td>
-                    <td style="padding: 8px 0;">${data.location}</td>
-                  </tr>
-                  ` : ''}
-                  ${data.description ? `
-                  <tr>
-                    <td style="padding: 8px 0; color: #666;"><strong>Descripción:</strong></td>
-                    <td style="padding: 8px 0;">${data.description}</td>
-                  </tr>
-                  ` : ''}
-                </table>
-              </div>
-
-              <p style="color: #666; font-size: 14px;">Este evento ha sido agregado a tu calendario de Odoo.</p>
-              <p style="color: #999; font-size: 12px; font-style: italic;">Sistema automatizado Leonobitech</p>
-            </div>
-          `;
-
-          // Enviar email al vendedor
-          const mailId = await this.create("mail.mail", {
-            subject: `📅 Reunión agendada: ${data.name}`,
-            body_html: emailBody,
-            email_to: vendorEmail,
-            auto_delete: false,
-            state: "outgoing"
-          });
-
-          // Forzar procesamiento inmediato de la cola de emails
-          try {
-            await this.execute_kw("mail.mail", "process_email_queue", [], {});
-            logger.info({ mailId, vendorEmail }, "Vendor email queue processed immediately");
-          } catch (queueError) {
-            logger.warn({ queueError, mailId }, "Could not force immediate vendor email send, will be sent by cron");
-          }
-
-          logger.info({ opportunityId: data.opportunityId, eventId, mailId, vendorEmail }, "Confirmation email sent to salesperson");
-        }
-      } catch (error) {
-        logger.warn({ error, opportunityId: data.opportunityId }, "Failed to send confirmation email to salesperson");
-      }
-    }
-
-    // Odoo automáticamente registra el evento en el chatter, no necesitamos hacerlo manualmente
-
-    // PASO 3: Progresión automática de etapa (New → Qualified)
+    // PASO 2: Progresión automática de etapa (New → Qualified)
     try {
       await this.autoProgressStage({
         opportunityId: data.opportunityId,
