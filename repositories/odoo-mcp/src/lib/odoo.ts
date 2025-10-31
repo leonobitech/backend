@@ -843,31 +843,49 @@ export class OdooClient {
       };
     }
 
-    // FLUJO SIMPLIFICADO EN ODOO:
-    // Solo crear el evento de calendario con opportunity_id
-    // Odoo automáticamente:
-    // - Crea la actividad vinculada
-    // - Muestra el evento en el calendario del contacto vinculado
-    // - Envía invitaciones a los participantes
+    // FLUJO NINJA EN ODOO (2 PASOS):
+    // 1. Crear actividad de reunión (pendiente, sin calendario todavía)
+    // 2. Crear evento de calendario que "programa" esa actividad
+    // 3. Vincular explícitamente ambos
+    // Resultado: Actividad de reunión CON fecha programada en calendario
 
     const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
+    const deadlineDate = new Date(data.start).toISOString().split('T')[0];
 
+    // PASO 1: Crear actividad de reunión PRIMERO (sin evento de calendario)
     logger.info({
       opportunityId: data.opportunityId,
       vendorUserId,
-      partnerIds,
-      start: data.start
-    }, "Creating calendar event for CRM opportunity");
+      deadlineDate
+    }, "Step 1: Creating meeting activity (pending, no calendar event yet)");
 
-    // Crear evento de calendario vinculado directamente a la oportunidad
+    const activityId = await this.createActivity({
+      activityType: "meeting",
+      summary: data.name,
+      resModel: "crm.lead",
+      resId: data.opportunityId,
+      dateDeadline: deadlineDate,
+      userId: vendorUserId,
+      note: data.description || `Reunión programada.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
+    });
+
+    logger.info({ activityId, opportunityId: data.opportunityId }, "Step 1 completed: Activity created (pending)");
+
+    // PASO 2: Crear evento de calendario que "programa" la actividad
+    logger.info({
+      activityId,
+      opportunityId: data.opportunityId,
+      start: data.start
+    }, "Step 2: Creating calendar event to schedule the activity");
+
     const values: Record<string, any> = {
       name: data.name,
       start: data.start,
       stop: this.calculateEndTime(data.start, duration),
       duration,
-      opportunity_id: data.opportunityId, // Campo específico para vincular al CRM lead/opportunity
-      partner_ids: [[6, 0, partnerIds]], // Participantes (contacto + vendedor)
-      user_id: vendorUserId // Usuario responsable
+      opportunity_id: data.opportunityId,
+      partner_ids: [[6, 0, partnerIds]],
+      user_id: vendorUserId
     };
 
     if (data.description) values.description = data.description;
@@ -875,14 +893,19 @@ export class OdooClient {
 
     const eventId = await this.create("calendar.event", values);
 
-    logger.info({
-      eventId,
-      opportunityId: data.opportunityId,
-      partnerIds,
-      vendorUserId
-    }, "Calendar event created and linked to CRM opportunity - Odoo will handle activity creation automatically");
+    logger.info({ eventId, activityId, opportunityId: data.opportunityId }, "Step 2 completed: Calendar event created");
 
-    // PASO 2: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
+    // PASO 3: Vincular la actividad con el evento de calendario
+    try {
+      await this.write("mail.activity", [activityId], {
+        calendar_event_id: eventId
+      });
+      logger.info({ activityId, eventId }, "Step 3 completed: Activity linked to calendar event - NOW it's a scheduled meeting with calendar date!");
+    } catch (error) {
+      logger.warn({ error, activityId, eventId }, "Could not link activity to event, but both were created successfully");
+    }
+
+    // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
     // El contacto ya recibe email automáticamente por estar en partner_ids del evento
     if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
       try {
@@ -969,7 +992,7 @@ export class OdooClient {
 
     // Odoo automáticamente registra el evento en el chatter, no necesitamos hacerlo manualmente
 
-    // PASO 3: Progresión automática de etapa (New → Qualified)
+    // PASO 5: Progresión automática de etapa (New → Qualified)
     try {
       await this.autoProgressStage({
         opportunityId: data.opportunityId,
@@ -979,7 +1002,7 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
     }
 
-    return { eventId };
+    return { eventId, activityId };
   }
 
   /**
