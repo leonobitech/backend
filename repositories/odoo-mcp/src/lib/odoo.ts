@@ -843,21 +843,19 @@ export class OdooClient {
       };
     }
 
-    // FLUJO NINJA EN ODOO (2 PASOS):
-    // 1. Crear actividad de reunión (pendiente, sin calendario todavía)
-    // 2. Crear evento de calendario que "programa" esa actividad
-    // 3. Vincular explícitamente ambos
-    // Resultado: Actividad de reunión CON fecha programada en calendario
+    // FLUJO SIMPLIFICADO (SOLO CREAR ACTIVIDAD):
+    // Odoo automáticamente crea el calendar.event cuando detecta una actividad tipo "meeting"
+    // Esto evita duplicados - solo creamos la actividad y Odoo hace el resto
 
     const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
     const deadlineDate = new Date(data.start).toISOString().split('T')[0];
 
-    // PASO 1: Crear actividad de reunión PRIMERO (sin evento de calendario)
     logger.info({
       opportunityId: data.opportunityId,
       vendorUserId,
-      deadlineDate
-    }, "Step 1: Creating meeting activity (pending, no calendar event yet)");
+      deadlineDate,
+      start: data.start
+    }, "Creating meeting activity - Odoo will auto-create calendar event");
 
     const activityId = await this.createActivity({
       activityType: "meeting",
@@ -869,44 +867,13 @@ export class OdooClient {
       note: data.description || `Reunión programada.\nFecha: ${data.start}\nDuración: ${duration} hora(s)${data.location ? `\nUbicación: ${data.location}` : ''}`
     });
 
-    logger.info({ activityId, opportunityId: data.opportunityId }, "Step 1 completed: Activity created (pending)");
-
-    // PASO 2: Crear evento de calendario que "programa" la actividad
     logger.info({
       activityId,
-      opportunityId: data.opportunityId,
-      start: data.start
-    }, "Step 2: Creating calendar event to schedule the activity");
+      opportunityId: data.opportunityId
+    }, "Meeting activity created - Odoo should auto-create calendar event and send invitations");
 
-    const values: Record<string, any> = {
-      name: data.name,
-      start: data.start,
-      stop: this.calculateEndTime(data.start, duration),
-      duration,
-      opportunity_id: data.opportunityId,
-      partner_ids: [[6, 0, partnerIds]],
-      user_id: vendorUserId
-    };
-
-    if (data.description) values.description = data.description;
-    if (data.location) values.location = data.location;
-
-    const eventId = await this.create("calendar.event", values);
-
-    logger.info({ eventId, activityId, opportunityId: data.opportunityId }, "Step 2 completed: Calendar event created");
-
-    // PASO 3: Vincular la actividad con el evento de calendario
-    try {
-      await this.write("mail.activity", [activityId], {
-        calendar_event_id: eventId
-      });
-      logger.info({ activityId, eventId }, "Step 3 completed: Activity linked to calendar event - NOW it's a scheduled meeting with calendar date!");
-    } catch (error) {
-      logger.warn({ error, activityId, eventId }, "Could not link activity to event, but both were created successfully");
-    }
-
-    // PASO 4: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
-    // El contacto ya recibe email automáticamente por estar en partner_ids del evento
+    // PASO 2: Enviar email de confirmación al VENDEDOR (user_id de la oportunidad)
+    // El contacto ya recibe email automáticamente si Odoo crea el calendar.event
     if (opp.user_id && Array.isArray(opp.user_id) && opp.user_id[0]) {
       try {
         const userId = opp.user_id[0];
@@ -992,7 +959,7 @@ export class OdooClient {
 
     // Odoo automáticamente registra el evento en el chatter, no necesitamos hacerlo manualmente
 
-    // PASO 5: Progresión automática de etapa (New → Qualified)
+    // PASO 3: Progresión automática de etapa (New → Qualified)
     try {
       await this.autoProgressStage({
         opportunityId: data.opportunityId,
@@ -1002,7 +969,7 @@ export class OdooClient {
       logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
     }
 
-    return { eventId, activityId };
+    return { activityId };
   }
 
   /**
