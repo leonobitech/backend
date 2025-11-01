@@ -233,7 +233,8 @@ function arrayToTextList(items) {
 // 3. CONSTRUIR MENSAJE PARA WHATSAPP (Texto plano)
 // ============================================================================
 
-let whatsappText = sanitizeText(message.text);
+// Agregar prefijo del bot
+let whatsappText = `🤖 Leonobit:\n${sanitizeText(message.text)}`;
 
 // Agregar fuentes si RAG fue usado
 if (message.rag_used && Array.isArray(message.sources) && message.sources.length > 0) {
@@ -249,7 +250,8 @@ if (message.rag_used && Array.isArray(message.sources) && message.sources.length
 // 4. CONSTRUIR MENSAJE PARA ODOO (HTML)
 // ============================================================================
 
-let bodyHtml = markdownToHtml(message.text);
+// Agregar prefijo del bot con formato HTML
+let bodyHtml = `<p><strong>🤖 Leonobit:</strong></p>\n${markdownToHtml(message.text)}`;
 
 // Agregar fuentes
 if (message.rag_used && Array.isArray(message.sources) && message.sources.length > 0) {
