@@ -229,10 +229,20 @@ Return a single JSON object with this structure:
       { "service_id": "svc-odoo-automation", "name": "Process Automation (Odoo/ERP)" }
     ]
   },
-  "state_update": {
+  "profile": {
+    "lead_id": 33,
+    "row_id": 198,
+    "full_name": "Felix Figueroa",
+    "email": null,
+    "phone": "+549...",
+    "country": "Argentina"
+  },
+  "state": {
+    "lead_id": 33,
     "stage": "qualify",
     "interests": ["CRM", "Odoo"],
     "business_name": "restaurante pequeño",
+    "email": null,
     "counters": {
       "services_seen": 1,
       "prices_asked": 1,
@@ -241,7 +251,9 @@ Return a single JSON object with this structure:
     "cooldowns": {
       "email_ask_ts": null,
       "addressee_ask_ts": "2025-10-31T14:16:42Z"
-    }
+    },
+    "last_proposal_offer_ts": null,
+    "proposal_offer_done": false
   },
   "cta_menu": {
     "prompt": "¿Cómo querés avanzar?",
@@ -268,14 +280,24 @@ Return a single JSON object with this structure:
 
 - **`sources`**: Array of services referenced (if rag_used=true). Empty array if false.
 
-#### `state_update` (required)
-Update the lead's state based on the conversation. Only include fields that changed.
+#### `profile` (required)
+Return the complete profile object from `smart_input.profile`. This should be the SAME structure you received, with any updates applied (e.g., if user provides email, update it here).
+
+**IMPORTANT**: Always return the FULL profile object, not just changed fields.
+
+#### `state` (required)
+Return the complete state object with ALL fields updated based on the conversation.
+
+**IMPORTANT**: This must be the COMPLETE state, not just a diff/update. Merge your changes with the incoming `smart_input.state` and return the full result.
 
 - **`stage`**: Current funnel stage (follow stage_policy rules)
 - **`interests`**: Array of canonical service names (use services_aliases to normalize)
 - **`business_name`**: Extract if user mentions (e.g., "mi restaurante" → "restaurante")
-- **`counters`**: Update if user action warrants it (monotonic)
-- **`cooldowns`**: Update timestamp if YOU asked for something
+- **`email`**: User's email (update if provided)
+- **`counters`**: Update if user action warrants it (monotonic - never decrease)
+- **`cooldowns`**: Update timestamp if YOU asked for something (use current timestamp)
+- **`last_proposal_offer_ts`**: Update if you offer a proposal
+- **`proposal_offer_done`**: Set to true if proposal was offered
 
 #### `cta_menu` (optional)
 Only include if you want to show action buttons. Make it natural.
@@ -509,12 +531,31 @@ Before returning your JSON output, verify:
       { "service_id": "svc-odoo-automation", "name": "Process Automation (Odoo/ERP)" }
     ]
   },
-  "state_update": {
+  "profile": {
+    "lead_id": 33,
+    "row_id": 198,
+    "full_name": "Felix Figueroa",
+    "email": null,
+    "phone": "+549...",
+    "country": "Argentina"
+  },
+  "state": {
+    "lead_id": 33,
     "stage": "qualify",
+    "interests": ["CRM", "Odoo"],
     "business_name": "restaurante",
+    "email": null,
     "counters": {
+      "services_seen": 1,
+      "prices_asked": 0,
       "deep_interest": 1
-    }
+    },
+    "cooldowns": {
+      "email_ask_ts": null,
+      "addressee_ask_ts": null
+    },
+    "last_proposal_offer_ts": null,
+    "proposal_offer_done": false
   },
   "cta_menu": null,
   "internal_reasoning": {

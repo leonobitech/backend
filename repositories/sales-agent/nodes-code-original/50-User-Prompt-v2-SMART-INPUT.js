@@ -45,7 +45,7 @@ ${JSON.stringify(smartInput, null, 2)}
 3. **Check the current state** (stage, interests, counters, cooldowns)
 4. **Consult the rules** for business policies
 5. **Use RAG** if the user mentions services or needs
-6. **Update state** based on the conversation
+6. **Return COMPLETE profile and state** (merge your updates with the input)
 7. **Respond naturally** in Spanish
 
 Remember:
@@ -54,6 +54,7 @@ Remember:
 - Respect cooldowns and stage transitions
 - Extract business context (business_name, industry)
 - Only show CTAs when it makes sense
+- **IMPORTANT**: Return the FULL \`profile\` and \`state\` objects (not just diffs)
 
 Now respond to the user following the System Prompt guidelines.`;
 }
@@ -96,9 +97,11 @@ ${JSON.stringify($json.smart_input, null, 2)}
 **Instructions**: Read the context above and respond following the System Prompt guidelines.
 
 1. Use RAG if user mentions services
-2. Update state based on conversation
+2. Return COMPLETE profile and state (merge your updates with the input)
 3. Respond naturally in Spanish (2-4 sentences)
 4. Only show CTAs if it makes sense
+
+**IMPORTANT**: Return the FULL \`profile\` and \`state\` objects in your response (not just diffs).
 
 Now respond to the user.`;
 
