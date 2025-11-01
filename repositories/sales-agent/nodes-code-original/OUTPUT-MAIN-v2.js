@@ -29,40 +29,66 @@ console.log('[OutputMain] RAG used:', message.rag_used);
 console.log('[OutputMain] CTA menu:', cta_menu ? 'present' : 'null');
 console.log('[OutputMain] State update:', state_update ? Object.keys(state_update) : 'none');
 
-// Pass-through data con fallback a nodos upstream
-let lead_id = inputData.lead_id;
-let profile = inputData.profile;
-let state_base = inputData.state;
+// ============================================================================
+// ESTRATEGIA DE OBTENCIÓN DE DATOS:
+//
+// El Master Agent DEBERÍA devolver profile y state completos actualizados.
+// Como fallback, buscamos en Input Main y aplicamos state_update manualmente.
+// ============================================================================
 
-// Fallback: buscar en Input Main si no vienen en inputData
-if (!lead_id || !profile || !state_base) {
+// 1. Intentar obtener datos directamente del Master Agent output
+let lead_id = masterOutput.lead_id || inputData.lead_id;
+let profile = masterOutput.profile || inputData.profile;
+let state = masterOutput.state || inputData.state;
+
+// 2. Fallback: buscar en Input Main si no vienen en ningún lado
+if (!lead_id || !profile || !state) {
   try {
     const inputMainNode = $('Input Main').first()?.json;
     if (inputMainNode) {
       lead_id = lead_id || inputMainNode.lead_id;
       profile = profile || inputMainNode.profile;
-      state_base = state_base || inputMainNode.state;
-      console.log('[OutputMain] Using fallback data from Input Main node');
+      state = state || inputMainNode.state;
+      console.log('[OutputMain] ⚠️ Using fallback data from Input Main node');
     }
   } catch (e) {
     console.log('[OutputMain] Warning: Could not access Input Main node:', e.message);
   }
 }
 
-// Validar que tenemos los datos necesarios
+// 3. Si tenemos state_update pero no state completo, hacer merge manual
+if (!masterOutput.state && state_update && state) {
+  console.log('[OutputMain] ⚠️ Master Agent returned state_update instead of full state, merging manually');
+  state = { ...state };
+
+  // Aplicar state_update
+  Object.keys(state_update).forEach(key => {
+    if (key === 'counters' && state_update.counters) {
+      state.counters = { ...state.counters, ...state_update.counters };
+    } else if (key === 'cooldowns' && state_update.cooldowns) {
+      state.cooldowns = { ...state.cooldowns, ...state_update.cooldowns };
+    } else if (state_update[key] !== undefined) {
+      state[key] = state_update[key];
+    }
+  });
+}
+
+// 4. Validar que tenemos los datos necesarios
 if (!lead_id) {
-  throw new Error('[OutputMain] Missing lead_id (not found in inputData or Input Main node)');
+  throw new Error('[OutputMain] Missing lead_id (not found in Master Agent, inputData, or Input Main node)');
 }
 if (!profile || !profile.row_id) {
   throw new Error('[OutputMain] Missing profile.row_id (required for StatePatchLead)');
 }
-if (!state_base) {
-  throw new Error('[OutputMain] Missing state_base (required for state merge)');
+if (!state) {
+  throw new Error('[OutputMain] Missing state (required for persistence)');
 }
 
-console.log('[OutputMain] lead_id:', lead_id);
-console.log('[OutputMain] profile.row_id:', profile.row_id);
-console.log('[OutputMain] state_base.stage:', state_base.stage);
+console.log('[OutputMain] ✅ Data loaded:');
+console.log('  - lead_id:', lead_id);
+console.log('  - profile.row_id:', profile.row_id);
+console.log('  - state.stage:', state.stage);
+console.log('  - state.counters:', JSON.stringify(state.counters || {}));
 
 // ============================================================================
 // 2. HELPERS - Formateo de texto
@@ -287,21 +313,12 @@ if (!cta_menu && hasQuestion) {
 }
 
 // ============================================================================
-// 6. ACTUALIZAR STATE CON state_update
+// 6. STATE FINAL PARA PERSISTIR
 // ============================================================================
 
-const updatedState = { ...state_base };
-
-if (state_update) {
-  // Merge state updates
-  Object.keys(state_update).forEach(key => {
-    if (state_update[key] !== undefined) {
-      updatedState[key] = state_update[key];
-    }
-  });
-
-  console.log('[OutputMain] State updated with keys:', Object.keys(state_update));
-}
+// El state ya fue merged arriba (líneas 59-74) si vino state_update
+// Aquí solo lo asignamos como state_for_persist
+const state_for_persist = state;
 
 // ============================================================================
 // 7. METADATA
@@ -342,7 +359,7 @@ const output = {
   // Para Odoo Record Agent Response (espera "id" no "lead_id")
   id: lead_id,
 
-  state_for_persist: updatedState,
+  state_for_persist: state_for_persist,
 
   profile_for_persist: profile,
 
