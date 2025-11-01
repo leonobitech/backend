@@ -9,6 +9,7 @@ Este directorio contiene los archivos principales del **Master Agent v2.0**, la 
 ```
 master-agent-v2/
 ├── README.md                      # Este archivo
+├── CHAT-HISTORY-FILTER.js         # Limpia y deduplica historial de Odoo
 ├── COMPOSE-PROFILE.js             # Transforma Baserow row → profile
 ├── LOAD-PROFILE-AND-STATE.js      # Construye profile + state con fallbacks
 ├── INPUT-MAIN.js                  # Construye Smart Input y User Prompt
