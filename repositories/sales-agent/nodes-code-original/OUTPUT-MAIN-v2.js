@@ -29,10 +29,40 @@ console.log('[OutputMain] RAG used:', message.rag_used);
 console.log('[OutputMain] CTA menu:', cta_menu ? 'present' : 'null');
 console.log('[OutputMain] State update:', state_update ? Object.keys(state_update) : 'none');
 
-// Pass-through data
-const lead_id = inputData.lead_id;
-const profile = inputData.profile;
-const state_base = inputData.state;
+// Pass-through data con fallback a nodos upstream
+let lead_id = inputData.lead_id;
+let profile = inputData.profile;
+let state_base = inputData.state;
+
+// Fallback: buscar en Input Main si no vienen en inputData
+if (!lead_id || !profile || !state_base) {
+  try {
+    const inputMainNode = $('Input Main').first()?.json;
+    if (inputMainNode) {
+      lead_id = lead_id || inputMainNode.lead_id;
+      profile = profile || inputMainNode.profile;
+      state_base = state_base || inputMainNode.state;
+      console.log('[OutputMain] Using fallback data from Input Main node');
+    }
+  } catch (e) {
+    console.log('[OutputMain] Warning: Could not access Input Main node:', e.message);
+  }
+}
+
+// Validar que tenemos los datos necesarios
+if (!lead_id) {
+  throw new Error('[OutputMain] Missing lead_id (not found in inputData or Input Main node)');
+}
+if (!profile || !profile.row_id) {
+  throw new Error('[OutputMain] Missing profile.row_id (required for StatePatchLead)');
+}
+if (!state_base) {
+  throw new Error('[OutputMain] Missing state_base (required for state merge)');
+}
+
+console.log('[OutputMain] lead_id:', lead_id);
+console.log('[OutputMain] profile.row_id:', profile.row_id);
+console.log('[OutputMain] state_base.stage:', state_base.stage);
 
 // ============================================================================
 // 2. HELPERS - Formateo de texto
