@@ -309,6 +309,9 @@ const output = {
   // Para Baserow (actualizar lead)
   lead_id: lead_id,
 
+  // Para Odoo Record Agent Response (espera "id" no "lead_id")
+  id: lead_id,
+
   state_for_persist: updatedState,
 
   profile_for_persist: profile,
