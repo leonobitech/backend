@@ -8,10 +8,13 @@ Este directorio contiene los archivos principales del **Master Agent v2.0**, la 
 
 ```
 master-agent-v2/
-├── README.md                    # Este archivo
-├── INPUT-MAIN.js               # Construye Smart Input y User Prompt
-├── SYSTEM-PROMPT.md            # Instrucciones para el LLM (GPT-4o-mini)
-└── OUTPUT-MAIN-v2.js           # Formatea output para Baserow, Odoo y Chatwoot
+├── README.md                      # Este archivo
+├── COMPOSE-PROFILE.js             # Transforma Baserow row → profile
+├── LOAD-PROFILE-AND-STATE.js      # Construye profile + state con fallbacks
+├── INPUT-MAIN.js                  # Construye Smart Input y User Prompt
+├── SYSTEM-PROMPT.md               # Instrucciones para el LLM (GPT-4o-mini)
+├── OUTPUT-MAIN-v2.js              # Formatea output para Baserow, Odoo y Chatwoot
+└── PROFILE-STATE-MAPPING.md       # Documentación Profile vs State
 ```
 
 ---
@@ -21,10 +24,22 @@ master-agent-v2/
 ```
 Webhook (Chatwoot)
   ↓
+Get/Update Baserow Row (Leads table)
+  ↓ (raw Baserow row)
+COMPOSE-PROFILE.js
+  - Transforma row de Baserow a profile
+  - pickVal(), toNum(), toInt0() helpers
+  ↓ (profile object)
+LOAD-PROFILE-AND-STATE.js
+  - Construye profile + state con fallbacks (3 tiers)
+  - Tier 1: ComposeProfile
+  - Tier 2: UpdateLeadWithRow_Id (raw row)
+  - Tier 3: $json.profile (fallback)
+  ↓ (profile + state objects)
 INPUT-MAIN.js
   - Construye Smart Input (history, profile, state, options, rules, meta)
   - Genera User Prompt con contexto completo
-  ↓
+  ↓ (smart_input + userPrompt)
 Master Agent (OpenAI GPT-4o-mini)
   - System Prompt: SYSTEM-PROMPT.md
   - User Prompt: del INPUT-MAIN.js
@@ -53,7 +68,97 @@ Downstream Nodes:
 
 ## 📄 Descripción de Archivos
 
-### 1. INPUT-MAIN.js
+### 1. COMPOSE-PROFILE.js
+
+**Propósito**: Transformar una row raw de Baserow a objeto `profile`.
+
+**Input** (Row de Baserow):
+```javascript
+{
+  "id": 198,
+  "lead_id": 33,
+  "phone_number": "+5491133851987",
+  "channel": { "value": "whatsapp" },
+  "interests": [{ "value": "CRM" }, { "value": "Odoo" }],
+  ...
+}
+```
+
+**Output**:
+```javascript
+{
+  "profile": {
+    "row_id": 198,
+    "lead_id": 33,
+    "phone": "+5491133851987",
+    "channel": "whatsapp",
+    "interests": ["CRM", "Odoo"],
+    ...
+  }
+}
+```
+
+**Helper Functions**:
+- `pickVal(x)`: Extrae `value` de Single/Multiple Select Baserow
+- `toNum(x)`: Convierte a número o null
+- `toInt0(x)`: Convierte a entero, default 0
+
+**Características**:
+- ✅ Maneja diferentes formatos de input (results[0], array[0], direct object)
+- ✅ Normaliza tipos de Baserow (Single Select → string, Multiple Select → array)
+- ✅ Preserva cooldowns (`email_ask_ts`, `addressee_ask_ts`)
+- ✅ Defaults correctos (`tz: "-03:00"`, `stage: "explore"`)
+
+---
+
+### 2. LOAD-PROFILE-AND-STATE.js
+
+**Propósito**: Construir objetos `profile` y `state` con estrategia de fallbacks robusta.
+
+**Estrategia de Obtención (3 tiers)**:
+1. **Tier 1**: ComposeProfile → profile ya transformado (ideal)
+2. **Tier 2**: UpdateLeadWithRow_Id → raw Baserow row (requiere mapeo)
+3. **Tier 3**: $json.profile → fallback del input actual
+
+**Input**:
+- Puede venir de ComposeProfile (profile listo)
+- Puede venir de UpdateLeadWithRow_Id (row de Baserow)
+- Puede venir del $json actual
+
+**Output**:
+```javascript
+{
+  "profile": {
+    "row_id": 198,
+    "lead_id": 33,
+    "full_name": "Felix Figueroa",
+    ...
+  },
+  "state": {
+    "lead_id": 33,
+    "stage": "qualify",
+    "interests": ["CRM", "Odoo"],
+    "counters": { services_seen: 1, ... },
+    "cooldowns": { email_ask_ts: null, ... },
+    ...
+  }
+}
+```
+
+**State Construction**:
+- Campos copiados de profile: `lead_id`, `stage`, `interests`, `email`, counters, cooldowns
+- Campos nuevos en state: `business_name` (null, extraído en conversación)
+- Normalización: counters → objeto con defaults 0, cooldowns → objeto con defaults null
+
+**Características**:
+- ✅ Robusto: múltiples fallbacks evitan fallos
+- ✅ Consistente: siempre devuelve profile + state
+- ✅ Flexible: maneja diferentes fuentes de datos
+- ✅ Safe: defaults correctos para todos los campos
+
+---
+
+### 3. INPUT-MAIN.js
 
 **Propósito**: Construir el contexto completo (Smart Input) para el Master Agent.
 
