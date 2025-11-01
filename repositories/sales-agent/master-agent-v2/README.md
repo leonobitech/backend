@@ -9,13 +9,15 @@ Este directorio contiene los archivos principales del **Master Agent v2.0**, la 
 ```
 master-agent-v2/
 ├── README.md                      # Este archivo
+├── UPDATE-PAYLOAD.js              # Limpia payload de webhook (row_id + row_always)
 ├── CHAT-HISTORY-FILTER.js         # Limpia y deduplica historial de Odoo
 ├── COMPOSE-PROFILE.js             # Transforma Baserow row → profile
 ├── LOAD-PROFILE-AND-STATE.js      # Construye profile + state con fallbacks
 ├── INPUT-MAIN.js                  # Construye Smart Input y User Prompt
 ├── SYSTEM-PROMPT.md               # Instrucciones para el LLM (GPT-4o-mini)
 ├── OUTPUT-MAIN-v2.js              # Formatea output para Baserow, Odoo y Chatwoot
-└── PROFILE-STATE-MAPPING.md       # Documentación Profile vs State
+├── PROFILE-STATE-MAPPING.md       # Documentación Profile vs State
+└── WORKFLOW-MAPPING.md            # Mapeo de nodos n8n → archivos
 ```
 
 ---
@@ -24,7 +26,11 @@ master-agent-v2/
 
 ```
 Webhook (Chatwoot)
-  ↓
+  ↓ (raw webhook payload)
+UPDATE-PAYLOAD.js
+  - Limpia row_id + row_always
+  - Filtra valores null/undefined
+  ↓ (clean payload)
 Get/Update Baserow Row (Leads table)
   ↓ (raw Baserow row)
 COMPOSE-PROFILE.js
@@ -69,7 +75,46 @@ Downstream Nodes:
 
 ## 📄 Descripción de Archivos
 
-### 1. COMPOSE-PROFILE.js
+### 1. UPDATE-PAYLOAD.js
+
+**Propósito**: Limpiar y normalizar el payload del webhook de Chatwoot antes de actualizar Baserow.
+
+**Input** (Webhook payload):
+```javascript
+{
+  "row_id": 198,
+  "row_always": {
+    "channel": "whatsapp",
+    "last_message": "Hola",
+    "empty_field": null,
+    "undefined_field": undefined
+  }
+}
+```
+
+**Output**:
+```javascript
+{
+  "row_id": 198,
+  "channel": "whatsapp",
+  "last_message": "Hola"
+}
+```
+
+**Función**:
+- Extrae `row_id` del input
+- Toma campos de `row_always`
+- Filtra valores `null` y `undefined`
+- Retorna objeto limpio con `row_id` en el root level
+
+**Características**:
+- ✅ Previene actualizar campos de Baserow con valores nulos
+- ✅ Normaliza estructura para nodos downstream
+- ✅ Simple y predecible (una sola responsabilidad)
+
+---
+
+### 2. COMPOSE-PROFILE.js
 
 **Propósito**: Transformar una row raw de Baserow a objeto `profile`.
 
@@ -112,7 +157,7 @@ Downstream Nodes:
 
 ---
 
-### 2. LOAD-PROFILE-AND-STATE.js
+### 3. LOAD-PROFILE-AND-STATE.js
 
 **Propósito**: Construir objetos `profile` y `state` con estrategia de fallbacks robusta.
 
@@ -159,7 +204,7 @@ Downstream Nodes:
 
 ---
 
-### 3. INPUT-MAIN.js
+### 4. INPUT-MAIN.js
 
 **Propósito**: Construir el contexto completo (Smart Input) para el Master Agent.
 
@@ -213,7 +258,7 @@ Downstream Nodes:
 
 ---
 
-### 2. SYSTEM-PROMPT.md
+### 5. SYSTEM-PROMPT.md
 
 **Propósito**: Instrucciones para el LLM sobre cómo comportarse como Leonobit Sales Agent.
 
@@ -272,7 +317,7 @@ Downstream Nodes:
 
 ---
 
-### 3. OUTPUT-MAIN-v2.js
+### 6. OUTPUT-MAIN-v2.js
 
 **Propósito**: Formatear el output del Master Agent para múltiples destinos.
 
