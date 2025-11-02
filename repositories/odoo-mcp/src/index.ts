@@ -15,6 +15,7 @@ import { oauthRouter } from "@/routes/oauth";
 import { wellKnownRouter } from "@/routes/well-known";
 import { authRouter } from "@/routes/auth";
 import { consentRouter } from "@/routes/consent";
+import { internalMcpRouter } from "@/routes/internal-mcp";
 import { optionalAuth } from "@/middlewares/session.middleware";
 import { scheduleSessionCleanup, cleanupZombieSessions } from "@/services/session-cleanup.service";
 
@@ -98,6 +99,7 @@ app.use("/auth", authRouter);
 app.use("/oauth/consent", consentRouter);
 app.use("/oauth", oauthRouter);
 app.use("/mcp", mcpHttpRouter);
+app.use("/internal/mcp", internalMcpRouter); // Internal MCP for n8n
 
 // Serve HTML pages with session check
 app.get("/register", async (req, res) => {

@@ -52,7 +52,14 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
     .optional()
-    .default("info")
+    .default("info"),
+
+  // Service Account (for internal n8n access)
+  SERVICE_TOKEN: z.string().min(32).optional(),
+  ODOO_SERVICE_URL: z.string().url().optional(),
+  ODOO_SERVICE_DB: z.string().optional(),
+  ODOO_SERVICE_USER: z.string().optional(),
+  ODOO_SERVICE_API_KEY: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);
