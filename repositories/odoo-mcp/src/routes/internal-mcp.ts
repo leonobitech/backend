@@ -17,15 +17,35 @@ const router = Router();
  * Service Authentication Middleware
  */
 function serviceAuth(req: Request, res: Response, next: Function) {
-  const serviceToken = req.headers['x-service-token'];
+  const serviceToken = req.header("X-Service-Token");
 
-  if (!serviceToken || serviceToken !== env.SERVICE_TOKEN) {
-    return res.status(401).json({
-      error: "unauthorized",
-      message: "Invalid or missing X-Service-Token"
+  // Check if SERVICE_TOKEN is configured
+  if (!env.SERVICE_TOKEN) {
+    logger.error("[InternalMCP] SERVICE_TOKEN not configured in .env");
+    return res.status(500).json({
+      error: "server_misconfigured",
+      message: "Service token authentication not configured"
     });
   }
 
+  // Validate token
+  if (!serviceToken) {
+    logger.warn({ headers: req.headers }, "[InternalMCP] Missing X-Service-Token header");
+    return res.status(401).json({
+      error: "unauthorized",
+      message: "Missing X-Service-Token header"
+    });
+  }
+
+  if (serviceToken !== env.SERVICE_TOKEN) {
+    logger.warn("[InternalMCP] Invalid service token");
+    return res.status(401).json({
+      error: "unauthorized",
+      message: "Invalid X-Service-Token"
+    });
+  }
+
+  logger.debug("[InternalMCP] Service token authenticated successfully");
   next();
 }
 
