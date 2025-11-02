@@ -14,8 +14,48 @@
 
 const inputData = $input.first().json;
 
-// Input desde Master Agent v2.0
-const masterOutput = inputData.output ? JSON.parse(inputData.output) : inputData;
+// ============================================================================
+// PARSING ROBUSTO DEL OUTPUT DEL MASTER AGENT
+// ============================================================================
+
+let masterOutput;
+
+if (inputData.output) {
+  try {
+    // Intentar parsear normalmente
+    masterOutput = JSON.parse(inputData.output);
+  } catch (parseError) {
+    console.log('[OutputMain] ⚠️ JSON parse error:', parseError.message);
+    console.log('[OutputMain] Attempting to repair JSON...');
+
+    try {
+      // Intentar reparar: remover keys sin valores en internal_reasoning
+      let fixedJson = inputData.output;
+
+      // Regex para encontrar keys sin valores seguidas de coma o cierre
+      fixedJson = fixedJson.replace(/"([^"]+)"(\s*[,}])/g, (match, key) => {
+        // Si después viene coma o cierre sin ":", es una key sin valor
+        if (!match.includes(':')) {
+          console.log('[OutputMain] Removing invalid key:', key);
+          return ''; // Remover completamente
+        }
+        return match;
+      });
+
+      // Limpiar comas duplicadas y comas antes de cierre
+      fixedJson = fixedJson.replace(/,\s*,/g, ',');
+      fixedJson = fixedJson.replace(/,\s*}/g, '}');
+      fixedJson = fixedJson.replace(/,\s*]/g, ']');
+
+      masterOutput = JSON.parse(fixedJson);
+      console.log('[OutputMain] ✅ JSON repaired successfully');
+    } catch (repairError) {
+      throw new Error(`[OutputMain] Failed to parse JSON: ${parseError.message}. Repair attempt also failed: ${repairError.message}`);
+    }
+  }
+} else {
+  masterOutput = inputData;
+}
 
 // Validar estructura
 if (!masterOutput || !masterOutput.message) {

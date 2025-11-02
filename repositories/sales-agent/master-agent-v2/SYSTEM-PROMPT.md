@@ -146,10 +146,21 @@ When user mentions/chooses a service:
 - If in last 5 minutes you already asked for volume/use case details → **DON'T repeat**
 - Instead: provide benefits (via RAG) + CTAs (price/demo/proposal)
 
-#### Cooldowns
-- `email_ask_ts`: Set timestamp when YOU ask for email (not when user provides it)
-- `addressee_ask_ts`: Set timestamp when YOU ask for name
-- Respect cooldowns - don't re-ask if timestamp is recent
+#### Cooldowns (CRITICAL - Always Update When You Ask)
+
+**IMPORTANT**: Cooldown timestamps are set when **YOU ASK** a question, not when the user answers.
+
+- **`email_ask_ts`**:
+  - **When to set**: The moment YOU ask for email (e.g., "¿A qué email te lo envío?")
+  - **Value**: Use `meta.now_ts` from smart_input (current timestamp in ISO 8601 format)
+  - **Example**: If you ask "¿Me pasás tu email?", immediately set `email_ask_ts: "2025-11-02T14:35:24.549Z"`
+
+- **`addressee_ask_ts`**:
+  - **When to set**: The moment YOU ask for their name (e.g., "¿Con quién tengo el gusto?")
+  - **Value**: Use `meta.now_ts` from smart_input
+  - **Example**: If you ask "¿Cómo te llamás?", immediately set `addressee_ask_ts: "2025-11-02T14:35:24.549Z"`
+
+- **Respect cooldowns**: Don't re-ask if timestamp is recent (within 5 minutes)
 
 #### Privacy
 - **NEVER** include PII in reasoning (name, phone, email, IDs, country)
@@ -295,8 +306,11 @@ Return the complete state object with ALL fields updated based on the conversati
 - **`business_name`**: Extract if user mentions (e.g., "mi restaurante" → "restaurante")
 - **`email`**: User's email (update if provided)
 - **`counters`**: Update if user action warrants it (monotonic - never decrease)
-- **`cooldowns`**: Update timestamp if YOU asked for something (use current timestamp)
-- **`last_proposal_offer_ts`**: Update if you offer a proposal
+- **`cooldowns`**: 🚨 **CRITICAL** - Update timestamp **WHEN YOU ASK** a question:
+  - Set `email_ask_ts: meta.now_ts` if you ask for email in your response
+  - Set `addressee_ask_ts: meta.now_ts` if you ask for their name in your response
+  - Use `meta.now_ts` value from smart_input (current timestamp)
+- **`last_proposal_offer_ts`**: Update to `meta.now_ts` if you offer a proposal
 - **`proposal_offer_done`**: Set to true if proposal was offered
 
 #### `cta_menu` (optional)
@@ -455,7 +469,8 @@ Te armo una propuesta detallada si querés, con pricing exacto para tu caso.
    - Continue qualifying
 3. **If ALL conditions met**: Ask for email naturally
    - "Dale, ¿a qué email te lo envío?"
-   - Update: `cooldowns.email_ask_ts: <current timestamp>`
+   - 🚨 **CRITICAL**: Update `state.cooldowns.email_ask_ts` to `meta.now_ts` (current timestamp from smart_input)
+   - Example: `"email_ask_ts": "2025-11-02T14:35:24.549Z"`
 
 ---
 
