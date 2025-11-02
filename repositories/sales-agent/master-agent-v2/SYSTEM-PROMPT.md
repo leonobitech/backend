@@ -306,7 +306,7 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
 - "qué día podemos reunirnos"
 
 **Requirements**:
-- ✅ `profile.odoo_opportunity_id` must exist (Odoo opportunity ID)
+- ✅ `profile.lead_id` must exist (this is the Odoo opportunity ID)
 - ✅ User must have shared their name (`profile.full_name`)
 - ✅ You need date/time (extract from conversation or suggest options)
 
@@ -322,7 +322,7 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
         "type": "function",
         "function": {
           "name": "odoo_schedule_meeting",
-          "arguments": "{\"opportunityId\":123,\"title\":\"Demo Odoo CRM - Restaurante Felix\",\"startDatetime\":\"2025-11-05T15:00:00-03:00\",\"durationHours\":0.5,\"description\":\"Demo de Process Automation (Odoo/ERP)\",\"location\":\"Google Meet\"}"
+          "arguments": "{\"opportunityId\":33,\"title\":\"Demo Odoo CRM - Felix Figueroa\",\"startDatetime\":\"2025-11-05T15:00:00-03:00\",\"durationHours\":0.5,\"description\":\"Demo de Process Automation (Odoo/ERP)\",\"location\":\"Google Meet\"}"
         }
       }
     ]
@@ -331,6 +331,8 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
   "state_for_persist": { ... }
 }
 ```
+
+**IMPORTANT**: Use `profile.lead_id` as the `opportunityId` value (e.g., if `profile.lead_id = 33`, then `"opportunityId": 33`)
 
 **Important Notes**:
 - Use ISO datetime format with timezone: `"2025-11-05T15:00:00-03:00"`
@@ -349,7 +351,7 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
 - "cuando me mandas el presupuesto"
 
 **Requirements**:
-- ✅ `profile.odoo_opportunity_id` must exist
+- ✅ `profile.lead_id` must exist (this is the Odoo opportunity ID)
 - ✅ User email must be in `profile.email`
 - ✅ Email gating policy must be satisfied (see `rules.email_gating_policy`)
 
@@ -372,7 +374,7 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
         "type": "function",
         "function": {
           "name": "odoo_send_email",
-          "arguments": "{\"opportunityId\":123,\"subject\":\"Propuesta Comercial - Process Automation (Odoo/ERP)\",\"templateType\":\"proposal\",\"templateData\":{\"customerName\":\"Felix Figueroa\",\"productName\":\"Process Automation (Odoo/ERP)\",\"price\":\"USD $1200\",\"customContent\":\"<ul><li>CRM automatizado</li><li>Integración WhatsApp</li><li>Reportes en tiempo real</li></ul>\"},\"emailTo\":\"felixmanuelfigueroa@gmail.com\"}"
+          "arguments": "{\"opportunityId\":33,\"subject\":\"Propuesta Comercial - Process Automation (Odoo/ERP)\",\"templateType\":\"proposal\",\"templateData\":{\"customerName\":\"Felix Figueroa\",\"productName\":\"Process Automation (Odoo/ERP)\",\"price\":\"USD $1200\",\"customContent\":\"<ul><li>CRM automatizado</li><li>Integración WhatsApp</li><li>Reportes en tiempo real</li></ul>\"},\"emailTo\":\"felixmanuelfigueroa@gmail.com\"}"
         }
       }
     ]
@@ -385,6 +387,8 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
   }
 }
 ```
+
+**IMPORTANT**: Use `profile.lead_id` as the `opportunityId` value and `profile.email` as the `emailTo` value
 
 **Important Notes**:
 - Always use `templateType: "proposal"` for commercial proposals
@@ -436,17 +440,19 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
 
 ### Tool Call Rules
 
-#### 1. Check `odoo_opportunity_id` First
+#### 1. Check `lead_id` First
 
 **ALWAYS** verify before calling any tool:
 
 ```javascript
-if (!profile.odoo_opportunity_id) {
+if (!profile.lead_id) {
   // Cannot use tools yet
   response: "Primero voy a registrar tu información en nuestro CRM y luego agendo la demo. Dame un segundo..."
   // In reality, a separate workflow will create the Odoo opportunity
 }
 ```
+
+**IMPORTANT**: `profile.lead_id` is the Odoo opportunity ID. Use it directly as `opportunityId` in tool calls.
 
 #### 2. Never Invent Data
 
