@@ -62,12 +62,38 @@ if (!masterOutput || !masterOutput.message) {
   throw new Error('[OutputMain] Missing required field: message');
 }
 
-const { message, state_update, cta_menu, internal_reasoning } = masterOutput;
+const { message, state_update, cta_menu, internal_reasoning, tool_calls } = masterOutput;
 
 console.log('[OutputMain] Processing message...');
 console.log('[OutputMain] RAG used:', message.rag_used);
 console.log('[OutputMain] CTA menu:', cta_menu ? 'present' : 'null');
 console.log('[OutputMain] State update:', state_update ? Object.keys(state_update) : 'none');
+console.log('[OutputMain] Tool calls:', tool_calls ? tool_calls.length : 0);
+
+// ============================================================================
+// DETECCIÓN DE TOOL CALLS - Si el LLM quiere ejecutar una acción en Odoo
+// ============================================================================
+
+if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
+  console.log('[OutputMain] 🔧 Tool calls detected! LLM wants to execute Odoo actions.');
+  console.log('[OutputMain] Tools to execute:', tool_calls.map(tc => tc.name).join(', '));
+
+  // Agregar tool_calls al output para que el siguiente nodo los procese
+  // El workflow bifurcará: si hay tool_calls → Execute MCP Tool, sino → continuar normal
+  return [{
+    json: {
+      has_tool_calls: true,
+      tool_calls: tool_calls,
+      lead_id: masterOutput.lead_id || inputData.lead_id,
+      profile: masterOutput.profile || inputData.profile,
+      state: masterOutput.state || inputData.state,
+      message: message,
+      state_update: state_update,
+      cta_menu: cta_menu,
+      internal_reasoning: internal_reasoning
+    }
+  }];
+}
 
 // ============================================================================
 // ESTRATEGIA DE OBTENCIÓN DE DATOS:
@@ -380,6 +406,9 @@ const metadata = {
 // ============================================================================
 
 const output = {
+  // Tool calls flag (para Switch node)
+  has_tool_calls: false,
+
   // Para Chatwoot/WhatsApp
   content_whatsapp: {
     content: sanitizeText(whatsappText),
