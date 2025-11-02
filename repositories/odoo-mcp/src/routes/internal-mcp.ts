@@ -60,7 +60,7 @@ router.use(serviceAuth);
 router.get("/tools", async (req, res) => {
   try {
     const registry = ToolRegistry.getInstance();
-    const tools = registry.listTools();
+    const tools = registry.listAll();
 
     // Format for consumption by LLM
     const toolsFormatted = tools.map(tool => ({
@@ -111,7 +111,7 @@ router.post("/call-tool", async (req, res) => {
     logger.info({ tool, arguments: toolArgs }, "[InternalMCP] Calling tool");
 
     const registry = ToolRegistry.getInstance();
-    const toolInstance = registry.getTool(tool);
+    const toolInstance = registry.get(tool);
 
     if (!toolInstance) {
       return res.status(404).json({
@@ -133,10 +133,10 @@ router.post("/call-tool", async (req, res) => {
 
     // Replace dummy client with authenticated service client
     // @ts-ignore - accessing private property for service account override
-    toolInstance.tool.odooClient = odooClient;
+    toolInstance.odooClient = odooClient;
 
     // Execute tool
-    const result = await toolInstance.tool.execute(toolArgs);
+    const result = await toolInstance.execute(toolArgs);
 
     logger.info({ tool, result }, "[InternalMCP] Tool executed successfully");
 
