@@ -172,7 +172,11 @@ async function start() {
 
   // Clean up zombie sessions on startup
   logger.info("[Cleanup] Running initial zombie session cleanup...");
-  await cleanupZombieSessions();
+  try {
+    await cleanupZombieSessions();
+  } catch (err) {
+    logger.error({ err }, "[Cleanup] Failed to cleanup zombie sessions - continuing without cleanup");
+  }
 
   // Schedule automatic cleanup every hour
   scheduleSessionCleanup();
