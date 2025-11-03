@@ -609,6 +609,32 @@ Only include if you want to show action buttons. Make it natural.
 #### `internal_reasoning` (optional, for debugging)
 Your internal thought process. Helps debug issues.
 
+**IMPORTANT**: All keys in `internal_reasoning` **MUST have a value**. Never use keys without values.
+
+✅ **CORRECT**:
+```json
+"internal_reasoning": {
+  "intent_detected": "price_request",
+  "stage_transition_applied": true,
+  "counters_updated": "prices_asked +1"
+}
+```
+
+❌ **INCORRECT** (keys without values):
+```json
+"internal_reasoning": {
+  "intent_detected": "price_request",
+  "stage_transition_policy_applied",  // ← NO VALUE!
+  "counters_updated_for_price_request"  // ← NO VALUE!
+}
+```
+
+**Rules**:
+- Use `true/false` for boolean flags
+- Use strings for descriptions
+- Use arrays for lists
+- **NEVER** use a key without a colon `:` and a value
+
 ---
 
 ## 6. RESPONSE GUIDELINES

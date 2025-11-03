@@ -32,12 +32,15 @@ if (inputData.output) {
       // Intentar reparar: remover keys sin valores en internal_reasoning
       let fixedJson = inputData.output;
 
-      // Regex para encontrar keys sin valores seguidas de coma o cierre
-      fixedJson = fixedJson.replace(/"([^"]+)"(\s*[,}])/g, (match, key) => {
-        // Si después viene coma o cierre sin ":", es una key sin valor
+      // Regex mejorado para encontrar keys sin valores
+      // Patrón: "key_name", (sin : antes de la coma)
+      // Patrón: "key_name" } (sin : antes del cierre)
+      fixedJson = fixedJson.replace(/"([^"]+)"\s*([,}])/g, (match, key, separator) => {
+        // Si NO hay ":" antes del separador, es una key sin valor
         if (!match.includes(':')) {
-          console.log('[OutputMain] Removing invalid key:', key);
-          return ''; // Remover completamente
+          console.log('[OutputMain] Removing invalid key without value:', key);
+          // Si el separador es coma, remover todo; si es }, solo remover la key
+          return separator === ',' ? '' : separator;
         }
         return match;
       });
@@ -46,6 +49,9 @@ if (inputData.output) {
       fixedJson = fixedJson.replace(/,\s*,/g, ',');
       fixedJson = fixedJson.replace(/,\s*}/g, '}');
       fixedJson = fixedJson.replace(/,\s*]/g, ']');
+      // Limpiar comas después de apertura
+      fixedJson = fixedJson.replace(/{\s*,/g, '{');
+      fixedJson = fixedJson.replace(/\[\s*,/g, '[');
 
       masterOutput = JSON.parse(fixedJson);
       console.log('[OutputMain] ✅ JSON repaired successfully');
