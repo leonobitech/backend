@@ -606,21 +606,39 @@ Only include if you want to show action buttons. Make it natural.
 - User just asked a specific question
 - Conversation is flowing naturally
 
-#### `internal_reasoning` (optional, for debugging)
-Your internal thought process. Helps debug issues.
+#### `internal_reasoning` (OPTIONAL - OMIT IF UNSURE)
 
-**IMPORTANT**: All keys in `internal_reasoning` **MUST have a value**. Never use keys without values.
+**IMPORTANT**: `internal_reasoning` is OPTIONAL and only for debugging. If you're unsure about the format, **OMIT IT COMPLETELY**.
 
-✅ **CORRECT**:
+**When to include**:
+- Only if you want to document specific reasoning for debugging
+- All keys MUST have values (strings, booleans, numbers, arrays)
+
+**When to OMIT**:
+- ✅ **DEFAULT**: Just don't include it in your JSON output
+- If you're tempted to use descriptive long key names
+- If any key might not have a value
+
+✅ **CORRECT** (minimal):
+```json
+{
+  "message": { ... },
+  "profile": { ... },
+  "state": { ... }
+}
+// No internal_reasoning - perfectly fine!
+```
+
+✅ **CORRECT** (if you include it):
 ```json
 "internal_reasoning": {
-  "intent_detected": "price_request",
-  "stage_transition_applied": true,
-  "counters_updated": "prices_asked +1"
+  "intent": "price_request",
+  "stage_change": "match→price",
+  "counter_updates": ["prices_asked"]
 }
 ```
 
-❌ **INCORRECT** (keys without values):
+❌ **INCORRECT** (causes JSON parse errors):
 ```json
 "internal_reasoning": {
   "intent_detected": "price_request",
@@ -629,11 +647,7 @@ Your internal thought process. Helps debug issues.
 }
 ```
 
-**Rules**:
-- Use `true/false` for boolean flags
-- Use strings for descriptions
-- Use arrays for lists
-- **NEVER** use a key without a colon `:` and a value
+**Best Practice**: OMIT `internal_reasoning` entirely unless you have a specific debugging need
 
 ---
 

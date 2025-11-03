@@ -29,33 +29,24 @@ if (inputData.output) {
     console.log('[OutputMain] Attempting to repair JSON...');
 
     try {
-      // Intentar reparar: remover keys sin valores en internal_reasoning
+      // ESTRATEGIA SIMPLE: Solo eliminar el objeto internal_reasoning si está causando problemas
+      // La LLM tiende a poner keys sin valores ahí
       let fixedJson = inputData.output;
 
-      // Regex mejorado para encontrar keys sin valores
-      // Patrón: "key_name", (sin : antes de la coma)
-      // Patrón: "key_name" } (sin : antes del cierre)
-      fixedJson = fixedJson.replace(/"([^"]+)"\s*([,}])/g, (match, key, separator) => {
-        // Si NO hay ":" antes del separador, es una key sin valor
-        if (!match.includes(':')) {
-          console.log('[OutputMain] Removing invalid key without value:', key);
-          // Si el separador es coma, remover todo; si es }, solo remover la key
-          return separator === ',' ? '' : separator;
-        }
-        return match;
-      });
+      // Buscar y remover internal_reasoning completo (puede tener nested objects)
+      // Usamos un approach más robusto que maneja nested brackets
+      fixedJson = fixedJson.replace(/,?\s*"internal_reasoning"\s*:\s*\{[^}]*\}/g, '');
 
-      // Limpiar comas duplicadas y comas antes de cierre
+      // Limpiar posibles comas duplicadas o trailing
       fixedJson = fixedJson.replace(/,\s*,/g, ',');
       fixedJson = fixedJson.replace(/,\s*}/g, '}');
       fixedJson = fixedJson.replace(/,\s*]/g, ']');
-      // Limpiar comas después de apertura
-      fixedJson = fixedJson.replace(/{\s*,/g, '{');
-      fixedJson = fixedJson.replace(/\[\s*,/g, '[');
 
       masterOutput = JSON.parse(fixedJson);
-      console.log('[OutputMain] ✅ JSON repaired successfully');
+      console.log('[OutputMain] ✅ JSON repaired by removing internal_reasoning');
     } catch (repairError) {
+      console.log('[OutputMain] ❌ Repair failed. Showing full JSON for debugging:');
+      console.log(inputData.output);
       throw new Error(`[OutputMain] Failed to parse JSON: ${parseError.message}. Repair attempt also failed: ${repairError.message}`);
     }
   }
