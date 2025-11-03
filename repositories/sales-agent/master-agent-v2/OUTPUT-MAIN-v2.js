@@ -76,7 +76,7 @@ console.log('[OutputMain] Tool calls:', tool_calls ? tool_calls.length : 0);
 
 if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
   console.log('[OutputMain] 🔧 Tool calls detected! LLM wants to execute Odoo actions.');
-  console.log('[OutputMain] Tools to execute:', tool_calls.map(tc => tc.name).join(', '));
+  console.log('[OutputMain] Tools to execute:', tool_calls.map(tc => tc.function?.name || tc.name).join(', '));
 
   // Agregar tool_calls al output para que el siguiente nodo los procese
   // El workflow bifurcará: si hay tool_calls → Execute MCP Tool, sino → continuar normal
