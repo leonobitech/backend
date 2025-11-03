@@ -74,13 +74,17 @@ Respuesta esperada:
 }
 ```
 
-### 2. Campo `odoo_opportunity_id` en Baserow
+### 2. Campo `lead_id` en Baserow
 
-Agregar a la tabla **Leads**:
-- **Nombre**: `odoo_opportunity_id`
+⚠️ **CRÍTICO**: El campo correcto en Baserow es `lead_id`, NO `odoo_opportunity_id`
+
+Verificar en la tabla **Leads**:
+- **Nombre**: `lead_id` (este es el ID de la oportunidad en Odoo)
 - **Tipo**: Number
 - **Nullable**: Sí
 - **Default**: null
+
+**Para Felix Figueroa**: Actualizar `lead_id` de 33 a **34** (ID correcto en Odoo)
 
 ### 3. Variables de Entorno en n8n
 
@@ -376,9 +380,9 @@ Use OpenAI function calling syntax:
 
 ### Important Rules
 
-1. **Always check `profile.odoo_opportunity_id`**:
+1. **Always check `profile.lead_id`**:
    - If `null` → Cannot use tools yet → Inform user "Primero voy a registrar tu información en nuestro CRM"
-   - If exists → Can use tools
+   - If exists → Can use tools (este es el `opportunityId` en Odoo)
 
 2. **Never invent data**:
    - Don't fabricate meeting dates/times
@@ -453,7 +457,52 @@ Después de **OUTPUT-MAIN-v2**, agregar un nodo **Switch** que decida el flujo:
   1. Si `json.action === 'call_tool'` → Ir a "Execute MCP Tool"
   2. Si `json.action === 'send_message'` → Ir a "Persist to Baserow" (flujo normal)
 
-### 5.2. Nodo: Execute MCP Tool
+### 5.2. Nodo: Prepare MCP Tool Call
+
+**Tipo**: Code (JavaScript)
+**Nombre**: "Prepare MCP Tool Call"
+**Posición**: Entre Switch Node y Execute MCP Tool
+
+**Propósito**: Construir dinámicamente el body para el HTTP Request al MCP Server. NO podemos usar expresiones `={{ }}` dentro del JSON body directamente porque n8n requiere JSON válido.
+
+**Código completo**: Ver [PREPARE-MCP-TOOL-CALL.js](./PREPARE-MCP-TOOL-CALL.js)
+
+**Resumen del código**:
+```javascript
+const inputData = $input.first().json;
+
+// Extraer primer tool call
+const toolCall = inputData.tool_calls[0];
+const toolName = toolCall.function?.name || toolCall.name;
+
+// Parsear arguments (viene como JSON string desde LLM)
+let toolArguments;
+const argsString = toolCall.function?.arguments || toolCall.arguments;
+
+if (typeof argsString === 'string') {
+  toolArguments = JSON.parse(argsString);
+} else {
+  toolArguments = argsString;
+}
+
+// Construir body dinámicamente
+const mcpBody = {
+  tool: toolName,
+  arguments: toolArguments
+};
+
+return [{
+  json: {
+    mcp_body: mcpBody,  // ✅ Usar como {{ $json.mcp_body }} en HTTP Request
+    lead_id: inputData.lead_id,
+    profile: inputData.profile,
+    state: inputData.state,
+    // ... más campos
+  }
+}];
+```
+
+### 5.3. Nodo: Execute MCP Tool
 
 **Tipo**: HTTP Request
 **Método**: POST
@@ -462,21 +511,17 @@ Después de **OUTPUT-MAIN-v2**, agregar un nodo **Switch** que decida el flujo:
 **Headers**:
 ```json
 {
-  "X-Service-Token": "={{$env.ODOO_MCP_SERVICE_TOKEN}}",
+  "X-Service-Token": "aea35e37a04fc6aa26cbf8a2f8155beb4692c59cd6a68c4392165715e7bf4765f29e2c582dbdd6de6ad70827547513b7b36cfe0c176c8c74d03a75cc167c2d37",
   "Content-Type": "application/json"
 }
-
-**Body** (JavaScript Expression):
-```javascript
-// Extraer primer tool call (por ahora solo soportamos 1 a la vez)
-const toolCall = $json.tool_calls[0];
-const functionCall = toolCall.function;
-
-return {
-  tool: functionCall.name,
-  arguments: JSON.parse(functionCall.arguments)
-};
 ```
+
+**Body** (Expression mode):
+```javascript
+={{ $json.mcp_body }}
+```
+
+⚠️ **IMPORTANTE**: NO escribir JSON manualmente en el body. El nodo anterior (Prepare MCP Tool Call) ya construyó el objeto completo. Simplemente usar `={{ $json.mcp_body }}`.
 
 **Ejemplo de Body enviado**:
 ```json
@@ -531,11 +576,11 @@ return {
 }
 ```
 
-### 5.3. Nodo: Process Tool Result
+### 5.4. Nodo: Process Tool Result (TODO - Próxima implementación)
 
 **Tipo**: Code (JavaScript)
 
-**Código**:
+**Código** (ejemplo):
 ```javascript
 // Obtener resultado del tool
 const toolResult = $json;
@@ -618,7 +663,7 @@ Execute MCP Tool → Process Tool Result → LoadProfileAndState → INPUT-MAIN 
 
 **2. INPUT-MAIN**:
 - Construye Smart Input con tools list
-- Profile tiene `odoo_opportunity_id: 123`
+- Profile tiene `lead_id: 34` (ID de la oportunidad en Odoo)
 
 **3. Master Agent (LLM)**:
 - Recibe Smart Input con tools disponibles
