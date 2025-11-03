@@ -8,16 +8,20 @@ Este directorio contiene los archivos principales del **Master Agent v2.0**, la 
 
 ```
 master-agent-v2/
-├── README.md                      # Este archivo
-├── UPDATE-PAYLOAD.js              # Limpia payload de webhook (row_id + row_always)
-├── CHAT-HISTORY-FILTER.js         # Limpia y deduplica historial de Odoo
-├── COMPOSE-PROFILE.js             # Transforma Baserow row → profile
-├── LOAD-PROFILE-AND-STATE.js      # Construye profile + state con fallbacks
-├── INPUT-MAIN.js                  # Construye Smart Input y User Prompt
-├── SYSTEM-PROMPT.md               # Instrucciones para el LLM (GPT-4o-mini)
-├── OUTPUT-MAIN-v2.js              # Formatea output para Baserow, Odoo y Chatwoot
-├── PROFILE-STATE-MAPPING.md       # Documentación Profile vs State
-└── WORKFLOW-MAPPING.md            # Mapeo de nodos n8n → archivos
+├── README.md                          # Este archivo
+├── UPDATE-PAYLOAD.js                  # Limpia payload de webhook (row_id + row_always)
+├── CHAT-HISTORY-FILTER.js             # Limpia y deduplica historial de Odoo
+├── COMPOSE-PROFILE.js                 # Transforma Baserow row → profile
+├── LOAD-PROFILE-AND-STATE.js          # Construye profile + state con fallbacks
+├── INPUT-MAIN.js                      # Construye Smart Input y User Prompt (+ MCP tools)
+├── SYSTEM-PROMPT.md                   # Instrucciones para el LLM (GPT-4o-mini + MCP tools)
+├── OUTPUT-MAIN-v2.js                  # Formatea output + detecta tool_calls
+├── PREPARE-MCP-TOOL-CALL.js           # Parser de tool_calls LLM → backend MCP
+├── MCP-SERVER-PROXY.js                # Proxy del MCP Server workflow
+├── MCP-SERVER-WORKFLOW-SETUP.md       # Guía de configuración del MCP Server en n8n
+├── N8N-SETUP.md                       # Setup original (HTTP directo, obsoleto)
+├── PROFILE-STATE-MAPPING.md           # Documentación Profile vs State
+└── WORKFLOW-MAPPING.md                # Mapeo de nodos n8n → archivos
 ```
 
 ---
@@ -45,30 +49,49 @@ LOAD-PROFILE-AND-STATE.js
   ↓ (profile + state objects)
 INPUT-MAIN.js
   - Construye Smart Input (history, profile, state, options, rules, meta)
+  - Fetches MCP tools from odoo_mcp:8100/internal/mcp/tools
   - Genera User Prompt con contexto completo
-  ↓ (smart_input + userPrompt)
+  ↓ (smart_input + userPrompt + tools)
 Master Agent (OpenAI GPT-4o-mini)
   - System Prompt: SYSTEM-PROMPT.md
   - User Prompt: del INPUT-MAIN.js
-  - Function calling: search_services_rag
+  - Function calling: search_services_rag + 11 MCP tools (Odoo actions)
   ↓ Output LLM
 {
   "message": { text, rag_used, sources },
   "profile": { lead_id, row_id, full_name, email, ... },
   "state": { lead_id, stage, interests, counters, cooldowns, ... },
   "cta_menu": { prompt, items } | null,
+  "tool_calls": [{ function: { name, arguments } }] | null,  ← NEW
   "internal_reasoning": { ... }
 }
   ↓
 OUTPUT-MAIN-v2.js
+  - Detecta tool_calls → branch to MCP execution
   - Formatea para WhatsApp (texto plano)
   - Formatea para Odoo (HTML)
   - Prepara state_for_persist y profile_for_persist
   ↓
-Downstream Nodes:
-  - StatePatchLead (Baserow update)
-  - Record Agent Response (Odoo mail.message)
-  - Output to Chatwoot (WhatsApp delivery)
+IF tool_calls detected:
+  ↓
+  MCP Client Node
+    - Envia tool call a MCP Server workflow
+    ↓
+  MCP Server Workflow (Odoo-MCP)
+    - MCP Server Trigger recibe tool call
+    - MCP Server Proxy extrae tool + arguments
+    - HTTP Request → odoo_mcp:8100/internal/mcp/call-tool
+    - Backend ejecuta action en Odoo (send email, schedule meeting, etc.)
+    ↓
+  Tool Result → Sales Agent (loop back)
+    - LLM recibe resultado
+    - Continua conversacion con confirmacion
+ELSE (no tool_calls):
+  ↓
+  Downstream Nodes:
+    - StatePatchLead (Baserow update)
+    - Record Agent Response (Odoo mail.message)
+    - Output to Chatwoot (WhatsApp delivery)
 ```
 
 ---
@@ -379,6 +402,258 @@ Downstream Nodes:
 - `markdownToHtml()`: Convertir markdown simple a HTML
 - `arrayToHtmlList()`: Arrays a listas `<ul>`
 - `arrayToTextList()`: Arrays a bullets de texto
+
+---
+
+### 7. MCP Integration (Odoo Actions)
+
+**Propósito**: Permitir que el LLM ejecute acciones reales en Odoo mediante MCP tools (send email, schedule meeting, update pipeline stage, etc.).
+
+**Arquitectura**:
+
+```
+Sales Agent Workflow (MCP Client)
+  ↓ tool call via MCP protocol
+MCP Server Workflow (Odoo-MCP)
+  ↓ HTTP POST /internal/mcp/call-tool
+Backend odoo_mcp:8100
+  ↓ XML-RPC
+Odoo CRM (acciones reales)
+```
+
+#### 7.1. INPUT-MAIN.js - Fetch MCP Tools
+
+**Modificación** (líneas 234-261):
+
+```javascript
+// Fetch MCP tools from backend
+const mcpResponse = await fetch('http://odoo_mcp:8100/internal/mcp/tools', {
+  method: 'GET',
+  headers: {
+    'X-Service-Token': 'aea35e37...7c2d37',
+    'Content-Type': 'application/json'
+  }
+});
+
+const mcpData = await mcpResponse.json();
+tools = mcpData.tools || [];  // 11 tools disponibles
+```
+
+**Tools Disponibles** (11 en total):
+
+1. **odoo_send_email** - Enviar email con template (auto-avanza stage a "Proposal Sent")
+2. **odoo_schedule_meeting** - Agendar reunión en calendario Odoo
+3. **odoo_update_deal_stage** - Actualizar stage del CRM pipeline
+4. **odoo_get_leads** - Obtener leads con filtros
+5. **odoo_create_lead** - Crear nuevo lead
+6. **odoo_get_opportunities** - Obtener opportunities del pipeline
+7. **odoo_search_contacts** - Buscar contactos por nombre/email/teléfono
+8. **odoo_create_contact** - Crear nuevo contacto
+9. **odoo_get_sales_report** - Generar reporte de ventas con métricas
+10. **odoo_create_activity** - Agendar actividad (call, meeting, email, task)
+11. **odoo_get_deal_details** - Obtener detalles de una opportunity
+
+**Output**:
+```javascript
+{
+  smart_input: {
+    history: [...],
+    profile: {...},
+    state: {...},
+    options: {...},
+    rules: {...},
+    meta: {...},
+    tools: [  // ← MCP tools
+      {
+        name: "odoo_send_email",
+        description: "Send email with template...",
+        inputSchema: { type: "object", properties: {...} }
+      },
+      ...
+    ]
+  }
+}
+```
+
+#### 7.2. SYSTEM-PROMPT.md - Instrucciones MCP
+
+**Sección agregada**: "TOOLS AVAILABLE" ahora incluye las 11 MCP tools además de `search_services_rag`.
+
+**Instrucciones para el LLM**:
+- Usar `odoo_send_email` cuando usuario confirma "sí, envíame la propuesta"
+- Usar `odoo_schedule_meeting` cuando usuario quiere agendar demo
+- Usar `odoo_update_deal_stage` para sincronizar stages Baserow → Odoo
+- **IMPORTANTE**: Usar `profile.lead_id` como `opportunityId` (no `odoo_opportunity_id`)
+
+**Ejemplo de tool call**:
+```json
+{
+  "tool_calls": [
+    {
+      "function": {
+        "name": "odoo_send_email",
+        "arguments": {
+          "opportunityId": 34,
+          "subject": "Propuesta Comercial - Leonobitech",
+          "emailTo": "felix@leonobitech.com",
+          "templateType": "proposal",
+          "templateData": {
+            "customerName": "Felix Figueroa",
+            "productName": "CRM + Odoo",
+            "price": "USD 1200"
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+#### 7.3. OUTPUT-MAIN-v2.js - Detectar Tool Calls
+
+**Modificación** (líneas 77-96):
+
+```javascript
+const { message, state_update, cta_menu, internal_reasoning, tool_calls } = masterOutput;
+
+// Detectar tool_calls
+if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
+  console.log('[OutputMain] 🔧 Tool calls detected!');
+
+  return [{
+    json: {
+      has_tool_calls: true,
+      tool_calls: tool_calls,
+      lead_id: masterOutput.lead_id || inputData.lead_id,
+      profile: masterOutput.profile || inputData.profile,
+      state: masterOutput.state || inputData.state,
+      message: message,
+      state_update: state_update,
+      cta_menu: cta_menu,
+      internal_reasoning: internal_reasoning
+    }
+  }];
+}
+```
+
+**Output cuando hay tool_calls**:
+```javascript
+{
+  has_tool_calls: true,
+  tool_calls: [{ function: { name, arguments } }],
+  lead_id: 33,
+  profile: {...},
+  state: {...},
+  message: {...}
+}
+```
+
+#### 7.4. MCP Server Workflow (Odoo-MCP)
+
+**Propósito**: Workflow separado en n8n que recibe tool calls del MCP Client y las ejecuta en el backend.
+
+**Nodos** (3 en total):
+
+1. **MCP Server Trigger** - Recibe tool calls del MCP Client
+2. **MCP Server Proxy** (Code Node) - Extrae tool name + arguments
+3. **Execute in Odoo MCP** (HTTP Request) - POST a `http://odoo_mcp:8100/internal/mcp/call-tool`
+
+**Archivo de configuración**: [MCP-SERVER-WORKFLOW-SETUP.md](./MCP-SERVER-WORKFLOW-SETUP.md)
+
+#### 7.5. MCP-SERVER-PROXY.js
+
+**Propósito**: Extraer tool name y arguments del MCP Client en múltiples formatos.
+
+**Soporta 3 formatos**:
+```javascript
+// Opción 1: { tool: "...", arguments: {...} }
+// Opción 2: { name: "...", input: {...} }
+// Opción 3: { params: { name: "...", arguments: {...} } }
+```
+
+**Output**:
+```javascript
+{
+  tool: "odoo_send_email",
+  arguments: {
+    opportunityId: 34,
+    subject: "Propuesta Comercial",
+    emailTo: "felix@leonobitech.com",
+    templateType: "proposal",
+    templateData: {...}
+  }
+}
+```
+
+#### 7.6. Backend odoo_mcp:8100
+
+**Endpoints Internos** (Service Token Auth):
+
+**GET /internal/mcp/tools**:
+- Lista las 11 tools disponibles con schemas
+- Usado por INPUT-MAIN.js para obtener tools
+
+**POST /internal/mcp/call-tool**:
+- Ejecuta una tool específica
+- Body: `{ tool: "odoo_send_email", arguments: {...} }`
+- Response: `{ success: true, tool: "...", data: {...} }`
+
+**Autenticación**:
+```http
+X-Service-Token: aea35e37a04fc6aa26cbf8a2f8155beb4692c59cd6a68c4392165715e7bf4765f29e2c582dbdd6de6ad70827547513b7b36cfe0c176c8c74d03a75cc167c2d37
+```
+
+#### 7.7. Flujo Completo de Tool Call
+
+```
+1. Usuario: "Mandame una propuesta por mail"
+   ↓
+2. Master Agent: Genera tool_call con odoo_send_email
+   ↓
+3. OUTPUT-MAIN-v2: Detecta has_tool_calls: true
+   ↓
+4. MCP Client: Envía tool call a MCP Server workflow
+   ↓
+5. MCP Server Trigger: Recibe tool call
+   ↓
+6. MCP Server Proxy: Extrae { tool, arguments }
+   ↓
+7. HTTP Request: POST http://odoo_mcp:8100/internal/mcp/call-tool
+   ↓
+8. Backend odoo_mcp:
+   - Autentica con service token
+   - Crea OdooClient con credentials de .env
+   - Ejecuta tool via XML-RPC
+   ↓
+9. Odoo CRM:
+   - Envía email usando template
+   - Actualiza stage a "Proposal Sent"
+   - Registra en chatter
+   ↓
+10. Response: { success: true, data: { mailId, message, ... } }
+    ↓
+11. Sales Agent: Recibe resultado (TODO: loop back)
+    ↓
+12. Master Agent: "Perfecto Felix! Te envié la propuesta por email..."
+```
+
+#### 7.8. Próximos Pasos (TODO)
+
+1. **Process Tool Result**: Crear nodo para manejar respuesta del MCP Server
+   - Actualizar state con `proposal_offer_done: true`
+   - Construir mensaje de confirmación
+   - Continuar flujo normal
+
+2. **Multi-turn Support**: Implementar loop back para múltiples tools en secuencia
+
+3. **Error Handling**: Agregar nodos para manejar errores de ejecución
+
+4. **Testing**: Probar todas las 11 tools disponibles
+
+**Referencias**:
+- MCP Server Setup: [MCP-SERVER-WORKFLOW-SETUP.md](./MCP-SERVER-WORKFLOW-SETUP.md)
+- Backend API: [backend/repositories/odoo-mcp/INTERNAL-MCP-API.md](../../odoo-mcp/INTERNAL-MCP-API.md)
+- Odoo Client: [backend/repositories/odoo-mcp/src/lib/odoo.ts](../../odoo-mcp/src/lib/odoo.ts)
 
 ---
 

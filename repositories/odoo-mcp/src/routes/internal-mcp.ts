@@ -143,7 +143,7 @@ router.post("/call-tool", async (req, res) => {
     return res.json({
       success: true,
       tool,
-      result
+      data: result  // Changed from "result" to "data" for n8n MCP Client compatibility
     });
 
   } catch (error: any) {

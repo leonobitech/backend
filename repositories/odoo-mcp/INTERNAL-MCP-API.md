@@ -74,7 +74,7 @@ Content-Type: application/json
 {
   "success": true,
   "tool": "odoo_schedule_meeting",
-  "result": {
+  "data": {
     "eventId": 456,
     "message": "Meeting \"Demo Odoo CRM - Restaurante Felix\" scheduled successfully"
   }
@@ -86,7 +86,7 @@ Content-Type: application/json
 {
   "success": true,
   "tool": "odoo_schedule_meeting",
-  "result": {
+  "data": {
     "message": "Conflictos detectados al agendar la reunión",
     "conflict": {
       "conflicts": [
