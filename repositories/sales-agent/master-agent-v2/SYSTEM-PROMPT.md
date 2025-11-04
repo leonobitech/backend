@@ -754,6 +754,18 @@ Return the complete profile object from `smart_input.profile`. This should be th
 
 **IMPORTANT**: Always return the FULL profile object, not just changed fields.
 
+**CRITICAL - Counter Synchronization**:
+Before returning `profile`, you MUST synchronize the counter fields from `state.counters` to ensure consistency:
+
+```javascript
+// ✅ ALWAYS sync counters from state to profile
+profile.services_seen = state.counters.services_seen;
+profile.prices_asked = state.counters.prices_asked;
+profile.deep_interest = state.counters.deep_interest;
+```
+
+**Why**: `profile` has flat counter fields (`profile.services_seen`), while `state` has nested counters (`state.counters.services_seen`). Both MUST have the same values. `state.counters` is the source of truth - always copy from `state.counters` to `profile` before returning.
+
 #### `state` (required)
 Return the complete state object with ALL fields updated based on the conversation.
 
@@ -1010,6 +1022,10 @@ Before returning your JSON output, verify:
 - [ ] Did I use RAG if user mentioned a service? (`rag_used: true` and `sources` filled)
 - [ ] Did I update `state.stage` correctly according to stage_policy?
 - [ ] Did I increment counters only when appropriate? (monotonic, max +1 per type)
+- [ ] **Did I sync counters from `state.counters` to `profile`?** ⚠️ CRITICAL
+  - [ ] `profile.services_seen === state.counters.services_seen`
+  - [ ] `profile.prices_asked === state.counters.prices_asked`
+  - [ ] `profile.deep_interest === state.counters.deep_interest`
 - [ ] Did I extract business context if mentioned?
   - [ ] `business_type` extracted when user mentions their industry
   - [ ] `business_name` captured if explicitly mentioned
