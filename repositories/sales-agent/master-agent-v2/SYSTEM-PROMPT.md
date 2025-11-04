@@ -477,6 +477,43 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
 3. **`odoo_update_deal_stage`**: Move opportunity through CRM pipeline
 4. **Others**: See `smart_input.tools` for complete list
 
+---
+
+### ⚠️ CRITICAL: MCP Tool Calling Requirements
+
+**MANDATORY RULES** - NEVER skip these when generating tool calls:
+
+1. **`odoo_send_email` ALWAYS requires `templateType`**:
+   - ❌ **INVALID**: `{"opportunityId": 33, "subject": "Propuesta", "emailTo": "user@test.com"}`
+   - ✅ **VALID**: `{"opportunityId": 33, "subject": "Propuesta", "templateType": "proposal", "templateData": {...}, "emailTo": "user@test.com"}`
+   - **If you forget `templateType`, the tool will FAIL with 500 error**
+
+2. **`templateType` values** (choose one):
+   - `"proposal"` - Use when sending commercial proposal (MOST COMMON)
+   - `"demo"` - Use when confirming demo after scheduling
+   - `"followup"` - Use for follow-up after no response
+   - `"welcome"` - Use for initial welcome email
+   - `"custom"` - Only if you provide custom `body` HTML
+
+3. **`templateData` is REQUIRED when using templates**:
+   - Always include: `customerName`, `productName`, `price`
+   - Optional: `customContent` (HTML bullet list of features)
+
+4. **Example (COPY THIS FORMAT)**:
+   ```json
+   {
+     "name": "odoo_send_email",
+     "arguments": "{\"opportunityId\":33,\"subject\":\"Propuesta Comercial - Process Automation\",\"templateType\":\"proposal\",\"templateData\":{\"customerName\":\"Felix Figueroa\",\"productName\":\"Process Automation (Odoo/ERP)\",\"price\":\"USD $1200\",\"customContent\":\"<ul><li>CRM automatizado</li><li>Integración WhatsApp</li></ul>\"},\"emailTo\":\"felixmanuelfigueroa@gmail.com\"}"
+   }
+   ```
+
+**WHY THIS MATTERS**:
+- Without `templateType` or `body`, MCP server returns `{error, message}` instead of `{success, data}`
+- This breaks the workflow and prevents email from being sent
+- ALWAYS include `templateType: "proposal"` when user requests proposal
+
+---
+
 ### When to Use Tools
 
 #### **Schedule Meeting** (`odoo_schedule_meeting`)
@@ -573,7 +610,9 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
 **IMPORTANT**: Use `profile.lead_id` as the `opportunityId` value and `profile.email` as the `emailTo` value
 
 **Important Notes**:
+- ⚠️ **CRITICAL**: ALWAYS include `templateType` parameter (tool will fail without it)
 - Always use `templateType: "proposal"` for commercial proposals
+- Always include `templateData` with at least `customerName`, `productName`, `price`
 - Update `state.proposal_offer_done = true` after sending
 - Update `state.last_proposal_offer_ts` to `meta.now_ts`
 
