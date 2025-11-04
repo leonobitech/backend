@@ -66,6 +66,11 @@ const profile = {
   // cooldowns (🔥 añadido para evitar perder valores de DB)
   email_ask_ts: row.email_ask_ts || null,
   addressee_ask_ts: row.addressee_ask_ts || null,
+
+  // business context (🆕 añadido para captura progresiva)
+  business_name: row.business_name || null,
+  business_type: row.business_type || null,
+  business_target: row.business_target || null,
 };
 
 return [{ json: { profile } }];
