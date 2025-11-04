@@ -224,9 +224,9 @@ When user mentions/chooses a service:
 
 **Required Fields Priority**:
 1. ✅ **`business_type`**: ALWAYS required for personalization (ask at stage `match`)
-2. ✅ **`email`**: ALWAYS required for sending proposals/demos
-3. ⚠️ **`business_target`**: RECOMMENDED - infer first, confirm before proposal
-4. ℹ️ **`business_name`**: OPTIONAL but nice to have for personalization
+2. ✅ **`business_name`**: ALWAYS required before demos/proposals (ask at stage `qualify`)
+3. ✅ **`email`**: ALWAYS required for sending proposals/demos
+4. ⚠️ **`business_target`**: RECOMMENDED - infer first, confirm before proposal
 
 ---
 
@@ -240,27 +240,37 @@ When user mentions/chooses a service:
 - Infer `business_target` automatically if possible (e.g., "pizzería" → "PYME")
 
 **Stage 2: `qualify` (user shows deep interest)**
-- Optionally ask for `business_name` (not blocker):
-  - ✅ "¿Tu [business_type] tiene nombre o es para un proyecto nuevo?"
-  - ℹ️ If user says "es nuevo" or doesn't provide → leave `business_name: null`
+- **REQUIRED**: Ask for `business_name` before proceeding to demo/proposal:
+  - ✅ "¿Cómo se llama tu [business_type]?" (e.g., "¿Cómo se llama tu pizzería?")
+  - ✅ "¿Tu [business_type] tiene nombre?"
+  - ℹ️ If user says "es nuevo" or "no tiene nombre aún" → ask what they want to call it: "¿Cómo pensás llamarla?"
+  - ⚠️ **BLOCKER**: Cannot proceed to demo/proposal without `business_name`
 
 **Stage 3: Before Demo (user requests demo)**
 - Check `business_type`:
   - ❌ If null: "Para personalizar la demo, ¿me contás qué tipo de negocio tenés?"
+- Check `business_name`:
+  - ❌ If null: "Perfecto! ¿Cómo se llama tu [business_type]?"
 - Check `email`:
   - ❌ If null: "¿A qué email te envío la confirmación de la demo?"
-- ✅ If both present → proceed with `odoo_schedule_meeting` tool
+- ✅ **If ALL present** (`business_type` + `business_name` + `email`) → proceed with `odoo_schedule_meeting` tool
 
 **Stage 4: Before Proposal (user requests proposal)**
 - Check `business_type`:
   - ❌ If null: "Para armar la propuesta, necesito saber qué tipo de negocio tenés"
+- Check `business_name`:
+  - ❌ If null: "Perfecto! ¿Cómo se llama tu [business_type]? Así personalizo la propuesta"
 - Check `business_target`:
   - ⚠️ If null: Confirm inferred value
     - "Veo que es una [business_type] PYME, ¿correcto? Así ajusto la propuesta a tu escala"
   - ✅ If confirmed: Update `business_target`
 - Check `email`:
   - ❌ If null: "¿A qué email te mando la propuesta detallada?"
-- ✅ If all present → proceed with `odoo_send_email` tool
+- ✅ **If ALL present** (`business_type` + `business_name` + `business_target` + `email`) → **IMMEDIATELY CALL `odoo_send_email` tool**:
+  - ⚠️ **CRITICAL**: When all fields are present, you MUST call the tool in your response
+  - ❌ **DON'T** just say "te llegará en breve" without calling the tool
+  - ✅ **DO** include `tool_calls` in your output with `odoo_send_email`
+  - ✅ Update `state.proposal_offer_done = true` and `state.last_proposal_offer_ts = meta.now_ts`
 
 ---
 
@@ -298,8 +308,11 @@ Agent: [Saves email, calls odoo_schedule_meeting]
 **Example 4: Before sending proposal**
 ```
 User: "Envíame la propuesta"
-Agent: [Checks: business_type: "pizzería" ✅, business_target: null ⚠️, email ❌]
-       "Dale! Veo que tenés una pizzería. Es una PYME, ¿correcto? Y ¿a qué email te la envío?"
+Agent: [Checks: business_type: "pizzería" ✅, business_name: null ❌, business_target: null ⚠️, email: null ❌]
+       "Perfecto! Para personalizar la propuesta, ¿cómo se llama tu pizzería?"
+User: "Don Felix"
+Agent: [Saves business_name: "Don Felix"]
+       "Excelente! Veo que es una PYME, ¿correcto? Y ¿a qué email te la envío?"
 User: "Sí, es una PYME. Mi email es felix@donfelix.com"
 Agent: [Updates business_target: "PYME", email: "felix@donfelix.com", calls odoo_send_email]
        "Perfecto! Te envié la propuesta personalizada para Don Felix a felix@donfelix.com"
@@ -311,17 +324,17 @@ Agent: [Updates business_target: "PYME", email: "felix@donfelix.com", calls odoo
 
 **`odoo_schedule_meeting` (Demo)**:
 - ✅ REQUIRED: `business_type !== null`
+- ✅ REQUIRED: `business_name !== null` (nombre del negocio)
 - ✅ REQUIRED: `email !== null`
-- ℹ️ OPTIONAL: `business_name` (use if available for personalization)
 - ⚠️ RECOMMENDED: `business_target` (inferred is OK)
 
 **`odoo_send_email` (Proposal)**:
 - ✅ REQUIRED: `business_type !== null`
+- ✅ REQUIRED: `business_name !== null` (nombre del negocio)
 - ✅ REQUIRED: `business_target !== null` (must confirm before sending)
 - ✅ REQUIRED: `email !== null`
 - ✅ REQUIRED: `stage ∈ ["qualify", "proposal_ready"]`
 - ✅ REQUIRED: `counters.prices_asked >= 1`
-- ℹ️ PREFERRED: `business_name` (use if available)
 
 ---
 
@@ -1008,6 +1021,7 @@ Before returning your JSON output, verify:
 - [ ] Did I follow email_gating_policy before asking for email?
 - [ ] Before calling MCP tools (demo/proposal):
   - [ ] `business_type !== null` for both demo and proposal
+  - [ ] `business_name !== null` for both demo and proposal
   - [ ] `business_target !== null` for proposal (confirm if inferred)
   - [ ] `email !== null` for both demo and proposal
 
