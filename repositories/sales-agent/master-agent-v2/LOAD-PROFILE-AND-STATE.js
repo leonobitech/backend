@@ -54,6 +54,11 @@ function mapBaserowRow(r){
 
     email_ask_ts: nul(r.email_ask_ts),
     addressee_ask_ts: nul(r.addressee_ask_ts),
+
+    // Business context (nuevos campos)
+    business_name: nul(r.business_name),
+    business_type: nul(r.business_type),
+    business_target: nul(r.business_target),
   };
 }
 
@@ -85,7 +90,9 @@ const state = {
 
   // Identidad
   full_name: profile.full_name ?? null,
-  business_name: profile.business_name ?? null,  // Extraído en conversación
+  business_name: profile.business_name ?? null,  // Nombre propio del negocio
+  business_type: profile.business_type ?? null,  // Tipo/industria (ej: "pizzería", "restaurante")
+  business_target: profile.business_target ?? null,  // Target/rubro alternativo
   email: profile.email ?? null,
   phone_number: profile.phone ?? profile.phone_number ?? null,
 
