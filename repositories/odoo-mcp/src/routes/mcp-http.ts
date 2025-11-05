@@ -1,82 +1,31 @@
 import { randomUUID } from "node:crypto";
-import { NextFunction, Request, Response, Router } from "express";
+import { Router } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { env } from "@/config/env";
-import { verifyAccessToken } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { createMcpServer } from "@/lib/mcp-server";
 import { ToolRegistry } from "@/tools/base/ToolRegistry";
-
-const requiredScopes = new Set(env.SCOPES.split(/\s+/).filter(Boolean));
+import { dualAuth } from "@/middlewares/dual-auth.middleware";
 
 // Store active transports by session ID
 const transports = new Map<string, StreamableHTTPServerTransport>();
-
-/**
- * Middleware para autenticar peticiones MCP mediante Bearer token
- */
-async function authenticateMcpRequest(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    res.setHeader(
-      "WWW-Authenticate",
-      `Bearer realm="${env.PUBLIC_URL}", error="invalid_request", error_uri="${env.PUBLIC_URL}/.well-known/oauth-protected-resource"`
-    );
-    return res.status(401).json({ error: "invalid_request", message: "Missing bearer token" });
-  }
-
-  const token = authHeader.slice(7).trim();
-  if (!token) {
-    res.setHeader(
-      "WWW-Authenticate",
-      `Bearer realm="${env.PUBLIC_URL}", error="invalid_request", error_uri="${env.PUBLIC_URL}/.well-known/oauth-protected-resource"`
-    );
-    return res.status(401).json({ error: "invalid_request", message: "Missing bearer token" });
-  }
-
-  try {
-    const payload = await verifyAccessToken(token);
-    const tokenScopes = new Set(
-      typeof payload.scope === "string" ? payload.scope.split(/\s+/).filter(Boolean) : []
-    );
-    const missingScopes = Array.from(requiredScopes).filter((scope) => !tokenScopes.has(scope));
-    if (missingScopes.length > 0) {
-      logger.warn({ sub: payload.sub, missingScopes }, "Token missing required MCP scopes");
-      res.setHeader(
-        "WWW-Authenticate",
-        `Bearer realm="${env.PUBLIC_URL}", error="insufficient_scope", scope="${env.SCOPES}", error_uri="${env.PUBLIC_URL}/.well-known/oauth-protected-resource"`
-      );
-      return res.status(403).json({ error: "insufficient_scope", scope: env.SCOPES });
-    }
-
-    res.locals.auth = {
-      subject: payload.sub,
-      scope: payload.scope,
-      token
-    };
-    return next();
-  } catch (error) {
-    logger.warn({ err: error }, "Failed to verify MCP access token");
-    res.setHeader(
-      "WWW-Authenticate",
-      `Bearer realm="${env.PUBLIC_URL}", error="invalid_token", error_uri="${env.PUBLIC_URL}/.well-known/oauth-protected-resource"`
-    );
-    return res.status(401).json({ error: "invalid_token" });
-  }
-}
 
 export const mcpHttpRouter = Router();
 
 /**
  * Endpoint principal MCP con Streamable HTTP
  * Soporta GET, POST y DELETE según la especificación MCP 2025-03-26
+ *
+ * DUAL AUTHENTICATION:
+ * - OAuth Bearer Token (Claude Desktop)
+ * - X-Service-Token header (n8n, automation)
  */
-mcpHttpRouter.all("/", authenticateMcpRequest, async (req, res) => {
+mcpHttpRouter.all("/", dualAuth, async (req, res) => {
   const userId = res.locals.auth.subject;
+  const authType = res.locals.auth.type;
   const method = req.method;
 
-  logger.info({ userId, method, url: req.originalUrl, headers: req.headers }, "MCP HTTP request");
+  logger.info({ userId, authType, method, url: req.originalUrl }, "MCP HTTP request");
 
   try {
     // Check for existing session ID
