@@ -99,7 +99,32 @@ router.get("/tools", async (req, res) => {
  */
 router.post("/call-tool", async (req, res) => {
   try {
-    const { tool, arguments: toolArgs } = req.body;
+    let { tool, arguments: toolArgs } = req.body;
+
+    // Handle n8n format: [{ "JSON": { ... } }]
+    // When n8n uses "Defined automatically by the model", it wraps arguments in this format
+    if (!tool && Array.isArray(req.body) && req.body.length > 0 && req.body[0].JSON) {
+      logger.info({ body: req.body }, "[InternalMCP] Detected n8n format, extracting tool arguments");
+
+      // Extract arguments from n8n wrapper
+      toolArgs = req.body[0].JSON;
+
+      // Infer tool name from arguments structure
+      // For now, we'll require tool name to be passed separately or default to a specific tool
+      // This is a limitation of n8n's format - it doesn't include tool name in the payload
+      if (toolArgs.opportunityId !== undefined) {
+        // Likely an Odoo tool - check if it has email/meeting specific fields
+        if (toolArgs.emailTo || toolArgs.subject) {
+          tool = "odoo_send_email";
+        } else if (toolArgs.startDatetime || toolArgs.title) {
+          tool = "odoo_schedule_meeting";
+        } else if (toolArgs.stageName) {
+          tool = "odoo_update_deal_stage";
+        }
+      }
+
+      logger.info({ inferredTool: tool }, "[InternalMCP] Inferred tool from n8n arguments");
+    }
 
     if (!tool || !toolArgs) {
       return res.status(400).json({
@@ -122,10 +147,10 @@ router.post("/call-tool", async (req, res) => {
 
     // Create authenticated Odoo client for service account
     const credentials: OdooCredentials = {
-      url: env.ODOO_SERVICE_URL,
-      db: env.ODOO_SERVICE_DB,
-      username: env.ODOO_SERVICE_USER,
-      apiKey: env.ODOO_SERVICE_API_KEY
+      url: env.ODOO_SERVICE_URL!,
+      db: env.ODOO_SERVICE_DB!,
+      username: env.ODOO_SERVICE_USER!,
+      apiKey: env.ODOO_SERVICE_API_KEY!
     };
 
     const odooClient = createOdooClient(credentials);
