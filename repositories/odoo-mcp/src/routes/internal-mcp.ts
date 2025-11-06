@@ -106,7 +106,11 @@ router.post("/call-tool", async (req, res) => {
 
     // Handle MCP Server Trigger format: { query: {...}, tool: { name: "...", description: "..." } }
     if (!tool && query && body.tool && typeof body.tool === 'object' && body.tool.name) {
-      logger.info({ body }, "[InternalMCP] Detected MCP Server Trigger format");
+      logger.info({
+        body,
+        toolName: body.tool.name,
+        toolDescription: body.tool.description
+      }, "[InternalMCP] Detected MCP Server Trigger format");
       tool = body.tool.name;
       toolArgs = query;
       logger.info({ tool, extractedArgs: toolArgs }, "[InternalMCP] Extracted from MCP Server Trigger format");
