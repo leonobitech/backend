@@ -99,15 +99,26 @@ router.get("/tools", async (req, res) => {
  */
 router.post("/call-tool", async (req, res) => {
   try {
-    let { tool, arguments: toolArgs } = req.body;
+    // Normalize body: if array with single element, extract it
+    let body = Array.isArray(req.body) && req.body.length > 0 ? req.body[0] : req.body;
+
+    let { tool, arguments: toolArgs, query } = body;
+
+    // Handle MCP Server Trigger format: { query: {...}, tool: { name: "...", description: "..." } }
+    if (!tool && query && body.tool && typeof body.tool === 'object' && body.tool.name) {
+      logger.info({ body }, "[InternalMCP] Detected MCP Server Trigger format");
+      tool = body.tool.name;
+      toolArgs = query;
+      logger.info({ tool, extractedArgs: toolArgs }, "[InternalMCP] Extracted from MCP Server Trigger format");
+    }
 
     // Handle n8n format: [{ "JSON": { ... } }]
     // When n8n uses "Defined automatically by the model", it wraps arguments in this format
-    if (!tool && Array.isArray(req.body) && req.body.length > 0 && req.body[0].JSON) {
-      logger.info({ body: req.body }, "[InternalMCP] Detected n8n format, extracting tool arguments");
+    if (!tool && body.JSON) {
+      logger.info({ body }, "[InternalMCP] Detected n8n legacy format, extracting tool arguments");
 
       // Extract arguments from n8n wrapper
-      toolArgs = req.body[0].JSON;
+      toolArgs = body.JSON;
 
       // Infer tool name from arguments structure
       // For now, we'll require tool name to be passed separately or default to a specific tool
