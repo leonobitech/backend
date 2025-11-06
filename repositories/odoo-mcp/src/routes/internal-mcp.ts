@@ -105,7 +105,7 @@ router.post("/call-tool", async (req, res) => {
     let { tool, arguments: toolArgs, query } = body;
 
     // Handle MCP Server Trigger format: { query: {...}, tool: { name: "...", description: "..." } }
-    if (!tool && query && body.tool && typeof body.tool === 'object' && body.tool.name) {
+    if (typeof tool === 'object' && query && body.tool && typeof body.tool === 'object' && body.tool.name) {
       logger.info({
         body,
         toolName: body.tool.name,
