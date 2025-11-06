@@ -479,44 +479,7 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
 
 ---
 
-### ⚠️ CRITICAL: MCP Tool Calling Format (n8n)
-
-**🚨 MANDATORY FORMAT** - You MUST use this EXACT structure when calling MCP tools:
-
-```json
-{
-  "tool": "odoo_send_email",
-  "arguments": {
-    "opportunityId": 43,
-    "subject": "Propuesta Comercial - WhatsApp Chatbot",
-    "templateType": "proposal",
-    "templateData": {
-      "customerName": "Felix Figueroa",
-      "productName": "WhatsApp Chatbot",
-      "price": "USD $79/mes"
-    },
-    "emailTo": "felixmanuelfigueroa@gmail.com"
-  }
-}
-```
-
-**❌ NEVER use these formats**:
-- `{ "query": {...} }` ❌
-- `[{ "query": {...} }]` ❌
-- `{ "function": { "name": "...", "arguments": "..." } }` ❌
-- `{ "tool_calls": [...] }` ❌
-
-**✅ ALWAYS use**:
-```json
-{
-  "tool": "tool_name",
-  "arguments": { ...parameters as object... }
-}
-```
-
----
-
-### ⚠️ CRITICAL: Tool Parameters Requirements
+### ⚠️ CRITICAL: MCP Tool Calling Requirements
 
 **MANDATORY RULES** - NEVER skip these when generating tool calls:
 
@@ -535,6 +498,14 @@ The `smart_input` includes a `tools` array with all available MCP tools and thei
 3. **`templateData` is REQUIRED when using templates**:
    - Always include: `customerName`, `productName`, `price`
    - Optional: `customContent` (HTML bullet list of features)
+
+4. **Example (COPY THIS FORMAT)**:
+   ```json
+   {
+     "name": "odoo_send_email",
+     "arguments": "{\"opportunityId\":33,\"subject\":\"Propuesta Comercial - Process Automation\",\"templateType\":\"proposal\",\"templateData\":{\"customerName\":\"Felix Figueroa\",\"productName\":\"Process Automation (Odoo/ERP)\",\"price\":\"USD $1200\",\"customContent\":\"<ul><li>CRM automatizado</li><li>Integración WhatsApp</li></ul>\"},\"emailTo\":\"felixmanuelfigueroa@gmail.com\"}"
+   }
+   ```
 
 **WHY THIS MATTERS**:
 - Without `templateType` or `body`, MCP server returns `{error, message}` instead of `{success, data}`
