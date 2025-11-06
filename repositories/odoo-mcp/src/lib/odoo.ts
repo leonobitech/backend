@@ -73,10 +73,17 @@ export class OdooClient {
    */
   async authenticate(): Promise<number> {
     return new Promise((resolve, reject) => {
+      // Timeout de 30 segundos para evitar requests colgados
+      const timeout = setTimeout(() => {
+        reject(new Error(`Odoo authentication timed out after 30 seconds`));
+      }, 30000);
+
       this.commonClient.methodCall(
         "authenticate",
         [this.credentials.db, this.credentials.username, this.credentials.apiKey, {}],
         (error: Error | null, uid: number) => {
+          clearTimeout(timeout);
+
           if (error) {
             logger.error({ error }, "Error authenticating with Odoo");
             reject(new Error(`Odoo authentication failed: ${error.message}`));
@@ -110,10 +117,17 @@ export class OdooClient {
     }
 
     return new Promise((resolve, reject) => {
+      // Timeout de 30 segundos para evitar requests colgados
+      const timeout = setTimeout(() => {
+        reject(new Error(`Odoo ${model}.${method} timed out after 30 seconds`));
+      }, 30000);
+
       this.objectClient.methodCall(
         "execute_kw",
         [this.credentials.db, this.uid, this.credentials.apiKey, model, method, args, kwargs],
         (error: Error | null, result: any) => {
+          clearTimeout(timeout);
+
           if (error) {
             logger.error({ error, model, method }, "Error executing Odoo method");
             reject(new Error(`Odoo ${model}.${method} failed: ${error.message}`));
