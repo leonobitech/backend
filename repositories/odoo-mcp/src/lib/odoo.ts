@@ -73,10 +73,10 @@ export class OdooClient {
    */
   async authenticate(): Promise<number> {
     return new Promise((resolve, reject) => {
-      // Timeout de 30 segundos para evitar requests colgados
+      // Timeout de 120 segundos para evitar requests colgados
       const timeout = setTimeout(() => {
-        reject(new Error(`Odoo authentication timed out after 30 seconds`));
-      }, 30000);
+        reject(new Error(`Odoo authentication timed out after 120 seconds`));
+      }, 120000);
 
       this.commonClient.methodCall(
         "authenticate",
@@ -117,10 +117,10 @@ export class OdooClient {
     }
 
     return new Promise((resolve, reject) => {
-      // Timeout de 30 segundos para evitar requests colgados
+      // Timeout de 120 segundos para evitar requests colgados
       const timeout = setTimeout(() => {
-        reject(new Error(`Odoo ${model}.${method} timed out after 30 seconds`));
-      }, 30000);
+        reject(new Error(`Odoo ${model}.${method} timed out after 120 seconds`));
+      }, 120000);
 
       this.objectClient.methodCall(
         "execute_kw",
