@@ -601,6 +601,7 @@ When user expresses interest in next steps, **YOU MUST IDENTIFY WHICH ACTION THE
 - ✅ `state.counters.prices_asked >= 1` (user has seen prices)
 
 **⚠️ MANDATORY PRE-FLIGHT CHECK**:
+
 ```
 BEFORE generating tool_calls, verify:
 1. Is business_name filled? If NO → Ask first
@@ -626,6 +627,7 @@ IF all data present:
 **You CANNOT do both at the same time!**
 
 **Example of INCORRECT behavior**:
+
 ```json
 ❌ BAD: {
   "message": "¿A qué email te mando la propuesta?",
@@ -634,6 +636,7 @@ IF all data present:
 ```
 
 **Example of CORRECT behavior when data is missing**:
+
 ```json
 ✅ GOOD: {
   "message": "Para enviarte la propuesta, ¿a qué email te la mando?",
@@ -642,6 +645,7 @@ IF all data present:
 ```
 
 **Example of CORRECT behavior when all data is present**:
+
 ```json
 ✅ GOOD: {
   "message": "Perfecto, te envío la propuesta ahora a felix@leonobitech.com",
@@ -723,6 +727,7 @@ For now, if user requests demo scheduling:
 - ✅ `state.counters.prices_asked >= 1`
 
 **Before calling `odoo_send_email`, you MUST verify**:
+
 ```javascript
 if (!state.business_name || !state.email || state.email === "") {
   // DON'T call the tool yet
