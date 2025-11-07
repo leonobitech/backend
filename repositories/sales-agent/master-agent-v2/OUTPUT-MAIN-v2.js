@@ -104,23 +104,76 @@ if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
     tool_calls.map((tc) => tc.function?.name || tc.name).join(", ")
   );
 
-  // Agregar tool_calls al output para que el siguiente nodo los procese
-  // El workflow bifurcará: si hay tool_calls → Execute MCP Tool, sino → continuar normal
-  return [
-    {
-      json: {
-        has_tool_calls: true,
-        tool_calls: tool_calls,
-        lead_id: masterOutput.lead_id || inputData.lead_id,
-        profile: masterOutput.profile || inputData.profile,
-        state: masterOutput.state || inputData.state,
-        message: message,
-        state_update: state_update,
-        cta_menu: cta_menu,
-        internal_reasoning: internal_reasoning,
+  // ============================================================================
+  // 🚨 VALIDACIÓN FORZADA: Bloquear tool calls con argumentos null/empty
+  // ============================================================================
+  let blockedToolCalls = [];
+  let validToolCalls = [];
+
+  for (const toolCall of tool_calls) {
+    const functionName = toolCall.function?.name || toolCall.name;
+
+    if (functionName === "odoo_send_email") {
+      try {
+        const args = JSON.parse(toolCall.function.arguments);
+
+        // Validar campos REQUERIDOS
+        const hasNullOrEmpty =
+          !args.emailTo ||
+          args.emailTo === "" ||
+          args.emailTo === null ||
+          !args.opportunityId ||
+          !args.subject ||
+          !args.templateType;
+
+        if (hasNullOrEmpty) {
+          console.error(
+            "[OutputMain] ❌ BLOCKED tool call with null/empty fields:",
+            JSON.stringify(args, null, 2)
+          );
+          blockedToolCalls.push({ toolCall, reason: "null/empty required fields" });
+        } else {
+          validToolCalls.push(toolCall);
+        }
+      } catch (e) {
+        console.error("[OutputMain] ❌ Failed to parse tool arguments:", e.message);
+        blockedToolCalls.push({ toolCall, reason: "invalid JSON arguments" });
+      }
+    } else {
+      // Otras tools pasan sin validación (por ahora)
+      validToolCalls.push(toolCall);
+    }
+  }
+
+  // Si bloqueamos todos los tool calls, retornar sin has_tool_calls
+  if (validToolCalls.length === 0) {
+    console.warn(
+      "[OutputMain] ⚠️ All tool calls BLOCKED. Continuing without tool execution."
+    );
+    console.warn("[OutputMain] Blocked reasons:", blockedToolCalls);
+
+    // Continuar sin tool_calls (el LLM ya debería haber preguntado en el message)
+    // NO retornar aquí - dejar que siga el flujo normal abajo
+  } else {
+    console.log(`[OutputMain] ✅ ${validToolCalls.length} valid tool calls will be executed`);
+
+    // Agregar SOLO los tool_calls válidos al output
+    return [
+      {
+        json: {
+          has_tool_calls: true,
+          tool_calls: validToolCalls,
+          lead_id: masterOutput.lead_id || inputData.lead_id,
+          profile: masterOutput.profile || inputData.profile,
+          state: masterOutput.state || inputData.state,
+          message: message,
+          state_update: state_update,
+          cta_menu: cta_menu,
+          internal_reasoning: internal_reasoning,
+        },
       },
-    },
-  ];
+    ];
+  }
 }
 
 // ============================================================================
