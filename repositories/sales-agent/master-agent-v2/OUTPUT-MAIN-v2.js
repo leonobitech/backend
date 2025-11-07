@@ -22,16 +22,27 @@ let masterOutput;
 
 if (inputData.output) {
   try {
+    // PRE-CLEANING: Remover markdown code fences si existen
+    let cleanedOutput = inputData.output;
+
+    // Remover ```json al inicio y ``` al final
+    cleanedOutput = cleanedOutput.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+
     // Intentar parsear normalmente
-    masterOutput = JSON.parse(inputData.output);
+    masterOutput = JSON.parse(cleanedOutput);
   } catch (parseError) {
     console.log("[OutputMain] ⚠️ JSON parse error:", parseError.message);
     console.log("[OutputMain] Attempting to repair JSON...");
 
     try {
-      // ESTRATEGIA SIMPLE: Solo eliminar el objeto internal_reasoning si está causando problemas
-      // La LLM tiende a poner keys sin valores ahí
+      // ESTRATEGIA 1: Remover markdown code fences
       let fixedJson = inputData.output;
+
+      // Limpiar backticks de markdown
+      fixedJson = fixedJson.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+
+      // ESTRATEGIA 2: Solo eliminar el objeto internal_reasoning si está causando problemas
+      // La LLM tiende a poner keys sin valores ahí
 
       // Buscar y remover internal_reasoning completo (puede tener nested objects)
       // Usamos un approach más robusto que maneja nested brackets
