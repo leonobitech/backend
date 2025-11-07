@@ -59,7 +59,10 @@ if (!masterOutput || !masterOutput.message) {
   throw new Error('[OutputMain] Missing required field: message');
 }
 
-const { message, state_update, cta_menu, internal_reasoning, tool_calls } = masterOutput;
+const { message, state_update, cta_menu, internal_reasoning } = masterOutput;
+
+// Tool calls pueden estar en message.tool_calls (OpenAI format) o en masterOutput.tool_calls (legacy)
+const tool_calls = message.tool_calls || masterOutput.tool_calls;
 
 console.log('[OutputMain] Processing message...');
 console.log('[OutputMain] RAG used:', message.rag_used);
