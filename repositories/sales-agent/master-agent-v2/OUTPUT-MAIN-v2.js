@@ -177,6 +177,82 @@ if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
 }
 
 // ============================================================================
+// 🚨 DETECCIÓN DE HALLUCINATION: LLM dice que envía pero no llamó tool
+// ============================================================================
+
+// Si NO hay tool_calls, verificar si el mensaje menciona que está enviando algo
+if (!tool_calls || tool_calls.length === 0) {
+  const messageText = message.text || "";
+
+  // Detectar frases que indican que el LLM dice que está enviando
+  const claimsToSend = /te env[íi]o|te mando|puedo enviarte|te llega|ya te envié|te lo envío/i.test(messageText);
+
+  if (claimsToSend) {
+    console.warn("[OutputMain] ⚠️ LLM HALLUCINATION DETECTED:");
+    console.warn("[OutputMain] Message claims to send something but no tool_calls present");
+    console.warn("[OutputMain] Message:", messageText);
+
+    // Verificar si tiene todos los campos para odoo_send_email
+    const hasAllFields =
+      state?.business_name &&
+      state?.email &&
+      state?.email !== "" &&
+      state?.business_type &&
+      profile?.lead_id;
+
+    if (hasAllFields) {
+      console.error("[OutputMain] 🔴 CRITICAL: All required fields present but LLM didn't call tool!");
+      console.error("[OutputMain] Forcing tool call creation...");
+
+      // Construir tool_call manualmente
+      const forcedToolCall = {
+        id: "call_forced_001",
+        type: "function",
+        function: {
+          name: "odoo_send_email",
+          arguments: JSON.stringify({
+            opportunityId: profile.lead_id,
+            subject: `Propuesta Comercial - ${state.interests?.[0] || "Nuestros Servicios"}`,
+            templateType: "proposal",
+            templateData: {
+              customerName: profile.full_name || "Cliente",
+              productName: state.interests?.[0] || "Automation Solution",
+              price: "Consultar"
+            },
+            emailTo: state.email
+          })
+        }
+      };
+
+      console.log("[OutputMain] ✅ Forced tool call created:", forcedToolCall.function.name);
+
+      // Retornar con el tool_call forzado
+      return [
+        {
+          json: {
+            has_tool_calls: true,
+            tool_calls: [forcedToolCall],
+            lead_id: profile.lead_id,
+            profile: profile,
+            state: state,
+            message: message,
+            state_update: state_update,
+            cta_menu: cta_menu,
+            internal_reasoning: internal_reasoning,
+            _forced_tool_call: true // Flag para debugging
+          }
+        }
+      ];
+    } else {
+      console.warn("[OutputMain] Missing fields, cannot force tool call");
+      console.warn("[OutputMain] business_name:", state?.business_name);
+      console.warn("[OutputMain] email:", state?.email);
+      console.warn("[OutputMain] business_type:", state?.business_type);
+    }
+  }
+}
+
+// ============================================================================
 // ESTRATEGIA DE OBTENCIÓN DE DATOS:
 //
 // El Master Agent DEBERÍA devolver profile y state completos actualizados.
