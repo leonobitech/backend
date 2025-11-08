@@ -22,27 +22,16 @@ let masterOutput;
 
 if (inputData.output) {
   try {
-    // PRE-CLEANING: Remover markdown code fences si existen
-    let cleanedOutput = inputData.output;
-
-    // Remover ```json al inicio y ``` al final
-    cleanedOutput = cleanedOutput.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
-
     // Intentar parsear normalmente
-    masterOutput = JSON.parse(cleanedOutput);
+    masterOutput = JSON.parse(inputData.output);
   } catch (parseError) {
     console.log("[OutputMain] ⚠️ JSON parse error:", parseError.message);
     console.log("[OutputMain] Attempting to repair JSON...");
 
     try {
-      // ESTRATEGIA 1: Remover markdown code fences
-      let fixedJson = inputData.output;
-
-      // Limpiar backticks de markdown
-      fixedJson = fixedJson.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
-
-      // ESTRATEGIA 2: Solo eliminar el objeto internal_reasoning si está causando problemas
+      // ESTRATEGIA SIMPLE: Solo eliminar el objeto internal_reasoning si está causando problemas
       // La LLM tiende a poner keys sin valores ahí
+      let fixedJson = inputData.output;
 
       // Buscar y remover internal_reasoning completo (puede tener nested objects)
       // Usamos un approach más robusto que maneja nested brackets
@@ -104,152 +93,23 @@ if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
     tool_calls.map((tc) => tc.function?.name || tc.name).join(", ")
   );
 
-  // ============================================================================
-  // 🚨 VALIDACIÓN FORZADA: Bloquear tool calls con argumentos null/empty
-  // ============================================================================
-  let blockedToolCalls = [];
-  let validToolCalls = [];
-
-  for (const toolCall of tool_calls) {
-    const functionName = toolCall.function?.name || toolCall.name;
-
-    if (functionName === "odoo_send_email") {
-      try {
-        const args = JSON.parse(toolCall.function.arguments);
-
-        // Validar campos REQUERIDOS
-        const hasNullOrEmpty =
-          !args.emailTo ||
-          args.emailTo === "" ||
-          args.emailTo === null ||
-          !args.opportunityId ||
-          !args.subject ||
-          !args.templateType;
-
-        if (hasNullOrEmpty) {
-          console.error(
-            "[OutputMain] ❌ BLOCKED tool call with null/empty fields:",
-            JSON.stringify(args, null, 2)
-          );
-          blockedToolCalls.push({ toolCall, reason: "null/empty required fields" });
-        } else {
-          validToolCalls.push(toolCall);
-        }
-      } catch (e) {
-        console.error("[OutputMain] ❌ Failed to parse tool arguments:", e.message);
-        blockedToolCalls.push({ toolCall, reason: "invalid JSON arguments" });
-      }
-    } else {
-      // Otras tools pasan sin validación (por ahora)
-      validToolCalls.push(toolCall);
-    }
-  }
-
-  // Si bloqueamos todos los tool calls, retornar sin has_tool_calls
-  if (validToolCalls.length === 0) {
-    console.warn(
-      "[OutputMain] ⚠️ All tool calls BLOCKED. Continuing without tool execution."
-    );
-    console.warn("[OutputMain] Blocked reasons:", blockedToolCalls);
-
-    // Continuar sin tool_calls (el LLM ya debería haber preguntado en el message)
-    // NO retornar aquí - dejar que siga el flujo normal abajo
-  } else {
-    console.log(`[OutputMain] ✅ ${validToolCalls.length} valid tool calls will be executed`);
-
-    // Agregar SOLO los tool_calls válidos al output
-    return [
-      {
-        json: {
-          has_tool_calls: true,
-          tool_calls: validToolCalls,
-          lead_id: masterOutput.lead_id || inputData.lead_id,
-          profile: masterOutput.profile || inputData.profile,
-          state: masterOutput.state || inputData.state,
-          message: message,
-          state_update: state_update,
-          cta_menu: cta_menu,
-          internal_reasoning: internal_reasoning,
-        },
+  // Agregar tool_calls al output para que el siguiente nodo los procese
+  // El workflow bifurcará: si hay tool_calls → Execute MCP Tool, sino → continuar normal
+  return [
+    {
+      json: {
+        has_tool_calls: true,
+        tool_calls: tool_calls,
+        lead_id: masterOutput.lead_id || inputData.lead_id,
+        profile: masterOutput.profile || inputData.profile,
+        state: masterOutput.state || inputData.state,
+        message: message,
+        state_update: state_update,
+        cta_menu: cta_menu,
+        internal_reasoning: internal_reasoning,
       },
-    ];
-  }
-}
-
-// ============================================================================
-// 🚨 DETECCIÓN DE HALLUCINATION: LLM dice que envía pero no llamó tool
-// ============================================================================
-
-// Si NO hay tool_calls, verificar si el mensaje menciona que está enviando algo
-if (!tool_calls || tool_calls.length === 0) {
-  const messageText = message.text || "";
-
-  // Detectar frases que indican que el LLM dice que está enviando
-  const claimsToSend = /te env[íi]o|te mando|puedo enviarte|te llega|ya te envié|te lo envío/i.test(messageText);
-
-  if (claimsToSend) {
-    console.warn("[OutputMain] ⚠️ LLM HALLUCINATION DETECTED:");
-    console.warn("[OutputMain] Message claims to send something but no tool_calls present");
-    console.warn("[OutputMain] Message:", messageText);
-
-    // Verificar si tiene todos los campos para odoo_send_email
-    const hasAllFields =
-      state?.business_name &&
-      state?.email &&
-      state?.email !== "" &&
-      state?.business_type &&
-      profile?.lead_id;
-
-    if (hasAllFields) {
-      console.error("[OutputMain] 🔴 CRITICAL: All required fields present but LLM didn't call tool!");
-      console.error("[OutputMain] Forcing tool call creation...");
-
-      // Construir tool_call manualmente
-      const forcedToolCall = {
-        id: "call_forced_001",
-        type: "function",
-        function: {
-          name: "odoo_send_email",
-          arguments: JSON.stringify({
-            opportunityId: profile.lead_id,
-            subject: `Propuesta Comercial - ${state.interests?.[0] || "Nuestros Servicios"}`,
-            templateType: "proposal",
-            templateData: {
-              customerName: profile.full_name || "Cliente",
-              productName: state.interests?.[0] || "Automation Solution",
-              price: "Consultar"
-            },
-            emailTo: state.email
-          })
-        }
-      };
-
-      console.log("[OutputMain] ✅ Forced tool call created:", forcedToolCall.function.name);
-
-      // Retornar con el tool_call forzado
-      return [
-        {
-          json: {
-            has_tool_calls: true,
-            tool_calls: [forcedToolCall],
-            lead_id: profile.lead_id,
-            profile: profile,
-            state: state,
-            message: message,
-            state_update: state_update,
-            cta_menu: cta_menu,
-            internal_reasoning: internal_reasoning,
-            _forced_tool_call: true // Flag para debugging
-          }
-        }
-      ];
-    } else {
-      console.warn("[OutputMain] Missing fields, cannot force tool call");
-      console.warn("[OutputMain] business_name:", state?.business_name);
-      console.warn("[OutputMain] email:", state?.email);
-      console.warn("[OutputMain] business_type:", state?.business_type);
-    }
-  }
+    },
+  ];
 }
 
 // ============================================================================

@@ -596,67 +596,11 @@ When user expresses interest in next steps, **YOU MUST IDENTIFY WHICH ACTION THE
 - ✅ `state.business_type !== null` (tipo de negocio)
 - ✅ `state.business_name !== null` (nombre del negocio)
 - ✅ `state.business_target !== null` (PYME/Enterprise - must be confirmed)
-- ✅ `state.email !== null` AND `state.email !== ""` (email address must have value)
+- ✅ `state.email !== null` (email address)
 - ✅ `state.stage ∈ ["qualify", "proposal_ready"]`
 - ✅ `state.counters.prices_asked >= 1` (user has seen prices)
 
-**⚠️ MANDATORY PRE-FLIGHT CHECK**:
-
-```
-BEFORE generating tool_calls, verify:
-1. Is business_name filled? If NO → Ask first
-2. Is email filled AND not empty? If NO → Ask first
-3. Is business_target confirmed? If NO → Confirm first
-
-ONLY call odoo_send_email when ALL three are present.
-```
-
-**🚨 CRITICAL - MUTUAL EXCLUSION RULE**:
-
-```
-IF missing data:
-  → ASK for it in your message
-  → DO NOT include tool_calls in your output
-  → STOP HERE
-
-IF all data present:
-  → Include tool_calls in your output
-  → Message can say "te envío ahora..."
-```
-
-**You CANNOT do both at the same time!**
-
-**Example of INCORRECT behavior**:
-
-```json
-❌ BAD: {
-  "message": "¿A qué email te mando la propuesta?",
-  "tool_calls": [{ ... }]  // ← WRONG! You're asking AND calling at the same time!
-}
-```
-
-**Example of CORRECT behavior when data is missing**:
-
-```json
-✅ GOOD: {
-  "message": "Para enviarte la propuesta, ¿a qué email te la mando?",
-  // NO tool_calls field at all
-}
-```
-
-**Example of CORRECT behavior when all data is present**:
-
-```json
-✅ GOOD: {
-  "message": "Perfecto, te envío la propuesta ahora a felix@leonobitech.com",
-  "tool_calls": [{
-    "function": {
-      "name": "odoo_send_email",
-      "arguments": "{\"opportunityId\": 47, \"emailTo\": \"felix@leonobitech.com\", ...}"
-    }
-  }]
-}
-```
+**If ANY field is missing**: ASK FOR IT NATURALLY before calling the tool.
 
 ---
 
@@ -716,35 +660,13 @@ For now, if user requests demo scheduling:
 
 **Requirements**:
 
-⚠️ **CRITICAL - NEVER call this tool without ALL these fields**:
-
 - ✅ `profile.lead_id` must exist (this is the Odoo opportunity ID)
-- ✅ `state.business_type !== null` - Ask: "¿Qué tipo de negocio tenés?"
-- ✅ `state.business_name !== null` - Ask: "¿Cómo se llama tu [business_type]?"
-- ✅ `state.business_target !== null` - Ask: "Veo que es una PYME, ¿correcto?"
-- ✅ `state.email !== null` - Ask: "¿A qué email te mando la propuesta?"
+- ✅ `state.business_type !== null`
+- ✅ `state.business_name !== null`
+- ✅ `state.business_target !== null` (MUST be confirmed, not just inferred)
+- ✅ `state.email !== null`
 - ✅ `state.stage ∈ ["qualify", "proposal_ready"]`
 - ✅ `state.counters.prices_asked >= 1`
-
-**Before calling `odoo_send_email`, you MUST verify**:
-
-```javascript
-if (!state.business_name || !state.email || state.email === "") {
-  // DON'T call the tool yet
-  // ASK for missing fields first
-  // RETURN message WITHOUT tool_calls
-  // Example: { "message": "¿A qué email te mando la propuesta?" }
-  return;
-}
-
-// All data present? NOW you can call the tool
-// Example: {
-//   "message": "Te envío la propuesta ahora...",
-//   "tool_calls": [{ ... }]
-// }
-```
-
-**🚨 CRITICAL RULE**: If you're asking for missing data, DO NOT include `tool_calls` in the same response. Ask FIRST, call tool AFTER user responds.
 
 **Template Types**:
 
