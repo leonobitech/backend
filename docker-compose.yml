@@ -91,6 +91,13 @@ services:
       # Cadena de middlewares: auth (labels) + headers/rules (file)
       - "traefik.http.routers.traefik.middlewares=auth-traefik@docker,block-trackers@file,secure-strict@file"
 
+    # Rotación de logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   redis_core:
     image: redis:latest
     container_name: redis_core
