@@ -279,7 +279,7 @@ services:
       - "traefik.http.routers.n8n_ui.entrypoints=websecure"
       - "traefik.http.routers.n8n_ui.tls.certresolver=le"
       - "traefik.http.routers.n8n_ui.service=n8n_main@docker"
-      - "traefik.http.routers.n8n_ui.middlewares=core-auth@file, secure-relaxed@file"
+      - "traefik.http.routers.n8n_ui.middlewares=core-auth@file,secure-relaxed@file"
 
       #########################################
       # 🎨 Assets estáticos (sin auth, mayor prioridad)
@@ -299,7 +299,7 @@ services:
       - "traefik.http.routers.n8n_rest.tls.certresolver=le"
       - "traefik.http.routers.n8n_rest.service=n8n_main@docker"
       - "traefik.http.routers.n8n_rest.priority=20"
-      - "traefik.http.routers.n8n_rest.middlewares=secure-relaxed@file, api-nostore-vary@file"
+      - "traefik.http.routers.n8n_rest.middlewares=secure-relaxed@file,api-nostore-vary@file"
 
       #########################################
       # 🖼️ Rutas estáticas (íconos, sin auth)
