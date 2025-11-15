@@ -1,11 +1,12 @@
 // ============================================================================
-// OUTPUT MAIN v5.0 - Formateo de salida para Baserow, Odoo y Chatwoot
+// OUTPUT MAIN v5.1 - Formateo de salida para Baserow, Odoo y Chatwoot
 // ============================================================================
 // Nodo: Code (n8n)
 // Posición: Después de Master AI Agent Main
 //
 // Recibe: Output de Master Agent v5.0 (message, profile, state, cta_menu, tool_calls)
 // Output: Formatos para WhatsApp, HTML (Odoo), y datos para persistir
+// Changelog v5.1: Agregada estrategia 3 para field names largos (>200 chars)
 // Changelog v5.0: Parsing robusto para claves corruptas _tool_calls_ignored
 // ============================================================================
 
@@ -74,7 +75,34 @@ if (inputData.output) {
         ""
       );
 
-      // ESTRATEGIA 3: Limpiar posibles comas duplicadas o trailing
+      // ESTRATEGIA 3: Detectar y remover field names sospechosamente largos (hallucinations)
+      // Patrón: Nombres de campo > 200 caracteres con muchos underscores/repeticiones
+      // Ejemplo: "_internal_send_email_called_now_ts_override...ignore__ignore__ignore..."
+      const longFieldPattern = /"_[^"]{200,}"\s*:/;
+      if (longFieldPattern.test(fixedJson)) {
+        console.log("[OutputMain] 🔧 Detected suspiciously long field name (>200 chars), removing...");
+
+        // Encontrar la posición del field corrupto
+        const match = fixedJson.match(longFieldPattern);
+        if (match) {
+          const fieldIndex = fixedJson.indexOf(match[0]);
+
+          // Buscar la coma anterior
+          let cutIndex = fieldIndex;
+          for (let i = fieldIndex - 1; i >= 0; i--) {
+            if (fixedJson[i] === ',') {
+              cutIndex = i;
+              break;
+            }
+          }
+
+          // Truncar desde la coma y cerrar el objeto
+          fixedJson = fixedJson.substring(0, cutIndex).trim() + "\n}";
+          console.log("[OutputMain] ✅ Removed long field name");
+        }
+      }
+
+      // ESTRATEGIA 4: Limpiar posibles comas duplicadas o trailing
       fixedJson = fixedJson.replace(/,\s*,/g, ",");
       fixedJson = fixedJson.replace(/,\s*}/g, "}");
       fixedJson = fixedJson.replace(/,\s*]/g, "]");
