@@ -23,6 +23,9 @@ import { clearAuthCookies } from "@utils/auth/cookies";
 import { refreshAccessTokenService } from "@services/account.service";
 import { refreshAuthCookies } from "@utils/auth/cookies";
 import { loggerEvent } from "@utils/logging/loggerEvent";
+import { UserRole } from "@constants/userRole";
+import appAssert from "@utils/validation/appAssert";
+import prisma from "@config/prisma";
 
 /**
  * 🛡️ Middleware para autenticar al usuario mediante Access Token válido.
@@ -80,16 +83,27 @@ const authenticate: RequestHandler = catchErrors(
     // Buscar el token en Redis
     let tokenResult;
     try {
-      tokenResult = await findAccessTokenOrThrow(accessKey, clientKey, meta, true);
+      tokenResult = await findAccessTokenOrThrow(
+        accessKey,
+        clientKey,
+        meta,
+        true
+      );
     } catch (err) {
       // Solo limpiar cookies si el token NO EXISTE en DB (TOKEN_REVOKED)
       // NO limpiar si es INVALID_CLIENT_KEY porque puede ser refresh temporal
-      if (err instanceof HttpException && err.errorCode === ERROR_CODE.TOKEN_REVOKED) {
-        logger.warn("🧹 Token revocado - limpiando cookies y forzando re-login", {
-          ...meta,
-          errorCode: err.errorCode,
-          event: "auth.token.revoked.cleanup",
-        });
+      if (
+        err instanceof HttpException &&
+        err.errorCode === ERROR_CODE.TOKEN_REVOKED
+      ) {
+        logger.warn(
+          "🧹 Token revocado - limpiando cookies y forzando re-login",
+          {
+            ...meta,
+            errorCode: err.errorCode,
+            event: "auth.token.revoked.cleanup",
+          }
+        );
 
         clearAuthCookies(res);
         throw err;
@@ -130,11 +144,14 @@ const authenticate: RequestHandler = catchErrors(
     // ⏳ Si el token viene del período de gracia, NO hacer refresh
     // Esto significa que ya se refrescó y solo estamos esperando propagación de cookies
     if (fromGrace) {
-      logger.info("⏳ Token en período de gracia - permitiendo acceso sin nuevo refresh", {
-        ...meta,
-        ttlRemaining: ttl,
-        event: "auth.token.grace_period",
-      });
+      logger.info(
+        "⏳ Token en período de gracia - permitiendo acceso sin nuevo refresh",
+        {
+          ...meta,
+          ttlRemaining: ttl,
+          event: "auth.token.grace_period",
+        }
+      );
 
       const { payload } = await verifyToken(accessToken, lang, req);
 
@@ -240,32 +257,68 @@ const authenticate: RequestHandler = catchErrors(
     }
 
     // ✅ Si el token fue recuperado de DB pero AÚN ES VÁLIDO (ttl >= 0), usar sin refrescar
+    // 🔧 FIX: Durante grace period, NO verificar el JWT porque ya expiró
+    // En su lugar, usar los datos del TokenRecord que findAccessTokenOrThrow() ya validó
     if (refreshed && ttl >= 0) {
-      logger.info("♻️ Token recuperado de DB con TTL válido - usando sin refresh", {
-        ...meta,
-        ttlRemaining: ttl,
-        event: "auth.token.db_recovery_valid",
+      logger.info(
+        "♻️ Token recuperado de DB con TTL válido - usando sin refresh",
+        {
+          ...meta,
+          ttlRemaining: ttl,
+          event: "auth.token.db_recovery_valid",
+        }
+      );
+
+      // 🎯 PROBLEMA: Si el token está en grace period (revoked: true, ttl > 0),
+      // el JWT tiene un exp que ya pasó, entonces verifyToken() lanza TokenExpired
+      // Esto causa que requests concurrentes (ej. auto-refresh cada 30s en frontend)
+      // fallen con 401 mientras Safari actualiza las cookies después de un refresh.
+
+      // ✅ SOLUCIÓN: Buscar el TokenRecord en DB y usar esos datos directamente
+      // findAccessTokenOrThrow() ya validó:
+      // - Token existe en DB
+      // - expiresAt > now (aún en grace period)
+      // - Fingerprint correcto (clientKey coincide con IP + User Agent + userId + sessionId)
+      // - IP coincide con Device.ipAddress
+      // Por lo tanto, es seguro confiar en los datos de la DB sin verificar el JWT.
+
+      const tokenRecord = await prisma.tokenRecord.findFirst({
+        where: {
+          jti: accessKey,
+          type: "ACCESS",
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              role: true,
+            },
+          },
+        },
       });
 
-      const { payload } = await verifyToken(accessToken, lang, req);
+      appAssert(
+        tokenRecord,
+        HTTP_CODE.UNAUTHORIZED,
+        "Token record not found in database.",
+        ERROR_CODE.TOKEN_REVOKED
+      );
 
-      if (
-        payload.aud !== Audience.Access ||
-        !("userId" in payload) ||
-        !("role" in payload)
-      ) {
-        throw new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          getErrorMessage("INVALID_AUDIENCE", lang),
-          ERROR_CODE.INVALID_AUDIENCE,
-          [`Expected Audience: ${Audience.Access}`]
-        );
-      }
+      // Construir payload desde los datos de DB (no desde JWT)
+      req.user = {
+        userId: tokenRecord.userId,
+        sessionId: tokenRecord.sessionId,
+        role: tokenRecord.user.role as UserRole,
+        aud: Audience.Access,
+        exp: Math.floor(tokenRecord.expiresAt.getTime() / 1000),
+        iss: "leonobitech.com",
+        jti: tokenRecord.jti,
+        sub: tokenRecord.userId,
+      } as AccessTokenPayload;
 
-      req.user = payload;
-      req.userId = payload.userId;
-      req.sessionId = payload.sessionId;
-      req.role = payload.role;
+      req.userId = tokenRecord.userId;
+      req.sessionId = tokenRecord.sessionId;
+      req.role = tokenRecord.user.role as UserRole;
 
       res.locals.user = {
         id: req.userId!,
@@ -278,6 +331,7 @@ const authenticate: RequestHandler = catchErrors(
         sessionId: req.sessionId,
         role: req.role,
         ttlRemaining: ttl,
+        isRevoked: tokenRecord.revoked,
         event: "auth.token.verified.db_valid",
       });
 
@@ -356,7 +410,10 @@ const authenticate: RequestHandler = catchErrors(
       }
 
       // 📝 Si detectamos uso de formato legacy, registrar para monitoreo
-      if (clientKey === expectedClientKeyLegacy && clientKey !== expectedClientKey) {
+      if (
+        clientKey === expectedClientKeyLegacy &&
+        clientKey !== expectedClientKey
+      ) {
         logger.info("🔄 Cliente usando formato legacy de clientKey detectado", {
           userId: tokenPayload.userId,
           sessionId: tokenPayload.sessionId,
