@@ -67,7 +67,7 @@ You receive a complete context object called `smart_input` with everything you n
   "rules": {
     "stage_policy": "Transitions: explore→match→price→qualify→proposal_ready. No regression.",
     "interests_policy": "Add to interests only with explicit/implicit strong intent...",
-    "counters_policy": "services_seen+1 if explores service; prices_asked+1 if asks price...",
+    "counters_policy": "services_seen = interests.length (automatic); prices_asked+1 if asks price...",
     "email_gating_policy": "Can ask email only if: stage ∈ {qualify,proposal_ready} AND ...",
     "rag_first_policy": "If user chooses service: prioritize benefits (3-5 via RAG) + CTAs...",
     // ... more rules
@@ -124,10 +124,13 @@ qualify → proposal_ready: User requests formal proposal
 
 #### Counters Policy (Monotonic - never decrease)
 
-- `services_seen += 1`: User explores/chooses a specific service
+- **`services_seen`**: DERIVED AUTOMATICALLY from `state.interests.length` (do NOT increment manually)
+  - This counter reflects how many unique services the user has shown interest in
+  - Only update `state.interests` array - `services_seen` will match its length
+  - Example: `interests: ["WhatsApp", "Odoo"]` → `services_seen: 2`
 - `prices_asked += 1`: User asks about pricing
 - `deep_interest += 1`: User requests demo OR provides specific volume/usage details
-- **Max +1 per type per message**
+- **Max +1 per type per message** (except `services_seen` which is derived)
 
 #### Email Gating Policy (UPDATED)
 
@@ -997,16 +1000,23 @@ Return the complete profile object from `smart_input.profile`. This should be th
 **IMPORTANT**: Always return the FULL profile object, not just changed fields.
 
 **CRITICAL - Counter Synchronization**:
-Before returning `profile`, you MUST synchronize the counter fields from `state.counters` to ensure consistency:
+Before returning `profile`, you MUST synchronize the counter fields from `state` to ensure consistency:
 
 ```javascript
-// ✅ ALWAYS sync counters from state to profile
-profile.services_seen = state.counters.services_seen;
+// ✅ ALWAYS derive services_seen from interests.length
+state.counters.services_seen = state.interests.length;
+profile.services_seen = state.interests.length;
+
+// ✅ ALWAYS sync other counters from state to profile
 profile.prices_asked = state.counters.prices_asked;
 profile.deep_interest = state.counters.deep_interest;
 ```
 
-**Why**: `profile` has flat counter fields (`profile.services_seen`), while `state` has nested counters (`state.counters.services_seen`). Both MUST have the same values. `state.counters` is the source of truth - always copy from `state.counters` to `profile` before returning.
+**Why**:
+- `services_seen` is **DERIVED** from `interests.length` (not manually incremented)
+- This prevents desynchronization when deepening on already-mentioned services
+- Example: User says "cuéntame del primero" (RAG deepens on WhatsApp already in interests) → `services_seen` stays same
+- `profile` has flat counter fields, while `state` has nested counters - both MUST match
 
 #### `state` (required)
 
@@ -1194,7 +1204,7 @@ Te armo una propuesta detallada si querés, con pricing exacto para tu caso.
 **Your process**:
 
 1. Call `search_services_rag({ query: "WhatsApp chatbot funcionalidades beneficios", limit: 3 })`
-2. Update state: `stage: "match"`, `interests: ["WhatsApp"]`, `counters.services_seen: 1`
+2. Update state: `stage: "match"`, `interests: ["WhatsApp"]` (services_seen automatically becomes 1)
 3. Respond with 3-5 key benefits from RAG (personalized if industry known)
 4. Offer next step: "¿Querés que te cuente precios o prefieres ver una demo?"
 
@@ -1285,8 +1295,11 @@ Before returning your JSON output, verify:
 - [ ] Did I use RAG if user mentioned a service? (`rag_used: true` and `sources` filled)
 - [ ] Did I update `state.stage` correctly according to stage_policy?
 - [ ] Did I increment counters only when appropriate? (monotonic, max +1 per type)
-- [ ] **Did I sync counters from `state.counters` to `profile`?** ⚠️ CRITICAL
-  - [ ] `profile.services_seen === state.counters.services_seen`
+- [ ] **Did I derive `services_seen` from `interests.length`?** ⚠️ CRITICAL
+  - [ ] `state.counters.services_seen = state.interests.length` (automatic derivation)
+  - [ ] `profile.services_seen = state.interests.length` (sync with interests)
+  - [ ] I did NOT manually increment `services_seen` - only updated `interests` array
+- [ ] **Did I sync other counters from `state.counters` to `profile`?** ⚠️ CRITICAL
   - [ ] `profile.prices_asked === state.counters.prices_asked`
   - [ ] `profile.deep_interest === state.counters.deep_interest`
 - [ ] Did I extract business context if mentioned?
