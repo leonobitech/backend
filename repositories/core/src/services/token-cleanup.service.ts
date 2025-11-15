@@ -23,12 +23,32 @@ export async function cleanupExpiredTokens(): Promise<{
     const beforeCount = await prisma.tokenRecord.count();
     logger.info(`🧹 [Cleanup] Total tokens in DB before cleanup: ${beforeCount}`);
 
+    // ⚠️ IMPORTANTE: NO borrar tokens recién expirados porque son necesarios para refresh
+    // Solo borrar tokens que:
+    // 1. Están revocados (revoked: true) Y ya pasaron su grace period
+    // 2. O expiraron hace más de 1 hora (para dar tiempo al refresh flow)
+
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
     // Obtener tokens que se van a borrar (para logging)
     const tokensToDelete = await prisma.tokenRecord.findMany({
       where: {
-        expiresAt: {
-          lt: now,
-        },
+        OR: [
+          // Tokens revocados que ya pasaron su grace period
+          {
+            revoked: true,
+            expiresAt: {
+              lt: now,
+            },
+          },
+          // Tokens expirados hace más de 1 hora (no revocados)
+          {
+            revoked: false,
+            expiresAt: {
+              lt: oneHourAgo,
+            },
+          },
+        ],
       },
       select: {
         id: true,
@@ -40,18 +60,32 @@ export async function cleanupExpiredTokens(): Promise<{
     });
 
     if (tokensToDelete.length > 0) {
-      logger.info(`🧹 [Cleanup] Found ${tokensToDelete.length} expired tokens to delete:`);
+      logger.info(`🧹 [Cleanup] Found ${tokensToDelete.length} tokens to delete:`);
       tokensToDelete.forEach(t => {
-        logger.info(`   - ${t.type} token (JTI: ${t.jti.substring(0, 16)}..., expires: ${t.expiresAt.toISOString()}, revoked: ${t.revoked})`);
+        const expiredAgo = Math.floor((now.getTime() - t.expiresAt.getTime()) / 1000 / 60);
+        logger.info(`   - ${t.type} token (JTI: ${t.jti.substring(0, 16)}..., expires: ${t.expiresAt.toISOString()}, revoked: ${t.revoked}, expired ${expiredAgo} min ago)`);
       });
     }
 
-    // Eliminar todos los tokens (ACCESS y REFRESH) que ya expiraron
+    // Eliminar solo los tokens que cumplen las condiciones
     const result = await prisma.tokenRecord.deleteMany({
       where: {
-        expiresAt: {
-          lt: now, // Menor que ahora = expirado
-        },
+        OR: [
+          // Tokens revocados que ya pasaron su grace period
+          {
+            revoked: true,
+            expiresAt: {
+              lt: now,
+            },
+          },
+          // Tokens expirados hace más de 1 hora (no revocados)
+          {
+            revoked: false,
+            expiresAt: {
+              lt: oneHourAgo,
+            },
+          },
+        ],
       },
     });
 
@@ -60,10 +94,10 @@ export async function cleanupExpiredTokens(): Promise<{
 
     if (result.count > 0) {
       logger.info(
-        `🧹 [Cleanup] Cleaned up ${result.count} expired token(s) from database`
+        `🧹 [Cleanup] Cleaned up ${result.count} token(s) from database`
       );
     } else {
-      logger.info(`🧹 [Cleanup] No expired tokens found`);
+      logger.info(`🧹 [Cleanup] No tokens to clean up`);
     }
 
     return {

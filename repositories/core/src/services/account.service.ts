@@ -593,43 +593,12 @@ export const refreshAccessTokenService = async (
 
   const { user, session } = tokenRecord;
 
-  // 🕐 Mover TODOS los tokens viejos al período de gracia ANTES de generar el nuevo
-  // Esto previene acumulación de tokens y permite que el cliente use las cookies viejas por 2 minutos
-  const oldAccessTokenRecords = await prisma.tokenRecord.findMany({
-    where: {
-      sessionId: session.id,
-      userId: user.id,
-      publicKey: activeClientKey, // Buscar con el clientKey activo (nuevo si hubo migración)
-      type: "ACCESS",
-      revoked: false, // Solo tokens activos
-    },
-  });
+  // ============================================================================
+  // ORDEN CORRECTO: Generar → Actualizar → Revocar → Cleanup
+  // ============================================================================
 
-  if (oldAccessTokenRecords.length > 0) {
-    const { moveTokenToGracePeriod } = await import("@utils/auth/tokenRedis");
-    const gracePeriodExpiration = new Date(Date.now() + 120 * 1000); // 120 segundos desde ahora
-
-    // Mover todos los tokens viejos a grace period en Redis
-    for (const token of oldAccessTokenRecords) {
-      await moveTokenToGracePeriod(token.jti);
-    }
-
-    // 🕐 Marcar todos los tokens viejos como revocados en DB durante el grace period
-    // Esto permite que los retries del browser con JTIs viejos funcionen desde DB fallback
-    await prisma.tokenRecord.updateMany({
-      where: {
-        id: { in: oldAccessTokenRecords.map(t => t.id) },
-      },
-      data: {
-        expiresAt: gracePeriodExpiration,
-        revoked: true, // ✅ Marcar como revocado pero mantener disponible durante grace period
-      },
-    });
-
-    logger.info(`🧹 Revoked ${oldAccessTokenRecords.length} old access token(s) for session ${session.id}`);
-  }
-
-  // 🔐 Generar nuevos tokens utilizando el clientKey activo (nuevo si hubo migración)
+  // 1️⃣ GENERAR nuevos tokens PRIMERO
+  logger.info(`🔄 [1/3] Generating new tokens for session ${session.id}`);
   const newAccess = await generateAccessToken(
     user.id,
     session.id,
@@ -642,14 +611,12 @@ export const refreshAccessTokenService = async (
     user.role as UserRole,
     activeClientKey
   );
+  logger.info(`✅ New tokens generated (ACCESS JTI: ${newAccess.hashedJti.substring(0, 16)}...)`);
 
-  // 🔄 CREAR nuevos registros en DB en lugar de sobrescribir
-  // Esto permite que tanto el token viejo (en grace period) como el nuevo coexistan
-  logger.info(`🔄 Creating new ACCESS token in DB for session ${session.id}`);
-  logger.info(`   - JTI: ${newAccess.hashedJti}`);
-  logger.info(`   - User: ${user.id}`);
-  logger.info(`   - Session: ${session.id}`);
+  // 2️⃣ CREAR/ACTUALIZAR en DB SEGUNDO
+  logger.info(`💾 [2/3] Persisting new tokens to database`);
 
+  // Crear nuevo ACCESS token
   const newAccessRecord = await prisma.tokenRecord.create({
     data: {
       jti: newAccess.hashedJti,
@@ -662,10 +629,9 @@ export const refreshAccessTokenService = async (
       revoked: false,
     },
   });
+  logger.info(`✅ ACCESS token created in DB with ID: ${newAccessRecord.id}`);
 
-  logger.info(`✅ ACCESS token created successfully in DB with ID: ${newAccessRecord.id}`);
-
-  // 🔄 Para refresh token, podemos sobrescribir porque no tiene grace period
+  // Actualizar REFRESH token (sobrescribe el anterior)
   await prisma.tokenRecord.updateMany({
     where: {
       sessionId: session.id,
@@ -680,6 +646,48 @@ export const refreshAccessTokenService = async (
       revoked: false,
     },
   });
+  logger.info(`✅ REFRESH token updated in DB`);
+
+  // 3️⃣ REVOCAR tokens viejos TERCERO (ahora que los nuevos ya existen)
+  logger.info(`🗑️ [3/3] Revoking old access tokens`);
+  const oldAccessTokenRecords = await prisma.tokenRecord.findMany({
+    where: {
+      sessionId: session.id,
+      userId: user.id,
+      publicKey: activeClientKey,
+      type: "ACCESS",
+      revoked: false,
+      // Excluir el token recién creado
+      NOT: {
+        id: newAccessRecord.id,
+      },
+    },
+  });
+
+  if (oldAccessTokenRecords.length > 0) {
+    const { moveTokenToGracePeriod } = await import("@utils/auth/tokenRedis");
+    const gracePeriodExpiration = new Date(Date.now() + 120 * 1000); // 120 segundos
+
+    // Mover a grace period en Redis
+    for (const token of oldAccessTokenRecords) {
+      await moveTokenToGracePeriod(token.jti);
+    }
+
+    // Marcar como revocados en DB (grace period de 120s)
+    await prisma.tokenRecord.updateMany({
+      where: {
+        id: { in: oldAccessTokenRecords.map(t => t.id) },
+      },
+      data: {
+        expiresAt: gracePeriodExpiration,
+        revoked: true,
+      },
+    });
+
+    logger.info(`✅ Revoked ${oldAccessTokenRecords.length} old access token(s), moved to grace period`);
+  } else {
+    logger.info(`ℹ️ No old access tokens to revoke`);
+  }
 
   return {
     status: API_STATUS.REFRESHED,
