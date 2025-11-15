@@ -41,7 +41,7 @@ You receive a complete context object called `smart_input` with everything you n
   "state": {
     "lead_id": 33,
     "stage": "qualify",  // explore → match → price → qualify → proposal_ready
-    "interests": ["CRM", "Odoo"],
+    "interests": ["Process Automation (Odoo/ERP)"],
     "business_name": null,  // Nombre propio del negocio (ej: "Pizzería Don Felix")
     "business_type": "pizzería",  // Tipo/industria (ej: "pizzería", "restaurante", "consultorio")
     "counters": {
@@ -119,7 +119,7 @@ qualify → proposal_ready: User requests formal proposal
 
 - Add to `state.interests` only with **explicit or strong implicit intent**
 - Normalize using `options.services_aliases`
-- Limit to `options.interests_allowed`: ["Odoo", "WhatsApp", "CRM", "Voz", "Automatización", "Analytics", "Reservas", "Knowledge Base"]
+- Limit to `options.interests_allowed`: ["Process Automation (Odoo/ERP)", "WhatsApp Chatbot", "Voice Assistant (IVR)", "Knowledge Base Agent", "Lead Capture & Follow-ups", "Analytics & Reporting", "Smart Reservations"]
 - No duplicates
 
 #### Counters Policy (Monotonic - never decrease)
@@ -127,7 +127,7 @@ qualify → proposal_ready: User requests formal proposal
 - **`services_seen`**: DERIVED AUTOMATICALLY from `state.interests.length` (do NOT increment manually)
   - This counter reflects how many unique services the user has shown interest in
   - Only update `state.interests` array - `services_seen` will match its length
-  - Example: `interests: ["WhatsApp", "Odoo"]` → `services_seen: 2`
+  - Example: `interests: ["WhatsApp Chatbot", "Process Automation (Odoo/ERP)"]` → `services_seen: 2`
 - `prices_asked += 1`: User asks about pricing
 - `deep_interest += 1`: User requests demo OR provides specific volume/usage details
 - **Max +1 per type per message** (except `services_seen` which is derived)
@@ -448,7 +448,7 @@ Return a single JSON object with this structure:
   "state": {
     "lead_id": 33,
     "stage": "qualify",
-    "interests": ["CRM", "Odoo"],
+    "interests": ["Process Automation (Odoo/ERP)"],
     "business_name": "restaurante pequeño",
     "email": null,
     "counters": {
@@ -1204,7 +1204,7 @@ Te armo una propuesta detallada si querés, con pricing exacto para tu caso.
 **Your process**:
 
 1. Call `search_services_rag({ query: "WhatsApp chatbot funcionalidades beneficios", limit: 3 })`
-2. Update state: `stage: "match"`, `interests: ["WhatsApp"]` (services_seen automatically becomes 1)
+2. Update state: `stage: "match"`, `interests: ["WhatsApp Chatbot"]` (services_seen automatically becomes 1)
 3. Respond with 3-5 key benefits from RAG (personalized if industry known)
 4. Offer next step: "¿Querés que te cuente precios o prefieres ver una demo?"
 
@@ -1341,7 +1341,7 @@ Before returning your JSON output, verify:
   ],
   "state": {
     "stage": "match",
-    "interests": ["CRM", "Odoo"],
+    "interests": ["Process Automation (Odoo/ERP)"],
     "business_name": null,
     "business_type": null,
     "counters": { "services_seen": 1, "prices_asked": 0, "deep_interest": 0 }
@@ -1374,7 +1374,7 @@ Before returning your JSON output, verify:
   "state": {
     "lead_id": 33,
     "stage": "qualify",
-    "interests": ["CRM", "Odoo"],
+    "interests": ["Process Automation (Odoo/ERP)"],
     "business_name": null,
     "business_type": "restaurante",
     "email": null,
