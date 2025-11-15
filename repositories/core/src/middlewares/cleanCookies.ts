@@ -27,6 +27,8 @@ const forwardAuthExtras = [
   "cw_d_session_info", // Chatwoot
   "_chatwoot_session", // Chatwoot
 
+  "odoo_mcp_session", // Odoo MCP Connector
+
   "clientMeta",
 ];
 
