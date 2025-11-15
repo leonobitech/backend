@@ -645,7 +645,12 @@ export const refreshAccessTokenService = async (
 
   // 🔄 CREAR nuevos registros en DB en lugar de sobrescribir
   // Esto permite que tanto el token viejo (en grace period) como el nuevo coexistan
-  await prisma.tokenRecord.create({
+  logger.info(`🔄 Creating new ACCESS token in DB for session ${session.id}`);
+  logger.info(`   - JTI: ${newAccess.hashedJti}`);
+  logger.info(`   - User: ${user.id}`);
+  logger.info(`   - Session: ${session.id}`);
+
+  const newAccessRecord = await prisma.tokenRecord.create({
     data: {
       jti: newAccess.hashedJti,
       type: "ACCESS",
@@ -657,6 +662,8 @@ export const refreshAccessTokenService = async (
       revoked: false,
     },
   });
+
+  logger.info(`✅ ACCESS token created successfully in DB with ID: ${newAccessRecord.id}`);
 
   // 🔄 Para refresh token, podemos sobrescribir porque no tiene grace period
   await prisma.tokenRecord.updateMany({

@@ -17,6 +17,35 @@ export async function cleanupExpiredTokens(): Promise<{
   try {
     const now = new Date();
 
+    logger.info(`🧹 [Cleanup] Starting token cleanup at ${now.toISOString()}`);
+
+    // Primero ver cuántos tokens hay antes de limpiar
+    const beforeCount = await prisma.tokenRecord.count();
+    logger.info(`🧹 [Cleanup] Total tokens in DB before cleanup: ${beforeCount}`);
+
+    // Obtener tokens que se van a borrar (para logging)
+    const tokensToDelete = await prisma.tokenRecord.findMany({
+      where: {
+        expiresAt: {
+          lt: now,
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        jti: true,
+        expiresAt: true,
+        revoked: true,
+      },
+    });
+
+    if (tokensToDelete.length > 0) {
+      logger.info(`🧹 [Cleanup] Found ${tokensToDelete.length} expired tokens to delete:`);
+      tokensToDelete.forEach(t => {
+        logger.info(`   - ${t.type} token (JTI: ${t.jti.substring(0, 16)}..., expires: ${t.expiresAt.toISOString()}, revoked: ${t.revoked})`);
+      });
+    }
+
     // Eliminar todos los tokens (ACCESS y REFRESH) que ya expiraron
     const result = await prisma.tokenRecord.deleteMany({
       where: {
@@ -26,10 +55,15 @@ export async function cleanupExpiredTokens(): Promise<{
       },
     });
 
+    const afterCount = await prisma.tokenRecord.count();
+    logger.info(`🧹 [Cleanup] Total tokens in DB after cleanup: ${afterCount}`);
+
     if (result.count > 0) {
       logger.info(
-        `🧹 Cleaned up ${result.count} expired token(s) from database`
+        `🧹 [Cleanup] Cleaned up ${result.count} expired token(s) from database`
       );
+    } else {
+      logger.info(`🧹 [Cleanup] No expired tokens found`);
     }
 
     return {
