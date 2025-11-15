@@ -1,5 +1,5 @@
 import prisma from "@config/prisma";
-import { logger } from "@utils/logging/logger";
+import logger from "@utils/logging/logger";
 
 /**
  * 🧹 Limpia tokens expirados de la base de datos
