@@ -1,4 +1,4 @@
-import { RequestHandler } from "express";
+import { Request, Response, RequestHandler } from "express";
 import catchErrors from "@utils/http/catchErrors";
 import { HTTP_CODE } from "@constants/httpCode";
 import { SupportedLang } from "@constants/errorMessages";
@@ -26,43 +26,107 @@ import { loggerEvent } from "@utils/logging/loggerEvent";
 import { UserRole } from "@constants/userRole";
 import appAssert from "@utils/validation/appAssert";
 
+//==============================================================================
+// 🧩 HELPER FUNCTIONS
+//==============================================================================
+
 /**
- * 🛡️ Middleware para autenticar al usuario mediante Access Token válido.
+ * Valida que el payload sea de tipo Access Token con los campos requeridos
+ */
+function validateAccessTokenPayload(
+  payload: any,
+  lang: SupportedLang
+): asserts payload is AccessTokenPayload {
+  if (
+    payload.aud !== Audience.Access ||
+    !("userId" in payload) ||
+    !("role" in payload)
+  ) {
+    throw new HttpException(
+      HTTP_CODE.UNAUTHORIZED,
+      getErrorMessage("INVALID_AUDIENCE", lang),
+      ERROR_CODE.INVALID_AUDIENCE,
+      [`Expected Audience: ${Audience.Access}`]
+    );
+  }
+}
+
+/**
+ * Setea los datos del usuario autenticado en el request
+ */
+function setAuthenticatedUser(
+  req: Request,
+  res: Response,
+  payload: AccessTokenPayload
+): void {
+  req.user = payload;
+  req.userId = payload.userId;
+  req.sessionId = payload.sessionId;
+  req.role = payload.role;
+
+  res.locals.user = {
+    id: payload.userId,
+    role: payload.role,
+  };
+}
+
+/**
+ * Construye un AccessTokenPayload desde datos de DB (usado en grace period)
+ */
+function buildPayloadFromDbData(
+  userId: string,
+  sessionId: string,
+  role: string,
+  accessKey: string,
+  ttl: number
+): AccessTokenPayload {
+  const expiresAt = Date.now() + ttl * 1000;
+  return {
+    userId,
+    sessionId,
+    role: role as UserRole,
+    aud: Audience.Access,
+    exp: Math.floor(expiresAt / 1000),
+    iss: "leonobitech.com",
+    jti: accessKey,
+    sub: userId,
+  };
+}
+
+//==============================================================================
+// 🛡️ MAIN MIDDLEWARE
+//==============================================================================
+
+/**
+ * Authentication Middleware
+ *
+ * Valida el Access Token del usuario y setea req.user con los datos autenticados.
+ *
+ * Flujo de autenticación:
+ * 1. Extrae accessKey y clientKey de cookies
+ * 2. Busca el token en Redis (o DB como fallback)
+ * 3. Procesa según el origen y estado del token:
+ *    - Grace period (fromGrace): Token en período de gracia post-refresh
+ *    - Expired DB token (refreshed && ttl<0): Trigger silent refresh
+ *    - Valid DB token (refreshed && ttl>=0): Usa datos de DB sin verificar JWT
+ *    - Normal Redis token: Verifica JWT y valida fingerprint
+ * 4. Setea req.user, req.userId, req.sessionId, req.role
+ *
+ * @throws {HttpException} 401 si el token es inválido, expirado o revocado
  */
 const authenticate: RequestHandler = catchErrors(
   async (req, res, next): Promise<void> => {
     const lang = (req.headers["accept-language"]?.split(",")[0] ||
       "en") as SupportedLang;
 
-    const accessKey = getAccessKey(req);
-    const clientKey = getClientKey(req);
-
     const meta = req.meta;
 
-    /* // 📍 Determinar si esta es una request de ForwardAuth de Traefik
-    const isForwardAuth = req.originalUrl.includes("/security/verify-admin");
+    //==========================================================================
+    // STEP 1: Extract & Validate Credentials
+    //==========================================================================
 
-    let meta: any;
-
-    if (!isForwardAuth) {
-      // 🌐 Request directa (desde el frontend al backend)
-      // El middleware `extractMeta` ya procesó la metadata completa
-      meta = req.meta!;
-    } else {
-      // 🚀 Request indirecta (de Traefik via ForwardAuth)
-      meta = getClientMeta(req); // Ya devuelve el objeto completo
-
-      if (!meta) {
-        throw new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          getErrorMessage("META_REQUIRED", lang),
-          ERROR_CODE.META_CLIENT_REQUIRED,
-          ["cookie clientMeta faltante"]
-        );
-      }
-
-      console.log("Request from Traefik:", meta);
-    } */
+    const accessKey = getAccessKey(req);
+    const clientKey = getClientKey(req);
 
     if (!accessKey || !clientKey) {
       logger.warn("🛑 Acceso denegado: Faltan cookies de autenticación", {
@@ -79,18 +143,21 @@ const authenticate: RequestHandler = catchErrors(
       );
     }
 
-    // Buscar el token en Redis
+    //==========================================================================
+    // STEP 2: Find Token (Redis or DB Fallback)
+    //==========================================================================
+
     let tokenResult;
     try {
       tokenResult = await findAccessTokenOrThrow(
         accessKey,
         clientKey,
         meta,
-        true
+        true // useFallback: Si no está en Redis, buscar en DB
       );
     } catch (err) {
-      // Solo limpiar cookies si el token NO EXISTE en DB (TOKEN_REVOKED)
-      // NO limpiar si es INVALID_CLIENT_KEY porque puede ser refresh temporal
+      // Si el token no existe en DB, limpiar cookies y forzar re-login
+      // NO limpiar si es INVALID_CLIENT_KEY (puede ser refresh temporal)
       if (
         err instanceof HttpException &&
         err.errorCode === ERROR_CODE.TOKEN_REVOKED
@@ -121,10 +188,7 @@ const authenticate: RequestHandler = catchErrors(
       role: dbRole,
     } = tokenResult;
 
-    // 🔐 Verificación básica contra Redis
-    // Si viene de DB (refreshed=true), el clientKeyHash puede estar en nuevo formato
-    // mientras el cliente envía legacy. En ese caso, la validación se hizo en tokenRedis.
-    // Solo validamos si NO viene de refresh o si coinciden exactamente.
+    // Validar clientKey si NO viene de DB (en DB ya se validó)
     if (!refreshed && clientKey !== clientKeyHash) {
       throw new HttpException(
         HTTP_CODE.UNAUTHORIZED,
@@ -133,18 +197,26 @@ const authenticate: RequestHandler = catchErrors(
       );
     }
 
-    // 🔍 Log: token recibido
+    // Log: Token recibido
     const audience = await getTokenAudience(accessToken);
     logger.info("🔑 Token recibido", {
       ...meta,
       ttlSeconds: ttl,
-      audience: audience,
+      audience,
       fromGrace: fromGrace || false,
+      refreshed,
       event: "auth.token.received",
     });
 
-    // ⏳ Si el token viene del período de gracia, NO hacer refresh
-    // Esto significa que ya se refrescó y solo estamos esperando propagación de cookies
+    //==========================================================================
+    // STEP 3: Process Token Based on Source & Status
+    //==========================================================================
+
+    // -------------------------------------------------------------------------
+    // PATH A: Grace Period Token
+    // -------------------------------------------------------------------------
+    // Token encontrado en Redis grace period key (movido ahí post-refresh)
+    // Aún válido por 120 segundos para permitir propagación de cookies
     if (fromGrace) {
       logger.info(
         "⏳ Token en período de gracia - permitiendo acceso sin nuevo refresh",
@@ -156,43 +228,30 @@ const authenticate: RequestHandler = catchErrors(
       );
 
       const { payload } = await verifyToken(accessToken, lang, req);
-
-      if (
-        payload.aud !== Audience.Access ||
-        !("userId" in payload) ||
-        !("role" in payload)
-      ) {
-        throw new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          getErrorMessage("INVALID_AUDIENCE", lang),
-          ERROR_CODE.INVALID_AUDIENCE,
-          [`Expected Audience: ${Audience.Access}`]
-        );
-      }
-
-      req.user = payload;
-      req.userId = payload.userId;
-      req.sessionId = payload.sessionId;
-      req.role = payload.role;
-
-      res.locals.user = {
-        id: req.userId!,
-        role: req.role!,
-      };
+      validateAccessTokenPayload(payload, lang);
+      setAuthenticatedUser(req, res, payload);
 
       return next();
     }
 
-    // 🔁 Si el token fue refrescado desde DB Y está expirado, forzar regeneración
-    // ⚠️ IMPORTANTE: Solo refrescar si ttl < 0 (realmente expirado)
-    // Si ttl >= 0, el token de DB aún es válido → NO refrescar
+    // -------------------------------------------------------------------------
+    // PATH B: Expired DB Token → Trigger Silent Refresh
+    // -------------------------------------------------------------------------
+    // Token recuperado de DB pero ya expiró (ttl < 0)
+    // Generar nuevo token y actualizar cookies automáticamente
     if (refreshed && ttl < 0) {
+      logger.info("🔁 Token expirado - iniciando silent refresh", {
+        ...meta,
+        ttlRemaining: ttl,
+        event: "auth.token.silent_refresh.start",
+      });
+
       const result = await refreshAccessTokenService(
         clientKey,
         meta,
         lang,
         req,
-        clientKeyHash // Pasar el formato alternativo para backward compatibility
+        clientKeyHash // Pasar formato alternativo para backward compatibility
       );
 
       const { payload } = await verifyToken(
@@ -200,8 +259,9 @@ const authenticate: RequestHandler = catchErrors(
         lang,
         req
       );
+      validateAccessTokenPayload(payload, lang);
 
-      // Actualizar cookies con nuevos tokens (tokens eliminados de logs por seguridad)
+      // Actualizar cookies con nuevos tokens
       logger.info("🍪 Actualizando cookies después de refresh", {
         userId: result.data.userId,
         sessionId: result.data.sessionId,
@@ -216,73 +276,52 @@ const authenticate: RequestHandler = catchErrors(
         clientKey: result.tokens.hashedPublicKey,
       });
 
-      if (
-        payload.aud !== Audience.Access ||
-        !("userId" in payload) ||
-        !("role" in payload)
-      ) {
-        throw new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          getErrorMessage("INVALID_AUDIENCE", lang),
-          ERROR_CODE.INVALID_AUDIENCE,
-          [`Expected Audience: ${Audience.Access}`]
-        );
-      }
-
-      req.user = payload;
-      req.userId = payload.userId;
-      req.sessionId = payload.sessionId;
-      req.role = payload.role;
-
-      res.locals.user = {
-        id: req.userId!,
-        role: req.role!,
-      };
+      setAuthenticatedUser(req, res, payload);
 
       loggerEvent("token.refreshed", {
         ...meta,
-        userId: req.userId,
-        sessionId: req.sessionId,
+        userId: payload.userId,
+        sessionId: payload.sessionId,
         event: "auth.token.silent_refresh",
         source: "auth.middleware.silent_refresh",
       });
 
-      logger.info("✅ Usuario autenticado", {
+      logger.info("✅ Usuario autenticado (post silent refresh)", {
         ...meta,
-        userId: req.userId,
-        sessionId: req.sessionId,
-        role: req.role,
+        userId: payload.userId,
+        sessionId: payload.sessionId,
+        role: payload.role,
         event: "auth.token.verified",
       });
 
       return next();
     }
 
-    // ✅ Si el token fue recuperado de DB pero AÚN ES VÁLIDO (ttl >= 0), usar sin refrescar
-    // 🔧 FIX: Durante grace period, NO verificar el JWT porque ya expiró
-    // En su lugar, usar los datos del TokenRecord que findAccessTokenOrThrow() ya validó
+    // -------------------------------------------------------------------------
+    // PATH C: Valid DB Token (Grace Period) → Use DB Data
+    // -------------------------------------------------------------------------
+    // Token recuperado de DB con TTL aún válido (ttl >= 0)
+    // Esto pasa durante grace period cuando el JWT ya expiró pero el TokenRecord
+    // todavía tiene expiresAt > now (grace period de 120 segundos)
+    //
+    // 🔧 FIX: No podemos usar verifyToken() porque el JWT claim 'exp' ya pasó,
+    // causando JWTExpired error. En su lugar, usamos los datos que
+    // findAccessTokenOrThrow() ya recuperó y validó desde DB.
+    //
+    // Seguridad: Safe porque findAccessTokenOrThrow() ya validó:
+    // - Token existe en DB
+    // - expiresAt > now (aún en grace period)
+    // - Fingerprint correcto (clientKey matches IP + User Agent + userId + sessionId)
+    // - IP matches Device.ipAddress
     if (refreshed && ttl >= 0) {
       logger.info(
-        "♻️ Token recuperado de DB con TTL válido - usando sin refresh",
+        "♻️ Token recuperado de DB con TTL válido - usando datos de DB",
         {
           ...meta,
           ttlRemaining: ttl,
           event: "auth.token.db_recovery_valid",
         }
       );
-
-      // 🎯 PROBLEMA: Si el token está en grace period (revoked: true, ttl > 0),
-      // el JWT tiene un exp que ya pasó, entonces verifyToken() lanza TokenExpired
-      // Esto causa que requests concurrentes (ej. auto-refresh cada 30s en frontend)
-      // fallen con 401 mientras Safari actualiza las cookies después de un refresh.
-
-      // ✅ SOLUCIÓN: Usar los datos que findAccessTokenOrThrow() ya recuperó de DB
-      // findAccessTokenOrThrow() ya validó:
-      // - Token existe en DB
-      // - expiresAt > now (aún en grace period)
-      // - Fingerprint correcto (clientKey coincide con IP + User Agent + userId + sessionId)
-      // - IP coincide con Device.ipAddress
-      // Por lo tanto, es seguro confiar en los datos de la DB sin verificar el JWT.
 
       appAssert(
         dbUserId && dbSessionId && dbRole,
@@ -291,33 +330,21 @@ const authenticate: RequestHandler = catchErrors(
         ERROR_CODE.TOKEN_REVOKED
       );
 
-      // Construir payload desde los datos de DB (no desde JWT)
-      const expiresAt = Date.now() + ttl * 1000;
-      req.user = {
-        userId: dbUserId,
-        sessionId: dbSessionId,
-        role: dbRole as UserRole,
-        aud: Audience.Access,
-        exp: Math.floor(expiresAt / 1000),
-        iss: "leonobitech.com",
-        jti: accessKey,
-        sub: dbUserId,
-      } as AccessTokenPayload;
+      const payload = buildPayloadFromDbData(
+        dbUserId,
+        dbSessionId,
+        dbRole,
+        accessKey,
+        ttl
+      );
 
-      req.userId = dbUserId;
-      req.sessionId = dbSessionId;
-      req.role = dbRole as UserRole;
+      setAuthenticatedUser(req, res, payload);
 
-      res.locals.user = {
-        id: req.userId!,
-        role: req.role!,
-      };
-
-      logger.info("✅ Usuario autenticado desde DB sin refresh (optimizado)", {
+      logger.info("✅ Usuario autenticado desde DB (grace period)", {
         ...meta,
-        userId: req.userId,
-        sessionId: req.sessionId,
-        role: req.role,
+        userId: payload.userId,
+        sessionId: payload.sessionId,
+        role: payload.role,
         ttlRemaining: ttl,
         event: "auth.token.verified.db_valid",
       });
@@ -325,7 +352,11 @@ const authenticate: RequestHandler = catchErrors(
       return next();
     }
 
-    // 🔐 Verificar token firmado y extraer payload
+    // -------------------------------------------------------------------------
+    // PATH D: Normal Redis Token → Verify JWT
+    // -------------------------------------------------------------------------
+    // Token encontrado en Redis con TTL válido
+    // Verificar firma JWT, audience, JTI hash, y fingerprint
     let payload: AccessTokenPayload;
     try {
       const { payload: tokenPayload } = await verifyToken(
@@ -334,22 +365,13 @@ const authenticate: RequestHandler = catchErrors(
         req
       );
 
-      if (
-        tokenPayload.aud !== Audience.Access ||
-        !("userId" in tokenPayload) ||
-        !("role" in tokenPayload)
-      ) {
-        throw new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          getErrorMessage("INVALID_AUDIENCE", lang),
-          ERROR_CODE.INVALID_AUDIENCE,
-          [`Expected Audience: ${Audience.Access}`]
-        );
-      }
+      validateAccessTokenPayload(tokenPayload, lang);
 
+      // Validar JTI hash
       const hashedJti = createHash("sha512")
         .update(tokenPayload.jti)
         .digest("hex");
+
       if (hashedJti !== accessKey) {
         throw new HttpException(
           HTTP_CODE.UNAUTHORIZED,
@@ -358,14 +380,14 @@ const authenticate: RequestHandler = catchErrors(
         );
       }
 
-      // 🔐 Validación de huella digital con soporte para formato legacy
+      // Validar fingerprint (device + IP)
       const expectedClientKey = await generateClientKeyFromMeta(
         meta,
         tokenPayload.userId,
         tokenPayload.sessionId
       );
 
-      // 🔄 BACKWARD COMPATIBILITY: Intentar también con formato legacy (IP /24)
+      // Backward compatibility: Intentar también con formato legacy (IP /24)
       const expectedClientKeyLegacy = await generateClientKeyLegacy(
         meta,
         tokenPayload.userId,
@@ -396,7 +418,7 @@ const authenticate: RequestHandler = catchErrors(
         );
       }
 
-      // 📝 Si detectamos uso de formato legacy, registrar para monitoreo
+      // Log si detectamos uso de formato legacy
       if (
         clientKey === expectedClientKeyLegacy &&
         clientKey !== expectedClientKey
@@ -415,7 +437,7 @@ const authenticate: RequestHandler = catchErrors(
           ...meta,
           errorCode: err.errorCode,
           message: err.message,
-          details: err.details, // Include details for debugging clientKey mismatches
+          details: err.details,
           event:
             err.errorCode === ERROR_CODE.TOKEN_REVOKED
               ? "auth.token.revoked"
@@ -440,22 +462,17 @@ const authenticate: RequestHandler = catchErrors(
       );
     }
 
-    // ✅ Autenticación exitosa
-    req.user = payload;
-    req.userId = payload.userId;
-    req.sessionId = payload.sessionId;
-    req.role = payload.role;
+    //==========================================================================
+    // STEP 4: Set Authenticated User & Continue
+    //==========================================================================
 
-    res.locals.user = {
-      id: req.userId!,
-      role: req.role!,
-    };
+    setAuthenticatedUser(req, res, payload);
 
-    logger.info("✅ Usuario autenticado", {
+    logger.info("✅ Usuario autenticado (token normal)", {
       ...meta,
-      userId: req.userId,
-      sessionId: req.sessionId,
-      role: req.role,
+      userId: payload.userId,
+      sessionId: payload.sessionId,
+      role: payload.role,
       event: "auth.token.verified",
     });
 
