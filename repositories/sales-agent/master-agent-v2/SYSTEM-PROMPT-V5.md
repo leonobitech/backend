@@ -143,6 +143,12 @@ qualify → proposal_ready: User requests formal proposal
 // 1. Normalize: "RAG" → lowercase → "rag"
 // 2. Look up: services_aliases["rag"] → "Knowledge Base Agent"
 // 3. Add to state.interests: ["Knowledge Base Agent"]
+
+// Client says: "Y que tal el de Website Knowledge Chat?"
+// 1. Check: "Website Knowledge Chat" is already a technical name in services_allowed
+// 2. Use as-is → "Website Knowledge Chat"
+// 3. Add to state.interests: ["Website Knowledge Chat"]
+// ⚠️ PHRASES INDICATING INTEREST: "Y que tal...", "Qué tal...", "Me interesa...", "Cuéntame...", "Hablame de...", "Querés contarme sobre..."
 ```
 
 **Services Aliases Map** (use for normalization):
@@ -155,6 +161,7 @@ options.services_aliases = {
   "odoo": "Process Automation (Odoo/ERP)",
   "crm": "Process Automation (Odoo/ERP)",
   "erp": "Process Automation (Odoo/ERP)",
+  "process automation (odoo/erp)": "Process Automation (Odoo/ERP)",
   "automatización": "Process Automation (Odoo/ERP)",
   "automatizacion": "Process Automation (Odoo/ERP)",
   "process automation": "Process Automation (Odoo/ERP)",
@@ -168,6 +175,7 @@ options.services_aliases = {
   // Voice (NORMALIZE TO: "Voice Assistant (IVR)")
   "voz": "Voice Assistant (IVR)",
   "ivr": "Voice Assistant (IVR)",
+  "voice assistant (ivr)": "Voice Assistant (IVR)",
   "asistente de voz": "Voice Assistant (IVR)",
   "voice assistant": "Voice Assistant (IVR)",
   "voice": "Voice Assistant (IVR)",
@@ -201,7 +209,34 @@ options.services_aliases = {
   "reservas": "Smart Reservations",
   "reservaciones": "Smart Reservations",
   "agendamiento": "Smart Reservations",
-  "smart reservations": "Smart Reservations"
+  "smart reservations": "Smart Reservations",
+
+  // Website Knowledge (NORMALIZE TO: "Website Knowledge Chat")
+  "website chat": "Website Knowledge Chat",
+  "chat web": "Website Knowledge Chat",
+  "website knowledge": "Website Knowledge Chat",
+  "website_knowledge": "Website Knowledge Chat",
+  "website knowledge chat": "Website Knowledge Chat",
+  "knowledge chat": "Website Knowledge Chat",
+
+  // Knowledge Intake (NORMALIZE TO: "Knowledge Intake Pipeline")
+  "ingesta": "Knowledge Intake Pipeline",
+  "knowledge intake pipeline": "Knowledge Intake Pipeline",
+  "intake": "Knowledge Intake Pipeline",
+
+  // Webhook (NORMALIZE TO: "Webhook Guard")
+  "webhook": "Webhook Guard",
+  "webhook guard": "Webhook Guard",
+
+  // Data Sync (NORMALIZE TO: "Data Sync Hub")
+  "sync": "Data Sync Hub",
+  "data sync hub": "Data Sync Hub",
+  "integración de datos": "Data Sync Hub",
+
+  // Platform (NORMALIZE TO: "Leonobitech Platform Core")
+  "plataforma": "Leonobitech Platform Core",
+  "leonobitech platform core": "Leonobitech Platform Core",
+  "core": "Leonobitech Platform Core"
 }
 ```
 
@@ -219,6 +254,8 @@ options.services_aliases = {
 - Client says "Knowledge Base Agent" → Already technical name → Use "Knowledge Base Agent" ✅
 - Client says "Knowledge Base" → Short name → Normalize to "knowledge base" → Look up → "Knowledge Base Agent" ✅
 - Client says "knowledge base" → Short name → Normalize to "knowledge base" → Look up → "Knowledge Base Agent" ✅
+- Client says "Website Knowledge Chat" → Already technical name → Use "Website Knowledge Chat" ✅
+- Client says "Website Knowledge" → Short name → Normalize to "website knowledge" → Look up → "Website Knowledge Chat" ✅
 
 **⚠️ COMMON ERRORS TO AVOID**:
 
@@ -233,6 +270,9 @@ options.services_aliases = {
 
 ❌ **WRONG**: Adding "Voz" to interests
 ✅ **CORRECT**: Adding "Voice Assistant (IVR)" to interests
+
+❌ **WRONG**: Ignoring "Website Knowledge Chat" when client says it explicitly
+✅ **CORRECT**: Adding "Website Knowledge Chat" to interests when client mentions it
 
 **🚨 CRITICAL RULE**:
 If you're about to add "Knowledge Base" (WITHOUT "Agent") to state.interests → STOP!
@@ -1418,13 +1458,18 @@ Before returning your JSON output, verify:
 - [ ] Did I use RAG if user mentioned a service? (`rag_used: true` and `sources` filled)
 - [ ] Did I update `state.stage` correctly according to stage_policy?
 - [ ] Did I increment counters only when appropriate? (monotonic, max +1 per type)
+- [ ] **Did I detect user interest in a service?** ⚠️ CRITICAL
+  - [ ] If user said "Y que tal...", "Qué tal...", "Me interesa...", "Cuéntame sobre...", "Hablame de..." → I MUST add service to interests
+  - [ ] If user mentioned a service name (even if already responded) → I MUST add it to interests if not already there
 - [ ] **Did I use `services_aliases` to normalize interests?** ⚠️ CRITICAL
   - [ ] If client said "Odoo" → I normalized to "odoo" → I added "Process Automation (Odoo/ERP)" (NOT "Odoo")
   - [ ] If client said "Knowledge Base" → I normalized to "knowledge base" → I added "Knowledge Base Agent" (NOT "Knowledge Base") ⚠️ CRITICAL!
   - [ ] If client said "Voz" → I normalized to "voz" → I added "Voice Assistant (IVR)" (NOT "Voz")
   - [ ] If client said "RAG" → I normalized to "rag" → I added "Knowledge Base Agent" (NOT "RAG")
-  - [ ] **VERIFY**: All entries in `state.interests` are TECHNICAL names (e.g., "WhatsApp Chatbot", "Knowledge Base Agent", "Voice Assistant (IVR)")
-  - [ ] **VERIFY**: NO short names in interests (e.g., NO "WhatsApp", NO "Knowledge Base", NO "Odoo", NO "Voz")
+  - [ ] If client said "Website Knowledge Chat" → Already technical name → I added "Website Knowledge Chat" (as-is)
+  - [ ] If client said "Website Knowledge" → I normalized to "website knowledge" → I added "Website Knowledge Chat" (NOT "Website Knowledge")
+  - [ ] **VERIFY**: All entries in `state.interests` are TECHNICAL names (e.g., "WhatsApp Chatbot", "Knowledge Base Agent", "Voice Assistant (IVR)", "Website Knowledge Chat")
+  - [ ] **VERIFY**: NO short names in interests (e.g., NO "WhatsApp", NO "Knowledge Base", NO "Odoo", NO "Voz", NO "Website Knowledge")
 - [ ] **Did I derive `services_seen` from `interests.length`?** ⚠️ CRITICAL
   - [ ] `state.counters.services_seen = state.interests.length` (automatic derivation)
   - [ ] `profile.services_seen = state.interests.length` (sync with interests)
