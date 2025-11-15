@@ -86,43 +86,53 @@ function normalizeIPv6ToPrefix(ip: string): string {
 /**
  * Extract IP address from request, considering proxies
  * Priority: CF-Connecting-IP (Cloudflare) > X-Real-IP > X-Forwarded-For > Socket
- * Note: Prefers IPv4 over IPv6 when available for consistency
+ * Note: ALWAYS prefers IPv4 over IPv6 when available for consistency
  */
 export function extractIpAddress(req: any): string {
-  let ip: string;
+  // Collect all possible IPs from different headers
+  const possibleIps: string[] = [];
 
   // Priority 1: CF-Connecting-IP (Cloudflare's real client IP)
   const cfIp = req.headers["cf-connecting-ip"];
   if (cfIp) {
-    ip = cfIp.trim();
+    possibleIps.push(cfIp.trim());
   }
+
   // Priority 2: X-Real-IP header (from nginx/Traefik)
-  else {
-    const realIp = req.headers["x-real-ip"];
-    if (realIp) {
-      ip = realIp.trim();
-    }
-    // Priority 3: X-Forwarded-For header (from proxies/load balancers)
-    else {
-      const forwardedFor = req.headers["x-forwarded-for"];
-      if (forwardedFor) {
-        // X-Forwarded-For can contain multiple IPs, take the first one
-        const ips = forwardedFor.split(",");
-        ip = ips[0].trim();
-      } else {
-        // Fallback to connection remote address
-        ip = req.socket.remoteAddress || "unknown";
-      }
-    }
+  const realIp = req.headers["x-real-ip"];
+  if (realIp) {
+    possibleIps.push(realIp.trim());
   }
 
-  // Normalize IPv6-mapped IPv4
-  ip = normalizeIpAddress(ip);
+  // Priority 3: X-Forwarded-For header (from proxies/load balancers)
+  const forwardedFor = req.headers["x-forwarded-for"];
+  if (forwardedFor) {
+    // X-Forwarded-For can contain multiple IPs, add all of them
+    const ips = forwardedFor.split(",").map((ip: string) => ip.trim());
+    possibleIps.push(...ips);
+  }
 
-  // Normalize IPv6 to stable /64 prefix
-  ip = normalizeIPv6ToPrefix(ip);
+  // Priority 4: Fallback to connection remote address
+  const socketIp = req.socket.remoteAddress;
+  if (socketIp) {
+    possibleIps.push(socketIp);
+  }
 
-  return ip;
+  // Normalize all IPs (remove IPv6-mapped IPv4 prefix)
+  const normalizedIps = possibleIps.map(ip => normalizeIpAddress(ip));
+
+  // ALWAYS prefer IPv4 over IPv6 for consistency
+  // Look for the first IPv4 address
+  const ipv4 = normalizedIps.find(ip => !isIPv6(ip));
+
+  if (ipv4) {
+    // Found IPv4, use it
+    return ipv4;
+  }
+
+  // No IPv4 found, fallback to first IPv6 (normalized to /64 prefix)
+  const ipv6 = normalizedIps[0] || "unknown";
+  return normalizeIPv6ToPrefix(ipv6);
 }
 
 /**
