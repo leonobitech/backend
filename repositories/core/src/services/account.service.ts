@@ -593,32 +593,40 @@ export const refreshAccessTokenService = async (
 
   const { user, session } = tokenRecord;
 
-  // 🕐 Mover el token viejo al período de gracia ANTES de generar el nuevo
-  // Esto permite que el cliente use las cookies viejas por 2 minutos mientras se propagan las nuevas
-  const oldAccessTokenRecord = await prisma.tokenRecord.findFirst({
+  // 🕐 Mover TODOS los tokens viejos al período de gracia ANTES de generar el nuevo
+  // Esto previene acumulación de tokens y permite que el cliente use las cookies viejas por 2 minutos
+  const oldAccessTokenRecords = await prisma.tokenRecord.findMany({
     where: {
       sessionId: session.id,
       userId: user.id,
       publicKey: activeClientKey, // Buscar con el clientKey activo (nuevo si hubo migración)
       type: "ACCESS",
+      revoked: false, // Solo tokens activos
     },
   });
 
-  if (oldAccessTokenRecord) {
+  if (oldAccessTokenRecords.length > 0) {
     const { moveTokenToGracePeriod } = await import("@utils/auth/tokenRedis");
-    await moveTokenToGracePeriod(oldAccessTokenRecord.jti);
-
-    // 🕐 Mantener el token viejo en DB durante el grace period (120 segundos)
-    // Esto permite que los retries del browser con el JTI viejo funcionen desde DB fallback
     const gracePeriodExpiration = new Date(Date.now() + 120 * 1000); // 120 segundos desde ahora
 
-    await prisma.tokenRecord.update({
-      where: { id: oldAccessTokenRecord.id },
+    // Mover todos los tokens viejos a grace period en Redis
+    for (const token of oldAccessTokenRecords) {
+      await moveTokenToGracePeriod(token.jti);
+    }
+
+    // 🕐 Marcar todos los tokens viejos como revocados en DB durante el grace period
+    // Esto permite que los retries del browser con JTIs viejos funcionen desde DB fallback
+    await prisma.tokenRecord.updateMany({
+      where: {
+        id: { in: oldAccessTokenRecords.map(t => t.id) },
+      },
       data: {
         expiresAt: gracePeriodExpiration,
         revoked: true, // ✅ Marcar como revocado pero mantener disponible durante grace period
       },
     });
+
+    logger.info(`🧹 Revoked ${oldAccessTokenRecords.length} old access token(s) for session ${session.id}`);
   }
 
   // 🔐 Generar nuevos tokens utilizando el clientKey activo (nuevo si hubo migración)

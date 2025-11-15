@@ -159,4 +159,8 @@ app.use(errorHandler);
 // 🚀 Bootstrap controlado
 app.listen(PORT, async () => {
   console.log(`Server listening on ${API_ORIGIN} in ${NODE_ENV} environment`);
+
+  // 🧹 Iniciar servicio de limpieza automática de tokens expirados
+  const { scheduleTokenCleanup } = await import("@services/token-cleanup.service");
+  scheduleTokenCleanup();
 });
