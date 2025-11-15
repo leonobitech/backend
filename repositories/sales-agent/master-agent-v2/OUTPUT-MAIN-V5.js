@@ -1,11 +1,12 @@
 // ============================================================================
-// OUTPUT MAIN v2.0 - Formateo de salida para Baserow, Odoo y Chatwoot
+// OUTPUT MAIN v5.0 - Formateo de salida para Baserow, Odoo y Chatwoot
 // ============================================================================
 // Nodo: Code (n8n)
 // Posición: Después de Master AI Agent Main
 //
-// Recibe: Output de Master Agent v2.0 (message, state_update, cta_menu)
+// Recibe: Output de Master Agent v5.0 (message, profile, state, cta_menu, tool_calls)
 // Output: Formatos para WhatsApp, HTML (Odoo), y datos para persistir
+// Changelog v5.0: Parsing robusto para claves corruptas _tool_calls_ignored
 // ============================================================================
 
 // ============================================================================
@@ -29,31 +30,63 @@ if (inputData.output) {
     console.log("[OutputMain] Attempting to repair JSON...");
 
     try {
-      // ESTRATEGIA SIMPLE: Solo eliminar el objeto internal_reasoning si está causando problemas
-      // La LLM tiende a poner keys sin valores ahí
       let fixedJson = inputData.output;
 
-      // Buscar y remover internal_reasoning completo (puede tener nested objects)
-      // Usamos un approach más robusto que maneja nested brackets
+      // ESTRATEGIA 1: Eliminar claves inválidas que genera el LLM cuando falla un tool_call
+      // Patrón: "_tool_calls_ignored..." con valores que tienen newlines literales sin escapar
+      // Ejemplo: "_tool_calls_ignored_due_to_missing_mandatory_fields...": "\n{\n  \"message\": ..."
+      //
+      // Detectamos estas claves y truncamos todo desde ahí (la clave corrupta siempre está al final)
+      const invalidKeyMarker = '"_tool_calls_ignored';
+      if (fixedJson.includes(invalidKeyMarker)) {
+        console.log("[OutputMain] 🔧 Detected invalid _tool_calls_ignored key, removing...");
+
+        // Encontrar el índice donde empieza la clave corrupta
+        const corruptIndex = fixedJson.indexOf(invalidKeyMarker);
+
+        // Buscar hacia atrás para encontrar la coma que precede esta clave
+        let cutIndex = corruptIndex;
+        for (let i = corruptIndex - 1; i >= 0; i--) {
+          if (fixedJson[i] === ',') {
+            cutIndex = i;
+            break;
+          }
+        }
+
+        // Truncar desde la coma (o desde la clave si no hay coma)
+        fixedJson = fixedJson.substring(0, cutIndex).trim();
+
+        // Después de truncar, SIEMPRE agregar el cierre del objeto raíz
+        // porque la clave corrupta siempre está después del último campo válido (state)
+        // Estructura esperada: { "message": {...}, "profile": {...}, "state": {...} }
+        //                                                                          ↑
+        // Después de truncar quedamos aquí: { "message": {...}, "profile": {...}, "state": {...}
+        // Necesitamos agregar el cierre: }
+        fixedJson += "\n}";
+
+        console.log("[OutputMain] ✅ Removed invalid _tool_calls_ignored key");
+      }
+
+      // ESTRATEGIA 2: Buscar y remover internal_reasoning completo si está malformado
+      // La LLM tiende a poner keys sin valores ahí
       fixedJson = fixedJson.replace(
         /,?\s*"internal_reasoning"\s*:\s*\{[^}]*\}/g,
         ""
       );
 
-      // Limpiar posibles comas duplicadas o trailing
+      // ESTRATEGIA 3: Limpiar posibles comas duplicadas o trailing
       fixedJson = fixedJson.replace(/,\s*,/g, ",");
       fixedJson = fixedJson.replace(/,\s*}/g, "}");
       fixedJson = fixedJson.replace(/,\s*]/g, "]");
 
       masterOutput = JSON.parse(fixedJson);
-      console.log(
-        "[OutputMain] ✅ JSON repaired by removing internal_reasoning"
-      );
+      console.log("[OutputMain] ✅ JSON repaired successfully");
     } catch (repairError) {
       console.log(
         "[OutputMain] ❌ Repair failed. Showing full JSON for debugging:"
       );
-      console.log(inputData.output);
+      console.log("[OutputMain] First 500 chars:", inputData.output.substring(0, 500));
+      console.log("[OutputMain] Last 500 chars:", inputData.output.substring(inputData.output.length - 500));
       throw new Error(
         `[OutputMain] Failed to parse JSON: ${parseError.message}. Repair attempt also failed: ${repairError.message}`
       );
