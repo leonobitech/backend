@@ -70,7 +70,6 @@ const profile = {
   // business context (🆕 añadido para captura progresiva)
   business_name: row.business_name || null,
   business_type: row.business_type || null,
-  business_target: row.business_target || null,
 };
 
 return [{ json: { profile } }];
