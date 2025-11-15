@@ -87,6 +87,9 @@ export const findAccessTokenOrThrow = async (
   ttl: number;
   refreshed: boolean;
   fromGrace?: boolean;
+  userId?: string;
+  sessionId?: string;
+  role?: string;
 }> => {
   const key = `access_token:${accessKey}`;
   const graceKey = `access_token:${accessKey}:grace`;
@@ -228,11 +231,15 @@ export const findAccessTokenOrThrow = async (
     const expiresAt = record.expiresAt.getTime();
     const ttlFromDb = Math.floor((expiresAt - Date.now()) / 1000);
 
+    // ✅ Retornar también userId, sessionId, y role para evitar segunda query en middleware
     return {
       token: record.token,
       clientKeyHash: record.publicKey,
       ttl: ttlFromDb,
       refreshed: true,
+      userId: record.userId,
+      sessionId: record.sessionId,
+      role: record.user.role,
     };
   }
 

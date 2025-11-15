@@ -25,7 +25,6 @@ import { refreshAuthCookies } from "@utils/auth/cookies";
 import { loggerEvent } from "@utils/logging/loggerEvent";
 import { UserRole } from "@constants/userRole";
 import appAssert from "@utils/validation/appAssert";
-import prisma from "@config/prisma";
 
 /**
  * 🛡️ Middleware para autenticar al usuario mediante Access Token válido.
@@ -117,6 +116,9 @@ const authenticate: RequestHandler = catchErrors(
       ttl,
       refreshed,
       fromGrace,
+      userId: dbUserId,
+      sessionId: dbSessionId,
+      role: dbRole,
     } = tokenResult;
 
     // 🔐 Verificación básica contra Redis
@@ -274,7 +276,7 @@ const authenticate: RequestHandler = catchErrors(
       // Esto causa que requests concurrentes (ej. auto-refresh cada 30s en frontend)
       // fallen con 401 mientras Safari actualiza las cookies después de un refresh.
 
-      // ✅ SOLUCIÓN: Buscar el TokenRecord en DB y usar esos datos directamente
+      // ✅ SOLUCIÓN: Usar los datos que findAccessTokenOrThrow() ya recuperó de DB
       // findAccessTokenOrThrow() ya validó:
       // - Token existe en DB
       // - expiresAt > now (aún en grace period)
@@ -282,56 +284,41 @@ const authenticate: RequestHandler = catchErrors(
       // - IP coincide con Device.ipAddress
       // Por lo tanto, es seguro confiar en los datos de la DB sin verificar el JWT.
 
-      const tokenRecord = await prisma.tokenRecord.findFirst({
-        where: {
-          jti: accessKey,
-          type: "ACCESS",
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              role: true,
-            },
-          },
-        },
-      });
-
       appAssert(
-        tokenRecord,
+        dbUserId && dbSessionId && dbRole,
         HTTP_CODE.UNAUTHORIZED,
-        "Token record not found in database.",
+        "Token data incomplete from database.",
         ERROR_CODE.TOKEN_REVOKED
       );
 
       // Construir payload desde los datos de DB (no desde JWT)
+      const expiresAt = Date.now() + ttl * 1000;
       req.user = {
-        userId: tokenRecord.userId,
-        sessionId: tokenRecord.sessionId,
-        role: tokenRecord.user.role as UserRole,
+        userId: dbUserId,
+        sessionId: dbSessionId,
+        role: dbRole as UserRole,
         aud: Audience.Access,
-        exp: Math.floor(tokenRecord.expiresAt.getTime() / 1000),
+        exp: Math.floor(expiresAt / 1000),
         iss: "leonobitech.com",
-        jti: tokenRecord.jti,
-        sub: tokenRecord.userId,
+        jti: accessKey,
+        sub: dbUserId,
       } as AccessTokenPayload;
 
-      req.userId = tokenRecord.userId;
-      req.sessionId = tokenRecord.sessionId;
-      req.role = tokenRecord.user.role as UserRole;
+      req.userId = dbUserId;
+      req.sessionId = dbSessionId;
+      req.role = dbRole as UserRole;
 
       res.locals.user = {
         id: req.userId!,
         role: req.role!,
       };
 
-      logger.info("✅ Usuario autenticado desde DB sin refresh", {
+      logger.info("✅ Usuario autenticado desde DB sin refresh (optimizado)", {
         ...meta,
         userId: req.userId,
         sessionId: req.sessionId,
         role: req.role,
         ttlRemaining: ttl,
-        isRevoked: tokenRecord.revoked,
         event: "auth.token.verified.db_valid",
       });
 
