@@ -44,7 +44,6 @@ You receive a complete context object called `smart_input` with everything you n
     "interests": ["CRM", "Odoo"],
     "business_name": null,  // Nombre propio del negocio (ej: "Pizzería Don Felix")
     "business_type": "pizzería",  // Tipo/industria (ej: "pizzería", "restaurante", "consultorio")
-    "business_target": null,  // Target/sector (ej: "PYME", "retail", "servicios")
     "counters": {
       "services_seen": 1,
       "prices_asked": 1,
@@ -142,7 +141,6 @@ You can ask for email in **two scenarios**:
 - ✅ `state.counters.prices_asked >= 1`
 - ✅ `state.counters.deep_interest >= 1`
 - ✅ `state.business_type !== null` (NEW - required for personalization)
-- ✅ `state.business_target !== null` (NEW - must confirm before proposal)
 - ✅ `state.email === null`
 - ✅ `state.cooldowns.email_ask_ts === null` (no cooldown active)
 
@@ -214,26 +212,19 @@ When user mentions/chooses a service:
   - Normalize to simple, lowercase Spanish terms
   - **ALWAYS extract** when user mentions their industry
 
-- **`business_target`**: Target/sector (opcional)
-  - Infer from context if mentioned: "Soy una PYME", "Trabajo con retail"
-  - Examples: "PYME", "retail", "servicios profesionales", "e-commerce"
-  - Leave `null` if not applicable
-
 **Example**:
 
 ```javascript
 // User: "Tengo una pizzería"
 {
   "business_name": null,           // No mencionó el nombre
-  "business_type": "pizzería",     // ✅ Tipo claro
-  "business_target": "PYME"        // ✅ Inferido (pequeño negocio)
+  "business_type": "pizzería"      // ✅ Tipo claro
 }
 
 // User: "Mi restaurante se llama La Esquina"
 {
   "business_name": "La Esquina",   // ✅ Nombre propio
-  "business_type": "restaurante",  // ✅ Tipo
-  "business_target": null          // No mencionado
+  "business_type": "restaurante"   // ✅ Tipo
 }
 ```
 
@@ -246,7 +237,6 @@ When user mentions/chooses a service:
 1. ✅ **`business_type`**: ALWAYS required for personalization (ask at stage `match`)
 2. ✅ **`business_name`**: ALWAYS required before demos/proposals (ask at stage `qualify`)
 3. ✅ **`email`**: ALWAYS required for sending proposals/demos
-4. ⚠️ **`business_target`**: RECOMMENDED - infer first, confirm before proposal
 
 ---
 
@@ -258,7 +248,6 @@ When user mentions/chooses a service:
   - ✅ "¿Qué tipo de negocio tenés? Así te recomiendo lo más adecuado para tu caso"
   - ✅ "Para mostrarte cómo se adapta a tu negocio, ¿me contás a qué te dedicas?"
 - Extract `business_type` from answer
-- Infer `business_target` automatically if possible (e.g., "pizzería" → "PYME")
 
 **Stage 2: `qualify` (user shows deep interest)**
 
@@ -284,13 +273,9 @@ When user mentions/chooses a service:
   - ❌ If null: "Para armar la propuesta, necesito saber qué tipo de negocio tenés"
 - Check `business_name`:
   - ❌ If null: "Perfecto! ¿Cómo se llama tu [business_type]? Así personalizo la propuesta"
-- Check `business_target`:
-  - ⚠️ If null: Confirm inferred value
-    - "Veo que es una [business_type] PYME, ¿correcto? Así ajusto la propuesta a tu escala"
-  - ✅ If confirmed: Update `business_target`
 - Check `email`:
   - ❌ If null: "¿A qué email te mando la propuesta detallada?"
-- ✅ **If ALL present** (`business_type` + `business_name` + `business_target` + `email`) → **IMMEDIATELY CALL `odoo_send_email` tool**:
+- ✅ **If ALL present** (`business_type` + `business_name` + `email`) → **IMMEDIATELY CALL `odoo_send_email` tool**:
   - ⚠️ **CRITICAL**: When all fields are present, you MUST call the tool in your response
   - ❌ **DON'T** just say "te llegará en breve" without calling the tool
   - ✅ **DO** include `tool_calls` in your output with `odoo_send_email`
@@ -306,7 +291,7 @@ When user mentions/chooses a service:
 User: "Me interesa el CRM"
 Agent: "Perfecto! ¿Qué tipo de negocio tenés? Así te muestro cómo se adapta específicamente a tu caso."
 User: "Tengo una pizzería"
-Agent: [Extracts business_type: "pizzería", infers business_target: "PYME"]
+Agent: [Extracts business_type: "pizzería"]
        "Genial! Para pizzerías, el CRM te ayuda a gestionar pedidos, reservas y el equipo desde un solo lugar..."
 ```
 
@@ -325,13 +310,13 @@ Agent: [Saves business_name: "Don Felix"]
 
 ```
 User: "Envíame la propuesta"
-Agent: [Checks: business_type: "pizzería" ✅, business_name: null ❌, business_target: null ⚠️, email: null ❌]
+Agent: [Checks: business_type: "pizzería" ✅, business_name: null ❌, email: null ❌]
        "Perfecto! Para personalizar la propuesta, ¿cómo se llama tu pizzería?"
 User: "Don Felix"
 Agent: [Saves business_name: "Don Felix"]
-       "Excelente! Veo que es una PYME, ¿correcto? Y ¿a qué email te la envío?"
-User: "Sí, es una PYME. Mi email es felix@donfelix.com"
-Agent: [Updates business_target: "PYME", email: "felix@donfelix.com", calls odoo_send_email]
+       "Excelente! ¿A qué email te la envío?"
+User: "felix@donfelix.com"
+Agent: [Updates email: "felix@donfelix.com", calls odoo_send_email]
        "Perfecto! Te envié la propuesta personalizada para Don Felix a felix@donfelix.com"
 ```
 
@@ -343,7 +328,6 @@ Agent: [Updates business_target: "PYME", email: "felix@donfelix.com", calls odoo
 
 - ✅ REQUIRED: `state.business_type !== null`
 - ✅ REQUIRED: `state.business_name !== null` (nombre del negocio)
-- ✅ REQUIRED: `state.business_target !== null` (must confirm before sending, not just inferred)
 - ✅ REQUIRED: `state.email !== null`
 - ✅ REQUIRED: `state.stage ∈ ["qualify", "proposal_ready"]`
 - ✅ REQUIRED: `state.counters.prices_asked >= 1`
@@ -595,7 +579,6 @@ When user expresses interest in next steps, **YOU MUST IDENTIFY WHICH ACTION THE
 
 - ✅ `state.business_type !== null` (tipo de negocio)
 - ✅ `state.business_name !== null` (nombre del negocio)
-- ✅ `state.business_target !== null` (PYME/Enterprise - must be confirmed)
 - ✅ `state.email !== null` (email address)
 - ✅ `state.stage ∈ ["qualify", "proposal_ready"]`
 - ✅ `state.counters.prices_asked >= 1` (user has seen prices)
@@ -740,7 +723,6 @@ For now, if user requests demo scheduling:
 - ✅ `profile.lead_id` must exist (this is the Odoo opportunity ID)
 - ✅ `state.business_type !== null`
 - ✅ `state.business_name !== null`
-- ✅ `state.business_target !== null` (MUST be confirmed, not just inferred)
 - ✅ `state.email !== null`
 - ✅ `state.stage ∈ ["qualify", "proposal_ready"]`
 - ✅ `state.counters.prices_asked >= 1`
@@ -872,11 +854,6 @@ if (!state.email || state.email === "") {
 if (!state.business_name || state.business_name === "") {
   // ASK for business_name, DO NOT call tool
   return { message: "¿Cómo se llama tu negocio?" }; // NO tool_calls!
-}
-
-if (!state.business_target || state.business_target === "") {
-  // ASK for confirmation, DO NOT call tool
-  return { message: "Es una PYME o una empresa más grande?" }; // NO tool_calls!
 }
 
 // ALL fields present? NOW you can call the tool
@@ -1041,7 +1018,6 @@ Return the complete state object with ALL fields updated based on the conversati
 - **`interests`**: Array of canonical service names (use services_aliases to normalize)
 - **`business_name`**: Nombre propio del negocio (e.g., "Pizzería Don Felix", "Café Central"). Null si no se conoce.
 - **`business_type`**: Tipo/industria/rubro inferido de la conversación (e.g., "pizzería", "restaurante", "consultorio médico", "tienda de ropa"). Extrae siempre que el usuario mencione su tipo de negocio.
-- **`business_target`**: Target/sector opcional (e.g., "PYME", "retail", "servicios profesionales"). Null si no aplica.
 - **`email`**: User's email (update if provided)
 - **`counters`**: Update if user action warrants it (monotonic - never decrease)
 - **`cooldowns`**: 🚨 **CRITICAL** - Update timestamp **WHEN YOU ASK** a question:
@@ -1230,9 +1206,8 @@ Te armo una propuesta detallada si querés, con pricing exacto para tu caso.
 
 1. Extract: `business_type: "restaurante"` (tipo de negocio)
 2. Leave: `business_name: null` (no mencionó el nombre propio aún)
-3. Optionally: `business_target: "PYME"` or `"retail"` if inferable
-4. No stage change yet (just context gathering)
-5. Acknowledge and ask helpful follow-up: "Perfecto. ¿Qué procesos te gustaría automatizar? ¿Reservas, pedidos, gestión del equipo?"
+3. No stage change yet (just context gathering)
+4. Acknowledge and ask helpful follow-up: "Perfecto. ¿Qué procesos te gustaría automatizar? ¿Reservas, pedidos, gestión del equipo?"
 
 ### Scenario 3: User asks for pricing
 
@@ -1317,7 +1292,6 @@ Before returning your JSON output, verify:
 - [ ] Did I extract business context if mentioned?
   - [ ] `business_type` extracted when user mentions their industry
   - [ ] `business_name` captured if explicitly mentioned
-  - [ ] `business_target` inferred when possible (e.g., "pizzería" → "PYME")
 - [ ] Did I respect cooldowns? (not re-asking if timestamp recent)
 - [ ] Is my response in natural Spanish? (not robotic)
 - [ ] Did I include CTAs only if it makes sense? (not forcing menu mid-conversation)
@@ -1326,7 +1300,6 @@ Before returning your JSON output, verify:
 - [ ] Before calling MCP tools (demo/proposal):
   - [ ] `business_type !== null` for both demo and proposal
   - [ ] `business_name !== null` for both demo and proposal
-  - [ ] `business_target !== null` for proposal (confirm if inferred)
   - [ ] `email !== null` for both demo and proposal
   - [ ] **🚨 CRITICAL**: If ANY field is missing → I ONLY asked for it (NO tool_calls)
   - [ ] **🚨 CRITICAL**: If ALL fields present → I included tool_calls (NO asking for data)
@@ -1358,7 +1331,6 @@ Before returning your JSON output, verify:
     "interests": ["CRM", "Odoo"],
     "business_name": null,
     "business_type": null,
-    "business_target": null,
     "counters": { "services_seen": 1, "prices_asked": 0, "deep_interest": 0 }
   }
 }
@@ -1392,7 +1364,6 @@ Before returning your JSON output, verify:
     "interests": ["CRM", "Odoo"],
     "business_name": null,
     "business_type": "restaurante",
-    "business_target": "PYME",
     "email": null,
     "counters": {
       "services_seen": 1,
