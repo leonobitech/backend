@@ -70,7 +70,13 @@ const options = {
     "voz": "Voice Assistant (IVR)",
 
     // Knowledge Base
+    "knowledge base": "Knowledge Base Agent",
+    "knowledge_base": "Knowledge Base Agent",
+    "knowledge base agent": "Knowledge Base Agent",
+    "knowledgebase": "Knowledge Base Agent",
     "base de conocimiento": "Knowledge Base Agent",
+    "agente de conocimiento": "Knowledge Base Agent",
+    "rag": "Knowledge Base Agent",
     "faq": "Knowledge Base Agent",
     "kb": "Knowledge Base Agent",
 
@@ -194,7 +200,7 @@ const options = {
 const rules = {
   timing_and_chronology: "Procesar el history de antiguo a reciente; prevalece el evento más nuevo; usar siempre el ts del historial; no inventar datos.",
 
-  interests_policy: "Añadir a state.interests solo ante intención explícita/implícita fuerte; normalizar con options.services_aliases; limitar a options.interests_allowed; sin duplicados; no eliminar salvo rechazo explícito.",
+  interests_policy: "Añadir a state.interests solo ante intención explícita/implícita fuerte; SIEMPRE normalizar usando options.services_aliases (usar el VALUE del mapeo, no el key); usar SOLO nombres técnicos completos de services_allowed (ej: 'Knowledge Base Agent', NO 'Knowledge Base'); sin duplicados; no eliminar salvo rechazo explícito.",
 
   stage_policy: "Transiciones: explore→match (lead define necesidad/canal o elige servicio por número/alias); match→price (pregunta precio); match→qualify (aporta volumen/uso concreto o pide demo); price→qualify (tras precio, si pide demo/volumen); qualify→proposal_ready (solicita propuesta). No retroceder salvo corrección clara del lead.",
 
@@ -212,7 +218,7 @@ const rules = {
 
   menu_guard_policy: "Con service_target presente o stage≥match está prohibido recomendar menú general. Usar CTAs del servicio.",
 
-  self_check_policy: "Si el último mensaje es selección de servicio (número/alias) y no hay precio/volumen/demo, stage MUST BE 'match' y services_seen+=1. service_target.bundle y rag_hints no pueden quedar vacíos (3–6 hints). state.interests debe mapearse a options.interests_allowed (p.ej., 'Odoo','CRM')."
+  self_check_policy: "Si el último mensaje es selección de servicio (número/alias) y no hay precio/volumen/demo, stage MUST BE 'match' y services_seen+=1. service_target.bundle y rag_hints no pueden quedar vacíos (3–6 hints). state.interests debe usar VALORES (VALUES) de services_aliases, NO keys (ej: 'Knowledge Base Agent', NO 'Knowledge Base'; 'Process Automation (Odoo/ERP)', NO 'Odoo')."
 };
 
 // ============================================================================

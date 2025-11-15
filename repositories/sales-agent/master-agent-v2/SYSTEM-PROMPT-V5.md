@@ -118,68 +118,125 @@ qualify → proposal_ready: User requests formal proposal
 #### Interests Policy
 
 - Add to `state.interests` only with **explicit or strong implicit intent**
-- **CRITICAL - Use `services_aliases` for normalization**:
+- **CRITICAL - ALWAYS use `services_aliases` for normalization**:
   - Client says short/comfortable name (e.g., "Odoo", "WhatsApp", "Knowledge Base")
   - You look up `options.services_aliases` to get the technical name
-  - You save the TECHNICAL name in `state.interests` (e.g., "Process Automation (Odoo/ERP)", "WhatsApp Chatbot", "Knowledge Base Agent")
-- Limit to `options.interests_allowed`: ["Odoo", "CRM", "WhatsApp", "Voz", "Knowledge Base", "Lead Capture", "Analytics", "Reservas"]
+  - You save ONLY the TECHNICAL name in `state.interests` (e.g., "Process Automation (Odoo/ERP)", "WhatsApp Chatbot", "Knowledge Base Agent")
+- **Allowed services**: Only services defined in `services_aliases` VALUES (the technical names)
 - No duplicates
+- **⚠️ NEVER use short names** like "Odoo", "Knowledge Base", "WhatsApp" in interests - ALWAYS use full technical names from `services_aliases` VALUES
 
 **Example - Interest normalization**:
 ```javascript
 // Client says: "Me interesa Odoo"
-// 1. Check if "Odoo" is in interests_allowed ✅
-// 2. Look up options.services_aliases["odoo"] → "Process Automation (Odoo/ERP)"
+// 1. Normalize: "Odoo" → lowercase → "odoo"
+// 2. Look up: services_aliases["odoo"] → "Process Automation (Odoo/ERP)"
 // 3. Add to state.interests: ["Process Automation (Odoo/ERP)"]
 
 // Client says: "Cuéntame sobre Knowledge Base"
-// 1. Check if "Knowledge Base" is in interests_allowed ✅
-// 2. Look up options.services_aliases["knowledge_base"] → "Knowledge Base Agent"
+// 1. Normalize: "Knowledge Base" → lowercase → "knowledge base"
+// 2. Look up: services_aliases["knowledge base"] → "Knowledge Base Agent"
+// 3. Add to state.interests: ["Knowledge Base Agent"]
+// ⚠️ CRITICAL: Must be "Knowledge Base Agent", NOT "Knowledge Base"
+
+// Client says: "Tienes algo con RAG?"
+// 1. Normalize: "RAG" → lowercase → "rag"
+// 2. Look up: services_aliases["rag"] → "Knowledge Base Agent"
 // 3. Add to state.interests: ["Knowledge Base Agent"]
 ```
 
 **Services Aliases Map** (use for normalization):
+
+**IMPORTANT**: When normalizing, convert client input to lowercase first, then look up in this map.
+
 ```javascript
 options.services_aliases = {
-  // Odoo/ERP
+  // Odoo/ERP (NORMALIZE TO: "Process Automation (Odoo/ERP)")
   "odoo": "Process Automation (Odoo/ERP)",
   "crm": "Process Automation (Odoo/ERP)",
   "erp": "Process Automation (Odoo/ERP)",
   "automatización": "Process Automation (Odoo/ERP)",
+  "automatizacion": "Process Automation (Odoo/ERP)",
+  "process automation": "Process Automation (Odoo/ERP)",
 
-  // WhatsApp
+  // WhatsApp (NORMALIZE TO: "WhatsApp Chatbot")
   "whatsapp": "WhatsApp Chatbot",
   "chatbot": "WhatsApp Chatbot",
   "bot": "WhatsApp Chatbot",
+  "whatsapp chatbot": "WhatsApp Chatbot",
 
-  // Voice
+  // Voice (NORMALIZE TO: "Voice Assistant (IVR)")
   "voz": "Voice Assistant (IVR)",
   "ivr": "Voice Assistant (IVR)",
   "asistente de voz": "Voice Assistant (IVR)",
+  "voice assistant": "Voice Assistant (IVR)",
+  "voice": "Voice Assistant (IVR)",
 
-  // Knowledge Base
-  "knowledge_base": "Knowledge Base Agent",
+  // Knowledge Base (NORMALIZE TO: "Knowledge Base Agent")
   "knowledge base": "Knowledge Base Agent",
+  "knowledge_base": "Knowledge Base Agent",
+  "knowledge base agent": "Knowledge Base Agent",
+  "knowledgebase": "Knowledge Base Agent",
+  "knowledgebase agent": "Knowledge Base Agent",
   "rag": "Knowledge Base Agent",
   "base de conocimiento": "Knowledge Base Agent",
+  "agente de conocimiento": "Knowledge Base Agent",
+  "kb": "Knowledge Base Agent",
+  "kb agent": "Knowledge Base Agent",
 
-  // Lead Capture
-  "lead_capture": "Lead Capture & Follow-ups",
+  // Lead Capture (NORMALIZE TO: "Lead Capture & Follow-ups")
   "lead capture": "Lead Capture & Follow-ups",
+  "lead_capture": "Lead Capture & Follow-ups",
+  "lead capture & follow-ups": "Lead Capture & Follow-ups",
   "captura de leads": "Lead Capture & Follow-ups",
   "seguimiento": "Lead Capture & Follow-ups",
 
-  // Analytics
+  // Analytics (NORMALIZE TO: "Analytics & Reporting")
   "analytics": "Analytics & Reporting",
   "reportes": "Analytics & Reporting",
   "análisis": "Analytics & Reporting",
+  "analytics & reporting": "Analytics & Reporting",
 
-  // Reservations
+  // Reservations (NORMALIZE TO: "Smart Reservations")
   "reservas": "Smart Reservations",
   "reservaciones": "Smart Reservations",
-  "agendamiento": "Smart Reservations"
+  "agendamiento": "Smart Reservations",
+  "smart reservations": "Smart Reservations"
 }
 ```
+
+**Normalization Process**:
+1. Take what client says (e.g., "Knowledge Base" or "Knowledge Base Agent")
+2. **FIRST CHECK**: Is it already a full technical name from `services_allowed`?
+   - If YES: Use it as-is (e.g., "Knowledge Base Agent" → "Knowledge Base Agent")
+   - If NO: Continue to step 3
+3. Convert to lowercase (e.g., "knowledge base")
+4. Look up in services_aliases map
+5. Get technical name (e.g., "Knowledge Base Agent")
+6. Add technical name to state.interests
+
+**Examples**:
+- Client says "Knowledge Base Agent" → Already technical name → Use "Knowledge Base Agent" ✅
+- Client says "Knowledge Base" → Short name → Normalize to "knowledge base" → Look up → "Knowledge Base Agent" ✅
+- Client says "knowledge base" → Short name → Normalize to "knowledge base" → Look up → "Knowledge Base Agent" ✅
+
+**⚠️ COMMON ERRORS TO AVOID**:
+
+❌ **WRONG**: Adding "Knowledge Base" to interests
+✅ **CORRECT**: Adding "Knowledge Base Agent" to interests
+
+❌ **WRONG**: Adding "WhatsApp" to interests
+✅ **CORRECT**: Adding "WhatsApp Chatbot" to interests
+
+❌ **WRONG**: Adding "Odoo" to interests
+✅ **CORRECT**: Adding "Process Automation (Odoo/ERP)" to interests
+
+❌ **WRONG**: Adding "Voz" to interests
+✅ **CORRECT**: Adding "Voice Assistant (IVR)" to interests
+
+**🚨 CRITICAL RULE**:
+If you're about to add "Knowledge Base" (WITHOUT "Agent") to state.interests → STOP!
+You MUST add "Knowledge Base Agent" (WITH "Agent") instead.
 
 #### Counters Policy (Monotonic - never decrease)
 
@@ -1085,9 +1142,12 @@ Return the complete state object with ALL fields updated based on the conversati
 
 - **`stage`**: Current funnel stage (follow stage_policy rules)
 - **`interests`**: Array of TECHNICAL service names (ALWAYS use `services_aliases` to normalize)
-  - Client says: "Odoo" → Look up `services_aliases["odoo"]` → Add "Process Automation (Odoo/ERP)"
-  - Client says: "Knowledge Base" → Look up `services_aliases["knowledge_base"]` → Add "Knowledge Base Agent"
-  - Client says: "Voz" → Look up `services_aliases["voz"]` → Add "Voice Assistant (IVR)"
+  - **Process**: Lowercase client input → Look up in `services_aliases` → Add TECHNICAL name
+  - Client says: "Odoo" → Normalize to "odoo" → Look up → Add "Process Automation (Odoo/ERP)"
+  - Client says: "Knowledge Base" → Normalize to "knowledge base" → Look up → Add "Knowledge Base Agent" (NOT "Knowledge Base"!)
+  - Client says: "Voz" → Normalize to "voz" → Look up → Add "Voice Assistant (IVR)"
+  - Client says: "RAG" → Normalize to "rag" → Look up → Add "Knowledge Base Agent"
+  - **CRITICAL**: NEVER add short names like "Odoo", "Knowledge Base", "WhatsApp", "Voz" - ALWAYS use full technical names
 - **`business_name`**: Nombre propio del negocio (e.g., "Pizzería Don Felix", "Café Central"). Null si no se conoce.
 - **`business_type`**: Tipo/industria/rubro inferido de la conversación (e.g., "pizzería", "restaurante", "consultorio médico", "tienda de ropa"). Extrae siempre que el usuario mencione su tipo de negocio.
 - **`email`**: User's email (update if provided)
@@ -1359,10 +1419,12 @@ Before returning your JSON output, verify:
 - [ ] Did I update `state.stage` correctly according to stage_policy?
 - [ ] Did I increment counters only when appropriate? (monotonic, max +1 per type)
 - [ ] **Did I use `services_aliases` to normalize interests?** ⚠️ CRITICAL
-  - [ ] If client said "Odoo" → I added "Process Automation (Odoo/ERP)" (NOT "Odoo")
-  - [ ] If client said "Knowledge Base" → I added "Knowledge Base Agent" (NOT "Knowledge Base")
-  - [ ] If client said "Voz" → I added "Voice Assistant (IVR)" (NOT "Voz")
-  - [ ] All entries in `state.interests` are TECHNICAL names (full names from `services_aliases`)
+  - [ ] If client said "Odoo" → I normalized to "odoo" → I added "Process Automation (Odoo/ERP)" (NOT "Odoo")
+  - [ ] If client said "Knowledge Base" → I normalized to "knowledge base" → I added "Knowledge Base Agent" (NOT "Knowledge Base") ⚠️ CRITICAL!
+  - [ ] If client said "Voz" → I normalized to "voz" → I added "Voice Assistant (IVR)" (NOT "Voz")
+  - [ ] If client said "RAG" → I normalized to "rag" → I added "Knowledge Base Agent" (NOT "RAG")
+  - [ ] **VERIFY**: All entries in `state.interests` are TECHNICAL names (e.g., "WhatsApp Chatbot", "Knowledge Base Agent", "Voice Assistant (IVR)")
+  - [ ] **VERIFY**: NO short names in interests (e.g., NO "WhatsApp", NO "Knowledge Base", NO "Odoo", NO "Voz")
 - [ ] **Did I derive `services_seen` from `interests.length`?** ⚠️ CRITICAL
   - [ ] `state.counters.services_seen = state.interests.length` (automatic derivation)
   - [ ] `profile.services_seen = state.interests.length` (sync with interests)
