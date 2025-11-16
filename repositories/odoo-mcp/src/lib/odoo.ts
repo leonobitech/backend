@@ -52,7 +52,7 @@ export class OdooClient {
       ? xmlrpc.createSecureClient({
           url: `${credentials.url}/xmlrpc/2/common`,
           rejectUnauthorized: true
-        })
+        } as any)
       : xmlrpc.createClient({
           url: `${credentials.url}/xmlrpc/2/common`,
         });
@@ -62,7 +62,7 @@ export class OdooClient {
       ? xmlrpc.createSecureClient({
           url: `${credentials.url}/xmlrpc/2/object`,
           rejectUnauthorized: true
-        })
+        } as any)
       : xmlrpc.createClient({
           url: `${credentials.url}/xmlrpc/2/object`,
         });
@@ -81,12 +81,12 @@ export class OdooClient {
       this.commonClient.methodCall(
         "authenticate",
         [this.credentials.db, this.credentials.username, this.credentials.apiKey, {}],
-        (error: Error | null, uid: number) => {
+        (error: any, uid: number) => {
           clearTimeout(timeout);
 
           if (error) {
             logger.error({ error }, "Error authenticating with Odoo");
-            reject(new Error(`Odoo authentication failed: ${error.message}`));
+            reject(new Error(`Odoo authentication failed: ${error.message || error}`));
             return;
           }
 
@@ -125,12 +125,12 @@ export class OdooClient {
       this.objectClient.methodCall(
         "execute_kw",
         [this.credentials.db, this.uid, this.credentials.apiKey, model, method, args, kwargs],
-        (error: Error | null, result: any) => {
+        (error: any, result: any) => {
           clearTimeout(timeout);
 
           if (error) {
             logger.error({ error, model, method }, "Error executing Odoo method");
-            reject(new Error(`Odoo ${model}.${method} failed: ${error.message}`));
+            reject(new Error(`Odoo ${model}.${method} failed: ${error.message || error}`));
             return;
           }
 
