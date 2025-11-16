@@ -104,6 +104,44 @@ router.post("/call-tool", async (req, res) => {
 
     let { tool, arguments: toolArgs, query } = body;
 
+    // Handle n8n native format (AI Agent Tools): [{ "query": "{...}" }]
+    // This is the format when LLM calls tool via function calling in n8n
+    if (query && typeof query === 'string' && !tool) {
+      logger.info({ queryString: query.substring(0, 100) + '...' }, "[InternalMCP] Detected n8n AI Agent native format");
+
+      try {
+        // Parse the JSON string
+        toolArgs = JSON.parse(query);
+
+        // Infer tool name based on argument structure
+        // This makes the connector work with all 11 tools without hardcoding
+        if (toolArgs.emailTo || toolArgs.subject || toolArgs.templateType) {
+          tool = "odoo_send_email";
+        } else if (toolArgs.startDatetime || toolArgs.title) {
+          tool = "odoo_schedule_meeting";
+        } else if (toolArgs.stageName && !toolArgs.emailTo && !toolArgs.startDatetime) {
+          tool = "odoo_update_deal_stage";
+        } else if (toolArgs.opportunityId && !toolArgs.emailTo && !toolArgs.startDatetime && !toolArgs.stageName) {
+          // Generic fallback for other Odoo tools with just opportunityId
+          logger.warn({ arguments: toolArgs }, "[InternalMCP] Could not infer tool from arguments, may need more specific detection logic");
+        }
+
+        logger.info({
+          inferredTool: tool,
+          hasOpportunityId: !!toolArgs.opportunityId,
+          argumentKeys: Object.keys(toolArgs)
+        }, "[InternalMCP] Parsed n8n native format");
+
+      } catch (parseError: any) {
+        logger.error({ err: parseError, queryString: query }, "[InternalMCP] Failed to parse query string");
+        return res.status(400).json({
+          error: "invalid_query_format",
+          message: "Failed to parse 'query' field as JSON",
+          details: parseError.message
+        });
+      }
+    }
+
     // Handle MCP Server Trigger format: { query: {...}, tool: { name: "...", description: "..." } }
     if (typeof tool === 'object' && query && body.tool && typeof body.tool === 'object' && body.tool.name) {
       logger.info({
@@ -116,7 +154,7 @@ router.post("/call-tool", async (req, res) => {
       logger.info({ tool, extractedArgs: toolArgs }, "[InternalMCP] Extracted from MCP Server Trigger format");
     }
 
-    // Handle n8n format: [{ "JSON": { ... } }]
+    // Handle n8n legacy format: [{ "JSON": { ... } }]
     // When n8n uses "Defined automatically by the model", it wraps arguments in this format
     if (!tool && body.JSON) {
       logger.info({ body }, "[InternalMCP] Detected n8n legacy format, extracting tool arguments");
@@ -125,8 +163,6 @@ router.post("/call-tool", async (req, res) => {
       toolArgs = body.JSON;
 
       // Infer tool name from arguments structure
-      // For now, we'll require tool name to be passed separately or default to a specific tool
-      // This is a limitation of n8n's format - it doesn't include tool name in the payload
       if (toolArgs.opportunityId !== undefined) {
         // Likely an Odoo tool - check if it has email/meeting specific fields
         if (toolArgs.emailTo || toolArgs.subject) {
@@ -138,7 +174,7 @@ router.post("/call-tool", async (req, res) => {
         }
       }
 
-      logger.info({ inferredTool: tool }, "[InternalMCP] Inferred tool from n8n arguments");
+      logger.info({ inferredTool: tool }, "[InternalMCP] Inferred tool from n8n legacy format");
     }
 
     if (!tool || !toolArgs) {
