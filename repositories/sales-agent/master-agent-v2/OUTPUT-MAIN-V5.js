@@ -1,11 +1,12 @@
 // ============================================================================
-// OUTPUT MAIN v5.1 - Formateo de salida para Baserow, Odoo y Chatwoot
+// OUTPUT MAIN v5.2 - Formateo de salida para Baserow, Odoo y Chatwoot
 // ============================================================================
 // Nodo: Code (n8n)
 // Posición: Después de Master AI Agent Main
 //
-// Recibe: Output de Master Agent v5.0 (message, profile, state, cta_menu, tool_calls)
+// Recibe: Output de Master Agent v5.0 (message, profile_for_persist, state_for_persist)
 // Output: Formatos para WhatsApp, HTML (Odoo), y datos para persistir
+// Changelog v5.2: Removed tool_calls detection (now handled via n8n function calling)
 // Changelog v5.1: Agregada estrategia 3 para field names largos (>200 chars)
 // Changelog v5.0: Parsing robusto para claves corruptas _tool_calls_ignored
 // ============================================================================
@@ -129,8 +130,7 @@ if (!masterOutput || !masterOutput.message) {
   throw new Error("[OutputMain] Missing required field: message");
 }
 
-const { message, state_update, cta_menu, internal_reasoning, tool_calls } =
-  masterOutput;
+const { message, state_update, cta_menu, internal_reasoning } = masterOutput;
 
 console.log("[OutputMain] Processing message...");
 console.log("[OutputMain] RAG used:", message.rag_used);
@@ -139,47 +139,12 @@ console.log(
   "[OutputMain] State update:",
   state_update ? Object.keys(state_update) : "none"
 );
-console.log("[OutputMain] Tool calls:", tool_calls ? tool_calls.length : 0);
 
 // ============================================================================
-// DETECCIÓN DE TOOL CALLS - Si el LLM quiere ejecutar una acción en Odoo
+// NOTE: Tool calls (odoo_send_email, odoo_schedule_meeting) are now handled
+// via n8n function calling - they execute BEFORE this node receives the output.
+// LLM output only contains: message, profile_for_persist, state_for_persist
 // ============================================================================
-
-if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
-  console.log(
-    "[OutputMain] 🔧 Tool calls detected! LLM wants to execute Odoo actions."
-  );
-  console.log(
-    "[OutputMain] Tools to execute:",
-    tool_calls.map((tc) => tc.function?.name || tc.name).join(", ")
-  );
-
-  // Agregar tool_calls al output para que el siguiente nodo los procese
-  // El workflow bifurcará: si hay tool_calls → Execute MCP Tool, sino → continuar normal
-
-  // Obtener profile y state (con fallbacks)
-  const profile_data = masterOutput.profile_for_persist || masterOutput.profile || inputData.profile;
-  const state_data = masterOutput.state_for_persist || masterOutput.state || inputData.state;
-
-  // Obtener lead_id (puede estar en el nivel raíz o dentro de profile)
-  const lead_id_value = masterOutput.lead_id || profile_data?.lead_id || inputData.lead_id;
-
-  return [
-    {
-      json: {
-        has_tool_calls: true,
-        tool_calls: tool_calls,
-        lead_id: lead_id_value,
-        profile: profile_data,
-        state: state_data,
-        message: message,
-        state_update: state_update,
-        cta_menu: cta_menu,
-        internal_reasoning: internal_reasoning,
-      },
-    },
-  ];
-}
 
 // ============================================================================
 // ESTRATEGIA DE OBTENCIÓN DE DATOS:
