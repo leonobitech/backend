@@ -25,6 +25,28 @@ export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
       throw new Error('Either templateType or body must be provided');
     }
 
+    // Generate subject automatically if not provided and using template
+    let emailSubject = params.subject;
+    if (!emailSubject && params.templateType) {
+      const businessName = params.templateData?.companyName || params.templateData?.customerName || 'tu negocio';
+      switch (params.templateType) {
+        case 'proposal':
+          emailSubject = `Propuesta comercial para ${businessName} - Leonobitech`;
+          break;
+        case 'demo':
+          emailSubject = `Confirmación de demo - ${businessName}`;
+          break;
+        case 'followup':
+          emailSubject = `Seguimiento - ${businessName}`;
+          break;
+        case 'welcome':
+          emailSubject = `Bienvenido/a a Leonobitech`;
+          break;
+        default:
+          emailSubject = `Mensaje de Leonobitech`;
+      }
+    }
+
     // IMPORTANTE: Solo crear y vincular contacto cuando se envía propuesta o demo
     // Esto mueve la oportunidad de "Qualified" → "Proposition"
     if (params.templateType === 'proposal' || params.templateType === 'demo') {
@@ -33,7 +55,7 @@ export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
 
     const result = await this.odooClient.sendEmailToOpportunity({
       opportunityId: params.opportunityId,
-      subject: params.subject,
+      subject: emailSubject!,
       body: emailBody,
       emailTo: params.emailTo,
       templateType: templateUsed // Pasar templateType para correcta progresión de stage
