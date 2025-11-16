@@ -1030,40 +1030,40 @@ export class OdooClient {
   }
 
   /**
-   * Convertir datetime ISO 8601 con timezone a formato Odoo (sin timezone)
+   * Convertir datetime ISO 8601 con timezone a formato Odoo UTC (sin timezone)
    *
-   * Odoo XML-RPC espera datetimes sin timezone offset y los interpreta
-   * según la timezone configurada en el perfil del usuario.
+   * Odoo XML-RPC espera datetimes en UTC sin timezone offset.
+   * Luego Odoo los muestra según la timezone configurada en el perfil del usuario.
    *
-   * IMPORTANTE: Preserva la hora LOCAL del datetime original, no convierte a la timezone del servidor.
+   * IMPORTANTE: Convierte a UTC, no preserva hora local.
    *
-   * Input:  "2025-11-17T09:30:00-03:00" (ISO 8601 con timezone Argentina)
-   * Output: "2025-11-17 09:30:00" (formato Odoo - preserva 09:30)
+   * Ejemplos:
+   * Input:  "2025-11-18T09:30:00-03:00" (9:30 AM Argentina UTC-3)
+   * Process: 09:30 + 03:00 = 12:30 UTC
+   * Output: "2025-11-18 12:30:00" (UTC sin timezone)
+   * Odoo muestra: 12:30 - 03:00 = 09:30 (hora Argentina) ✅
    */
   private convertToOdooDatetime(isoDatetime: string): string {
-    // Si el string ya está en formato Odoo (YYYY-MM-DD HH:MM:SS), retornar tal cual
+    // Si el string ya está en formato Odoo (YYYY-MM-DD HH:MM:SS), asumir que ya es UTC
     if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(isoDatetime)) {
       return isoDatetime;
     }
 
-    // Extraer la parte de fecha/hora del ISO 8601 sin convertir timezone
-    // Formato: YYYY-MM-DDTHH:MM:SS[timezone]
-    // Queremos preservar YYYY-MM-DD HH:MM:SS y remover el timezone
-    const match = isoDatetime.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
+    // Parsear el datetime (Date automáticamente convierte a UTC internamente)
+    const date = new Date(isoDatetime);
 
-    if (match) {
-      return `${match[1]} ${match[2]}`;
+    // Verificar que el parseo fue exitoso
+    if (isNaN(date.getTime())) {
+      throw new Error(`Invalid datetime format: ${isoDatetime}`);
     }
 
-    // Fallback: si no matchea el patrón esperado, intentar parsear con Date
-    // (esto puede causar conversión de timezone, pero es mejor que fallar)
-    const date = new Date(isoDatetime);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
+    // Extraer componentes en UTC
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
