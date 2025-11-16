@@ -25,26 +25,9 @@ export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
       throw new Error('Either templateType or body must be provided');
     }
 
-    // Generate subject automatically if not provided and using template
-    let emailSubject = params.subject;
-    if (!emailSubject && params.templateType) {
-      const businessName = params.templateData?.companyName || params.templateData?.customerName || 'tu negocio';
-      switch (params.templateType) {
-        case 'proposal':
-          emailSubject = `Propuesta comercial para ${businessName} - Leonobitech`;
-          break;
-        case 'demo':
-          emailSubject = `Confirmación de demo - ${businessName}`;
-          break;
-        case 'followup':
-          emailSubject = `Seguimiento - ${businessName}`;
-          break;
-        case 'welcome':
-          emailSubject = `Bienvenido/a a Leonobitech`;
-          break;
-        default:
-          emailSubject = `Mensaje de Leonobitech`;
-      }
+    // Require subject - LLM should generate contextual subject line
+    if (!params.subject) {
+      throw new Error('Subject is required. LLM must provide contextual subject line based on conversation context.');
     }
 
     // IMPORTANTE: Solo crear y vincular contacto cuando se envía propuesta o demo
@@ -55,7 +38,7 @@ export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
 
     const result = await this.odooClient.sendEmailToOpportunity({
       opportunityId: params.opportunityId,
-      subject: emailSubject!,
+      subject: params.subject,
       body: emailBody,
       emailTo: params.emailTo,
       templateType: templateUsed // Pasar templateType para correcta progresión de stage

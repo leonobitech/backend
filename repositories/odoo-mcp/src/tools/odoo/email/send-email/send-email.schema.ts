@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const sendEmailSchema = z.object({
   opportunityId: z.number().int().positive(),
-  subject: z.string().min(1).optional(),  // Optional when using templates
+  subject: z.string().min(1),
   body: z.string().min(1).optional(),
   emailTo: z.string().email().optional(),
 
