@@ -400,7 +400,7 @@ export class OdooClient {
    */
   async autoProgressStage(data: {
     opportunityId: number;
-    action: "email_sent" | "meeting_scheduled" | "proposal_sent";
+    action: "email_sent" | "meeting_scheduled" | "proposal_sent" | "formal_proposal_sent";
     currentStage?: string;
   }): Promise<{ moved: boolean; fromStage?: string; toStage?: string; reason?: string }> {
     // Obtener stage actual si no se proporcionó
@@ -412,7 +412,20 @@ export class OdooClient {
 
     const currentStageLower = currentStage.toLowerCase();
 
-    // Definir reglas de progresión
+    /**
+     * Reglas de progresión automática de stages:
+     *
+     * NEW → QUALIFIED:
+     *   - email_sent: Primer email enviado
+     *   - meeting_scheduled: Demo agendada
+     *   - proposal_sent: Propuesta por email con template HTML
+     *
+     * QUALIFIED → PROPOSITION:
+     *   - formal_proposal_sent: Propuesta formal en PDF (funcionalidad futura)
+     *
+     * NOTA: PROPOSITION se reserva para propuestas formales/contractuales,
+     *       no para emails de propuesta con template HTML
+     */
     let targetStage: string | null = null;
     let reason = "";
 
@@ -429,10 +442,19 @@ export class OdooClient {
         break;
 
       case "proposal_sent":
-        // NEW → PROPOSITION o QUALIFIED → PROPOSITION
-        if (currentStageLower.includes("new") || currentStageLower.includes("qualified")) {
+        // NEW → QUALIFIED (propuesta por email con template HTML)
+        // NOTA: PROPOSITION se reserva para propuestas formales en PDF (funcionalidad futura)
+        if (currentStageLower.includes("new")) {
+          targetStage = "Qualified";
+          reason = "Propuesta comercial enviada por email - Lead calificado";
+        }
+        break;
+
+      case "formal_proposal_sent":
+        // QUALIFIED → PROPOSITION (propuesta formal en PDF)
+        if (currentStageLower.includes("qualified")) {
           targetStage = "Proposition";
-          reason = "Propuesta comercial enviada";
+          reason = "Propuesta formal en PDF enviada - Cliente en etapa de propuesta";
         }
         break;
     }
