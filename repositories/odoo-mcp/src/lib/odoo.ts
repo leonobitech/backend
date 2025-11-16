@@ -666,6 +666,8 @@ export class OdooClient {
       partner_ids: any;
     }>;
   }> {
+    // Convertir datetime a formato Odoo (sin timezone)
+    const odooStart = this.convertToOdooDatetime(data.start);
     const endTime = this.calculateEndTime(data.start, data.duration);
 
     // Buscar eventos que se superpongan con el rango solicitado
@@ -673,17 +675,17 @@ export class OdooClient {
     const domain: any[] = [
       "|",
       "&",
-      ["start", "<=", data.start],
-      ["stop", ">", data.start],
+      ["start", "<=", odooStart],
+      ["stop", ">", odooStart],
       "&",
       ["start", "<", endTime],
       ["stop", ">=", endTime],
       "|",
       "&",
-      ["start", ">=", data.start],
+      ["start", ">=", odooStart],
       ["start", "<", endTime],
       "&",
-      ["stop", ">", data.start],
+      ["stop", ">", odooStart],
       ["stop", "<=", endTime]
     ];
 
@@ -722,9 +724,12 @@ export class OdooClient {
     const endSearchDate = new Date(currentSlot);
     endSearchDate.setDate(endSearchDate.getDate() + searchDays);
 
+    // Convertir datetimes a formato Odoo (sin timezone)
+    const odooPreferredStart = this.convertToOdooDatetime(data.preferredStart);
+    const searchEndStr = this.convertToOdooDatetime(endSearchDate.toISOString());
+
     // Obtener todos los eventos en el rango de búsqueda
-    const searchEndStr = endSearchDate.toISOString().replace("T", " ").substring(0, 19);
-    const domain: any[] = [["start", ">=", data.preferredStart], ["start", "<=", searchEndStr]];
+    const domain: any[] = [["start", ">=", odooPreferredStart], ["start", "<=", searchEndStr]];
 
     if (data.partnerIds.length > 0) {
       domain.unshift(["partner_ids", "in", data.partnerIds]);
@@ -816,7 +821,7 @@ export class OdooClient {
   async scheduleMeeting(data: {
     name: string;
     opportunityId: number;
-    start: string; // ISO datetime string (YYYY-MM-DD HH:MM:SS)
+    start: string; // ISO 8601 datetime con timezone (e.g., "2025-11-17T15:00:00-03:00") o formato Odoo (YYYY-MM-DD HH:MM:SS)
     duration?: number; // Duración en horas (default: 1)
     description?: string;
     location?: string;
@@ -895,9 +900,12 @@ export class OdooClient {
       duration
     }, "Step 1: Creating calendar event with full details");
 
+    // Convertir datetime de ISO 8601 con timezone a formato Odoo (sin timezone)
+    const odooStart = this.convertToOdooDatetime(data.start);
+
     const eventValues: Record<string, any> = {
       name: data.name,
-      start: data.start, // Fecha + hora específica
+      start: odooStart, // Fecha + hora en formato Odoo (YYYY-MM-DD HH:MM:SS)
       stop: this.calculateEndTime(data.start, duration),
       duration,
       opportunity_id: data.opportunityId, // Vincula al CRM
@@ -1022,12 +1030,53 @@ export class OdooClient {
   }
 
   /**
+   * Convertir datetime ISO 8601 con timezone a formato Odoo (sin timezone)
+   *
+   * Odoo XML-RPC espera datetimes sin timezone offset y los interpreta
+   * según la timezone configurada en el perfil del usuario.
+   *
+   * IMPORTANTE: Preserva la hora LOCAL del datetime original, no convierte a la timezone del servidor.
+   *
+   * Input:  "2025-11-17T09:30:00-03:00" (ISO 8601 con timezone Argentina)
+   * Output: "2025-11-17 09:30:00" (formato Odoo - preserva 09:30)
+   */
+  private convertToOdooDatetime(isoDatetime: string): string {
+    // Si el string ya está en formato Odoo (YYYY-MM-DD HH:MM:SS), retornar tal cual
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(isoDatetime)) {
+      return isoDatetime;
+    }
+
+    // Extraer la parte de fecha/hora del ISO 8601 sin convertir timezone
+    // Formato: YYYY-MM-DDTHH:MM:SS[timezone]
+    // Queremos preservar YYYY-MM-DD HH:MM:SS y remover el timezone
+    const match = isoDatetime.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
+
+    if (match) {
+      return `${match[1]} ${match[2]}`;
+    }
+
+    // Fallback: si no matchea el patrón esperado, intentar parsear con Date
+    // (esto puede causar conversión de timezone, pero es mejor que fallar)
+    const date = new Date(isoDatetime);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  }
+
+  /**
    * Calcular hora de fin basado en hora de inicio y duración
    */
   private calculateEndTime(start: string, durationHours: number): string {
     const startDate = new Date(start);
     startDate.setHours(startDate.getHours() + durationHours);
-    return startDate.toISOString().replace("T", " ").substring(0, 19);
+
+    // Convertir a formato Odoo (sin timezone)
+    return this.convertToOdooDatetime(startDate.toISOString());
   }
 
   // ==================== REPORTS ====================
