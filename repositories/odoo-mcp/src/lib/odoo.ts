@@ -894,18 +894,23 @@ export class OdooClient {
     // Convertir datetime de ISO 8601 con timezone a formato Odoo (sin timezone)
     const odooStart = this.convertToOdooDatetime(data.start);
 
-    const eventValues: Record<string, any> = {
+    // Valores base (para create y update)
+    const baseEventValues: Record<string, any> = {
       name: data.name,
       start: odooStart, // Fecha + hora en formato Odoo (YYYY-MM-DD HH:MM:SS)
       stop: this.calculateEndTime(data.start, duration),
-      duration,
+      duration
+    };
+
+    if (data.description) baseEventValues.description = data.description;
+    if (data.location) baseEventValues.location = data.location;
+
+    // Valores adicionales solo para CREATE (no para UPDATE/reschedule)
+    const createOnlyValues: Record<string, any> = {
       opportunity_id: data.opportunityId, // Vincula al CRM
       partner_ids: [[6, 0, partnerIds]], // Participantes
       user_id: vendorUserId
     };
-
-    if (data.description) eventValues.description = data.description;
-    if (data.location) eventValues.location = data.location;
 
     // PASO 0: Buscar si ya existe un evento para esta oportunidad
     const existingEvents = await this.search("calendar.event", [
@@ -927,8 +932,8 @@ export class OdooClient {
         oldEvent: existingEvents
       }, "Rescheduling: Updating existing calendar event");
 
-      // Actualizar el evento existente
-      await this.write("calendar.event", [eventId], eventValues);
+      // Actualizar el evento existente (solo campos seguros, sin partner_ids)
+      await this.write("calendar.event", [eventId], baseEventValues);
 
       logger.info({ eventId, opportunityId: data.opportunityId }, "Rescheduling completed: Calendar event updated");
 
@@ -974,6 +979,8 @@ export class OdooClient {
         duration
       }, "Step 1: Creating calendar event with full details");
 
+      // Merge base values con create-only values (partner_ids, opportunity_id)
+      const eventValues = { ...baseEventValues, ...createOnlyValues };
       eventId = await this.create("calendar.event", eventValues);
 
       logger.info({ eventId, opportunityId: data.opportunityId }, "Step 1 completed: Calendar event created");
