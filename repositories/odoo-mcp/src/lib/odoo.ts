@@ -7,7 +7,7 @@
  * MULTI-TENANT: Cada usuario proporciona sus propias credenciales durante la creación del cliente.
  */
 
-import * as xmlrpc from "xmlrpc";
+import xmlrpc from "xmlrpc";
 import { logger } from "@/lib/logger";
 
 /**
