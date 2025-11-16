@@ -828,6 +828,7 @@ export class OdooClient {
     forceSchedule?: boolean; // Forzar agendamiento incluso con conflictos
   }): Promise<{
     eventId?: number;
+    activityId?: number;
     conflict?: {
       available: boolean;
       conflicts: any[];
