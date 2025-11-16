@@ -99,47 +99,85 @@ router.get("/tools", async (req, res) => {
  */
 router.post("/call-tool", async (req, res) => {
   try {
+    // Log raw request body for debugging
+    logger.info({
+      rawBody: req.body,
+      isArray: Array.isArray(req.body),
+      bodyType: typeof req.body
+    }, "[InternalMCP] Received request");
+
     // Normalize body: if array with single element, extract it
     let body = Array.isArray(req.body) && req.body.length > 0 ? req.body[0] : req.body;
 
+    logger.info({
+      normalizedBody: body,
+      bodyType: typeof body
+    }, "[InternalMCP] Normalized body");
+
     let { tool, arguments: toolArgs, query } = body;
+
+    logger.info({
+      hasQuery: !!query,
+      queryType: typeof query,
+      hasTool: !!tool,
+      toolValue: tool,
+      hasToolArgs: !!toolArgs
+    }, "[InternalMCP] Destructured variables");
 
     // Handle n8n native format (AI Agent Tools): [{ "query": "{...}" }]
     // This is the format when LLM calls tool via function calling in n8n
     if (query && typeof query === 'string' && !tool) {
-      logger.info({ queryString: query.substring(0, 100) + '...' }, "[InternalMCP] Detected n8n AI Agent native format");
+      logger.info({ queryString: query.substring(0, 100) + '...' }, "[InternalMCP] ✅ ENTERED n8n native format detection block");
 
       try {
         // Parse the JSON string
         toolArgs = JSON.parse(query);
+        logger.info({
+          parsedArgs: toolArgs,
+          hasEmailTo: !!toolArgs.emailTo,
+          hasSubject: !!toolArgs.subject,
+          hasTemplateType: !!toolArgs.templateType
+        }, "[InternalMCP] ✅ Successfully parsed query JSON");
 
         // Infer tool name based on argument structure
         // This makes the connector work with all 11 tools without hardcoding
         if (toolArgs.emailTo || toolArgs.subject || toolArgs.templateType) {
           tool = "odoo_send_email";
+          logger.info({ tool }, "[InternalMCP] ✅ Inferred tool: odoo_send_email");
         } else if (toolArgs.startDatetime || toolArgs.title) {
           tool = "odoo_schedule_meeting";
+          logger.info({ tool }, "[InternalMCP] ✅ Inferred tool: odoo_schedule_meeting");
         } else if (toolArgs.stageName && !toolArgs.emailTo && !toolArgs.startDatetime) {
           tool = "odoo_update_deal_stage";
+          logger.info({ tool }, "[InternalMCP] ✅ Inferred tool: odoo_update_deal_stage");
         } else if (toolArgs.opportunityId && !toolArgs.emailTo && !toolArgs.startDatetime && !toolArgs.stageName) {
           // Generic fallback for other Odoo tools with just opportunityId
-          logger.warn({ arguments: toolArgs }, "[InternalMCP] Could not infer tool from arguments, may need more specific detection logic");
+          logger.warn({ arguments: toolArgs }, "[InternalMCP] ⚠️ Could not infer tool from arguments");
         }
 
         logger.info({
           inferredTool: tool,
           hasOpportunityId: !!toolArgs.opportunityId,
           argumentKeys: Object.keys(toolArgs)
-        }, "[InternalMCP] Parsed n8n native format");
+        }, "[InternalMCP] ✅ Finished parsing n8n native format");
 
       } catch (parseError: any) {
-        logger.error({ err: parseError, queryString: query }, "[InternalMCP] Failed to parse query string");
+        logger.error({ err: parseError, queryString: query }, "[InternalMCP] ❌ Failed to parse query string");
         return res.status(400).json({
           error: "invalid_query_format",
           message: "Failed to parse 'query' field as JSON",
           details: parseError.message
         });
       }
+    } else {
+      logger.warn({
+        hasQuery: !!query,
+        queryType: typeof query,
+        queryIsString: typeof query === 'string',
+        hasTool: !!tool,
+        toolValue: tool,
+        notToolCheck: !tool
+      }, "[InternalMCP] ❌ Did NOT enter n8n native format detection (condition failed)");
     }
 
     // Handle MCP Server Trigger format: { query: {...}, tool: { name: "...", description: "..." } }
@@ -177,7 +215,23 @@ router.post("/call-tool", async (req, res) => {
       logger.info({ inferredTool: tool }, "[InternalMCP] Inferred tool from n8n legacy format");
     }
 
+    // Final validation check
+    logger.info({
+      finalTool: tool,
+      finalToolType: typeof tool,
+      finalToolArgs: toolArgs,
+      hasToolArgs: !!toolArgs,
+      validationWillPass: !!(tool && toolArgs)
+    }, "[InternalMCP] Final state before validation");
+
     if (!tool || !toolArgs) {
+      logger.error({
+        tool,
+        toolArgs,
+        missingTool: !tool,
+        missingToolArgs: !toolArgs
+      }, "[InternalMCP] ❌ Validation failed - missing tool or arguments");
+
       return res.status(400).json({
         error: "invalid_request",
         message: "Missing 'tool' or 'arguments' in request body"
