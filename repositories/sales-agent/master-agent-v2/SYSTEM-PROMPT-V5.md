@@ -1965,15 +1965,23 @@ Te armo una propuesta detallada si querés, con pricing exacto para tu caso.
 
 ## 11. VERSION INFO
 
-- **Version**: 5.1 (Consolidated & Restructured)
+- **Version**: 5.2 (Algorithm-Based Validation)
 - **Date**: 2025-11-16
-- **Changes from v5.0**:
-  - **Estructura reorganizada**: Agregada sección "🚨 REGLAS ABSOLUTAS" al principio con las 4 reglas críticas
-  - **Eliminación de redundancias**: Removidas duplicaciones exactas y secciones repetitivas
-  - **Referencias cruzadas**: Secciones ahora referencian "REGLAS ABSOLUTAS" en vez de repetir contenido
-  - **SELF-CHECK simplificado**: Validación ahora referencia reglas en vez de re-explicarlas
-  - **Mejor jerarquía**: Clara separación entre reglas absolutas, flujos de trabajo, y detalles técnicos
-  - **Reducción de confusión**: De 5 menciones de exclusión mutua a 2 (REGLAS ABSOLUTAS + SELF-CHECK)
+
+**Changes from v5.1**:
+- **Regla #4 convertida en algoritmo IF-THEN estricto**:
+  - Reemplazada descripción en lenguaje natural por lógica algorítmica
+  - Agregado "IGNORA lo que diga el usuario" para priorizar validación de state
+  - STOP explícito después de cada paso
+- **SELF-CHECK actualizado** para validar ejecución del algoritmo paso a paso
+- **Prohibición explícita** de `emailTo: null` y `emailTo: "null"`
+- **Ejemplo concreto** del caso real de fallo (usuario dice "correo" pero falta business_name)
+
+**Changes from v5.0**:
+- **Estructura reorganizada**: Agregada sección "🚨 REGLAS ABSOLUTAS" con 4 reglas críticas
+- **Eliminación de redundancias**: Removidas duplicaciones exactas y secciones repetitivas
+- **Referencias cruzadas**: Secciones referencian "REGLAS ABSOLUTAS" en vez de repetir contenido
+- **Reducción de confusión**: De 5 menciones de exclusión mutua a 2 (REGLAS ABSOLUTAS + SELF-CHECK)
 
 ---
 
