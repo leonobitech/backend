@@ -156,14 +156,22 @@ if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
 
   // Agregar tool_calls al output para que el siguiente nodo los procese
   // El workflow bifurcará: si hay tool_calls → Execute MCP Tool, sino → continuar normal
+
+  // Obtener profile y state (con fallbacks)
+  const profile_data = masterOutput.profile_for_persist || masterOutput.profile || inputData.profile;
+  const state_data = masterOutput.state_for_persist || masterOutput.state || inputData.state;
+
+  // Obtener lead_id (puede estar en el nivel raíz o dentro de profile)
+  const lead_id_value = masterOutput.lead_id || profile_data?.lead_id || inputData.lead_id;
+
   return [
     {
       json: {
         has_tool_calls: true,
         tool_calls: tool_calls,
-        lead_id: masterOutput.lead_id || inputData.lead_id,
-        profile: masterOutput.profile || inputData.profile,
-        state: masterOutput.state || inputData.state,
+        lead_id: lead_id_value,
+        profile: profile_data,
+        state: state_data,
         message: message,
         state_update: state_update,
         cta_menu: cta_menu,
@@ -181,9 +189,11 @@ if (tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
 // ============================================================================
 
 // 1. Intentar obtener datos directamente del Master Agent output
-let lead_id = masterOutput.lead_id || inputData.lead_id;
-let profile = masterOutput.profile || inputData.profile;
-let state = masterOutput.state || inputData.state;
+// IMPORTANTE: El LLM devuelve profile_for_persist y state_for_persist (no profile/state)
+let profile = masterOutput.profile_for_persist || masterOutput.profile || inputData.profile;
+let state = masterOutput.state_for_persist || masterOutput.state || inputData.state;
+// lead_id puede estar en el nivel raíz o dentro de profile
+let lead_id = masterOutput.lead_id || profile?.lead_id || inputData.lead_id;
 
 // 2. Fallback: buscar en Input Main si no vienen en ningún lado
 if (!lead_id || !profile || !state) {
