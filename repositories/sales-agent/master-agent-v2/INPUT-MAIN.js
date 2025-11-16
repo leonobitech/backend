@@ -252,35 +252,6 @@ const meta = {
 };
 
 // ============================================================================
-// 4.5. FETCH MCP TOOLS (Para Odoo Actions)
-// ============================================================================
-
-let tools = [];
-try {
-  console.log('[InputMain] Fetching MCP tools from Odoo MCP Server...');
-
-  const mcpResponse = await fetch('http://odoo_mcp:8100/internal/mcp/tools', {
-    method: 'GET',
-    headers: {
-      'X-Service-Token': 'aea35e37a04fc6aa26cbf8a2f8155beb4692c59cd6a68c4392165715e7bf4765f29e2c582dbdd6de6ad70827547513b7b36cfe0c176c8c74d03a75cc167c2d37',
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!mcpResponse.ok) {
-    console.error('[InputMain] MCP tools fetch failed:', mcpResponse.status, mcpResponse.statusText);
-    // No lanzar error, continuar con tools vacío
-  } else {
-    const mcpData = await mcpResponse.json();
-    tools = mcpData.tools || [];
-    console.log('[InputMain] ✅ Fetched', tools.length, 'MCP tools');
-  }
-} catch (error) {
-  console.error('[InputMain] Error fetching MCP tools:', error.message);
-  // Continuar con tools vacío en caso de error
-}
-
-// ============================================================================
 // 5. CONSTRUIR SMART INPUT COMPLETO
 // ============================================================================
 
@@ -290,8 +261,7 @@ const smart_input = {
   state,
   options,
   rules,
-  meta,
-  tools  // MCP tools para Odoo actions (agendar demo, enviar propuesta, etc.)
+  meta
 };
 
 // ============================================================================
@@ -357,7 +327,6 @@ console.log('[InputMain] Last user message:', smart_input.history.filter(m => m.
 console.log('[InputMain] Current stage:', smart_input.state.stage);
 console.log('[InputMain] Interests:', smart_input.state.interests);
 console.log('[InputMain] Counters:', JSON.stringify(smart_input.state.counters));
-console.log('[InputMain] MCP Tools available:', smart_input.tools.length);
 console.log('[InputMain] User prompt length:', userPrompt.length, 'chars');
 
 // ============================================================================

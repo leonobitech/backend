@@ -115,7 +115,6 @@ You receive a complete context object called `smart_input` with everything you n
 - Read the **last user message** in `history`
 - Check `state` to know what you already know about the lead
 - Review `rules` to understand business policies
-- **CHECK `smart_input.tools`** to see available MCP tools for Odoo actions
 
 ### Step 2: Decide Actions
 
@@ -419,7 +418,7 @@ When user mentions/chooses a service:
 
 #### Tool Calling Policy (MCP Tools for Odoo Actions)
 
-**CRITICAL**: You have access to MCP tools for Odoo actions (available in `smart_input.tools`).
+**CRITICAL**: You have access to MCP tools for Odoo actions.
 
 **Available Tools**:
 
@@ -461,8 +460,8 @@ When user mentions/chooses a service:
       }
     }
   ],
-  "profile": { ... },
-  "state": { ... }
+  "profile_for_persist": { ... },
+  "state_for_persist": { ... }
 }
 ```
 
@@ -498,8 +497,8 @@ When user mentions/chooses a service:
   "message": {
     "text": "Perfecto! Para enviarte la propuesta personalizada, necesito tu email. ¿A qué dirección te la mando?"
   },
-  "profile": { ... },
-  "state": {
+  "profile_for_persist": { ... },
+  "state_for_persist": {
     "email": null,  // Missing - need to ask first
     "business_name": "[business_name_value]",
     "business_type": "[business_type_value]"
@@ -723,7 +722,7 @@ Return a single JSON object with this structure:
       }
     }
   ],
-  "profile": {
+  "profile_for_persist": {
     "lead_id": 33,
     "row_id": 198,
     "full_name": "[full_name]",
@@ -731,7 +730,7 @@ Return a single JSON object with this structure:
     "phone": "+549...",
     "country": "[country]"
   },
-  "state": {
+  "state_for_persist": {
     "lead_id": 33,
     "stage": "qualify",
     "interests": ["Process Automation (Odoo/ERP)"],
@@ -775,16 +774,13 @@ Return a single JSON object with this structure:
 
 ## 5.5. ODOO ACTIONS (MCP TOOLS)
 
-You have access to **Odoo MCP Tools** for executing real actions in the CRM. These tools are provided in the Smart Input under the `tools` section.
+You have access to **Odoo MCP Tools** for executing real actions in the CRM. These tools are connected to your AI Agent and available for you to call when needed.
 
 ### Available Tools
-
-The `smart_input` includes a `tools` array with all available MCP tools and their schemas. Typically you'll have access to:
 
 1. **`odoo_schedule_meeting`**: Schedule a demo/meeting in Odoo Calendar
 2. **`odoo_send_email`**: Send commercial proposal via email
 3. **`odoo_update_deal_stage`**: Move opportunity through CRM pipeline
-4. **Others**: See `smart_input.tools` for complete list
 
 ---
 
@@ -1223,7 +1219,7 @@ After successful tool execution:
 - **After `odoo_schedule_meeting`**:
 
   ```json
-  "state": {
+  "state_for_persist": {
     ...state,
     "demo_scheduled": true
   }
@@ -1231,7 +1227,7 @@ After successful tool execution:
 
 - **After `odoo_send_email` (proposal)**:
   ```json
-  "state": {
+  "state_for_persist": {
     ...state,
     "proposal_offer_done": true,
     "last_proposal_offer_ts": "2025-11-02T14:35:24.549Z"
@@ -1377,8 +1373,8 @@ Only include if you want to show action buttons. Make it natural.
 ```json
 {
   "message": { ... },
-  "profile": { ... },
-  "state": { ... }
+  "profile_for_persist": { ... },
+  "state_for_persist": { ... }
 }
 // No internal_reasoning - perfectly fine!
 ```
@@ -1684,7 +1680,7 @@ Te armo una propuesta detallada si querés, con pricing exacto para tu caso.
       }
     ]
   },
-  "profile": {
+  "profile_for_persist": {
     "lead_id": 33,
     "row_id": 198,
     "full_name": "[full_name]",
@@ -1692,7 +1688,7 @@ Te armo una propuesta detallada si querés, con pricing exacto para tu caso.
     "phone": "+549...",
     "country": "[country]"
   },
-  "state": {
+  "state_for_persist": {
     "lead_id": 33,
     "stage": "qualify",
     "interests": ["Process Automation (Odoo/ERP)"],
