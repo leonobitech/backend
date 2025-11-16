@@ -884,21 +884,12 @@ export class OdooClient {
       };
     }
 
-    // FLUJO DEFINITIVO: Crear AMBOS (evento + actividad) y vincularlos
-    // 1. Crear calendar.event (con hora, duración, ubicación)
-    // 2. Crear mail.activity (para que aparezca en "Actividades planeadas")
-    // 3. Vincularlos con calendar_event_id
+    // FLUJO DEFINITIVO: Buscar evento existente → Actualizar o Crear
+    // Si existe un evento para esta oportunidad, actualizarlo (reprogramar)
+    // Si no existe, crear nuevo evento + actividad + vincularlos
 
     const vendorUserId = opp.user_id && Array.isArray(opp.user_id) ? opp.user_id[0] : undefined;
     const deadlineDate = new Date(data.start).toISOString().split('T')[0];
-
-    // PASO 1: Crear evento de calendario con TODA la información
-    logger.info({
-      opportunityId: data.opportunityId,
-      vendorUserId,
-      start: data.start,
-      duration
-    }, "Step 1: Creating calendar event with full details");
 
     // Convertir datetime de ISO 8601 con timezone a formato Odoo (sin timezone)
     const odooStart = this.convertToOdooDatetime(data.start);
@@ -916,37 +907,105 @@ export class OdooClient {
     if (data.description) eventValues.description = data.description;
     if (data.location) eventValues.location = data.location;
 
-    const eventId = await this.create("calendar.event", eventValues);
+    // PASO 0: Buscar si ya existe un evento para esta oportunidad
+    const existingEvents = await this.search("calendar.event", [
+      ["opportunity_id", "=", data.opportunityId]
+    ]);
 
-    logger.info({ eventId, opportunityId: data.opportunityId }, "Step 1 completed: Calendar event created");
+    let eventId: number;
+    let activityId: number;
+    let isReschedule = false;
 
-    // PASO 2: Crear actividad de reunión para que aparezca en "Actividades planeadas"
-    logger.info({
-      eventId,
-      opportunityId: data.opportunityId,
-      deadlineDate
-    }, "Step 2: Creating meeting activity");
+    if (existingEvents.length > 0) {
+      // FLUJO DE REPROGRAMACIÓN: Actualizar evento existente
+      eventId = existingEvents[0];
+      isReschedule = true;
 
-    const activityId = await this.createActivity({
-      activityType: "meeting",
-      summary: data.name,
-      resModel: "crm.lead",
-      resId: data.opportunityId,
-      dateDeadline: deadlineDate,
-      userId: vendorUserId,
-      note: data.description || `Reunión: ${data.name}`
-    });
+      logger.info({
+        eventId,
+        opportunityId: data.opportunityId,
+        oldEvent: existingEvents
+      }, "Rescheduling: Updating existing calendar event");
 
-    logger.info({ activityId, eventId }, "Step 2 completed: Activity created");
+      // Actualizar el evento existente
+      await this.write("calendar.event", [eventId], eventValues);
 
-    // PASO 3: Vincular la actividad con el evento de calendario
-    try {
-      await this.write("mail.activity", [activityId], {
-        calendar_event_id: eventId
+      logger.info({ eventId, opportunityId: data.opportunityId }, "Rescheduling completed: Calendar event updated");
+
+      // Buscar y actualizar la actividad asociada
+      const existingActivities = await this.search("mail.activity", [
+        ["res_model", "=", "crm.lead"],
+        ["res_id", "=", data.opportunityId],
+        ["activity_type_id.name", "=", "Meeting"],
+        ["calendar_event_id", "=", eventId]
+      ]);
+
+      if (existingActivities.length > 0) {
+        activityId = existingActivities[0];
+        await this.write("mail.activity", [activityId], {
+          summary: data.name,
+          date_deadline: deadlineDate,
+          note: data.description || `Reunión: ${data.name}`
+        });
+        logger.info({ activityId, eventId }, "Rescheduling: Activity updated");
+      } else {
+        // Si no existe actividad, crear una nueva
+        activityId = await this.createActivity({
+          activityType: "meeting",
+          summary: data.name,
+          resModel: "crm.lead",
+          resId: data.opportunityId,
+          dateDeadline: deadlineDate,
+          userId: vendorUserId,
+          note: data.description || `Reunión: ${data.name}`
+        });
+
+        await this.write("mail.activity", [activityId], {
+          calendar_event_id: eventId
+        });
+        logger.info({ activityId, eventId }, "Rescheduling: New activity created and linked");
+      }
+    } else {
+      // FLUJO DE CREACIÓN: Crear nuevo evento
+      logger.info({
+        opportunityId: data.opportunityId,
+        vendorUserId,
+        start: data.start,
+        duration
+      }, "Step 1: Creating calendar event with full details");
+
+      eventId = await this.create("calendar.event", eventValues);
+
+      logger.info({ eventId, opportunityId: data.opportunityId }, "Step 1 completed: Calendar event created");
+
+      // PASO 2: Crear actividad de reunión para que aparezca en "Actividades planeadas"
+      logger.info({
+        eventId,
+        opportunityId: data.opportunityId,
+        deadlineDate
+      }, "Step 2: Creating meeting activity");
+
+      activityId = await this.createActivity({
+        activityType: "meeting",
+        summary: data.name,
+        resModel: "crm.lead",
+        resId: data.opportunityId,
+        dateDeadline: deadlineDate,
+        userId: vendorUserId,
+        note: data.description || `Reunión: ${data.name}`
       });
-      logger.info({ activityId, eventId }, "Step 3 completed: Activity linked to calendar event");
-    } catch (error) {
-      logger.warn({ error, activityId, eventId }, "Could not link activity to event");
+
+      logger.info({ activityId, eventId }, "Step 2 completed: Activity created");
+
+      // PASO 3: Vincular la actividad con el evento de calendario
+      try {
+        await this.write("mail.activity", [activityId], {
+          calendar_event_id: eventId
+        });
+        logger.info({ activityId, eventId }, "Step 3 completed: Activity linked to calendar event");
+      } catch (error) {
+        logger.warn({ error, activityId, eventId }, "Could not link activity to event");
+      }
     }
 
     // Odoo automáticamente:
@@ -975,11 +1034,14 @@ export class OdooClient {
             minute: "2-digit"
           });
 
+          const emailTitle = isReschedule ? "🔄 Reunión Reprogramada" : "📅 Reunión Programada";
+          const emailAction = isReschedule ? "reprogramado" : "programado";
+
           const emailBody = `
             <div style="font-family: Arial, sans-serif; max-width: 600px;">
-              <h2 style="color: #875A7B;">📅 Reunión Programada</h2>
+              <h2 style="color: #875A7B;">${emailTitle}</h2>
               <p>Hola <strong>${vendorName}</strong>,</p>
-              <p>Se ha programado la siguiente reunión en tu calendario:</p>
+              <p>Se ha ${emailAction} la siguiente reunión en tu calendario:</p>
 
               <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #875A7B;">
                 <h3 style="margin: 0 0 15px 0; color: #875A7B;">${data.name}</h3>
@@ -996,7 +1058,7 @@ export class OdooClient {
           `;
 
           const mailId = await this.create("mail.mail", {
-            subject: `📅 Reunión programada: ${data.name}`,
+            subject: `${emailTitle}: ${data.name}`,
             body_html: emailBody,
             email_to: vendorEmail,
             auto_delete: false,
@@ -1017,13 +1079,18 @@ export class OdooClient {
     }
 
     // PASO 5: Progresión automática de etapa (New → Qualified)
-    try {
-      await this.autoProgressStage({
-        opportunityId: data.opportunityId,
-        action: "meeting_scheduled"
-      });
-    } catch (error) {
-      logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
+    // Solo progresar si es un nuevo agendamiento, no si es reprogramación
+    if (!isReschedule) {
+      try {
+        await this.autoProgressStage({
+          opportunityId: data.opportunityId,
+          action: "meeting_scheduled"
+        });
+      } catch (error) {
+        logger.warn({ error, opportunityId: data.opportunityId }, "Failed to auto-progress stage after meeting scheduling");
+      }
+    } else {
+      logger.info({ opportunityId: data.opportunityId }, "Skipping stage progression for rescheduled meeting");
     }
 
     return { eventId, activityId };
