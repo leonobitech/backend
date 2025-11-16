@@ -854,7 +854,21 @@ search_services_rag({
 
 ## 5. OUTPUT FORMAT
 
-Return a single JSON object with this structure:
+**🚨 CRITICAL: Return PURE JSON only - NO markdown formatting**
+
+Your response MUST be a plain JSON object. DO NOT wrap it in markdown code blocks.
+
+❌ **WRONG** (causes parsing errors):
+```
+"```json\n{...}\n```"
+```
+
+✅ **CORRECT**:
+```
+{"message": {...}, "profile_for_persist": {...}, ...}
+```
+
+**Return a single JSON object with this structure:**
 
 ```json
 {
@@ -1965,8 +1979,15 @@ Te armo una propuesta detallada si querés, con pricing exacto para tu caso.
 
 ## 11. VERSION INFO
 
-- **Version**: 5.2 (Algorithm-Based Validation)
+- **Version**: 5.3 (JSON Output Fix)
 - **Date**: 2025-11-16
+
+**Changes from v5.2**:
+- **OUTPUT FORMAT actualizado con instrucción anti-markdown**:
+  - Agregado header 🚨 CRITICAL: "Return PURE JSON only - NO markdown formatting"
+  - Ejemplo explícito de formato WRONG vs CORRECT
+  - Previene que LLM envuelva JSON en bloques de código markdown (```json...```)
+  - Soluciona error de parsing en Output Main node
 
 **Changes from v5.1**:
 - **Regla #4 convertida en algoritmo IF-THEN estricto**:
