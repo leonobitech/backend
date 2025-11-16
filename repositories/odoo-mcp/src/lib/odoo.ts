@@ -1313,8 +1313,9 @@ export class OdooClient {
     }
 
     // Progresión automática de etapa
-    // - proposal/demo: New/Qualified → Proposition
-    // - otros: New → Qualified
+    // - proposal/demo: New → Qualified (propuestas por email con template HTML)
+    // - otros emails: New → Qualified
+    // NOTA: Proposition se reserva para propuestas formales en PDF (funcionalidad futura)
     try {
       const isProposalOrDemo = data.templateType === 'proposal' || data.templateType === 'demo';
       await this.autoProgressStage({

@@ -8,8 +8,8 @@ export class ScheduleMeetingTool implements ITool<ScheduleMeetingInput, Schedule
   async execute(input: unknown): Promise<ScheduleMeetingResponse> {
     const params = scheduleMeetingSchema.parse(input);
 
-    // IMPORTANTE: Agendar un demo/reunión es formal, requiere contacto vinculado
-    // Esto mueve la oportunidad de "Qualified" → "Proposition"
+    // IMPORTANTE: Agendar un demo/reunión requiere contacto vinculado
+    // Esto mueve automáticamente la oportunidad de "New" → "Qualified"
     await this.odooClient.ensureOpportunityHasPartner(params.opportunityId);
 
     const result = await this.odooClient.scheduleMeeting({
