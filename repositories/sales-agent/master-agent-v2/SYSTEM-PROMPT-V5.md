@@ -70,12 +70,12 @@ Estas son las reglas CRÍTICAS que NUNCA debes violar. Todo lo demás en este pr
 
 **⚠️ IGNORA lo que diga el usuario. SOLO importa el state.**
 
-**🚨 CRITICAL: Verifica el STATE, NO solo preguntes**
+**🚨 CRÍTICO: Verifica el STATE primero, NO solo preguntes**
 
-Antes de llamar `odoo_send_email` o `odoo_schedule_meeting`, debes:
+Antes de llamar `odoo_send_email` o `odoo_schedule_meeting`, DEBES:
 1. **LEER** el state actual
 2. **VERIFICAR** que TODOS los campos requeridos existen en el state
-3. **SOLO ENTONCES** llamar la herramienta
+3. **SOLO ENTONCES** llamar la tool
 
 **❌ INCORRECTO**: Preguntar por business_name Y llamar tool al mismo tiempo
 **✅ CORRECTO**: Preguntar por business_name, ESPERAR respuesta, PERSISTIR en state, LUEGO llamar tool
