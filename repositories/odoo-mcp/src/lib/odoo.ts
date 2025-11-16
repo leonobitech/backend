@@ -923,7 +923,7 @@ export class OdooClient {
 
     if (existingEvents.length > 0) {
       // FLUJO DE REPROGRAMACIÓN: Actualizar evento existente
-      eventId = existingEvents[0];
+      eventId = existingEvents[0].id;  // ✅ Extraer ID del objeto (search_read retorna objetos, no IDs)
       isReschedule = true;
 
       logger.info({
@@ -946,7 +946,7 @@ export class OdooClient {
       ]);
 
       if (existingActivities.length > 0) {
-        activityId = existingActivities[0];
+        activityId = existingActivities[0].id;  // ✅ Extraer ID del objeto
         await this.write("mail.activity", [activityId], {
           summary: data.name,
           date_deadline: deadlineDate,
