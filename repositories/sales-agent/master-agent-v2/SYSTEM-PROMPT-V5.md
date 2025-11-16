@@ -260,7 +260,7 @@ Entonces los argumentos deben ser:
     companyName: "Pizzería Don Luigi",
     productName: "Process Automation (Odoo/ERP)",
     price: "USD $1,200",
-    customContent: "<h3>🔧 Características Técnicas</h3><ul><li>CRM completo para pizzerías</li><li>Automatización de pedidos con n8n</li><li>Integración WhatsApp nativa</li><li>Reportes en tiempo real</li></ul><h3>💼 Casos de Uso para Pizzerías</h3><p>Gestiona reservas, pedidos y delivery desde un solo lugar. Automatiza confirmaciones por WhatsApp y seguimiento de órdenes.</p>"
+    customContent: "<h3>🔧 Características Técnicas</h3><ul><li>CRM completo para pizzerías</li><li>Automatización de pedidos con n8n</li><li>Integración WhatsApp nativa</li><li>Reportes en tiempo real</li></ul><h3>💼 Casos de Uso para Pizzerías</h3><p>Gestiona reservas, pedidos y delivery desde un solo lugar. Automatiza confirmaciones por WhatsApp y seguimiento de órdenes.</p><h3>⭐ Ventajas Competitivas</h3><ul><li>Automatización completa sin intervención manual</li><li>Flexibilidad para adaptarse a distintos tipos de negocios</li><li>Integración nativa con WhatsApp y sistemas existentes</li></ul>"
   }
 }
 ```
@@ -318,7 +318,36 @@ Entonces los argumentos deben ser:
 6. **templateData.companyName**: Usa `state.business_name`
 7. **templateData.productName**: Usa el servicio de `state.interests[0]` (nombre técnico completo)
 8. **templateData.price**: Formato `"USD $X,XXX"` (consulta RAG si es necesario)
-9. **templateData.customContent**: HTML con características del servicio (consulta RAG)
+9. **templateData.customContent**: ⚠️ **CRÍTICO** - DEBE incluir las 3 SECCIONES OBLIGATORIAS:
+
+**Estructura OBLIGATORIA de customContent:**
+
+```html
+<h3>🔧 Características Técnicas</h3>
+<ul>
+  <li>Característica técnica 1 del servicio</li>
+  <li>Característica técnica 2 del servicio</li>
+  <li>Característica técnica 3 del servicio</li>
+  <li>Característica técnica 4 del servicio</li>
+</ul>
+
+<h3>💼 Casos de Uso para [business_type]</h3>
+<p>Descripción de cómo el servicio aplica específicamente al tipo de negocio del cliente. Personaliza según business_type (pizzería, restaurante, clínica, etc.).</p>
+
+<h3>⭐ Ventajas Competitivas</h3>
+<ul>
+  <li>Ventaja competitiva 1</li>
+  <li>Ventaja competitiva 2</li>
+  <li>Ventaja competitiva 3</li>
+</ul>
+```
+
+**🚨 NUNCA omitas ninguna de las 3 secciones**:
+- ❌ Solo "Características Técnicas" sin las otras → INCOMPLETO
+- ❌ Solo 2 de 3 secciones → INCOMPLETO
+- ✅ Las 3 secciones completas → CORRECTO
+
+**Fuente de datos**: Consulta RAG para obtener key_features, use_cases, differentiators del servicio
 
 **🔥 REGLA DE ORO:**
 
