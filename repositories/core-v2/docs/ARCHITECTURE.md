@@ -163,12 +163,52 @@ tonic-build = "0.12"
 | Crate | Why? |
 |-------|------|
 | **Axum** | Modern, type-safe, built on Tower, excellent ergonomics |
-| **SQLx** | Compile-time checked queries, async-native, safe |
+| **SQLx** | **Compile-time checked queries**, async-native, zero overhead |
 | **Tonic** | Production-ready gRPC, interop with Python/Go |
 | **thiserror** | Ergonomic custom error types |
 | **tracing** | Structured, async-aware logging/tracing |
 | **argon2** | Memory-hard password hashing (OWASP recommended) |
 | **testcontainers** | Real database testing (no mocks for integration) |
+
+### 3.3 Database Layer: Why SQLx Over ORMs?
+
+**Decision:** We chose **SQLx** over traditional ORMs (SeaORM, Diesel).
+
+**See:** [ADR 001: Database Layer - SQLx](ADR/001-database-layer-sqlx.md) for full rationale.
+
+**TL;DR - SQLx advantages for this project:**
+
+1. **Compile-time verification** 🔒
+   - SQL queries verified against **real database schema** at compile-time
+   - Impossible to ship code with schema mismatches
+   - Type-safe query results
+
+2. **Functional programming alignment** 🎯
+   - No ActiveRecord pattern (no mutable entity objects)
+   - Pure functions: `query → data → transform`
+   - Separates data from behavior
+
+3. **Explicit SQL = Better observability** 🔍
+   - See exact SQL in code and traces
+   - No "query builder magic"
+   - Performance debugging is trivial
+
+4. **Zero abstraction overhead** ⚡
+   - Direct SQL execution
+   - No ORM translation layer
+   - You control query optimization
+
+5. **Testing with real databases** 🧪
+   - Testcontainers + real PostgreSQL
+   - No need to mock ORM behaviors
+   - Tests match production exactly
+
+**Trade-off accepted:**
+- More verbose (write SQL manually)
+- Build-time dependency on database (mitigated with offline mode)
+
+**Why this matters:**
+SQLx embodies Rust's philosophy: **explicit, safe, and zero-cost abstractions**. Perfect for professional-grade systems where correctness and performance are non-negotiable.
 
 ---
 

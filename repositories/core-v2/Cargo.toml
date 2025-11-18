@@ -1,0 +1,84 @@
+[package]
+name = "core-v2"
+version = "0.1.0"
+edition = "2021"
+authors = ["Felix @ Leonobitech <felix@leonobitech.com>"]
+description = "Production-grade authentication and business logic microservice"
+license = "MIT"
+
+[dependencies]
+# Web Framework & HTTP
+axum = { version = "0.7", features = ["macros", "tracing"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip", "validate-request"] }
+hyper = { version = "1.5", features = ["full"] }
+tokio = { version = "1.42", features = ["full"] }
+
+# Database & Persistence
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate"] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+
+# Authentication & Security
+argon2 = "0.5"
+jsonwebtoken = "9.3"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+# gRPC
+tonic = { version = "0.12", features = ["transport", "tls"] }
+prost = "0.13"
+
+# Error Handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Tracing & Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.27"
+opentelemetry = { version = "0.26", features = ["trace"] }
+opentelemetry-otlp = "0.26"
+opentelemetry_sdk = { version = "0.26", features = ["rt-tokio"] }
+
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+
+# Time & Date
+chrono = { version = "0.4", features = ["serde"] }
+
+# Async utilities
+async-trait = "0.1"
+futures = "0.3"
+
+[dev-dependencies]
+# Testing
+tokio-test = "0.4"
+mockall = "0.13"
+rstest = "0.23"
+wiremock = "0.6"
+testcontainers = "0.23"
+fake = "2.10"
+quickcheck = "1.0"
+
+[build-dependencies]
+# gRPC code generation
+tonic-build = "0.12"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+
+[profile.test]
+opt-level = 1

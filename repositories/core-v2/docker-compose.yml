@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  core-v2:
+    build: .
+    ports:
+      - "3000:3000"
+      - "50051:50051"
+    environment:
+      DATABASE__URL: postgres://core:password@postgres:5432/core_v2
+      REDIS__URL: redis://redis:6379
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: 3000
+      RUST_LOG: info,core_v2=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: core
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: core_v2
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U core"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
