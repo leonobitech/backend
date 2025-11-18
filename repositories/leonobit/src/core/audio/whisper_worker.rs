@@ -23,7 +23,6 @@ const MAX_PHRASE_DURATION_S: f32 = 30.0; // Máximo 30s por frase (safety)
 const STREAMING_ENABLED: bool = true; // Enable/disable streaming parcials
 const STREAMING_UPDATE_INTERVAL_MS: u64 = 1500; // Enviar update cada 1.5s mientras habla
 const STREAMING_MIN_AUDIO_MS: u64 = 1000; // Mínimo 1s de audio para primera transcripción parcial
-const STREAMING_OVERLAP_MS: u64 = 300; // 300ms overlap para mantener contexto entre windows
 
 // ===== VAD Espectral con FFT =====
 const SPEECH_FREQ_MIN: f32 = 300.0; // Hz - Frecuencia mínima de voz humana
