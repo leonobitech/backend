@@ -1,230 +1,279 @@
 // ============================================================================
-// OUTPUT MAIN v5.2 - Formateo de salida para Baserow, Odoo y Chatwoot
+// OUTPUT MAIN v7.3 PRODUCTION - Ultra Robusto
 // ============================================================================
 // Nodo: Code (n8n)
 // Posición: Después de Master AI Agent Main
 //
-// Recibe: Output de Master Agent v5.0 (message, profile_for_persist, state_for_persist)
-// Output: Formatos para WhatsApp, HTML (Odoo), y datos para persistir
-// Changelog v5.2: Removed tool_calls detection (now handled via n8n function calling)
-// Changelog v5.1: Agregada estrategia 3 para field names largos (>200 chars)
-// Changelog v5.0: Parsing robusto para claves corruptas _tool_calls_ignored
-// ============================================================================
-
-// ============================================================================
-// 1. OBTENER DATOS DE ENTRADA
+// Recibe: Output del LLM (message, profile_for_persist, state_for_persist)
+// Output: Estructura completa para Chatwoot/Odoo/Baserow
+//
+// Changelog v7.3:
+// - Limpieza robusta de markdown code blocks
+// - Manejo de múltiples formatos de output
+// - Estrategias de repair mejoradas
+// - Logs detallados para debugging
+// - Validaciones exhaustivas
 // ============================================================================
 
 const inputData = $input.first().json;
 
+console.log(
+  "[OutputMain v7.3] ================================================"
+);
+console.log("[OutputMain v7.3] Starting PRODUCTION version...");
+console.log(
+  "[OutputMain v7.3] ================================================"
+);
+
 // ============================================================================
-// PARSING ROBUSTO DEL OUTPUT DEL MASTER AGENT
+// 1. PARSING ULTRA ROBUSTO DEL OUTPUT DEL LLM
 // ============================================================================
 
 let masterOutput;
 
 if (inputData.output) {
   try {
-    // Intentar parsear normalmente
-    masterOutput = JSON.parse(inputData.output);
+    // ========================================================================
+    // FASE 1: LIMPIEZA INICIAL
+    // ========================================================================
+    let rawOutput = inputData.output.trim();
+
+    console.log(
+      "[OutputMain v7.3] Raw output length:",
+      rawOutput.length,
+      "chars"
+    );
+
+    // LIMPIEZA A: Markdown code blocks
+    if (rawOutput.includes("```")) {
+      console.log(
+        "[OutputMain v7.3] 🔧 Detected markdown code blocks, cleaning..."
+      );
+
+      // Remover ```json al inicio
+      rawOutput = rawOutput.replace(/^```json\s*/i, "");
+      // Remover ``` al inicio (sin json)
+      rawOutput = rawOutput.replace(/^```\s*/, "");
+      // Remover ``` al final
+      rawOutput = rawOutput.replace(/\s*```$/m, "");
+
+      rawOutput = rawOutput.trim();
+      console.log("[OutputMain v7.3] ✅ Markdown removed");
+    }
+
+    // LIMPIEZA B: Whitespace problemático
+    rawOutput = rawOutput.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+
+    // ========================================================================
+    // FASE 2: PARSE INICIAL
+    // ========================================================================
+    masterOutput = JSON.parse(rawOutput);
+    console.log(
+      "[OutputMain v7.3] ✅ JSON parsed successfully on first attempt"
+    );
   } catch (parseError) {
-    console.log("[OutputMain] ⚠️ JSON parse error:", parseError.message);
-    console.log("[OutputMain] Attempting to repair JSON...");
+    console.log(
+      "[OutputMain v7.3] ⚠️ Initial parse failed:",
+      parseError.message
+    );
+    console.log("[OutputMain v7.3] 🔧 Initiating repair sequence...");
 
     try {
-      let fixedJson = inputData.output;
+      let fixedJson = inputData.output.trim();
 
-      // ESTRATEGIA 1: Eliminar claves inválidas que genera el LLM cuando falla un tool_call
-      // Patrón: "_tool_calls_ignored..." con valores que tienen newlines literales sin escapar
-      // Ejemplo: "_tool_calls_ignored_due_to_missing_mandatory_fields...": "\n{\n  \"message\": ..."
-      //
-      // Detectamos estas claves y truncamos todo desde ahí (la clave corrupta siempre está al final)
+      // ======================================================================
+      // REPAIR STAGE 1: Markdown removal
+      // ======================================================================
+      if (fixedJson.includes("```")) {
+        console.log("[OutputMain v7.3] REPAIR 1: Removing markdown...");
+        fixedJson = fixedJson.replace(/^```json\s*/i, "");
+        fixedJson = fixedJson.replace(/^```\s*/, "");
+        fixedJson = fixedJson.replace(/\s*```$/m, "");
+        fixedJson = fixedJson.trim();
+      }
+
+      // ======================================================================
+      // REPAIR STAGE 2: Invalid _tool_calls_ignored keys
+      // ======================================================================
       const invalidKeyMarker = '"_tool_calls_ignored';
       if (fixedJson.includes(invalidKeyMarker)) {
-        console.log("[OutputMain] 🔧 Detected invalid _tool_calls_ignored key, removing...");
+        console.log(
+          "[OutputMain v7.3] REPAIR 2: Removing _tool_calls_ignored..."
+        );
 
-        // Encontrar el índice donde empieza la clave corrupta
         const corruptIndex = fixedJson.indexOf(invalidKeyMarker);
-
-        // Buscar hacia atrás para encontrar la coma que precede esta clave
         let cutIndex = corruptIndex;
+
+        // Buscar coma anterior
         for (let i = corruptIndex - 1; i >= 0; i--) {
-          if (fixedJson[i] === ',') {
+          if (fixedJson[i] === ",") {
             cutIndex = i;
             break;
           }
         }
 
-        // Truncar desde la coma (o desde la clave si no hay coma)
-        fixedJson = fixedJson.substring(0, cutIndex).trim();
-
-        // Después de truncar, SIEMPRE agregar el cierre del objeto raíz
-        // porque la clave corrupta siempre está después del último campo válido (state)
-        // Estructura esperada: { "message": {...}, "profile": {...}, "state": {...} }
-        //                                                                          ↑
-        // Después de truncar quedamos aquí: { "message": {...}, "profile": {...}, "state": {...}
-        // Necesitamos agregar el cierre: }
-        fixedJson += "\n}";
-
-        console.log("[OutputMain] ✅ Removed invalid _tool_calls_ignored key");
+        // Truncar y cerrar objeto
+        fixedJson = fixedJson.substring(0, cutIndex).trim() + "\n}";
+        console.log("[OutputMain v7.3] ✅ Invalid key removed");
       }
 
-      // ESTRATEGIA 2: Buscar y remover internal_reasoning completo si está malformado
-      // La LLM tiende a poner keys sin valores ahí
-      fixedJson = fixedJson.replace(
-        /,?\s*"internal_reasoning"\s*:\s*\{[^}]*\}/g,
-        ""
-      );
+      // ======================================================================
+      // REPAIR STAGE 3: Malformed internal_reasoning
+      // ======================================================================
+      if (fixedJson.includes('"internal_reasoning"')) {
+        console.log(
+          "[OutputMain v7.3] REPAIR 3: Cleaning internal_reasoning..."
+        );
+        fixedJson = fixedJson.replace(
+          /,?\s*"internal_reasoning"\s*:\s*\{[^}]*\}/g,
+          ""
+        );
+      }
 
-      // ESTRATEGIA 3: Detectar y remover field names sospechosamente largos (hallucinations)
-      // Patrón: Nombres de campo > 200 caracteres con muchos underscores/repeticiones
-      // Ejemplo: "_internal_send_email_called_now_ts_override...ignore__ignore__ignore..."
+      // ======================================================================
+      // REPAIR STAGE 4: Suspiciously long field names (>200 chars)
+      // ======================================================================
       const longFieldPattern = /"_[^"]{200,}"\s*:/;
       if (longFieldPattern.test(fixedJson)) {
-        console.log("[OutputMain] 🔧 Detected suspiciously long field name (>200 chars), removing...");
+        console.log("[OutputMain v7.3] REPAIR 4: Removing long field names...");
 
-        // Encontrar la posición del field corrupto
         const match = fixedJson.match(longFieldPattern);
         if (match) {
           const fieldIndex = fixedJson.indexOf(match[0]);
-
-          // Buscar la coma anterior
           let cutIndex = fieldIndex;
+
           for (let i = fieldIndex - 1; i >= 0; i--) {
-            if (fixedJson[i] === ',') {
+            if (fixedJson[i] === ",") {
               cutIndex = i;
               break;
             }
           }
 
-          // Truncar desde la coma y cerrar el objeto
           fixedJson = fixedJson.substring(0, cutIndex).trim() + "\n}";
-          console.log("[OutputMain] ✅ Removed long field name");
+          console.log("[OutputMain v7.3] ✅ Long field name removed");
         }
       }
 
-      // ESTRATEGIA 4: Limpiar posibles comas duplicadas o trailing
+      // ======================================================================
+      // REPAIR STAGE 5: Trailing commas
+      // ======================================================================
+      console.log("[OutputMain v7.3] REPAIR 5: Cleaning trailing commas...");
       fixedJson = fixedJson.replace(/,\s*,/g, ",");
       fixedJson = fixedJson.replace(/,\s*}/g, "}");
       fixedJson = fixedJson.replace(/,\s*]/g, "]");
 
+      // ======================================================================
+      // REPAIR STAGE 6: Final parse attempt
+      // ======================================================================
       masterOutput = JSON.parse(fixedJson);
-      console.log("[OutputMain] ✅ JSON repaired successfully");
+      console.log("[OutputMain v7.3] ✅ JSON repaired and parsed successfully");
     } catch (repairError) {
+      console.log("[OutputMain v7.3] ❌ CRITICAL: Repair sequence failed");
+      console.log("[OutputMain v7.3] Original error:", parseError.message);
+      console.log("[OutputMain v7.3] Repair error:", repairError.message);
       console.log(
-        "[OutputMain] ❌ Repair failed. Showing full JSON for debugging:"
+        "[OutputMain v7.3] ==================== DEBUG INFO ===================="
       );
-      console.log("[OutputMain] First 500 chars:", inputData.output.substring(0, 500));
-      console.log("[OutputMain] Last 500 chars:", inputData.output.substring(inputData.output.length - 500));
+      console.log(
+        "[OutputMain v7.3] First 500 chars:",
+        inputData.output.substring(0, 500)
+      );
+      console.log(
+        "[OutputMain v7.3] Last 500 chars:",
+        inputData.output.substring(inputData.output.length - 500)
+      );
+      console.log(
+        "[OutputMain v7.3] ================================================"
+      );
+
       throw new Error(
-        `[OutputMain] Failed to parse JSON: ${parseError.message}. Repair attempt also failed: ${repairError.message}`
+        `[OutputMain v7.3] PARSE FAILED. Original: ${parseError.message}. Repair: ${repairError.message}`
       );
     }
   }
 } else {
+  console.log("[OutputMain v7.3] No 'output' field, using inputData directly");
   masterOutput = inputData;
 }
 
-// Validar estructura
-if (!masterOutput || !masterOutput.message) {
-  throw new Error("[OutputMain] Missing required field: message");
+// ============================================================================
+// 2. VALIDACIÓN DE ESTRUCTURA
+// ============================================================================
+
+console.log("[OutputMain v7.3] Validating structure...");
+
+// Validación crítica: message.text
+if (!masterOutput.message || !masterOutput.message.text) {
+  console.log("[OutputMain v7.3] ❌ CRITICAL: Missing message.text");
+  console.log("[OutputMain v7.3] Available keys:", Object.keys(masterOutput));
+  throw new Error("[OutputMain v7.3] Missing required field: message.text");
 }
 
-const { message, state_update, cta_menu, internal_reasoning } = masterOutput;
-
-console.log("[OutputMain] Processing message...");
-console.log("[OutputMain] RAG used:", message.rag_used);
-console.log("[OutputMain] CTA menu:", cta_menu ? "present" : "null");
-console.log(
-  "[OutputMain] State update:",
-  state_update ? Object.keys(state_update) : "none"
-);
-
-// ============================================================================
-// NOTE: Tool calls (odoo_send_email, odoo_schedule_meeting) are now handled
-// via n8n function calling - they execute BEFORE this node receives the output.
-// LLM output only contains: message, profile_for_persist, state_for_persist
-// ============================================================================
-
-// ============================================================================
-// ESTRATEGIA DE OBTENCIÓN DE DATOS:
-//
-// El Master Agent DEBERÍA devolver profile y state completos actualizados.
-// Como fallback, buscamos en Input Main y aplicamos state_update manualmente.
-// ============================================================================
-
-// 1. Intentar obtener datos directamente del Master Agent output
-// IMPORTANTE: El LLM devuelve profile_for_persist y state_for_persist (no profile/state)
-let profile = masterOutput.profile_for_persist || masterOutput.profile || inputData.profile;
-let state = masterOutput.state_for_persist || masterOutput.state || inputData.state;
-// lead_id puede estar en el nivel raíz o dentro de profile
-let lead_id = masterOutput.lead_id || profile?.lead_id || inputData.lead_id;
-
-// 2. Fallback: buscar en Input Main si no vienen en ningún lado
-if (!lead_id || !profile || !state) {
-  try {
-    const inputMainNode = $("Input Main").first()?.json;
-    if (inputMainNode) {
-      lead_id = lead_id || inputMainNode.lead_id;
-      profile = profile || inputMainNode.profile;
-      state = state || inputMainNode.state;
-      console.log("[OutputMain] ⚠️ Using fallback data from Input Main node");
-    }
-  } catch (e) {
-    console.log(
-      "[OutputMain] Warning: Could not access Input Main node:",
-      e.message
-    );
-  }
-}
-
-// 3. Si tenemos state_update pero no state completo, hacer merge manual
-if (!masterOutput.state && state_update && state) {
+// Validación crítica: profile_for_persist
+if (
+  !masterOutput.profile_for_persist ||
+  !masterOutput.profile_for_persist.row_id
+) {
   console.log(
-    "[OutputMain] ⚠️ Master Agent returned state_update instead of full state, merging manually"
+    "[OutputMain v7.3] ❌ CRITICAL: Missing profile_for_persist.row_id"
   );
-  state = { ...state };
-
-  // Aplicar state_update
-  Object.keys(state_update).forEach((key) => {
-    if (key === "counters" && state_update.counters) {
-      state.counters = { ...state.counters, ...state_update.counters };
-    } else if (key === "cooldowns" && state_update.cooldowns) {
-      state.cooldowns = { ...state.cooldowns, ...state_update.cooldowns };
-    } else if (state_update[key] !== undefined) {
-      state[key] = state_update[key];
-    }
-  });
+  throw new Error(
+    "[OutputMain v7.3] Missing required field: profile_for_persist.row_id"
+  );
 }
 
-// 4. Validar que tenemos los datos necesarios
+// Validación crítica: state_for_persist
+if (!masterOutput.state_for_persist) {
+  console.log("[OutputMain v7.3] ❌ CRITICAL: Missing state_for_persist");
+  throw new Error(
+    "[OutputMain v7.3] Missing required field: state_for_persist"
+  );
+}
+
+console.log("[OutputMain v7.3] ✅ Structure validation passed");
+
+// ============================================================================
+// 3. EXTRACCIÓN DE DATOS
+// ============================================================================
+
+const {
+  message,
+  profile_for_persist,
+  state_for_persist,
+  cta_menu,
+  state_update,
+  internal_reasoning,
+} = masterOutput;
+
+// Obtener lead_id de múltiples fuentes posibles
+const lead_id =
+  masterOutput.lead_id ||
+  profile_for_persist.lead_id ||
+  state_for_persist.lead_id;
+
 if (!lead_id) {
-  throw new Error(
-    "[OutputMain] Missing lead_id (not found in Master Agent, inputData, or Input Main node)"
-  );
-}
-if (!profile || !profile.row_id) {
-  throw new Error(
-    "[OutputMain] Missing profile.row_id (required for StatePatchLead)"
-  );
-}
-if (!state) {
-  throw new Error("[OutputMain] Missing state (required for persistence)");
+  console.log("[OutputMain v7.3] ❌ CRITICAL: No lead_id found");
+  throw new Error("[OutputMain v7.3] Missing lead_id");
 }
 
-console.log("[OutputMain] ✅ Data loaded:");
-console.log("  - lead_id:", lead_id);
-console.log("  - profile.row_id:", profile.row_id);
-console.log("  - state.stage:", state.stage);
-console.log("  - state.counters:", JSON.stringify(state.counters || {}));
+console.log("[OutputMain v7.3] ✅ Data extracted successfully:");
+console.log("[OutputMain v7.3]   - lead_id:", lead_id);
+console.log(
+  "[OutputMain v7.3]   - profile.row_id:",
+  profile_for_persist.row_id
+);
+console.log("[OutputMain v7.3]   - state.stage:", state_for_persist.stage);
+console.log(
+  "[OutputMain v7.3]   - state.interests:",
+  state_for_persist.interests
+);
+console.log("[OutputMain v7.3]   - message.rag_used:", message.rag_used);
+console.log("[OutputMain v7.3]   - cta_menu:", cta_menu ? "present" : "null");
 
 // ============================================================================
-// 2. HELPERS - Formateo de texto
+// 4. HELPERS - Formateo de texto
 // ============================================================================
 
-/**
- * Escape HTML
- */
 function escapeHtml(str) {
   if (!str) return "";
   return String(str)
@@ -235,22 +284,17 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-/**
- * Sanitize text - remover caracteres inválidos
- */
 function sanitizeText(str, maxLength = 3500) {
   if (!str) return "";
 
   let text = String(str);
 
-  // Normalizar unicode
   try {
     text = text.normalize("NFC");
   } catch (e) {
-    // ignore
+    // Ignore normalization errors
   }
 
-  // Limpiar caracteres de control
   text = text
     .replace(/\r\n?/g, "\n")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
@@ -258,7 +302,6 @@ function sanitizeText(str, maxLength = 3500) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  // Truncar si excede límite
   if (text.length > maxLength) {
     text = text.slice(0, maxLength - 1) + "…";
   }
@@ -266,9 +309,6 @@ function sanitizeText(str, maxLength = 3500) {
   return text;
 }
 
-/**
- * Convertir Markdown simple a HTML
- */
 function markdownToHtml(md) {
   if (!md) return "";
 
@@ -279,41 +319,33 @@ function markdownToHtml(md) {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-
-    // Detectar bullet (• o - al inicio)
     const isBullet = /^[•\-]\s+/.test(line);
 
     if (isBullet) {
-      // Cerrar párrafo anterior si existe
       if (currentParagraph) {
         html += `<p>${escapeHtml(currentParagraph)}</p>`;
         currentParagraph = "";
       }
 
-      // Iniciar lista si no está abierta
       if (!inList) {
         html += "<ul>";
         inList = true;
       }
 
-      // Agregar item a la lista
       const text = line.replace(/^[•\-]\s+/, "");
       html += `<li>${escapeHtml(text)}</li>`;
     } else {
-      // Cerrar lista si estaba abierta
       if (inList) {
         html += "</ul>";
         inList = false;
       }
 
-      // Línea vacía = separador de párrafos
       if (!line) {
         if (currentParagraph) {
           html += `<p>${escapeHtml(currentParagraph)}</p>`;
           currentParagraph = "";
         }
       } else {
-        // Acumular texto del párrafo
         if (currentParagraph) {
           currentParagraph += " " + line;
         } else {
@@ -323,12 +355,10 @@ function markdownToHtml(md) {
     }
   }
 
-  // Cerrar lista si quedó abierta
   if (inList) {
     html += "</ul>";
   }
 
-  // Cerrar párrafo si quedó texto
   if (currentParagraph) {
     html += `<p>${escapeHtml(currentParagraph)}</p>`;
   }
@@ -336,9 +366,6 @@ function markdownToHtml(md) {
   return html;
 }
 
-/**
- * Convertir array a lista HTML
- */
 function arrayToHtmlList(items, ordered = false) {
   if (!Array.isArray(items) || items.length === 0) return "";
 
@@ -350,21 +377,18 @@ function arrayToHtmlList(items, ordered = false) {
   return `<${tag}>${listItems}</${tag}>`;
 }
 
-/**
- * Convertir array a texto con bullets
- */
 function arrayToTextList(items) {
   if (!Array.isArray(items) || items.length === 0) return "";
-
   return items.map((item) => `• ${String(item)}`).join("\n");
 }
 
 // ============================================================================
-// 3. CONSTRUIR MENSAJE PARA WHATSAPP (Texto plano)
+// 5. CONSTRUIR CONTENIDO WHATSAPP
 // ============================================================================
 
-// Agregar prefijo del bot
-let whatsappText = `🤖 Leonobit:\n${sanitizeText(message.text)}`;
+console.log("[OutputMain v7.3] Building WhatsApp content...");
+
+let whatsappContent = `🤖 Leonobit:\n${sanitizeText(message.text)}`;
 
 // Agregar fuentes si RAG fue usado
 if (
@@ -377,14 +401,21 @@ if (
     .map((s) => `• ${s.name || "Servicio"}`)
     .join("\n");
 
-  whatsappText += `\n\n*Fuentes:*\n${sourcesText}`;
+  whatsappContent += `\n\n*Fuentes:*\n${sourcesText}`;
 }
 
+console.log(
+  "[OutputMain v7.3] WhatsApp content length:",
+  whatsappContent.length,
+  "chars"
+);
+
 // ============================================================================
-// 4. CONSTRUIR MENSAJE PARA ODOO (HTML)
+// 6. CONSTRUIR HTML PARA ODOO
 // ============================================================================
 
-// Agregar prefijo del bot con formato HTML
+console.log("[OutputMain v7.3] Building HTML content...");
+
 let bodyHtml = `<p><strong>🤖 Leonobit:</strong></p>\n${markdownToHtml(
   message.text
 )}`;
@@ -402,26 +433,33 @@ if (
   );
 }
 
+console.log("[OutputMain v7.3] HTML content length:", bodyHtml.length, "chars");
+
 // ============================================================================
-// 5. CONSTRUIR CTA MENU (si existe)
+// 7. CONSTRUIR CHATWOOT MESSAGES
 // ============================================================================
 
-let chatwootMessages = [];
+console.log("[OutputMain v7.3] Building Chatwoot messages...");
+
+let chatwootMessages = [
+  {
+    content: whatsappContent,
+    message_type: "outgoing",
+    content_type: "text",
+    content_attributes: {},
+  },
+];
+
 let structuredCta = [];
-let expectReply = true;
-
-// Mensaje principal de texto
-const mainMessage = {
-  content: whatsappText,
-  message_type: "outgoing",
-  content_type: "text",
-  content_attributes: {},
-};
-
-chatwootMessages.push(mainMessage);
 
 // CTA Menu (si existe)
 if (cta_menu && Array.isArray(cta_menu.items) && cta_menu.items.length > 0) {
+  console.log(
+    "[OutputMain v7.3] CTA menu detected with",
+    cta_menu.items.length,
+    "items"
+  );
+
   const menuMessage = {
     content: cta_menu.prompt || "¿Cómo querés avanzar?",
     message_type: "outgoing",
@@ -438,8 +476,8 @@ if (cta_menu && Array.isArray(cta_menu.items) && cta_menu.items.length > 0) {
   structuredCta = cta_menu.items;
 
   // Agregar menú al texto de WhatsApp
-  whatsappText += `\n\n*${cta_menu.prompt || "Opciones:"}*\n`;
-  whatsappText += arrayToTextList(cta_menu.items);
+  whatsappContent += `\n\n*${cta_menu.prompt || "Opciones:"}*\n`;
+  whatsappContent += arrayToTextList(cta_menu.items);
 
   // Agregar menú al HTML de Odoo
   bodyHtml += `<p><strong>${escapeHtml(
@@ -448,24 +486,89 @@ if (cta_menu && Array.isArray(cta_menu.items) && cta_menu.items.length > 0) {
   bodyHtml += arrayToHtmlList(cta_menu.items, false);
 }
 
-// Si no hay menú pero hay pregunta en el mensaje, esperar respuesta
+// ============================================================================
+// 8. DETECTAR EXPECT_REPLY
+// ============================================================================
+
 const hasQuestion = /[?¿]/.test(message.text);
-if (!cta_menu && hasQuestion) {
-  expectReply = true;
-} else if (!cta_menu) {
-  expectReply = false;
+const expectReply = cta_menu ? true : hasQuestion;
+
+console.log(
+  "[OutputMain v7.3] Expect reply:",
+  expectReply,
+  "(has question:",
+  hasQuestion,
+  ", has menu:",
+  !!cta_menu,
+  ")"
+);
+
+// ============================================================================
+// 9. STATE MERGE (si hay state_update)
+// ============================================================================
+
+let finalState = state_for_persist;
+
+if (state_update && Object.keys(state_update).length > 0) {
+  console.log("[OutputMain v7.3] ⚠️ state_update detected, merging...");
+
+  finalState = { ...state_for_persist };
+
+  Object.keys(state_update).forEach((key) => {
+    if (key === "counters" && state_update.counters) {
+      finalState.counters = {
+        ...finalState.counters,
+        ...state_update.counters,
+      };
+    } else if (key === "cooldowns" && state_update.cooldowns) {
+      finalState.cooldowns = {
+        ...finalState.cooldowns,
+        ...state_update.cooldowns,
+      };
+    } else if (state_update[key] !== undefined) {
+      finalState[key] = state_update[key];
+    }
+  });
+
+  console.log("[OutputMain v7.3] ✅ State merged");
 }
 
 // ============================================================================
-// 6. STATE FINAL PARA PERSISTIR
+// 10. VALIDACIONES FINALES
 // ============================================================================
 
-// El state ya fue merged arriba (líneas 59-74) si vino state_update
-// Aquí solo lo asignamos como state_for_persist
-const state_for_persist = state;
+console.log("[OutputMain v7.3] Running final validations...");
+
+// Validar sincronización de counters
+const interestsLength = finalState.interests?.length || 0;
+const servicesSeenCounter = finalState.counters?.services_seen || 0;
+
+if (interestsLength !== servicesSeenCounter) {
+  console.log("[OutputMain v7.3] ⚠️ WARNING: Counter mismatch");
+  console.log("[OutputMain v7.3]   - interests.length:", interestsLength);
+  console.log(
+    "[OutputMain v7.3]   - counters.services_seen:",
+    servicesSeenCounter
+  );
+}
+
+// Validar campos fijos
+if (finalState.tz !== "-03:00") {
+  console.log(
+    "[OutputMain v7.3] ⚠️ WARNING: timezone is not -03:00, got:",
+    finalState.tz
+  );
+}
+
+if (finalState.channel !== "whatsapp") {
+  console.log(
+    "[OutputMain v7.3] ⚠️ WARNING: channel is not whatsapp, got:",
+    finalState.channel
+  );
+}
 
 // ============================================================================
-// 7. METADATA
+// 11. METADATA
 // ============================================================================
 
 const metadata = {
@@ -474,20 +577,20 @@ const metadata = {
   sources_count: message.sources ? message.sources.length : 0,
   has_cta_menu: !!cta_menu,
   internal_reasoning: internal_reasoning || null,
-  version: "output-main@2.0",
+  version: "output-main@7.3",
 };
 
 // ============================================================================
-// 8. OUTPUT FINAL
+// 12. CONSTRUIR OUTPUT FINAL
 // ============================================================================
 
+console.log("[OutputMain v7.3] Building final output...");
+
 const output = {
-  // Tool calls flag (para Switch node)
   has_tool_calls: false,
 
-  // Para Chatwoot/WhatsApp
   content_whatsapp: {
-    content: sanitizeText(whatsappText),
+    content: whatsappContent,
     message_type: "outgoing",
     content_type: "text",
     content_attributes: {},
@@ -498,45 +601,70 @@ const output = {
   chatwoot_input_select:
     chatwootMessages.length > 1 ? chatwootMessages[1] : null,
 
-  // Para Odoo (mail.message body en HTML)
   body_html: bodyHtml,
 
-  // Para Baserow (actualizar lead)
   lead_id: lead_id,
-
-  // Para Odoo Record Agent Response (espera "id" no "lead_id")
   id: lead_id,
 
-  state_for_persist: state_for_persist,
+  state_for_persist: finalState,
+  profile_for_persist: profile_for_persist,
 
-  profile_for_persist: profile,
-
-  // CTAs estructurados
   structured_cta: structuredCta,
 
-  // Expect reply
   expect_reply: expectReply,
 
-  // Message kind
   message_kind: internal_reasoning?.intent_detected || "response",
 
-  // Metadata
   meta: metadata,
 };
 
 // ============================================================================
-// 9. LOGS PARA DEBUGGING
+// 13. LOGS FINALES
 // ============================================================================
 
-console.log("[OutputMain] ✅ Output formatted successfully");
-console.log("[OutputMain] WhatsApp text length:", whatsappText.length, "chars");
-console.log("[OutputMain] HTML body length:", bodyHtml.length, "chars");
-console.log("[OutputMain] Chatwoot messages:", chatwootMessages.length);
-console.log("[OutputMain] Structured CTAs:", structuredCta.length);
-console.log("[OutputMain] Expect reply:", expectReply);
+console.log(
+  "[OutputMain v7.3] ================================================"
+);
+console.log("[OutputMain v7.3] ✅ OUTPUT BUILT SUCCESSFULLY");
+console.log(
+  "[OutputMain v7.3] ================================================"
+);
+console.log("[OutputMain v7.3] Summary:");
+console.log("[OutputMain v7.3]   - lead_id:", output.lead_id);
+console.log(
+  "[OutputMain v7.3]   - profile.row_id:",
+  output.profile_for_persist.row_id
+);
+console.log(
+  "[OutputMain v7.3]   - state.stage:",
+  output.state_for_persist.stage
+);
+console.log(
+  "[OutputMain v7.3]   - state.interests:",
+  output.state_for_persist.interests
+);
+console.log(
+  "[OutputMain v7.3]   - content_whatsapp length:",
+  output.content_whatsapp.content.length
+);
+console.log("[OutputMain v7.3]   - body_html length:", output.body_html.length);
+console.log(
+  "[OutputMain v7.3]   - chatwoot_messages:",
+  output.chatwoot_messages.length
+);
+console.log(
+  "[OutputMain v7.3]   - structured_cta:",
+  output.structured_cta.length
+);
+console.log("[OutputMain v7.3]   - expect_reply:", output.expect_reply);
+console.log("[OutputMain v7.3]   - meta.rag_used:", output.meta.rag_used);
+console.log("[OutputMain v7.3]   - meta.version:", output.meta.version);
+console.log(
+  "[OutputMain v7.3] ================================================"
+);
 
 // ============================================================================
-// 10. RETURN
+// 14. RETURN
 // ============================================================================
 
 return [

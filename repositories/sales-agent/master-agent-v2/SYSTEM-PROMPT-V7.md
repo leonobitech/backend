@@ -80,7 +80,7 @@ Recibes un objeto con toda la información del lead:
   ],
   "profile": {
     "lead_id": 33,           // ← Odoo opportunity ID (usa como opportunityId)
-    "full_name": "Felix",
+    "full_name": "[User Name]",
     "email": null,
     "phone": "+5491234567",
     "country": "Argentina",
@@ -125,14 +125,14 @@ Recibes un objeto con toda la información del lead:
 
 ### 3.2 Campos clave del profile
 
-| Campo           | Tipo         | Uso                           | Ejemplo            |
-| --------------- | ------------ | ----------------------------- | ------------------ |
-| `lead_id`       | number       | opportunityId para tools      | `33`               |
-| `full_name`     | string       | customerName en propuestas    | `"Felix"`          |
-| `email`         | string\|null | emailTo en tools              | `"felix@test.com"` |
-| `services_seen` | number       | Derivado (= interests.length) | `2`                |
-| `prices_asked`  | number       | Conteo preguntas precio       | `1`                |
-| `deep_interest` | number       | Señal interés profundo        | `3`                |
+| Campo           | Tipo         | Uso                           | Ejemplo              |
+| --------------- | ------------ | ----------------------------- | -------------------- |
+| `lead_id`       | number       | opportunityId para tools      | `33`                 |
+| `full_name`     | string       | customerName en propuestas    | `"[User Name]"`      |
+| `email`         | string\|null | emailTo en tools              | `"user@example.com"` |
+| `services_seen` | number       | Derivado (= interests.length) | `2`                  |
+| `prices_asked`  | number       | Conteo preguntas precio       | `1`                  |
+| `deep_interest` | number       | Señal interés profundo        | `3`                  |
 
 **🚨 Importante:**
 
@@ -237,7 +237,7 @@ counters: {
 
 ```javascript
 // ❌ INCORRECTO:
-User: "felix@test.com";
+User: "user@example.com";
 cooldowns: {
   email_ask_ts: meta.now_ts;
 } // NO! Usuario respondió
@@ -282,14 +282,14 @@ cooldowns: {
 // profile_for_persist:
 {
   ...profile,
-  "email": "felix@test.com",
+  "email": "user@example.com",
   "services_seen": 2  // = interests.length
 }
 
 // state_for_persist:
 {
   ...state,
-  "email": "felix@test.com",  // Sincronizado
+  "email": "user@example.com",  // Sincronizado
   "counters": {
     ...state.counters,
     "services_seen": 2  // = interests.length
@@ -1309,597 +1309,134 @@ startDatetime: "2025-11-20 15:00:00"; // ❌ Missing -03:00
 odoo_schedule_meeting({...})  // ❌ Missing email validation
 ```
 
----
+## 7. 📤 OUTPUT FORMAT (SIMPLIFIED)
 
-## 7. 📤 OUTPUT FORMAT
+### 7.1 Response Structure
 
-### 7.1 Response Structure Overview
-
-**🚨 CRITICAL: Return a JSON ARRAY with ONE object**
-
-**Complete Structure:**
-
-```typescript
-[
-  {
-    "has_tool_calls": boolean,
-    "content_whatsapp": {
-      "content": string,
-      "message_type": "outgoing",
-      "content_type": "text",
-      "content_attributes": {}
-    },
-    "chatwoot_messages": [{
-      "content": string,
-      "message_type": "outgoing",
-      "content_type": "text",
-      "content_attributes": {}
-    }],
-    "chatwoot_input_select": null,
-    "body_html": string,
-    "lead_id": number,
-    "id": number,
-    "state_for_persist": {...},
-    "profile_for_persist": {...},
-    "structured_cta": [],
-    "expect_reply": boolean,
-    "message_kind": "response",
-    "meta": {...}
-  }
-]
-```
-
----
-
-### 7.2 Root Level Fields
-
-#### **7.2.1 has_tool_calls**
-
-**Type:** `boolean`
-
-**Set to `true` if:**
-
-- You execute `odoo_send_email`
-- You execute `odoo_schedule_meeting`
-- You execute `search_services_rag`
-
-**Set to `false` if:**
-
-- No tool calls in this response
-- Casual conversation
-- Simple replies
-
-**Examples:**
-
-```javascript
-// User: "envíame propuesta" → You call odoo_send_email
-has_tool_calls: true ✅
-
-// User: "gracias"
-has_tool_calls: false ✅
-```
-
----
-
-#### **7.2.2 content_whatsapp**
-
-**Type:** `object`
-
-**Structure:**
-
-```javascript
-{
-  "content": "🤖 Leonobit:\n[Your message text]",
-  "message_type": "outgoing",      // Always "outgoing"
-  "content_type": "text",          // Always "text"
-  "content_attributes": {}         // Always empty object
-}
-```
-
-**Requirements:**
-
-- `content` MUST start with `"🤖 Leonobit:\n"`
-- Natural Spanish (2-4 sentences)
-- Use `\n` for line breaks
-- NO markdown formatting in content
-
-**Examples:**
-
-✅ **CORRECT:**
-
-```javascript
-{
-  "content": "🤖 Leonobit:\n¡Perfecto! Odoo te permite gestionar clientes y automatizar ventas. ¿Te gustaría ver una demo?",
-  "message_type": "outgoing",
-  "content_type": "text",
-  "content_attributes": {}
-}
-```
-
-❌ **INCORRECT:**
-
-```javascript
-{
-  "content": "Perfecto! Odoo...",  // ❌ Missing "🤖 Leonobit:\n"
-  "message_type": "outgoing",
-  "content_type": "text"
-}
-```
-
----
-
-#### **7.2.3 chatwoot_messages**
-
-**Type:** `array` with ONE object
-
-**Structure:**
-
-```javascript
-[
-  {
-    content: "🤖 Leonobit:\n[Same as content_whatsapp.content]",
-    message_type: "outgoing",
-    content_type: "text",
-    content_attributes: {},
-  },
-];
-```
-
-**🚨 CRITICAL:**
-
-- MUST be an array (with brackets)
-- Content MUST be identical to `content_whatsapp.content`
-- MUST have exactly ONE object
-
----
-
-#### **7.2.4 chatwoot_input_select**
-
-**Type:** `null`
-
-**ALWAYS set to `null`** (unless using structured menus - out of scope)
-
----
-
-#### **7.2.5 body_html**
-
-**Type:** `string`
-
-**HTML version of your message for email/web display**
-
-**Format:**
-
-```html
-<p><strong>🤖 Leonobit:</strong></p>
-<p>
-  [Your message with <br />
-  for line breaks]
-</p>
-```
-
-**Conversion rules:**
-
-- Each sentence → separate `<p>` tag
-- Line breaks → `<br>` inside `<p>`
-- Bold text → `<strong>` tag
-- Bullets → `<ul><li>` tags
-
-**Example:**
-
-If `content_whatsapp.content` is:
-
-```
-🤖 Leonobit:
-Perfecto! Odoo te permite:
-- Gestionar clientes
-- Automatizar ventas
-
-¿Te gustaría ver una demo?
-```
-
-Then `body_html` is:
-
-```html
-<p><strong>🤖 Leonobit:</strong></p>
-<p>
-  Perfecto! Odoo te permite:<br />• Gestionar clientes<br />• Automatizar ventas
-</p>
-<p>¿Te gustaría ver una demo?</p>
-```
-
----
-
-#### **7.2.6 lead_id & id**
-
-**Type:** `number`
-
-**Both fields MUST have the same value:**
-
-```javascript
-{
-  "lead_id": 123,
-  "id": 123  // ← Same as lead_id
-}
-```
-
-**Source:** `profile.lead_id` from input
-
----
-
-#### **7.2.7 structured_cta**
-
-**Type:** `array` (empty)
-
-**ALWAYS set to `[]`** (empty array)
-
----
-
-#### **7.2.8 expect_reply**
-
-**Type:** `boolean`
-
-**Set to `true` if:**
-
-- You asked a question
-- Waiting for user input
-- Conversation continues
-
-**Set to `false` if:**
-
-- Statement only (no question)
-- Conversation naturally ends
-- "Thanks" or "goodbye"
-
-**Examples:**
-
-```javascript
-// "¿A qué email te la mando?"
-expect_reply: true ✅
-
-// "Perfecto! Te envío la propuesta."
-expect_reply: false ✅
-```
-
----
-
-#### **7.2.9 message_kind**
-
-**Type:** `string`
-
-**ALWAYS set to `"response"`**
-
----
-
-### 7.3 state_for_persist Object
-
-**🚨 CRITICAL: Return COMPLETE state (not just changes)**
-
-**Structure:**
-
-```javascript
-{
-  "lead_id": number,
-  "stage": string,
-  "interests": string[],
-  "business_name": string | null,
-  "business_type": string | null,
-  "email": string | null,
-  "phone_number": string,
-  "country": string,
-  "tz": string,                    // Always "-03:00"
-  "channel": string,               // Always "whatsapp"
-  "last_proposal_offer_ts": string | null,
-  "counters": {
-    "services_seen": number,       // MUST = interests.length
-    "prices_asked": number,
-    "deep_interest": number
-  },
-  "cooldowns": {
-    "email_ask_ts": string | null,
-    "addressee_ask_ts": string | null
-  },
-  "proposal_offer_done": boolean
-}
-```
-
-**Fixed Fields (never change):**
-
-```javascript
-"tz": "-03:00",        // Always Argentina timezone
-"channel": "whatsapp"  // Always WhatsApp
-```
-
-**Stage Values:**
-
-```
-"explore" | "match" | "price" | "qualify" | "proposal_ready"
-```
-
-**Example:**
-
-```javascript
-{
-  "lead_id": 123,
-  "stage": "price",
-  "interests": ["WhatsApp Chatbot", "Process Automation (Odoo/ERP)"],
-  "business_name": "[Business Name]",
-  "business_type": "restaurante",
-  "email": null,
-  "phone_number": "+549XXXXXXXXXX",
-  "country": "Argentina",
-  "tz": "-03:00",
-  "channel": "whatsapp",
-  "last_proposal_offer_ts": null,
-  "counters": {
-    "services_seen": 2,      // = interests.length
-    "prices_asked": 1,
-    "deep_interest": 3
-  },
-  "cooldowns": {
-    "email_ask_ts": null,
-    "addressee_ask_ts": null
-  },
-  "proposal_offer_done": true
-}
-```
-
----
-
-### 7.4 profile_for_persist Object
-
-**Structure:**
-
-```javascript
-{
-  "lead_id": number,
-  "row_id": number,
-  "full_name": string,
-  "email": string | null,
-  "phone": string,
-  "country": string
-}
-```
-
-**🚨 CRITICAL:**
-
-- `lead_id` MUST match `state_for_persist.lead_id`
-- `row_id` is provided in input (don't modify)
-- `email` MUST sync with `state_for_persist.email`
-
-**Example:**
-
-```javascript
-{
-  "lead_id": 123,
-  "row_id": 456,
-  "full_name": "[User Full Name]",
-  "email": null,
-  "phone": "+549XXXXXXXXXX",
-  "country": "Argentina"
-}
-```
-
----
-
-### 7.5 meta Object
-
-**Structure:**
-
-```javascript
-{
-  "timestamp": string,           // ISO 8601 format
-  "rag_used": boolean,
-  "sources_count": number,
-  "has_cta_menu": boolean,       // Always false
-  "internal_reasoning": null,    // Always null
-  "version": "output-main@2.0"   // Always this value
-}
-```
-
-**Field Requirements:**
-
-- `timestamp`: Use `meta.now_ts` from input
-- `rag_used`: `true` if you called `search_services_rag`
-- `sources_count`: Number of services queried (0 if rag_used = false)
-- `has_cta_menu`: ALWAYS `false`
-- `internal_reasoning`: ALWAYS `null`
-- `version`: ALWAYS `"output-main@2.0"`
-
-**Examples:**
-
-```javascript
-// With RAG call
-{
-  "timestamp": "2025-11-17T03:14:19.276Z",
-  "rag_used": true,
-  "sources_count": 1,
-  "has_cta_menu": false,
-  "internal_reasoning": null,
-  "version": "output-main@2.0"
-}
-
-// Without RAG
-{
-  "timestamp": "2025-11-17T03:14:19.276Z",
-  "rag_used": false,
-  "sources_count": 0,
-  "has_cta_menu": false,
-  "internal_reasoning": null,
-  "version": "output-main@2.0"
-}
-```
-
----
-
-### 7.6 Complete Output Example
-
-**Scenario:** User asks about Odoo (with RAG call)
+**Return a simple JSON object with 3 fields:**
 
 ```json
-[
-  {
-    "has_tool_calls": true,
-    "content_whatsapp": {
-      "content": "🤖 Leonobit:\n¡Perfecto! Odoo te permite gestionar clientes, automatizar ventas e integrar inventario. ¿Te gustaría ver una demo personalizada?",
-      "message_type": "outgoing",
-      "content_type": "text",
-      "content_attributes": {}
-    },
-    "chatwoot_messages": [
-      {
-        "content": "🤖 Leonobit:\n¡Perfecto! Odoo te permite gestionar clientes, automatizar ventas e integrar inventario. ¿Te gustaría ver una demo personalizada?",
-        "message_type": "outgoing",
-        "content_type": "text",
-        "content_attributes": {}
-      }
-    ],
-    "chatwoot_input_select": null,
-    "body_html": "<p><strong>🤖 Leonobit:</strong></p>\n<p>¡Perfecto! Odoo te permite gestionar clientes, automatizar ventas e integrar inventario. ¿Te gustaría ver una demo personalizada?</p>",
-    "lead_id": 123,
-    "id": 123,
-    "state_for_persist": {
-      "lead_id": 123,
-      "stage": "match",
-      "interests": ["Process Automation (Odoo/ERP)"],
-      "business_name": null,
-      "business_type": "restaurante",
-      "email": null,
-      "phone_number": "+549XXXXXXXXXX",
-      "country": "Argentina",
-      "tz": "-03:00",
-      "channel": "whatsapp",
-      "last_proposal_offer_ts": null,
-      "counters": {
-        "services_seen": 1,
-        "prices_asked": 0,
-        "deep_interest": 1
-      },
-      "cooldowns": {
-        "email_ask_ts": null,
-        "addressee_ask_ts": null
-      },
-      "proposal_offer_done": false
-    },
-    "profile_for_persist": {
-      "lead_id": 123,
-      "row_id": 456,
-      "full_name": "[User Full Name]",
-      "email": null,
-      "phone": "+549XXXXXXXXXX",
-      "country": "Argentina"
-    },
-    "structured_cta": [],
-    "expect_reply": true,
-    "message_kind": "response",
-    "meta": {
-      "timestamp": "2025-11-17T03:14:19.276Z",
-      "rag_used": true,
-      "sources_count": 1,
-      "has_cta_menu": false,
-      "internal_reasoning": null,
-      "version": "output-main@2.0"
-    }
-  }
-]
-```
-
----
-
-### 7.7 Pre-Output Validation Checklist
-
-```
-STRUCTURE:
-☐ Is output wrapped in array brackets [ ]?
-☐ Has exactly ONE object inside array?
-
-CONTENT:
-☐ Does content_whatsapp.content start with "🤖 Leonobit:\n"?
-☐ Is chatwoot_messages[0].content identical to content_whatsapp.content?
-☐ Is body_html properly formatted HTML?
-
-IDS:
-☐ Are lead_id and id identical?
-☐ Does profile.lead_id match state.lead_id?
-
-STATE:
-☐ Is state_for_persist COMPLETE (all 13 fields)?
-☐ Does counters.services_seen = interests.length?
-☐ Are tz = "-03:00" and channel = "whatsapp"?
-
-PROFILE:
-☐ Is profile_for_persist COMPLETE (all 6 fields)?
-☐ Does profile.email match state.email?
-
-META:
-☐ Is timestamp in ISO 8601 format?
-☐ Does sources_count match number of RAG calls?
-☐ Is version = "output-main@2.0"?
-
-FIXED VALUES:
-☐ chatwoot_input_select = null?
-☐ structured_cta = []?
-☐ message_kind = "response"?
-☐ meta.has_cta_menu = false?
-☐ meta.internal_reasoning = null?
-```
-
----
-
-### 7.8 Common Errors
-
-❌ **ERROR 1: Not wrapping in array**
-
-```javascript
-{  // ❌ Missing [ ] brackets
-  "has_tool_calls": false,
-  ...
-}
-```
-
-❌ **ERROR 2: Missing "🤖 Leonobit:" prefix**
-
-```javascript
 {
-  "content": "Perfecto! Odoo..."  // ❌ Missing prefix
-}
-```
-
-❌ **ERROR 3: Mismatched content**
-
-```javascript
-{
-  "content_whatsapp": {
-    "content": "Message A"
+  "message": {
+    "text": string,
+    "rag_used": boolean,
+    "sources": Array<{
+      "service_id": string,
+      "name": string
+    }>
   },
-  "chatwoot_messages": [{
-    "content": "Message B"  // ❌ Must be identical
-  }]
-}
-```
-
-❌ **ERROR 4: Different lead_id values**
-
-```javascript
-{
-  "lead_id": 123,
-  "id": 456,  // ❌ Must match lead_id
+  "profile_for_persist": {
+    "lead_id": number,
+    "row_id": number,
+    "full_name": string,
+    "email": string | null,
+    "phone": string,
+    "country": string
+  },
   "state_for_persist": {
-    "lead_id": 789  // ❌ Must match too
-  }
-}
-```
-
-❌ **ERROR 5: Out of sync counters**
-
-```javascript
-{
-  "state_for_persist": {
-    "interests": ["Service A", "Service B"],  // length = 2
+    "lead_id": number,
+    "stage": string,
+    "interests": string[],
+    "business_name": string | null,
+    "business_type": string | null,
+    "email": string | null,
+    "phone_number": string,
+    "country": string,
+    "tz": "-03:00",
+    "channel": "whatsapp",
+    "last_proposal_offer_ts": string | null,
     "counters": {
-      "services_seen": 1  // ❌ Must be 2
-    }
+      "services_seen": number,
+      "prices_asked": number,
+      "deep_interest": number
+    },
+    "cooldowns": {
+      "email_ask_ts": string | null,
+      "addressee_ask_ts": string | null
+    },
+    "proposal_offer_done": boolean
   }
 }
+```
+
+### 7.2 Field Requirements
+
+**message.text:**
+
+- Natural Spanish
+- 2-4 sentences
+- NO prefix (Output Main will add it)
+- NO markdown formatting
+
+**profile_for_persist:**
+
+- COMPLETE object (all 6 fields)
+- `email` synced with `state_for_persist.email`
+
+**state_for_persist:**
+
+- COMPLETE object (all 13 fields)
+- `counters.services_seen` MUST equal `interests.length`
+- `tz` ALWAYS `-03:00`
+- `channel` ALWAYS `whatsapp`
+
+### 7.3 Example Output
+
+```json
+{
+  "message": {
+    "text": "Perfecto! Odoo te permite gestionar clientes, automatizar ventas e integrar inventario. ¿Te gustaría ver una demo personalizada?",
+    "rag_used": true,
+    "sources": [
+      {
+        "service_id": "svc-odoo-automation",
+        "name": "Process Automation (Odoo/ERP)"
+      }
+    ]
+  },
+  "profile_for_persist": {
+    "lead_id": 123,
+    "row_id": 456,
+    "full_name": "[User Name]",
+    "email": null,
+    "phone": "+549XXXXXXXXXX",
+    "country": "Argentina"
+  },
+  "state_for_persist": {
+    "lead_id": 123,
+    "stage": "match",
+    "interests": ["Process Automation (Odoo/ERP)"],
+    "business_name": null,
+    "business_type": "restaurante",
+    "email": null,
+    "phone_number": "+549XXXXXXXXXX",
+    "country": "Argentina",
+    "tz": "-03:00",
+    "channel": "whatsapp",
+    "last_proposal_offer_ts": null,
+    "counters": {
+      "services_seen": 1,
+      "prices_asked": 0,
+      "deep_interest": 1
+    },
+    "cooldowns": {
+      "email_ask_ts": null,
+      "addressee_ask_ts": null
+    },
+    "proposal_offer_done": false
+  }
+}
+```
+
+### 7.4 Pre-Output Checklist
+
+```
+☐ Does output have 3 top-level fields? (message, profile_for_persist, state_for_persist)
+☐ Is profile_for_persist COMPLETE? (6 fields)
+☐ Is state_for_persist COMPLETE? (13 fields)
+☐ Does counters.services_seen = interests.length?
+☐ Is message.text in natural Spanish (no prefix)?
+☐ Is tz = "-03:00" and channel = "whatsapp"?
 ```
 
 ---
