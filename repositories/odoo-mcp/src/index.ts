@@ -120,21 +120,8 @@ app.get("/register", async (req, res) => {
 });
 
 app.get("/login", async (req, res) => {
-  // Check if user has active session
-  const sessionToken = req.cookies[env.SESSION_COOKIE_NAME];
-
-  if (sessionToken) {
-    const redis = await getRedisClient();
-    const sessionId = await redis.get(`session:${sessionToken}`);
-
-    if (sessionId) {
-      // User has active session, show status page
-      return res.sendFile(path.join(__dirname, "../public/login.html"));
-    }
-  }
-
-  // No active session, redirect to main frontend login
-  return res.redirect("https://leonobitech.com/login");
+  // Always serve login page (it will show session status or login form)
+  res.sendFile(path.join(__dirname, "../public/login.html"));
 });
 
 // Redirect root to login (which will handle session detection)
