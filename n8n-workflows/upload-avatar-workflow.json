@@ -20,10 +20,10 @@
       "parameters": {
         "mode": "jsonToBinary",
         "convertAllData": false,
-        "sourceKey": "fileData",
+        "sourceKey": "body.fileData",
         "options": {
-          "fileName": "={{ $json.filename || 'avatar.jpg' }}",
-          "mimeType": "={{ $json.mimeType || 'image/jpeg' }}"
+          "fileName": "={{ $json.body.filename || 'avatar.jpg' }}",
+          "mimeType": "={{ $json.body.mimeType || 'image/jpeg' }}"
         }
       },
       "name": "Convert to Binary",
