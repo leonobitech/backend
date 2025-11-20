@@ -40,44 +40,39 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://br.leonobitech.com/api/database/rows/table/{{ $env.BASEROW_AVATARS_TABLE_ID }}/",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "operation": "create",
+        "tableId": "={{ $env.BASEROW_AVATARS_TABLE_ID }}",
+        "options": {},
+        "fieldsUi": {
+          "fieldValues": [
             {
-              "name": "Authorization",
-              "value": "Token {{ $env.BASEROW_API_TOKEN }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "user_id",
-              "value": "={{ $json.userId }}"
+              "fieldId": "user_id",
+              "fieldValue": "={{ $json.userId }}"
             },
             {
-              "name": "filename",
-              "value": "={{ $json.filename }}"
+              "fieldId": "filename",
+              "fieldValue": "={{ $json.filename }}"
+            },
+            {
+              "fieldId": "avatar",
+              "binaryData": true,
+              "binaryProperty": "data"
             }
           ]
-        },
-        "options": {
-          "batching": {
-            "batch": {}
-          }
         }
       },
       "name": "Upload to Baserow",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
       "position": [850, 300],
+      "credentials": {
+        "baserowApi": {
+          "id": "baserow_credentials",
+          "name": "Baserow API"
+        }
+      },
       "notesInFlow": true,
-      "notes": "Sube el archivo a Baserow.\nNecesita:\n- BASEROW_AVATARS_TABLE_ID\n- BASEROW_API_TOKEN"
+      "notes": "Sube el archivo a Baserow usando el nodo nativo.\nRequiere:\n- Credenciales de Baserow configuradas en n8n\n- BASEROW_AVATARS_TABLE_ID en variables de entorno"
     },
     {
       "parameters": {

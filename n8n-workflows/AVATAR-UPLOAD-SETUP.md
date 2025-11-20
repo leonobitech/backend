@@ -82,22 +82,37 @@
 
 ---
 
-### **2. Variables de Entorno en n8n**
+### **2. Configurar Credenciales de Baserow en n8n**
+
+1. **En n8n**:
+   - Ve a **Settings** → **Credentials**
+   - Click **Add Credential**
+   - Busca y selecciona **Baserow API**
+   - Configura:
+     - **Name**: `Baserow API` (o el nombre que prefieras)
+     - **Host**: `https://br.leonobitech.com`
+     - **API Token**: Pega el token que generaste en el paso 1.3
+   - Click **Save**
+
+---
+
+### **3. Variables de Entorno en n8n**
 
 Agrega estas variables en n8n (Settings → Environment Variables):
 
 ```bash
-# Baserow
+# Baserow Table ID
 BASEROW_AVATARS_TABLE_ID=<tu_table_id>
-BASEROW_API_TOKEN=<tu_api_token>
 
-# Core Backend
-CORE_API_KEY=<tu_core_api_key>  # Mismo que X_API_KEY en backend/.env
+# Core Backend API Key
+CORE_API_KEY=7xeDpg4wekGuBsDhV06mIgxQ84K0f0DUK81qWkzC2wqQHpb9UqL4U0OJ7F41nHK6tw
 ```
+
+**Nota**: Ya NO necesitas `BASEROW_API_TOKEN` como variable de entorno, porque ahora se usa el **nodo nativo de Baserow** que toma las credenciales configuradas en el paso 2.
 
 ---
 
-### **3. Importar Workflow en n8n**
+### **4. Importar Workflow en n8n**
 
 1. **Importar JSON**:
    ```bash
