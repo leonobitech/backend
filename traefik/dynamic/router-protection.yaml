@@ -7,6 +7,19 @@
 http:
   routers:
     # -------------------------------------------------------------------------
+    # 🚨 Block Malicious IPs - HIGHEST PRIORITY
+    # -------------------------------------------------------------------------
+    block-malicious-ip-62-171-169-169:
+      rule: "ClientIP(`62.171.169.169`)"
+      entryPoints:
+        - websecure
+        - web
+      service: blackhole
+      priority: 10000  # Máxima prioridad
+      middlewares:
+        - security-block-response
+
+    # -------------------------------------------------------------------------
     # 🚫 Block PHP exploitation attempts (WordPress, admin panels, etc.)
     # Priority: 1000 (higher than normal routers)
     # -------------------------------------------------------------------------
