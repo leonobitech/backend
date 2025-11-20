@@ -6,9 +6,7 @@
         "httpMethod": "POST",
         "path": "upload-avatar",
         "responseMode": "responseNode",
-        "options": {
-          "rawBody": true
-        }
+        "options": {}
       },
       "name": "Webhook - Upload Avatar",
       "type": "n8n-nodes-base.webhook",
