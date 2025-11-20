@@ -24,9 +24,9 @@ if (item.binary && item.binary.data) {
 
 return {
   json: {
-    userId,
-    filename,
-    mimeType,
+    user_id: userId,  // Match Baserow field name
+    filename: filename,
+    mimeType: mimeType,
     validated: true
   },
   binary: item.binary
