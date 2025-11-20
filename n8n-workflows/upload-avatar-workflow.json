@@ -1,0 +1,239 @@
+{
+  "name": "Upload Avatar to Baserow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-avatar",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "name": "Webhook - Upload Avatar",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "upload-avatar"
+    },
+    {
+      "parameters": {
+        "mode": "jsonToBinary",
+        "options": {
+          "fileName": "={{ $json.filename || 'avatar.jpg' }}",
+          "mimeType": "={{ $json.mimeType || 'image/jpeg' }}"
+        }
+      },
+      "name": "Convert to Binary",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate image\nconst binary = items[0].binary;\nconst data = $input.first().json;\n\n// Extract user data\nconst userId = data.userId;\nconst filename = data.filename || 'avatar.jpg';\nconst mimeType = data.mimeType || 'image/jpeg';\n\n// Validate MIME type\nconst allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];\nif (!allowedTypes.includes(mimeType)) {\n  throw new Error(`Invalid file type: ${mimeType}. Allowed: ${allowedTypes.join(', ')}`);\n}\n\n// Validate file size (5MB max)\nconst maxSize = 5 * 1024 * 1024; // 5MB\nif (binary && binary.data && Buffer.from(binary.data, 'base64').length > maxSize) {\n  throw new Error('File size exceeds 5MB limit');\n}\n\nreturn {\n  json: {\n    userId,\n    filename,\n    mimeType,\n    validated: true\n  },\n  binary\n};"
+      },
+      "name": "Validate Image",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://br.leonobitech.com/api/database/rows/table/{{ $env.BASEROW_AVATARS_TABLE_ID }}/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token {{ $env.BASEROW_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.userId }}"
+            },
+            {
+              "name": "filename",
+              "value": "={{ $json.filename }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {}
+          }
+        }
+      },
+      "name": "Upload to Baserow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 300],
+      "notesInFlow": true,
+      "notes": "Sube el archivo a Baserow.\nNecesita:\n- BASEROW_AVATARS_TABLE_ID\n- BASEROW_API_TOKEN"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract avatar URL from Baserow response\nconst response = $input.first().json;\n\n// Baserow returns file info in response\n// Adjust field name based on your Baserow table structure\nconst fileField = response.avatar || response.file; // Replace with actual field name\n\nif (!fileField || !fileField[0]) {\n  throw new Error('No file URL returned from Baserow');\n}\n\nconst avatarUrl = fileField[0].url;\nconst userId = response.user_id;\n\nreturn {\n  json: {\n    userId,\n    avatarUrl,\n    filename: fileField[0].name,\n    size: fileField[0].size,\n    visible_name: fileField[0].visible_name\n  }\n};"
+      },
+      "name": "Extract Avatar URL",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "http://core:8000/account/avatar/update-from-n8n",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-core-access-key",
+              "value": "={{ $env.CORE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{ $json.userId }}"
+            },
+            {
+              "name": "avatarUrl",
+              "value": "={{ $json.avatarUrl }}"
+            }
+          ]
+        }
+      },
+      "name": "Update Core Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300],
+      "notesInFlow": true,
+      "notes": "Actualiza el avatar en el backend Core (MongoDB) usando red interna Docker\nURL: http://core:8000/account/avatar/update-from-n8n\nAuth: x-core-access-key header"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  userId: $json.userId,\n  avatarUrl: $json.avatarUrl,\n  message: 'Avatar uploaded successfully'\n}) }}"
+      },
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({\n  success: false,\n  error: $json.error || 'Upload failed',\n  message: $json.message || 'An error occurred during avatar upload'\n}) }}"
+      },
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 500]
+    }
+  ],
+  "connections": {
+    "Webhook - Upload Avatar": {
+      "main": [
+        [
+          {
+            "node": "Convert to Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Binary": {
+      "main": [
+        [
+          {
+            "node": "Validate Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Image": {
+      "main": [
+        [
+          {
+            "node": "Upload to Baserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Baserow": {
+      "main": [
+        [
+          {
+            "node": "Extract Avatar URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Avatar URL": {
+      "main": [
+        [
+          {
+            "node": "Update Core Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Core Backend": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "avatar",
+      "id": "avatar-upload"
+    },
+    {
+      "name": "file-upload",
+      "id": "file-management"
+    }
+  ],
+  "meta": {
+    "instanceId": "leonobitech-n8n"
+  }
+}

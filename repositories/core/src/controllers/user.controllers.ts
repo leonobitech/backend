@@ -253,3 +253,76 @@ export const changePassword = catchErrors(
     });
   }
 );
+
+//==============================================================================
+
+/**
+ * 📌 PATCH /account/avatar/update-from-n8n
+ * Endpoint especial para n8n: actualiza el avatar después de subirlo a Baserow
+ * Requiere X-API-KEY en headers
+ */
+export const updateAvatarFromN8n = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { z } = await import("zod");
+
+    const updateAvatarSchema = z.object({
+      userId: z.string().min(1, "userId es requerido"),
+      avatarUrl: z.string().url("Debe ser una URL válida"),
+    });
+
+    const parsed = updateAvatarSchema.safeParse(req.body);
+
+    appAssert(
+      parsed.success,
+      HTTP_CODE.BAD_REQUEST,
+      "Datos inválidos",
+      ERROR_CODE.INVALID_INPUT,
+      parsed.error
+        ? Object.entries(parsed.error.flatten().fieldErrors).map(
+            ([field, messages]) => ({
+              field,
+              message: messages?.join(", ") || "Valor inválido",
+            })
+          )
+        : []
+    );
+
+    const { userId, avatarUrl } = parsed.data;
+
+    // Verificar que el usuario existe
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+
+    appAssert(
+      user,
+      HTTP_CODE.NOT_FOUND,
+      "Usuario no encontrado",
+      ERROR_CODE.USER_NOT_FOUND
+    );
+
+    // Actualizar avatar
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { avatar: avatarUrl },
+      select: {
+        id: true,
+        email: true,
+        avatar: true,
+        updatedAt: true,
+      },
+    });
+
+    logger.info("✅ Avatar actualizado desde n8n", {
+      userId,
+      avatarUrl,
+      source: "n8n-webhook",
+    });
+
+    res.status(HTTP_CODE.OK).json({
+      message: "Avatar actualizado correctamente desde n8n.",
+      user: updatedUser,
+    });
+  }
+);
