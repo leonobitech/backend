@@ -1,6 +1,6 @@
 // Validate image
 const item = items[0];
-const data = item.json;
+const data = item.json.body;  // Data is inside body from webhook
 
 // Extract user data
 const userId = data.userId;
