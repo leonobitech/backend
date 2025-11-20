@@ -1,0 +1,33 @@
+// Validate image
+const item = items[0];
+const data = item.json;
+
+// Extract user data
+const userId = data.userId;
+const filename = data.filename || 'avatar.jpg';
+const mimeType = data.mimeType || 'image/jpeg';
+
+// Validate MIME type
+const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+if (!allowedTypes.includes(mimeType)) {
+  throw new Error(`Invalid file type: ${mimeType}. Allowed: ${allowedTypes.join(', ')}`);
+}
+
+// Validate file size (5MB max)
+const maxSize = 5 * 1024 * 1024; // 5MB
+if (item.binary && item.binary.data) {
+  const fileSize = item.binary.data.data.length;
+  if (fileSize > maxSize) {
+    throw new Error('File size exceeds 5MB limit');
+  }
+}
+
+return {
+  json: {
+    userId,
+    filename,
+    mimeType,
+    validated: true
+  },
+  binary: item.binary
+};
