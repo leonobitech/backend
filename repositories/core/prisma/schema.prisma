@@ -28,6 +28,14 @@ model User {
   updatedAt        DateTime @updatedAt
   lastLogin        DateTime?
 
+  // Profile fields
+  website          String?
+  location         String?
+  socialTwitter    String?
+  socialInstagram  String?
+  socialYoutube    String?
+  socialGithub     String?
+
   twoFactorEnabled Boolean  @default(false)
   twoFactorSecret  String?
   twoFactorAttempts Int     @default(0)

@@ -46,6 +46,12 @@ export const updateProfileSchema = z.object({
   name: z.string().min(1).max(50).optional(),
   avatar: z.string().url().optional(),
   bio: z.string().max(200).optional(),
+  website: z.string().url().optional().or(z.literal("")),
+  location: z.string().max(100).optional(),
+  socialTwitter: z.string().url().optional().or(z.literal("")),
+  socialInstagram: z.string().url().optional().or(z.literal("")),
+  socialYoutube: z.string().url().optional().or(z.literal("")),
+  socialGithub: z.string().url().optional().or(z.literal("")),
 });
 
 export const changePasswordSchema = z.object({
