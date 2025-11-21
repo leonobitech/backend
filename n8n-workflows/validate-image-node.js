@@ -1,11 +1,14 @@
 // Validate image
 const item = items[0];
-const data = item.json.body;  // Data is inside body from webhook
+
+// Get data from the Webhook node
+const webhookNode = $node["Webhook - Upload Avatar"].json;
+const webhookData = webhookNode.body;
 
 // Extract user data
-const userId = data.userId;
-const filename = data.filename || 'avatar.jpg';
-const mimeType = data.mimeType || 'image/jpeg';
+const userId = webhookData.userId;
+const filename = webhookData.filename || 'avatar.jpg';
+const mimeType = webhookData.mimeType || 'image/jpeg';
 
 // Validate MIME type
 const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];

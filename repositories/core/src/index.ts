@@ -145,6 +145,9 @@ app.use("/service", authenticate, serviceRoutes);
 // Usar las rutas de account
 app.use("/account", accountRoutes);
 
+// ✅ Ruta específica para n8n (solo API key, sin authenticate)
+app.use("/account/avatar/update-from-n8n", apiKeyGuard, userRoutes);
+
 // 🔐 Auth & protected routes
 app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
