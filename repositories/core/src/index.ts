@@ -33,6 +33,9 @@ import adminRouter from "@routes/admin.routes";
 import passkeyRoutes from "@routes/passkey.routes";
 import serviceRoutes from "@routes/service.routes";
 
+// controllers (for specific routes)
+import { updateAvatarFromN8n } from "@controllers/user.controllers";
+
 // test route for error handling
 import testRouter from "@routes/test.routes";
 
@@ -146,7 +149,7 @@ app.use("/service", authenticate, serviceRoutes);
 app.use("/account", accountRoutes);
 
 // ✅ Ruta específica para n8n (solo API key, sin authenticate)
-app.use("/account/avatar/update-from-n8n", apiKeyGuard, userRoutes);
+app.patch("/account/avatar/update-from-n8n", apiKeyGuard, updateAvatarFromN8n);
 
 // 🔐 Auth & protected routes
 app.use("/account", authenticate, userRoutes);
