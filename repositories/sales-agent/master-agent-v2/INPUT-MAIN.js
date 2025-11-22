@@ -14,12 +14,14 @@ const { history, lead_id, profile, state } = inputData;
 
 // Validar datos mínimos requeridos
 if (!history || !profile || !state) {
-  throw new Error('[InputMain] Missing required fields: history, profile, or state');
+  throw new Error(
+    "[InputMain] Missing required fields: history, profile, or state"
+  );
 }
 
-console.log('[InputMain] Processing lead:', lead_id);
-console.log('[InputMain] History messages:', history.length);
-console.log('[InputMain] Current stage:', state.stage);
+console.log("[InputMain] Processing lead:", lead_id);
+console.log("[InputMain] History messages:", history.length);
+console.log("[InputMain] Current stage:", state.stage);
 
 // ============================================================================
 // 2. BUILD OPTIONS (Catálogo de servicios, aliases, configuración)
@@ -34,7 +36,7 @@ const options = {
     "Automatización",
     "Analytics",
     "Reservas",
-    "Knowledge Base"
+    "Knowledge Base",
   ],
 
   services_allowed: [
@@ -49,135 +51,117 @@ const options = {
     "Webhook Guard",
     "Website Knowledge Chat",
     "Data Sync Hub",
-    "Leonobitech Platform Core"
+    "Leonobitech Platform Core",
   ],
 
   services_aliases: {
     // WhatsApp
-    "whatsapp": "WhatsApp Chatbot",
-    "whatapp": "WhatsApp Chatbot",
-    "chatbot": "WhatsApp Chatbot",
+    whatsapp: "WhatsApp Chatbot",
+    whatapp: "WhatsApp Chatbot",
+    chatbot: "WhatsApp Chatbot",
     "whatsapp chatbot": "WhatsApp Chatbot",
     "bot de whatsapp": "WhatsApp Chatbot",
-    "bot": "WhatsApp Chatbot",
-    "agente": "WhatsApp Chatbot",
-    "asistente": "WhatsApp Chatbot",
+    bot: "WhatsApp Chatbot",
+    agente: "WhatsApp Chatbot",
+    asistente: "WhatsApp Chatbot",
 
     // Voz/IVR
-    "ivr": "Voice Assistant (IVR)",
+    ivr: "Voice Assistant (IVR)",
     "voice assistant (ivr)": "Voice Assistant (IVR)",
     "agente de voz": "Voice Assistant (IVR)",
     "asistente de voz": "Voice Assistant (IVR)",
-    "llamadas": "Voice Assistant (IVR)",
-    "voz": "Voice Assistant (IVR)",
+    llamadas: "Voice Assistant (IVR)",
+    voz: "Voice Assistant (IVR)",
 
     // Knowledge Base
     "knowledge base": "Knowledge Base Agent",
-    "knowledge_base": "Knowledge Base Agent",
+    knowledge_base: "Knowledge Base Agent",
     "knowledge base agent": "Knowledge Base Agent",
-    "knowledgebase": "Knowledge Base Agent",
+    knowledgebase: "Knowledge Base Agent",
     "base de conocimiento": "Knowledge Base Agent",
     "agente de conocimiento": "Knowledge Base Agent",
-    "rag": "Knowledge Base Agent",
-    "faq": "Knowledge Base Agent",
-    "kb": "Knowledge Base Agent",
+    rag: "Knowledge Base Agent",
+    faq: "Knowledge Base Agent",
+    kb: "Knowledge Base Agent",
 
     // Odoo/ERP/CRM
-    "odoo": "Process Automation (Odoo/ERP)",
-    "erp": "Process Automation (Odoo/ERP)",
-    "crm": "Process Automation (Odoo/ERP)",
+    odoo: "Process Automation (Odoo/ERP)",
+    erp: "Process Automation (Odoo/ERP)",
+    crm: "Process Automation (Odoo/ERP)",
     "process automation (odoo/erp)": "Process Automation (Odoo/ERP)",
     "automatización de procesos": "Process Automation (Odoo/ERP)",
-    "automatizacion": "Process Automation (Odoo/ERP)",
+    automatizacion: "Process Automation (Odoo/ERP)",
 
     // Otros
-    "leads": "Lead Capture & Follow-ups",
+    leads: "Lead Capture & Follow-ups",
     "lead capture & follow-ups": "Lead Capture & Follow-ups",
-    "seguimiento": "Lead Capture & Follow-ups",
-    "reportes": "Analytics & Reporting",
+    seguimiento: "Lead Capture & Follow-ups",
+    reportes: "Analytics & Reporting",
     "analytics & reporting": "Analytics & Reporting",
-    "analítica": "Analytics & Reporting",
-    "analytics": "Analytics & Reporting",
-    "reservas": "Smart Reservations",
+    analítica: "Analytics & Reporting",
+    analytics: "Analytics & Reporting",
+    reservas: "Smart Reservations",
     "smart reservations": "Smart Reservations",
-    "bookings": "Smart Reservations",
-    "turnos": "Smart Reservations",
-    "ingesta": "Knowledge Intake Pipeline",
+    bookings: "Smart Reservations",
+    turnos: "Smart Reservations",
+    ingesta: "Knowledge Intake Pipeline",
     "knowledge intake pipeline": "Knowledge Intake Pipeline",
-    "webhook": "Webhook Guard",
+    webhook: "Webhook Guard",
     "webhook guard": "Webhook Guard",
     "website chat": "Website Knowledge Chat",
     "chat web": "Website Knowledge Chat",
     "website knowledge": "Website Knowledge Chat",
-    "website_knowledge": "Website Knowledge Chat",
+    website_knowledge: "Website Knowledge Chat",
     "website knowledge chat": "Website Knowledge Chat",
     "knowledge chat": "Website Knowledge Chat",
-    "sync": "Data Sync Hub",
+    sync: "Data Sync Hub",
     "data sync hub": "Data Sync Hub",
     "integración de datos": "Data Sync Hub",
-    "plataforma": "Leonobitech Platform Core",
+    plataforma: "Leonobitech Platform Core",
     "leonobitech platform core": "Leonobitech Platform Core",
-    "core": "Leonobitech Platform Core"
+    core: "Leonobitech Platform Core",
   },
 
   services_number_map: {
-    "1": "WhatsApp Chatbot",
-    "2": "Voice Assistant (IVR)",
-    "3": "Knowledge Base Agent",
-    "4": "Process Automation (Odoo/ERP)"
+    1: "WhatsApp Chatbot",
+    2: "Voice Assistant (IVR)",
+    3: "Knowledge Base Agent",
+    4: "Process Automation (Odoo/ERP)",
   },
 
-  stage_allowed: [
-    "explore",
-    "match",
-    "price",
-    "qualify",
-    "proposal_ready"
-  ],
+  stage_allowed: ["explore", "match", "price", "qualify", "proposal_ready"],
 
   service_defaults: {
     "Process Automation (Odoo/ERP)": {
-      bundle: [
-        "Odoo CRM",
-        "n8n triggers",
-        "WhatsApp Chatbot (opcional)"
-      ],
+      bundle: ["Odoo CRM", "n8n triggers", "WhatsApp Chatbot (opcional)"],
       rag_hints: [
         "Odoo CRM para pymes/restaurantes",
         "automatización con n8n (actividades, presupuestos→facturas)",
         "integración WhatsApp (Chatwoot) ↔ Odoo",
-        "reportes y tableros operativos"
+        "reportes y tableros operativos",
       ],
-      interests: ["Odoo", "CRM"]
+      interests: ["Odoo", "CRM"],
     },
     "WhatsApp Chatbot": {
-      bundle: [
-        "Chatwoot integration",
-        "n8n workflows",
-        "Knowledge base"
-      ],
+      bundle: ["Chatwoot integration", "n8n workflows", "Knowledge base"],
       rag_hints: [
         "Chatbot para WhatsApp Business",
         "captura de leads automática",
         "respuestas FAQ 24/7",
-        "integración con CRM"
+        "integración con CRM",
       ],
-      interests: ["WhatsApp"]
+      interests: ["WhatsApp"],
     },
     "Voice Assistant (IVR)": {
-      bundle: [
-        "IVR system",
-        "Voice recognition",
-        "Call routing"
-      ],
+      bundle: ["IVR system", "Voice recognition", "Call routing"],
       rag_hints: [
         "Asistente de voz para llamadas",
         "IVR inteligente con IA",
         "routing automático de llamadas",
-        "integración con CRM"
+        "integración con CRM",
       ],
-      interests: ["Voz"]
-    }
+      interests: ["Voz"],
+    },
   },
 
   cta_menu_default: {
@@ -187,9 +171,9 @@ const options = {
       "Ver precios",
       "Beneficios e integraciones",
       "Agendar demo",
-      "Solicitar propuesta"
+      "Solicitar propuesta",
     ],
-    max_picks: 1
+    max_picks: 1,
   },
 
   intents_allowed: [
@@ -203,8 +187,8 @@ const options = {
     "negotiation",
     "support",
     "off_topic",
-    "unclear"
-  ]
+    "unclear",
+  ],
 };
 
 // ============================================================================
@@ -212,27 +196,38 @@ const options = {
 // ============================================================================
 
 const rules = {
-  timing_and_chronology: "Procesar el history de antiguo a reciente; prevalece el evento más nuevo; usar siempre el ts del historial; no inventar datos.",
+  timing_and_chronology:
+    "Procesar el history de antiguo a reciente; prevalece el evento más nuevo; usar siempre el ts del historial; no inventar datos.",
 
-  interests_policy: "Añadir a state.interests solo ante intención explícita/implícita fuerte; SIEMPRE normalizar usando options.services_aliases (usar el VALUE del mapeo, no el key); usar SOLO nombres técnicos completos de services_allowed (ej: 'Knowledge Base Agent', NO 'Knowledge Base'); sin duplicados; no eliminar salvo rechazo explícito.",
+  interests_policy:
+    "Añadir a state.interests solo ante intención explícita/implícita fuerte; SIEMPRE normalizar usando options.services_aliases (usar el VALUE del mapeo, no el key); usar SOLO nombres técnicos completos de services_allowed (ej: 'Knowledge Base Agent', NO 'Knowledge Base'); sin duplicados; no eliminar salvo rechazo explícito.",
 
-  stage_policy: "Transiciones: explore→match (lead define necesidad/canal o elige servicio por número/alias); match→price (pregunta precio); match→qualify (aporta volumen/uso concreto o pide demo); price→qualify (tras precio, si pide demo/volumen); qualify→proposal_ready (solicita propuesta). No retroceder salvo corrección clara del lead.",
+  stage_policy:
+    "Transiciones: explore→match (lead define necesidad/canal o elige servicio por número/alias); match→price (pregunta precio); match→qualify (aporta volumen/uso concreto o pide demo); price→qualify (tras precio, si pide demo/volumen); qualify→proposal_ready (solicita propuesta). No retroceder salvo corrección clara del lead.",
 
-  counters_policy: "services_seen+1 si el usuario explora/elige un servicio; prices_asked+1 si pregunta precio; deep_interest+1 si pide demo o aporta volumen/uso específico. Máx +1 por tipo en una iteración.",
+  counters_policy:
+    "services_seen+1 si el usuario explora/elige un servicio; prices_asked+1 si pregunta precio; deep_interest+1 si pide demo o aporta volumen/uso específico. Máx +1 por tipo en una iteración.",
 
-  cooldowns_policy: "email_ask_ts y addressee_ask_ts se actualizan SOLO cuando el assistant lo pide explícitamente; timestamp = ts del mensaje del assistant; conservar el más reciente; no usar mensajes del usuario para estos campos.",
+  cooldowns_policy:
+    "email_ask_ts y addressee_ask_ts se actualizan SOLO cuando el assistant lo pide explícitamente; timestamp = ts del mensaje del assistant; conservar el más reciente; no usar mensajes del usuario para estos campos.",
 
-  rag_first_policy: "Si el usuario elige servicio o expresa necesidad clara: generar service_target {canonical,bundle,rag_hints}; priorizar beneficios (3–5 vía RAG) + CTAs (precio/beneficios/demo/propuesta). Prohibido reiniciar menú general; pedir volumen solo como invitación opcional (no bloqueante).",
+  rag_first_policy:
+    "Si el usuario elige servicio o expresa necesidad clara: generar service_target {canonical,bundle,rag_hints}; priorizar beneficios (3–5 vía RAG) + CTAs (precio/beneficios/demo/propuesta). Prohibido reiniciar menú general; pedir volumen solo como invitación opcional (no bloqueante).",
 
-  anti_loop_policy: "Si en los últimos 5 minutos ya se pidió volumen/caso de uso, no repetir; avanzar con beneficios (RAG) + CTAs.",
+  anti_loop_policy:
+    "Si en los últimos 5 minutos ya se pidió volumen/caso de uso, no repetir; avanzar con beneficios (RAG) + CTAs.",
 
-  email_gating_policy: "can_ask_email_now=true solo si: stage ∈ {qualify,proposal_ready} AND interests≠∅ AND services_seen≥1 AND prices_asked≥1 AND deep_interest≥1 AND business_name≠∅ AND email vacío y sin cooldown. Si es false, reason debe listar faltantes y 'stage insuficiente' si stage∉{qualify,proposal_ready}.",
+  email_gating_policy:
+    "can_ask_email_now=true solo si: stage ∈ {qualify,proposal_ready} AND interests≠∅ AND services_seen≥1 AND prices_asked≥1 AND deep_interest≥1 AND business_name≠∅ AND email vacío y sin cooldown. Si es false, reason debe listar faltantes y 'stage insuficiente' si stage∉{qualify,proposal_ready}.",
 
-  privacy_policy: "No incluir PII (nombre, teléfono, email, IDs, país, tz, canal) en history_summary/recommendation/reason; referirse como 'el usuario'.",
+  privacy_policy:
+    "No incluir PII (nombre, teléfono, email, IDs, país, tz, canal) en history_summary/recommendation/reason; referirse como 'el usuario'.",
 
-  menu_guard_policy: "Con service_target presente o stage≥match está prohibido recomendar menú general. Usar CTAs del servicio.",
+  menu_guard_policy:
+    "Con service_target presente o stage≥match está prohibido recomendar menú general. Usar CTAs del servicio.",
 
-  self_check_policy: "Si el último mensaje es selección de servicio (número/alias) y no hay precio/volumen/demo, stage MUST BE 'match' y services_seen+=1. service_target.bundle y rag_hints no pueden quedar vacíos (3–6 hints). state.interests debe usar VALORES (VALUES) de services_aliases, NO keys (ej: 'Knowledge Base Agent', NO 'Knowledge Base'; 'Process Automation (Odoo/ERP)', NO 'Odoo')."
+  self_check_policy:
+    "Si el último mensaje es selección de servicio (número/alias) y no hay precio/volumen/demo, stage MUST BE 'match' y services_seen+=1. service_target.bundle y rag_hints no pueden quedar vacíos (3–6 hints). state.interests debe usar VALORES (VALUES) de services_aliases, NO keys (ej: 'Knowledge Base Agent', NO 'Knowledge Base'; 'Process Automation (Odoo/ERP)', NO 'Odoo').",
 };
 
 // ============================================================================
@@ -248,7 +243,7 @@ const meta = {
   tz: profile.tz || "-03:00",
   now_ts: new Date().toISOString(),
   anti_loop_window_min: 5,
-  version: "smart-input@2"
+  version: "smart-input@2",
 };
 
 // ============================================================================
@@ -261,7 +256,7 @@ const smart_input = {
   state,
   options,
   rules,
-  meta
+  meta,
 };
 
 // ============================================================================
@@ -272,12 +267,10 @@ function buildUserPrompt(smartInput) {
   const { history } = smartInput;
 
   // Extraer último mensaje del usuario
-  const lastUserMessage = history
-    .filter(m => m.role === 'user')
-    .slice(-1)[0];
+  const lastUserMessage = history.filter((m) => m.role === "user").slice(-1)[0];
 
   if (!lastUserMessage) {
-    throw new Error('[InputMain] No user message found in history');
+    throw new Error("[InputMain] No user message found in history");
   }
 
   // Construir prompt
@@ -322,25 +315,33 @@ const userPrompt = buildUserPrompt(smart_input);
 // 7. LOGS PARA DEBUGGING
 // ============================================================================
 
-console.log('[InputMain] ✅ Smart Input built successfully');
-console.log('[InputMain] Last user message:', smart_input.history.filter(m => m.role === 'user').slice(-1)[0]?.text);
-console.log('[InputMain] Current stage:', smart_input.state.stage);
-console.log('[InputMain] Interests:', smart_input.state.interests);
-console.log('[InputMain] Counters:', JSON.stringify(smart_input.state.counters));
-console.log('[InputMain] User prompt length:', userPrompt.length, 'chars');
+console.log("[InputMain] ✅ Smart Input built successfully");
+console.log(
+  "[InputMain] Last user message:",
+  smart_input.history.filter((m) => m.role === "user").slice(-1)[0]?.text
+);
+console.log("[InputMain] Current stage:", smart_input.state.stage);
+console.log("[InputMain] Interests:", smart_input.state.interests);
+console.log(
+  "[InputMain] Counters:",
+  JSON.stringify(smart_input.state.counters)
+);
+console.log("[InputMain] User prompt length:", userPrompt.length, "chars");
 
 // ============================================================================
 // 8. OUTPUT
 // ============================================================================
 
-return [{
-  json: {
-    smart_input: smart_input,
-    userPrompt: userPrompt,
+return [
+  {
+    json: {
+      smart_input: smart_input,
+      userPrompt: userPrompt,
 
-    // Pass through útiles para siguiente nodo
-    lead_id: lead_id,
-    profile: profile,
-    state: state
-  }
-}];
+      // Pass through útiles para siguiente nodo
+      lead_id: lead_id,
+      profile: profile,
+      state: state,
+    },
+  },
+];
