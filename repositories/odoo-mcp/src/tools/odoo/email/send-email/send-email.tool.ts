@@ -6,6 +6,25 @@ import { getEmailTemplate } from "@/prompts/email-templates";
 export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
   constructor(private readonly odooClient: OdooClient) {}
 
+  /**
+   * Parse price from string format to number
+   * Examples:
+   *   "USD $1,200" → 1200
+   *   "$3,500" → 3500
+   *   "1200" → 1200
+   */
+  private parsePrice(priceString: string): number | null {
+    if (!priceString) return null;
+
+    // Remove currency symbols, spaces, and commas
+    const cleaned = priceString.replace(/[USD\$,\s]/gi, '').trim();
+
+    // Parse to number
+    const parsed = parseFloat(cleaned);
+
+    return isNaN(parsed) ? null : parsed;
+  }
+
   async execute(input: unknown): Promise<SendEmailResponse> {
     const params = sendEmailSchema.parse(input);
 
@@ -43,6 +62,27 @@ export class SendEmailTool implements ITool<SendEmailInput, SendEmailResponse> {
       emailTo: params.emailTo,
       templateType: templateUsed // Pasar templateType para correcta progresión de stage
     });
+
+    // Update opportunity price when sending proposal
+    if (params.templateType === 'proposal' && params.templateData?.price) {
+      const priceValue = this.parsePrice(params.templateData.price);
+
+      if (priceValue !== null && priceValue > 0) {
+        try {
+          // Update expected_revenue field in the opportunity
+          await this.odooClient.write('crm.lead', [params.opportunityId], {
+            expected_revenue: priceValue
+          });
+
+          console.log(`[SendEmailTool] Updated opportunity #${params.opportunityId} expected_revenue: ${priceValue}`);
+        } catch (error) {
+          // Log error but don't fail the entire operation
+          console.error(`[SendEmailTool] Failed to update price for opportunity #${params.opportunityId}:`, error);
+        }
+      } else {
+        console.warn(`[SendEmailTool] Could not parse price "${params.templateData.price}" - skipping price update`);
+      }
+    }
 
     const queueStatus = result.queueProcessed ? "Email queued for immediate delivery" : "Email enqueued; Odoo cron will deliver";
 
