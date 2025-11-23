@@ -32,6 +32,24 @@ export class ScheduleMeetingTool implements ITool<ScheduleMeetingInput, Schedule
       };
     }
 
+    // Update opportunity's next activity date when meeting is successfully scheduled
+    if (result.eventId) {
+      try {
+        // Parse ISO datetime to extract just the date for activity deadline
+        const meetingDate = new Date(params.startDatetime).toISOString().split('T')[0];
+
+        // Update activity_date_deadline field in the opportunity
+        await this.odooClient.write('crm.lead', [params.opportunityId], {
+          activity_date_deadline: meetingDate
+        });
+
+        console.log(`[ScheduleMeetingTool] Updated opportunity #${params.opportunityId} activity_date_deadline: ${meetingDate}`);
+      } catch (error) {
+        // Log error but don't fail the entire operation
+        console.error(`[ScheduleMeetingTool] Failed to update activity date for opportunity #${params.opportunityId}:`, error);
+      }
+    }
+
     return {
       eventId: result.eventId,
       message: `Meeting "${params.title}" scheduled successfully`
