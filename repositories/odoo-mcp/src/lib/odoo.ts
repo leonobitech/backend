@@ -1039,7 +1039,8 @@ export class OdooClient {
             month: "long",
             day: "numeric",
             hour: "2-digit",
-            minute: "2-digit"
+            minute: "2-digit",
+            timeZone: "America/Argentina/Buenos_Aires"
           });
 
           const emailTitle = isReschedule ? "🔄 Reunión Reprogramada" : "📅 Reunión Programada";
