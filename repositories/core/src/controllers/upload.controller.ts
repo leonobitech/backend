@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { HTTP_CODE } from "@constants/httpCode";
+import { prisma } from "@config/prisma";
 import fs from "fs/promises";
 import path from "path";
 
@@ -43,23 +44,23 @@ export const uploadPodcast = async (req: Request, res: Response): Promise<void> 
   };
 
   // Extraer metadata del body
-  const { title, artist, description, duration } = req.body;
+  const { title, description, duration } = req.body;
 
   // Validar campos requeridos
-  if (!title || !artist) {
+  if (!title) {
     try {
       await fs.unlink(video.tempFilePath);
     } catch {}
 
     res.status(HTTP_CODE.BAD_REQUEST).json({
       success: false,
-      message: "title y artist son requeridos",
+      message: "title es requerido",
     });
     return;
   }
 
   try {
-    console.log(`📤 Uploading podcast: ${title} by ${artist}`);
+    console.log(`📤 Uploading podcast: ${title}`);
     console.log(`📁 Temp file: ${video.tempFilePath} (${(video.size / 1024 / 1024).toFixed(2)} MB)`);
 
     // Leer el archivo y convertir a base64
@@ -79,7 +80,6 @@ export const uploadPodcast = async (req: Request, res: Response): Promise<void> 
       body: JSON.stringify({
         userId: req.userId,
         title,
-        artist,
         description: description || "",
         duration: duration || "",
         filename: video.name,
@@ -110,14 +110,26 @@ export const uploadPodcast = async (req: Request, res: Response): Promise<void> 
     }
 
     const result = await n8nResponse.json();
-    console.log(`✅ Podcast uploaded successfully:`, result);
+    console.log(`✅ n8n response:`, result);
+
+    // Guardar en base de datos
+    const podcast = await prisma.podcast.create({
+      data: {
+        title,
+        description: description || "",
+        videoUrl: result.videoUrl,
+        thumbnailUrl: result.thumbnailUrl || null,
+        duration: parseInt(duration) || 0,
+        createdBy: req.userId!,
+      },
+    });
+
+    console.log(`💾 Podcast saved to DB:`, podcast.id);
 
     res.status(HTTP_CODE.OK).json({
       success: true,
       message: "Podcast subido exitosamente",
-      videoUrl: result.videoUrl,
-      thumbnailUrl: result.thumbnailUrl,
-      duration: result.duration,
+      podcast,
     });
   } catch (error) {
     console.error(`❌ Upload error:`, error);
