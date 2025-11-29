@@ -1039,7 +1039,7 @@ services:
       - "traefik.http.routers.baserow-media.entrypoints=websecure"
       - "traefik.http.routers.baserow-media.tls.certresolver=le"
       - "traefik.http.routers.baserow-media.service=baserow-media"
-      - "traefik.http.routers.baserow-media.middlewares=secure-basic@file, block-trackers@file"
+      - "traefik.http.routers.baserow-media.middlewares=secure-basic@file"
 
       #########################################
       # 🔁 Servicio expuesto en el puerto estándar de Nginx

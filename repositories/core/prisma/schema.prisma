@@ -46,6 +46,7 @@ model User {
   tokenRecords      TokenRecord[]
   securityEventLogs SecurityEventLog[]
   passkeys          Passkey[]
+  podcasts          Podcast[]
 }
 
 model Device {
@@ -172,4 +173,22 @@ model Passkey {
   lastUsedAt      DateTime @default(now())
 
   @@index([userId])
+}
+
+model Podcast {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String
+  videoUrl    String   // Baserow URL to MP4 file
+  thumbnailUrl String? // Optional thumbnail extracted from video
+  duration    Int      // Duration in seconds, extracted by n8n
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy   String   @map("createdBy") @db.ObjectId
+  user        User     @relation(fields: [createdBy], references: [id])
+
+  @@index([createdBy])
+  @@index([publishedAt])
 }
