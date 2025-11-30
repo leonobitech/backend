@@ -1,7 +1,7 @@
 import { Router } from "express";
 import fileUpload from "express-fileupload";
 import { getAdminInfo } from "@controllers/admin.controller";
-import { uploadPodcast } from "@controllers/upload.controller";
+import { uploadPodcast, getUploadToken } from "@controllers/upload.controller";
 
 const adminRouter = Router();
 
@@ -36,7 +36,10 @@ adminRouter.post("/leonobit", (_req, res) => {
   res.json({ url: "https://leonobit.leonobitech.com" });
 });
 
-// 📹 Upload podcast video
+// 📹 Upload podcast video (legacy - requires apiKeyGuard)
 adminRouter.post("/upload-podcast", uploadMiddleware, uploadPodcast);
+
+// 🎫 Get upload token for direct uploads (bypasses Vercel 4.5MB limit)
+adminRouter.post("/upload-token", getUploadToken);
 
 export default adminRouter;

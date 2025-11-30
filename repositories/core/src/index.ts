@@ -32,6 +32,7 @@ import userRoutes from "@routes/user.routes";
 import adminRouter from "@routes/admin.routes";
 import passkeyRoutes from "@routes/passkey.routes";
 import serviceRoutes from "@routes/service.routes";
+import uploadRouter from "@routes/upload.routes";
 
 // controllers (for specific routes)
 import { updateAvatarFromN8n } from "@controllers/user.controllers";
@@ -83,7 +84,8 @@ app.use(
       "X-Requested-With",
       "X-Request-ID",
       "Idempotency-Key",
-      "x-core-access-key"
+      "x-core-access-key",
+      "X-Upload-Token"
     ], // FIXED: was malformed string, now proper array
     credentials: true, // allow session cookie from browser to pass through
     maxAge: 86400, // Cache preflight requests for 24 hours
@@ -135,6 +137,11 @@ app.use("/security", securityRoutes);
 
 // ✅ Rutas públicas de passkey (ANTES del apiKeyGuard para permitir login sin API key)
 app.use("/account/passkey", passkeyRoutes); // Passkey routes (mixed auth)
+
+// 📤 Upload routes con token pre-autenticado (ANTES del apiKeyGuard)
+// Estas rutas usan X-Upload-Token en lugar de x-core-access-key
+// El token fue generado previamente por un admin autenticado vía /admin/upload-token
+app.use("/upload", uploadRouter);
 
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
