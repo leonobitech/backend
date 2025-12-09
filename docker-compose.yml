@@ -1538,6 +1538,7 @@ volumes:
 
 networks:
   leonobitech-net:
+    name: leonobitech-net
     driver: bridge
     ipam:
       driver: default
