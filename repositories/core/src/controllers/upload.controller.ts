@@ -256,6 +256,7 @@ export const uploadPodcastWithToken = async (req: Request, res: Response): Promi
 
   try {
     console.log(`📤 [Token Auth] Uploading podcast: ${title} (user: ${userId})`);
+    console.log(`📊 Duration received: "${duration}" (type: ${typeof duration}, parsed: ${parseInt(duration)})`);
     console.log(`📁 Temp file: ${video.tempFilePath} (${(video.size / 1024 / 1024).toFixed(2)} MB)`);
 
     // 4) Leer archivo y convertir a base64
