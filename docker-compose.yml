@@ -844,6 +844,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - MALLOC_ARENA_MAX=2
+      # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
+      - UMASK=0022
 
     volumes:
       - baserow_media:/baserow/media
@@ -889,6 +891,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - MALLOC_ARENA_MAX=2
+      # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
+      - UMASK=0022
 
     volumes:
       - baserow_media:/baserow/media
@@ -933,6 +937,8 @@ services:
       - MALLOC_ARENA_MAX=2
       # Beat no usa concurrency, pero dejamos prefetch bajo en tareas delegadas
       - CELERY_PREFETCH_MULTIPLIER=1
+      # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
+      - UMASK=0022
 
     volumes:
       - baserow_media:/baserow/media
