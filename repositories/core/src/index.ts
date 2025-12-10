@@ -33,6 +33,7 @@ import adminRouter from "@routes/admin.routes";
 import passkeyRoutes from "@routes/passkey.routes";
 import serviceRoutes from "@routes/service.routes";
 import uploadRouter from "@routes/upload.routes";
+import podcastRouter from "@routes/podcast.routes";
 
 // controllers (for specific routes)
 import { updateAvatarFromN8n } from "@controllers/user.controllers";
@@ -142,6 +143,9 @@ app.use("/account/passkey", passkeyRoutes); // Passkey routes (mixed auth)
 // Estas rutas usan X-Upload-Token en lugar de x-core-access-key
 // El token fue generado previamente por un admin autenticado vía /admin/upload-token
 app.use("/upload", uploadRouter);
+
+// 📻 Public podcast routes (read-only, no auth required)
+app.use("/podcasts", podcastRouter);
 
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
