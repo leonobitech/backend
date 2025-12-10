@@ -240,7 +240,7 @@ export const uploadPodcastWithToken = async (req: Request, res: Response): Promi
   };
 
   // 3) Extraer metadata del body
-  const { title, description, duration } = req.body;
+  const { title, description, duration, width, height } = req.body;
 
   if (!title) {
     try {
@@ -277,6 +277,8 @@ export const uploadPodcastWithToken = async (req: Request, res: Response): Promi
         title,
         description: description || "",
         duration: duration || "",
+        width: width ? parseInt(width) : null,
+        height: height ? parseInt(height) : null,
         filename: video.name,
         mimeType: video.mimetype,
         fileData: base64Data,
@@ -315,6 +317,8 @@ export const uploadPodcastWithToken = async (req: Request, res: Response): Promi
         videoUrl: result.videoUrl,
         thumbnailUrl: result.thumbnailUrl || null,
         duration: parseInt(duration) || 0,
+        width: width ? parseInt(width) : null,
+        height: height ? parseInt(height) : null,
         createdBy: userId,
       },
     });
