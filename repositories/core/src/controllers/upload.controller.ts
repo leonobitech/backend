@@ -13,7 +13,7 @@ const N8N_WEBHOOK_URL = process.env.N8N_INTERNAL_URL || "http://n8n_webhook_1:56
 const N8N_WEBHOOK_KEY = process.env.N8N_WEBHOOK_KEY || "";
 
 // Directorio temporal para archivos
-const TEMP_DIR = path.join(process.cwd(), "temp-uploads");
+const TEMP_DIR = "/tmp/uploads";
 
 // Asegurar que el directorio temporal existe
 async function ensureTempDir() {

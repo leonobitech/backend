@@ -7,8 +7,9 @@ const uploadRouter = Router();
 // Middleware para upload de archivos
 const uploadMiddleware = fileUpload({
   useTempFiles: true,
-  tempFileDir: "./temp-uploads",
+  tempFileDir: "/tmp/uploads",
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max
+  createParentPath: true,
 });
 
 /**
