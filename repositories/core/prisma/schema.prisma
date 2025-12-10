@@ -180,8 +180,7 @@ model Podcast {
   title       String
   description String
   videoUrl    String   // Baserow URL to MP4 file
-  thumbnailUrl String? // Optional thumbnail extracted from video
-  duration    Int      // Duration in seconds, extracted by n8n
+  duration    Int      // Duration in seconds
   width       Int?     // Video width in pixels
   height      Int?     // Video height in pixels
   publishedAt DateTime @default(now())

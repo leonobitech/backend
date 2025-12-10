@@ -315,7 +315,6 @@ export const uploadPodcastWithToken = async (req: Request, res: Response): Promi
         title,
         description: description || "",
         videoUrl: result.videoUrl,
-        thumbnailUrl: result.thumbnailUrl || null,
         duration: parseInt(duration) || 0,
         width: width ? parseInt(width) : null,
         height: height ? parseInt(height) : null,
