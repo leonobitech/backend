@@ -1231,6 +1231,16 @@ services:
       - "traefik.http.routers.chatwoot-webhook.middlewares=webhook-open@file"
 
       #########################################
+      # 📎 RUTA PÚBLICA PARA ACTIVE STORAGE (WhatsApp media)
+      #########################################
+      - "traefik.http.routers.chatwoot-storage.rule=Host(`chat.leonobitech.com`) && PathPrefix(`/rails/active_storage`)"
+      - "traefik.http.routers.chatwoot-storage.entrypoints=websecure"
+      - "traefik.http.routers.chatwoot-storage.tls.certresolver=le"
+      - "traefik.http.routers.chatwoot-storage.service=chatwoot"
+      - "traefik.http.routers.chatwoot-storage.priority=100"
+      - "traefik.http.routers.chatwoot-storage.middlewares=secure-basic@file"
+
+      #########################################
       # 🆓 Archivos públicos (manifest, favicon, etc.)
       #########################################
       - "traefik.http.routers.chatwoot-static.rule=Host(`chat.leonobitech.com`) && (Path(`/manifest.json`) || Path(`/favicon.ico`) || PathPrefix(`/assets`))"
