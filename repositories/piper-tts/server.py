@@ -112,7 +112,7 @@ async def text_to_speech(request: TTSRequest) -> Response:
             filename = "speech.wav"
         else:
             audio_data = pcm_to_opus(raw_audio)
-            media_type = "audio/ogg"
+            media_type = "audio/ogg; codecs=opus"
             filename = "speech.ogg"
 
         return Response(
