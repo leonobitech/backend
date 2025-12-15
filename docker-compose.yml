@@ -1510,6 +1510,47 @@ services:
       - "traefik.http.middlewares.webrtc-rl.ratelimit.burst=60"
       - "traefik.http.routers.leonobit-webrtc.middlewares=webrtc-rl@docker"
 
+  piper_tts:
+    container_name: piper_tts
+    build:
+      context: ./repositories/piper-tts
+      dockerfile: Dockerfile
+    image: leonobitech/piper-tts:v1.0
+    restart: unless-stopped
+
+    # Seguridad
+    user: "10002:65534"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    networks:
+      - leonobitech-net
+
+    expose:
+      - "5000"
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    # Recursos (TTS es CPU-intensive)
+    cpus: 2.0
+    mem_limit: 1024m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   # 🔴 Redis
   redis_core_data: # Almacena los datos persistentes del Redis del Core
