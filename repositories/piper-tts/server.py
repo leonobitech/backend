@@ -28,7 +28,7 @@ PIPER_BIN = "/app/piper/piper"
 class TTSRequest(BaseModel):
     """Request body for TTS conversion."""
     text: str = Field(..., min_length=1, max_length=5000, description="Text to convert to speech")
-    output_format: Literal["wav", "opus"] = Field(default="wav", description="Output audio format")
+    output_format: Literal["wav", "opus", "ogg"] = Field(default="wav", description="Output audio format (ogg and opus both produce OGG/Opus)")
     speaker_id: int | None = Field(default=None, description="Speaker ID (if model supports multiple speakers)")
     length_scale: float = Field(default=1.0, ge=0.5, le=2.0, description="Speech speed (1.0 = normal)")
     noise_scale: float = Field(default=0.667, ge=0.0, le=1.0, description="Phoneme noise")
@@ -105,12 +105,13 @@ async def text_to_speech(request: TTSRequest) -> Response:
                 detail="Piper produced no audio output",
             )
 
-        # Convert raw PCM to WAV or Opus
+        # Convert raw PCM to WAV or OGG/Opus
         if request.output_format == "wav":
             audio_data = pcm_to_wav(raw_audio)
             media_type = "audio/wav"
             filename = "speech.wav"
         else:
+            # Both "opus" and "ogg" produce OGG container with Opus codec
             audio_data = pcm_to_opus(raw_audio)
             media_type = "audio/ogg; codecs=opus"
             filename = "speech.ogg"
