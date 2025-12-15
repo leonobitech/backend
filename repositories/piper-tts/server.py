@@ -179,13 +179,14 @@ def pcm_to_opus(pcm_data: bytes, sample_rate: int = 22050) -> bytes:
                 "-ar", str(sample_rate),
                 "-ac", "1",
                 "-i", raw_file.name,
-                # WhatsApp-compatible Opus settings
+                # WhatsApp-compatible OGG/Opus settings
                 "-c:a", "libopus",
                 "-b:a", "32k",          # 32kbps is good for voice
                 "-ar", "48000",         # WhatsApp expects 48kHz
                 "-ac", "1",             # Mono
                 "-application", "voip", # Optimize for voice
                 "-vbr", "on",           # Variable bitrate
+                "-f", "ogg",            # Force OGG container
                 ogg_file.name,
             ]
 
