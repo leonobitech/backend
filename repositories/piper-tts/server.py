@@ -28,7 +28,7 @@ PIPER_BIN = "/app/piper/piper"
 class TTSRequest(BaseModel):
     """Request body for TTS conversion."""
     text: str = Field(..., min_length=1, max_length=5000, description="Text to convert to speech")
-    output_format: Literal["wav", "opus", "ogg"] = Field(default="wav", description="Output audio format (ogg and opus both produce OGG/Opus)")
+    output_format: Literal["wav", "opus", "ogg", "mp3"] = Field(default="wav", description="Output audio format")
     speaker_id: int | None = Field(default=None, description="Speaker ID (if model supports multiple speakers)")
     length_scale: float = Field(default=1.0, ge=0.5, le=2.0, description="Speech speed (1.0 = normal)")
     noise_scale: float = Field(default=0.667, ge=0.0, le=1.0, description="Phoneme noise")
@@ -105,11 +105,15 @@ async def text_to_speech(request: TTSRequest) -> Response:
                 detail="Piper produced no audio output",
             )
 
-        # Convert raw PCM to WAV or OGG/Opus
+        # Convert raw PCM to requested format
         if request.output_format == "wav":
             audio_data = pcm_to_wav(raw_audio)
             media_type = "audio/wav"
             filename = "speech.wav"
+        elif request.output_format == "mp3":
+            audio_data = pcm_to_mp3(raw_audio)
+            media_type = "audio/mpeg"
+            filename = "speech.mp3"
         else:
             # Both "opus" and "ogg" produce OGG container with Opus codec
             audio_data = pcm_to_opus(raw_audio)
@@ -165,6 +169,34 @@ def pcm_to_wav(pcm_data: bytes, sample_rate: int = 22050, channels: int = 1, bit
     )
 
     return header + pcm_data
+
+
+def pcm_to_mp3(pcm_data: bytes, sample_rate: int = 22050) -> bytes:
+    """Convert raw PCM audio to MP3 format."""
+    with tempfile.NamedTemporaryFile(suffix=".raw", delete=True) as raw_file:
+        raw_file.write(pcm_data)
+        raw_file.flush()
+
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=True) as mp3_file:
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "s16le",
+                "-ar", str(sample_rate),
+                "-ac", "1",
+                "-i", raw_file.name,
+                "-c:a", "libmp3lame",
+                "-b:a", "64k",          # 64kbps for voice quality
+                "-ar", "44100",         # Standard MP3 sample rate
+                "-ac", "1",             # Mono
+                mp3_file.name,
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, timeout=30)
+
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg failed: {result.stderr.decode()}")
+
+            return Path(mp3_file.name).read_bytes()
 
 
 def pcm_to_opus(pcm_data: bytes, sample_rate: int = 22050) -> bytes:
