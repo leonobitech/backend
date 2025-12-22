@@ -17,6 +17,12 @@ import { ScheduleMeetingTool } from "./odoo/calendar/schedule-meeting/schedule-m
 import { SendEmailTool } from "./odoo/email/send-email/send-email.tool";
 import { CompleteActivityTool } from "./odoo/activities/complete-activity/complete-activity.tool";
 import { SendReminderTool } from "./odoo/activities/send-reminder/send-reminder.tool";
+// Leraysi Salon Tools
+import { CrearTurnoLeraysiTool } from "./odoo/leraysi/crear-turno/crear-turno.tool";
+import { ConsultarTurnosDiaTool } from "./odoo/leraysi/consultar-turnos-dia/consultar-turnos-dia.tool";
+import { ConsultarDisponibilidadTool } from "./odoo/leraysi/consultar-disponibilidad/consultar-disponibilidad.tool";
+import { ConfirmarTurnoTool } from "./odoo/leraysi/confirmar-turno/confirmar-turno.tool";
+import { CancelarTurnoTool } from "./odoo/leraysi/cancelar-turno/cancelar-turno.tool";
 import { createOdooClient, type OdooCredentials } from "@/lib/odoo";
 import { logger } from "@/lib/logger";
 
@@ -128,6 +134,42 @@ export async function initializeTools(): Promise<ToolRegistry> {
     version: "2.0.0",
     requiredScopes: ["odoo:email"],
     estimatedTime: 1500,
+  });
+
+  // Leraysi Salon Tools (Estilos Leraysi - Beauty Salon)
+  registry.register(new CrearTurnoLeraysiTool(odooClient), {
+    category: "odoo/leraysi",
+    version: "1.0.0",
+    requiredScopes: ["odoo:write"],
+    estimatedTime: 2000,
+  });
+
+  registry.register(new ConsultarTurnosDiaTool(odooClient), {
+    category: "odoo/leraysi",
+    version: "1.0.0",
+    requiredScopes: ["odoo:read"],
+    estimatedTime: 1000,
+  });
+
+  registry.register(new ConsultarDisponibilidadTool(odooClient), {
+    category: "odoo/leraysi",
+    version: "1.0.0",
+    requiredScopes: ["odoo:read"],
+    estimatedTime: 1000,
+  });
+
+  registry.register(new ConfirmarTurnoTool(odooClient), {
+    category: "odoo/leraysi",
+    version: "1.0.0",
+    requiredScopes: ["odoo:write"],
+    estimatedTime: 800,
+  });
+
+  registry.register(new CancelarTurnoTool(odooClient), {
+    category: "odoo/leraysi",
+    version: "1.0.0",
+    requiredScopes: ["odoo:write"],
+    estimatedTime: 800,
   });
 
   const stats = registry.getStats();
