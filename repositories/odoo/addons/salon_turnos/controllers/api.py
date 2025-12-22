@@ -46,7 +46,7 @@ class SalonTurnosAPI(http.Controller):
 
     @http.route(
         '/salon_turnos/api/turno',
-        type='json',
+        type='jsonrpc',
         auth='none',
         methods=['POST'],
         csrf=False,
@@ -187,7 +187,7 @@ class SalonTurnosAPI(http.Controller):
 
     @http.route(
         '/salon_turnos/api/turno/<int:turno_id>/estado',
-        type='json',
+        type='jsonrpc',
         auth='none',
         methods=['PUT'],
         csrf=False,

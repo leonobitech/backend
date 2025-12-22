@@ -57,7 +57,7 @@ class MercadoPagoWebhook(http.Controller):
 
     @http.route(
         '/salon_turnos/webhook/mercadopago',
-        type='json',
+        type='jsonrpc',
         auth='none',
         methods=['POST'],
         csrf=False,
