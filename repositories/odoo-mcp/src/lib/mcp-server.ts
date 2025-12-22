@@ -116,8 +116,9 @@ export function createMcpServer(userId: string, registry: ToolRegistry): Server 
     logger.info({ userId, toolName }, "[MCP] call_tool request");
 
     try {
-      // Handle all Odoo tools through registry and executor
-      if (toolName.startsWith("odoo_")) {
+      // Handle all tools through registry and executor
+      // Includes: odoo_*, leraysi_* (salon tools)
+      if (toolName.startsWith("odoo_") || toolName.startsWith("leraysi_")) {
         const result = await executor.execute(toolName, args);
 
         if (!result.success) {
