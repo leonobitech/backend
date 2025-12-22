@@ -45,3 +45,4 @@ traefik/acme.json
 **/target
 **/dist
 **/node_modules
+repositories/odoo/odoo_data/
