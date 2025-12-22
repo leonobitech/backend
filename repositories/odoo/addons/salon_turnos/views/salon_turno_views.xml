@@ -106,11 +106,9 @@
                 <filter name="filter_confirmado" string="Confirmado" domain="[('estado', '=', 'confirmado')]"/>
                 <filter name="filter_completado" string="Completado" domain="[('estado', '=', 'completado')]"/>
                 <filter name="filter_cancelado" string="Cancelado" domain="[('estado', '=', 'cancelado')]"/>
-                <group string="Agrupar Por">
-                    <filter name="group_estado" string="Estado" context="{'group_by': 'estado'}"/>
-                    <filter name="group_servicio" string="Servicio" context="{'group_by': 'servicio'}"/>
-                    <filter name="group_fecha" string="Fecha" context="{'group_by': 'fecha_hora:day'}"/>
-                </group>
+                <filter name="group_estado" string="Estado" context="{'group_by': 'estado'}"/>
+                <filter name="group_servicio" string="Servicio" context="{'group_by': 'servicio'}"/>
+                <filter name="group_fecha" string="Fecha" context="{'group_by': 'fecha_hora:day'}"/>
             </search>
         </field>
     </record>
