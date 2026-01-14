@@ -84,6 +84,31 @@ Make sure your Core Auth service validates cookies like `accessKey`, `clientKey`
 
 ---
 
+## 🔓 Permisos de Archivos Subidos (FILE_UPLOAD_PERMISSIONS)
+
+Baserow (Django) ignora la variable `UMASK` al crear archivos subidos. Por defecto crea archivos con permisos `600` (solo lectura del owner), lo que impide que nginx pueda servirlos.
+
+**Solución:** Agregar `FILE_UPLOAD_PERMISSIONS=0o644` en los servicios que manejan uploads:
+- `baserow_backend`
+- `baserow_celery`
+- `baserow_celery_export_worker`
+- `baserow_celery_beat`
+
+**Sintomas del problema:**
+- Upload retorna 200 OK con URL valida
+- El archivo existe en `/baserow/media/user_files/`
+- Acceder a la URL retorna 403 Forbidden
+
+**Verificacion:**
+```bash
+# Verificar permisos de archivos recientes
+docker exec baserow_backend ls -la /baserow/media/user_files/ | tail -10
+
+# Los archivos deben tener -rw-r--r-- (644), no -rw------- (600)
+```
+
+---
+
 ## 👀 Contribute
 
 This system is ideal for multi-tenant SaaS, microservices-based CRM backends, and secure app distribution platforms. Pull requests welcome!
