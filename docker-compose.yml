@@ -756,6 +756,8 @@ services:
       - GUNICORN_CMD_ARGS=--workers=2 --threads=2 --timeout 300 --graceful-timeout 60 --max-requests 200 --max-requests-jitter 50 --worker-tmp-dir /dev/shm
       # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
       - UMASK=0022
+      # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
+      - FILE_UPLOAD_PERMISSIONS=0o644
 
     volumes:
       - baserow_data:/baserow/data
@@ -846,6 +848,8 @@ services:
       - MALLOC_ARENA_MAX=2
       # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
       - UMASK=0022
+      # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
+      - FILE_UPLOAD_PERMISSIONS=0o644
 
     volumes:
       - baserow_media:/baserow/media
@@ -893,6 +897,8 @@ services:
       - MALLOC_ARENA_MAX=2
       # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
       - UMASK=0022
+      # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
+      - FILE_UPLOAD_PERMISSIONS=0o644
 
     volumes:
       - baserow_media:/baserow/media
@@ -939,6 +945,8 @@ services:
       - CELERY_PREFETCH_MULTIPLIER=1
       # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
       - UMASK=0022
+      # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
+      - FILE_UPLOAD_PERMISSIONS=0o644
 
     volumes:
       - baserow_media:/baserow/media
