@@ -349,7 +349,7 @@ services:
       - N8N_LICENSE_AUTO_RENEW_ENABLED=true
 
     volumes:
-      - n8n_data_webhook_1:/home/node/.n8n
+      - n8n_data_main:/home/node/.n8n
 
     networks:
       - leonobitech-net
@@ -408,7 +408,7 @@ services:
       - N8N_LICENSE_AUTO_RENEW_ENABLED=true
 
     volumes:
-      - n8n_data_worker_1:/home/node/.n8n
+      - n8n_data_main:/home/node/.n8n
 
     networks:
       - leonobitech-net
@@ -440,7 +440,7 @@ services:
       - N8N_LICENSE_AUTO_RENEW_ENABLED=true
 
     volumes:
-      - n8n_data_worker_2:/home/node/.n8n
+      - n8n_data_main:/home/node/.n8n
 
     networks:
       - leonobitech-net
