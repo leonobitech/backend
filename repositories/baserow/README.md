@@ -88,7 +88,7 @@ Make sure your Core Auth service validates cookies like `accessKey`, `clientKey`
 
 Baserow (Django) ignora la variable `UMASK` al crear archivos subidos. Por defecto crea archivos con permisos `600` (solo lectura del owner), lo que impide que nginx pueda servirlos.
 
-**Solución:** Agregar `FILE_UPLOAD_PERMISSIONS=0o644` en los servicios que manejan uploads:
+**Solución:** Agregar `FILE_UPLOAD_PERMISSIONS=420` (decimal de 0o644) en los servicios que manejan uploads:
 - `baserow_backend`
 - `baserow_celery`
 - `baserow_celery_export_worker`

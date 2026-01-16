@@ -757,7 +757,7 @@ services:
       # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
       - UMASK=0022
       # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
-      - FILE_UPLOAD_PERMISSIONS=0o644
+      - FILE_UPLOAD_PERMISSIONS=420
 
     volumes:
       - baserow_data:/baserow/data
@@ -849,7 +849,7 @@ services:
       # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
       - UMASK=0022
       # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
-      - FILE_UPLOAD_PERMISSIONS=0o644
+      - FILE_UPLOAD_PERMISSIONS=420
 
     volumes:
       - baserow_media:/baserow/media
@@ -898,7 +898,7 @@ services:
       # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
       - UMASK=0022
       # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
-      - FILE_UPLOAD_PERMISSIONS=0o644
+      - FILE_UPLOAD_PERMISSIONS=420
 
     volumes:
       - baserow_media:/baserow/media
@@ -946,7 +946,7 @@ services:
       # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
       - UMASK=0022
       # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
-      - FILE_UPLOAD_PERMISSIONS=0o644
+      - FILE_UPLOAD_PERMISSIONS=420
 
     volumes:
       - baserow_media:/baserow/media
