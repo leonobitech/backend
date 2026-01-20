@@ -33,6 +33,12 @@ class MercadoPagoWebhook(http.Controller):
             _logger.warning('Webhook secret no configurado, omitiendo verificación')
             return True
 
+        # IMPORTANTE: Limpiar espacios en blanco del secret (común al copiar de MP)
+        webhook_secret = webhook_secret.strip()
+
+        # Log para debug (solo longitud por seguridad)
+        _logger.info(f'Webhook secret length: {len(webhook_secret)}, first 4 chars: {webhook_secret[:4]}...')
+
         # Parsear x_signature
         # Formato: ts=xxx,v1=xxx
         parts = {}
@@ -40,7 +46,7 @@ class MercadoPagoWebhook(http.Controller):
             for part in x_signature.split(','):
                 if '=' in part:
                     key, value = part.split('=', 1)
-                    parts[key] = value
+                    parts[key.strip()] = value.strip()
         except Exception as e:
             _logger.error(f'Error parseando x_signature: {x_signature}, error: {e}')
             return False
@@ -58,14 +64,19 @@ class MercadoPagoWebhook(http.Controller):
 
         # Calcular HMAC
         calculated = hmac.new(
-            webhook_secret.encode(),
-            manifest.encode(),
+            webhook_secret.encode('utf-8'),
+            manifest.encode('utf-8'),
             hashlib.sha256
         ).hexdigest()
 
         # Log para debug
+        _logger.info(f'Signature verification - data_id: {data_id}')
+        _logger.info(f'Signature verification - x_request_id: {x_request_id}')
+        _logger.info(f'Signature verification - ts: {ts}')
         _logger.info(f'Signature verification - manifest: {manifest}')
-        _logger.info(f'Signature verification - calculated: {calculated}, received v1: {v1}')
+        _logger.info(f'Signature verification - calculated: {calculated}')
+        _logger.info(f'Signature verification - received v1: {v1}')
+        _logger.info(f'Signature verification - match: {calculated == v1}')
 
         return hmac.compare_digest(calculated, v1)
 
@@ -85,37 +96,74 @@ class MercadoPagoWebhook(http.Controller):
         - plan: Suscripción (no usado)
         - subscription: Suscripción (no usado)
         - invoice: Factura (no usado)
+
+        Formatos de webhook:
+        1. IPN (legacy): ?id=123&topic=payment
+        2. Webhook V2: ?data.id=123&type=payment (JSON body)
         """
         try:
+            # Log de toda la request para debug
+            _logger.info(f'Webhook MP - Query params (kwargs): {kwargs}')
+            _logger.info(f'Webhook MP - Headers: x-signature={request.httprequest.headers.get("x-signature")}, x-request-id={request.httprequest.headers.get("x-request-id")}')
+
             # MP puede enviar datos como JSON body o query params
             content_type = request.httprequest.content_type or ''
 
+            # Detectar formato IPN (legacy) vs Webhook V2
+            is_ipn_format = kwargs.get('topic') is not None
+
             if 'application/json' in content_type:
-                data = json.loads(request.httprequest.data.decode('utf-8'))
+                body_data = json.loads(request.httprequest.data.decode('utf-8'))
+                _logger.info(f'Webhook MP - JSON body: {json.dumps(body_data)}')
+                data = body_data
             else:
-                # Datos vienen como query params
+                body_data = {}
+                _logger.info('Webhook MP - No JSON body')
+
+            if is_ipn_format:
+                # Formato IPN: ?id=123&topic=payment
+                _logger.info('Webhook MP - Detectado formato IPN (legacy)')
+                data = {
+                    'type': kwargs.get('topic'),  # 'payment', 'merchant_order', etc.
+                    'data': {'id': kwargs.get('id')},  # En IPN es 'id', no 'data.id'
+                    'action': None,
+                }
+            elif not body_data:
+                # Formato query params nuevo: ?data.id=123&type=payment
                 data = {
                     'type': kwargs.get('type'),
                     'data': {'id': kwargs.get('data.id')},
                     'action': kwargs.get('action'),
                 }
 
-            _logger.info(f'Webhook MP recibido: {json.dumps(data)}')
+            _logger.info(f'Webhook MP - Data normalizada: {json.dumps(data)}')
 
             # Verificar firma si está configurada
             x_signature = request.httprequest.headers.get('x-signature')
             x_request_id = request.httprequest.headers.get('x-request-id')
 
             if x_signature and x_request_id:
-                # MP firma usando el data.id de los query params, no del body
-                data_id_for_signature = kwargs.get('data.id') or data.get('data', {}).get('id')
-                if not self._verify_signature(x_signature, x_request_id, str(data_id_for_signature)):
+                # Determinar data_id para verificación de firma
+                # En IPN: viene de kwargs['id']
+                # En V2: viene de kwargs['data.id'] o body['data']['id']
+                if is_ipn_format:
+                    data_id_for_signature = kwargs.get('id')
+                else:
+                    data_id_for_signature = kwargs.get('data.id') or data.get('data', {}).get('id')
+
+                _logger.info(f'Webhook MP - data_id para firma: {data_id_for_signature}')
+
+                if data_id_for_signature and not self._verify_signature(x_signature, x_request_id, str(data_id_for_signature)):
                     _logger.warning(f'Firma de webhook inválida para data_id: {data_id_for_signature}')
                     return Response(
                         json.dumps({'status': 'error', 'message': 'Invalid signature'}),
                         content_type='application/json',
                         status=401
                     )
+                elif not data_id_for_signature:
+                    _logger.warning('No se pudo determinar data_id para verificar firma')
+            else:
+                _logger.info('Webhook MP - Sin headers de firma (x-signature/x-request-id)')
 
             # Procesar según tipo
             notification_type = data.get('type')
