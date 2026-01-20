@@ -93,9 +93,10 @@ class MercadoPagoWebhook(http.Controller):
             x_request_id = request.httprequest.headers.get('x-request-id')
 
             if x_signature and x_request_id:
-                data_id = data.get('data', {}).get('id')
-                if not self._verify_signature(x_signature, x_request_id, str(data_id)):
-                    _logger.warning('Firma de webhook inválida')
+                # MP firma usando el data.id de los query params, no del body
+                data_id_for_signature = kwargs.get('data.id') or data.get('data', {}).get('id')
+                if not self._verify_signature(x_signature, x_request_id, str(data_id_for_signature)):
+                    _logger.warning(f'Firma de webhook inválida para data_id: {data_id_for_signature}')
                     return Response(
                         json.dumps({'status': 'error', 'message': 'Invalid signature'}),
                         content_type='application/json',
