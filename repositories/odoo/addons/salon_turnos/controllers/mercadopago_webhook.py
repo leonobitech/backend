@@ -36,14 +36,24 @@ class MercadoPagoWebhook(http.Controller):
         # Parsear x_signature
         # Formato: ts=xxx,v1=xxx
         parts = {}
-        for part in x_signature.split(','):
-            key, value = part.split('=')
-            parts[key] = value
+        try:
+            for part in x_signature.split(','):
+                if '=' in part:
+                    key, value = part.split('=', 1)
+                    parts[key] = value
+        except Exception as e:
+            _logger.error(f'Error parseando x_signature: {x_signature}, error: {e}')
+            return False
 
         ts = parts.get('ts')
         v1 = parts.get('v1')
 
+        if not ts or not v1:
+            _logger.warning(f'Firma incompleta - ts: {ts}, v1: {v1}')
+            return False
+
         # Construir string para verificar
+        # Formato MP: id:[data.id];request-id:[x-request-id];ts:[ts];
         manifest = f'id:{data_id};request-id:{x_request_id};ts:{ts};'
 
         # Calcular HMAC
@@ -52,6 +62,10 @@ class MercadoPagoWebhook(http.Controller):
             manifest.encode(),
             hashlib.sha256
         ).hexdigest()
+
+        # Log para debug
+        _logger.info(f'Signature verification - manifest: {manifest}')
+        _logger.info(f'Signature verification - calculated: {calculated}, received v1: {v1}')
 
         return hmac.compare_digest(calculated, v1)
 
