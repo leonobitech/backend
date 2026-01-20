@@ -330,6 +330,171 @@ export function getEmailTemplate(type: string, data: EmailTemplateData = {}): st
   }
 }
 
+// ============================================================================
+// ESTILOS LERAYSI - TEMPLATES
+// ============================================================================
+
+export interface TurnoConfirmadoData {
+  clienta: string;
+  servicio: string;
+  servicio_detalle?: string | null;
+  fecha: string;
+  hora: string;
+  precio: number;
+  sena: number;
+  monto_restante: number;
+  mp_payment_id: string;
+  direccion: string;
+}
+
+/**
+ * Base template for Estilos Leraysi
+ */
+const leraysiEmailTemplate = (content: string) => `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estilos Leraysi</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #fdf2f8;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fdf2f8; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(135, 90, 123, 0.15);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: 600;">Estilos Leraysi</h1>
+              <p style="margin: 10px 0 0 0; color: #e0d4dd; font-size: 14px;">Salón de Belleza - Buenos Aires</p>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              ${content}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #fdf2f8; padding: 30px; text-align: center; border-top: 1px solid #f3e8f0;">
+              <p style="margin: 0 0 10px 0; color: #875A7B; font-size: 14px; font-weight: 600;">
+                Estilos Leraysi - Salón de Belleza
+              </p>
+              <p style="margin: 0 0 10px 0; color: #9ca3af; font-size: 13px;">
+                Buenos Aires, Argentina
+              </p>
+              <p style="margin: 0; color: #adb5bd; font-size: 12px;">
+                WhatsApp: +54 9 11 XXXX-XXXX
+              </p>
+              <p style="margin: 15px 0 0 0; color: #d1d5db; font-size: 11px;">
+                Este correo fue enviado automáticamente. Por favor no responder a esta dirección.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+/**
+ * Template: Turno Confirmado (Estilos Leraysi)
+ */
+export const turnoConfirmadoTemplate = (data: TurnoConfirmadoData) => {
+  const content = `
+    <!-- Success Banner -->
+    <div style="text-align: center; margin-bottom: 30px;">
+      <div style="display: inline-block; background-color: #d1fae5; color: #065f46; padding: 12px 30px; border-radius: 50px; font-weight: 600; font-size: 18px;">
+        ✅ ¡Tu turno está confirmado!
+      </div>
+    </div>
+
+    <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+      Hola <strong>${data.clienta}</strong>,
+    </p>
+
+    <p style="margin: 0 0 25px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+      ¡Gracias por tu pago! Tu turno ha sido confirmado exitosamente. A continuación encontrarás los detalles de tu reserva.
+    </p>
+
+    <!-- Turno Details Card -->
+    <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 25px; margin: 25px 0; border-radius: 12px; color: #ffffff;">
+      <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600; text-align: center;">📅 Detalles del Turno</h3>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">💇‍♀️ Servicio:</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2); text-transform: capitalize;">${data.servicio}${data.servicio_detalle ? ` - ${data.servicio_detalle}` : ''}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">📆 Fecha:</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.fecha}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">⏰ Hora:</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.hora}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; font-size: 14px; opacity: 0.9;">📍 Dirección:</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right;">${data.direccion}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Payment Details -->
+    <div style="background-color: #f0fdf4; border: 2px solid #22c55e; padding: 20px; margin: 25px 0; border-radius: 8px;">
+      <h4 style="margin: 0 0 15px 0; color: #166534; font-size: 16px;">💳 Detalle del Pago</h4>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">Precio total:</td>
+          <td style="padding: 8px 0; color: #1f2937; font-size: 14px; text-align: right;">$${data.precio.toLocaleString('es-AR')}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #166534; font-size: 14px; font-weight: 600;">Seña pagada (30%):</td>
+          <td style="padding: 8px 0; color: #166534; font-size: 16px; font-weight: 600; text-align: right;">$${data.sena.toLocaleString('es-AR')}</td>
+        </tr>
+        <tr style="border-top: 1px dashed #d1d5db;">
+          <td style="padding: 12px 0 8px 0; color: #4b5563; font-size: 14px;">Monto restante:</td>
+          <td style="padding: 12px 0 8px 0; color: #1f2937; font-size: 14px; text-align: right;">$${data.monto_restante.toLocaleString('es-AR')}</td>
+        </tr>
+      </table>
+      <p style="margin: 15px 0 0 0; color: #6b7280; font-size: 12px;">
+        ID de Pago: ${data.mp_payment_id}
+      </p>
+    </div>
+
+    <!-- Important Info -->
+    <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 25px 0; border-radius: 4px;">
+      <h4 style="margin: 0 0 10px 0; color: #92400e; font-size: 14px;">⚠️ Información Importante</h4>
+      <ul style="margin: 0; padding-left: 20px; color: #78350f; font-size: 13px; line-height: 1.6;">
+        <li>El monto restante ($${data.monto_restante.toLocaleString('es-AR')}) debe abonarse el día del turno.</li>
+        <li>En caso de necesitar cancelar, avisanos con al menos 24hs de anticipación.</li>
+        <li>Te recomendamos llegar 5-10 minutos antes de tu turno.</li>
+      </ul>
+    </div>
+
+    <p style="margin: 25px 0 0 0; color: #4b5563; font-size: 16px; line-height: 1.6; text-align: center;">
+      ⋆˚🧚‍♀️ ¡Te esperamos para dejarte divina! 💕
+    </p>
+  `;
+
+  return leraysiEmailTemplate(content);
+};
+
+/**
+ * Get Turno Confirmado template (exported for use in tool)
+ */
+export function getTurnoConfirmadoEmailTemplate(data: TurnoConfirmadoData): string {
+  return turnoConfirmadoTemplate(data);
+}
+
 /**
  * List available templates
  */
@@ -353,5 +518,10 @@ export const availableTemplates = [
     type: 'welcome',
     name: 'Bienvenida',
     description: 'Template de primer contacto presentando servicios de Leonobitech'
+  },
+  {
+    type: 'turno_confirmado',
+    name: 'Turno Confirmado (Leraysi)',
+    description: 'Template de confirmación de turno para Estilos Leraysi con detalles de pago'
   }
 ];

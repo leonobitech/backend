@@ -1,0 +1,585 @@
+{
+  "name": "Leraysi - Webhook Pago Confirmado",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mp-pago-leraysi",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook - MP Pago",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "mp-pago-leraysi"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-payment-updated",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "payment.updated",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF: Payment Updated",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.mercadopago.com/v1/payments/{{ $json.body.data.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MP_ACCESS_TOKEN_LERAYSI }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "GET: MP Payment Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [650, 200],
+      "notesInFlow": true,
+      "notes": "Consulta detalles del pago a MercadoPago API.\nExtrae external_reference que contiene el turno_id de Odoo."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-approved",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF: Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extraer datos del pago de MercadoPago\nconst payment = $input.first().json;\n\n// external_reference tiene formato: \"turno_{turno_id}_lead_{lead_id}\"\n// Ejemplo: \"turno_123_lead_456\"\nconst externalRef = payment.external_reference || '';\n\n// Parse external_reference\nlet turnoId = null;\nlet leadId = null;\n\nconst turnoMatch = externalRef.match(/turno_(\\d+)/);\nconst leadMatch = externalRef.match(/lead_(\\d+)/);\n\nif (turnoMatch) turnoId = parseInt(turnoMatch[1]);\nif (leadMatch) leadId = parseInt(leadMatch[1]);\n\nif (!turnoId) {\n  throw new Error(`No se pudo extraer turno_id de external_reference: ${externalRef}`);\n}\n\nreturn {\n  json: {\n    mp_payment_id: payment.id.toString(),\n    turno_id: turnoId,\n    lead_id: leadId,\n    amount: payment.transaction_amount,\n    currency: payment.currency_id,\n    status: payment.status,\n    status_detail: payment.status_detail,\n    payer_email: payment.payer?.email || null,\n    payer_name: payment.payer?.first_name || null,\n    external_reference: externalRef,\n    date_approved: payment.date_approved\n  }\n};"
+      },
+      "name": "Parse Payment Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 100],
+      "notesInFlow": true,
+      "notes": "Parsea external_reference para obtener turno_id y lead_id.\nFormato esperado: turno_{id}_lead_{id}"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "tableId": "={{ $env.BASEROW_TURNOS_LERAYSI_TABLE_ID }}",
+        "searchField": "odoo_turno_id",
+        "searchValue": "={{ $json.turno_id }}"
+      },
+      "name": "Baserow: Get Turno",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [1250, 100],
+      "credentials": {
+        "baserowApi": {
+          "id": "baserow_credentials",
+          "name": "Baserow API"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Busca el turno en Baserow por odoo_turno_id"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Combinar datos del pago con datos del turno de Baserow\nconst payment = $('Parse Payment Data').first().json;\nconst turnoRows = $input.all();\n\nif (turnoRows.length === 0) {\n  throw new Error(`Turno no encontrado en Baserow: ${payment.turno_id}`);\n}\n\nconst turno = turnoRows[0].json;\n\n// Obtener lead_id de Baserow si no viene en external_reference\nconst leadId = payment.lead_id || turno.lead_row_id;\n\nif (!leadId) {\n  throw new Error('No se pudo determinar lead_id');\n}\n\nreturn {\n  json: {\n    // Datos del pago MP\n    mp_payment_id: payment.mp_payment_id,\n    amount: payment.amount,\n    payer_email: payment.payer_email,\n    date_approved: payment.date_approved,\n    \n    // IDs\n    turno_id: payment.turno_id,\n    lead_id: leadId,\n    turno_row_id: turno.id,\n    \n    // Datos del turno de Baserow\n    conversation_id: turno.conversation_id || null,\n    clienta: turno.clienta,\n    telefono: turno.telefono,\n    email: turno.email || payment.payer_email\n  }\n};"
+      },
+      "name": "Merge Payment + Turno",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1450, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MCP_SERVER_URL }}/tools/leraysi_confirmar_pago_completo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MCP_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "turno_id",
+              "value": "={{ $json.turno_id }}"
+            },
+            {
+              "name": "mp_payment_id",
+              "value": "={{ $json.mp_payment_id }}"
+            },
+            {
+              "name": "lead_id",
+              "value": "={{ $json.lead_id }}"
+            },
+            {
+              "name": "conversation_id",
+              "value": "={{ $json.conversation_id }}"
+            },
+            {
+              "name": "email_override",
+              "value": "={{ $json.payer_email }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "MCP: Confirmar Pago Completo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1650, 100],
+      "notesInFlow": true,
+      "notes": "Llama a la tool MCP consolidada que:\n- Confirma turno en Odoo\n- Crea contacto\n- Vincula a Lead\n- Mueve Lead a Calificado\n- Crea evento calendario\n- Genera PDF recibo\n- Envía email confirmación"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "={{ $env.BASEROW_TURNOS_LERAYSI_TABLE_ID }}",
+        "rowId": "={{ $('Merge Payment + Turno').first().json.turno_row_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "estado",
+              "fieldValue": "confirmado"
+            },
+            {
+              "fieldId": "sena_pagada",
+              "fieldValue": "true"
+            },
+            {
+              "fieldId": "mp_payment_id",
+              "fieldValue": "={{ $('Merge Payment + Turno').first().json.mp_payment_id }}"
+            },
+            {
+              "fieldId": "confirmado_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "name": "Baserow: Update Turno",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [1850, 100],
+      "credentials": {
+        "baserowApi": {
+          "id": "baserow_credentials",
+          "name": "Baserow API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "tableId": "={{ $env.BASEROW_LEADS_LERAYSI_TABLE_ID }}",
+        "searchField": "lead_id",
+        "searchValue": "={{ $('Merge Payment + Turno').first().json.lead_id }}"
+      },
+      "name": "Baserow: Get Lead",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [2050, 100],
+      "credentials": {
+        "baserowApi": {
+          "id": "baserow_credentials",
+          "name": "Baserow API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "={{ $env.BASEROW_LEADS_LERAYSI_TABLE_ID }}",
+        "rowId": "={{ $json.id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "stage",
+              "fieldValue": "turno_confirmado"
+            },
+            {
+              "fieldId": "turno_agendado",
+              "fieldValue": "true"
+            },
+            {
+              "fieldId": "sena_pagada",
+              "fieldValue": "true"
+            }
+          ]
+        }
+      },
+      "name": "Baserow: Update Lead",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [2250, 100],
+      "credentials": {
+        "baserowApi": {
+          "id": "baserow_credentials",
+          "name": "Baserow API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-has-conversation",
+              "leftValue": "={{ $('Merge Payment + Turno').first().json.conversation_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF: Has Conversation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2450, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CHATWOOT_API_URL }}/api/v1/accounts/{{ $env.CHATWOOT_ACCOUNT_ID }}/conversations/{{ $('Merge Payment + Turno').first().json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $env.CHATWOOT_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $('MCP: Confirmar Pago Completo').first().json.mensaje_whatsapp }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Chatwoot: Send WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2650, 0],
+      "notesInFlow": true,
+      "notes": "Envía mensaje de confirmación por WhatsApp usando Chatwoot API"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Pago procesado correctamente',\n  turno_id: $('Merge Payment + Turno').first().json.turno_id,\n  mp_payment_id: $('Merge Payment + Turno').first().json.mp_payment_id\n}) }}"
+      },
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2850, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Webhook recibido pero no es payment.updated',\n  action: $json.body.action\n}) }}"
+      },
+      "name": "Ignore Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Pago no aprobado, ignorado',\n  status: $json.status\n}) }}"
+      },
+      "name": "Not Approved Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Pago procesado (sin conversación para WhatsApp)',\n  turno_id: $('Merge Payment + Turno').first().json.turno_id\n}) }}"
+      },
+      "name": "Success No WA Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2650, 200]
+    }
+  ],
+  "connections": {
+    "Webhook - MP Pago": {
+      "main": [
+        [
+          {
+            "node": "IF: Payment Updated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Payment Updated": {
+      "main": [
+        [
+          {
+            "node": "GET: MP Payment Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET: MP Payment Details": {
+      "main": [
+        [
+          {
+            "node": "IF: Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Approved": {
+      "main": [
+        [
+          {
+            "node": "Parse Payment Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not Approved Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Payment Data": {
+      "main": [
+        [
+          {
+            "node": "Baserow: Get Turno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baserow: Get Turno": {
+      "main": [
+        [
+          {
+            "node": "Merge Payment + Turno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Payment + Turno": {
+      "main": [
+        [
+          {
+            "node": "MCP: Confirmar Pago Completo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP: Confirmar Pago Completo": {
+      "main": [
+        [
+          {
+            "node": "Baserow: Update Turno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baserow: Update Turno": {
+      "main": [
+        [
+          {
+            "node": "Baserow: Get Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baserow: Get Lead": {
+      "main": [
+        [
+          {
+            "node": "Baserow: Update Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baserow: Update Lead": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Conversation": {
+      "main": [
+        [
+          {
+            "node": "Chatwoot: Send WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Success No WA Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chatwoot: Send WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "leraysi",
+      "id": "leraysi-salon"
+    },
+    {
+      "name": "mercadopago",
+      "id": "payment-webhook"
+    },
+    {
+      "name": "whatsapp",
+      "id": "chatwoot-integration"
+    }
+  ],
+  "meta": {
+    "instanceId": "leonobitech-n8n"
+  },
+  "pinData": {},
+  "notes": "## Leraysi - Webhook Pago Confirmado\n\nEste workflow procesa notificaciones de pago de MercadoPago para Estilos Leraysi.\n\n### Flujo:\n1. Recibe webhook de MercadoPago (payment.updated)\n2. Valida que el pago esté aprobado\n3. Extrae turno_id y lead_id del external_reference\n4. Busca turno en Baserow\n5. Llama a MCP tool para procesar todo en Odoo:\n   - Confirmar turno\n   - Crear contacto\n   - Vincular a Lead\n   - Mover a Calificado\n   - Crear evento calendario\n   - Generar PDF recibo\n   - Enviar email\n6. Actualiza Baserow (turno + lead)\n7. Envía WhatsApp de confirmación\n\n### Variables de entorno requeridas:\n- MP_ACCESS_TOKEN_LERAYSI\n- BASEROW_TURNOS_LERAYSI_TABLE_ID\n- BASEROW_LEADS_LERAYSI_TABLE_ID\n- MCP_SERVER_URL\n- MCP_API_KEY\n- CHATWOOT_API_URL\n- CHATWOOT_ACCOUNT_ID\n- CHATWOOT_API_KEY"
+}

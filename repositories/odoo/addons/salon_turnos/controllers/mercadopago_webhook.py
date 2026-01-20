@@ -157,6 +157,10 @@ class MercadoPagoWebhook(http.Controller):
                 )
                 _logger.info(f'Turno {turno.id} confirmado por pago MP {payment_id}')
 
+                # Notificar a n8n para que procese el resto del flujo
+                # (contacto, factura, calendario, email, WhatsApp)
+                self._notify_n8n_payment_confirmed(turno, payment_id, payment_data)
+
             elif status in ['pending', 'in_process']:
                 turno.message_post(
                     body=f'Pago pendiente en Mercado Pago. Payment ID: {payment_id}'
@@ -179,6 +183,73 @@ class MercadoPagoWebhook(http.Controller):
         # Similar a payment pero para órdenes
         _logger.info('Merchant order notification received')
         return {'status': 'ok', 'message': 'Merchant order processed'}
+
+    def _notify_n8n_payment_confirmed(self, turno, payment_id, payment_data):
+        """
+        Notifica a n8n que el pago fue confirmado.
+
+        n8n se encarga de:
+        - Crear contacto (res.partner)
+        - Crear factura (account.move)
+        - Crear evento calendario
+        - Enviar email con PDF
+        - Enviar WhatsApp
+
+        Esta llamada es "fire and forget" - si falla, el pago ya está registrado
+        en Odoo y se puede reintentar el enriquecimiento después.
+        """
+        n8n_webhook_url = request.env['ir.config_parameter'].sudo().get_param(
+            'salon_turnos.n8n_webhook_url'
+        )
+
+        if not n8n_webhook_url:
+            _logger.warning('n8n webhook URL no configurada, omitiendo notificación')
+            return
+
+        try:
+            # Preparar datos del turno para n8n
+            turno_data = {
+                'event': 'payment_confirmed',
+                'turno': {
+                    'id': turno.id,
+                    'clienta': turno.clienta,
+                    'telefono': turno.telefono,
+                    'email': turno.email,
+                    'servicio': turno.servicio,
+                    'servicio_detalle': turno.servicio_detalle,
+                    'fecha_hora': turno.fecha_hora.isoformat() if turno.fecha_hora else None,
+                    'duracion': turno.duracion,
+                    'precio': turno.precio,
+                    'sena': turno.sena,
+                    'monto_restante': turno.monto_restante,
+                },
+                'payment': {
+                    'mp_payment_id': str(payment_id),
+                    'status': payment_data.get('status'),
+                    'status_detail': payment_data.get('status_detail'),
+                    'payer_email': payment_data.get('payer', {}).get('email'),
+                },
+            }
+
+            # Llamada async-style (timeout corto, no esperamos respuesta)
+            response = requests.post(
+                n8n_webhook_url,
+                json=turno_data,
+                headers={'Content-Type': 'application/json'},
+                timeout=5,  # Timeout corto - fire and forget
+            )
+
+            if response.ok:
+                _logger.info(f'n8n notificado exitosamente para turno {turno.id}')
+            else:
+                _logger.warning(
+                    f'n8n respondió con error: {response.status_code} - {response.text}'
+                )
+
+        except requests.exceptions.Timeout:
+            _logger.warning(f'Timeout al notificar a n8n para turno {turno.id}')
+        except requests.exceptions.RequestException as e:
+            _logger.error(f'Error al notificar a n8n: {e}')
 
     @http.route(
         '/salon_turnos/pago/exito',

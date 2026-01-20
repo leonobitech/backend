@@ -19,6 +19,8 @@
     'data': [
         'security/ir.model.access.csv',
         'views/salon_turno_views.xml',
+        'report/recibo_pago_report.xml',
+        'report/recibo_pago_template.xml',
     ],
     'installable': True,
     'application': True,
