@@ -57,7 +57,7 @@ class MercadoPagoWebhook(http.Controller):
 
     @http.route(
         '/salon_turnos/webhook/mercadopago',
-        type='jsonrpc',
+        type='http',
         auth='none',
         methods=['POST'],
         csrf=False,
@@ -73,7 +73,19 @@ class MercadoPagoWebhook(http.Controller):
         - invoice: Factura (no usado)
         """
         try:
-            data = request.jsonrequest
+            # MP puede enviar datos como JSON body o query params
+            content_type = request.httprequest.content_type or ''
+
+            if 'application/json' in content_type:
+                data = json.loads(request.httprequest.data.decode('utf-8'))
+            else:
+                # Datos vienen como query params
+                data = {
+                    'type': kwargs.get('type'),
+                    'data': {'id': kwargs.get('data.id')},
+                    'action': kwargs.get('action'),
+                }
+
             _logger.info(f'Webhook MP recibido: {json.dumps(data)}')
 
             # Verificar firma si está configurada
@@ -84,23 +96,37 @@ class MercadoPagoWebhook(http.Controller):
                 data_id = data.get('data', {}).get('id')
                 if not self._verify_signature(x_signature, x_request_id, str(data_id)):
                     _logger.warning('Firma de webhook inválida')
-                    return {'status': 'error', 'message': 'Invalid signature'}
+                    return Response(
+                        json.dumps({'status': 'error', 'message': 'Invalid signature'}),
+                        content_type='application/json',
+                        status=401
+                    )
 
             # Procesar según tipo
             notification_type = data.get('type')
             action = data.get('action')
 
             if notification_type == 'payment':
-                return self._process_payment_notification(data)
+                result = self._process_payment_notification(data)
             elif notification_type == 'merchant_order':
-                return self._process_merchant_order(data)
+                result = self._process_merchant_order(data)
             else:
                 _logger.info(f'Tipo de notificación no manejado: {notification_type}')
-                return {'status': 'ok', 'message': 'Notification type not handled'}
+                result = {'status': 'ok', 'message': 'Notification type not handled'}
+
+            return Response(
+                json.dumps(result),
+                content_type='application/json',
+                status=200
+            )
 
         except Exception as e:
             _logger.error(f'Error procesando webhook MP: {e}')
-            return {'status': 'error', 'message': str(e)}
+            return Response(
+                json.dumps({'status': 'error', 'message': str(e)}),
+                content_type='application/json',
+                status=500
+            )
 
     def _process_payment_notification(self, data):
         """Procesa notificación de pago"""
