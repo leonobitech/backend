@@ -24,7 +24,7 @@ class MercadoPagoWebhook(http.Controller):
     - GET /salon_turnos/pago/pendiente - Página de pago pendiente
     """
 
-    def _verify_signature_v2(self, x_signature, x_request_id, data_id):
+    def _verify_signature_v2(self, x_signature, x_request_id, data_id, notification_type=None):
         """
         Verifica la firma del webhook V2 de MercadoPago usando HMAC-SHA256.
 
@@ -72,23 +72,36 @@ class MercadoPagoWebhook(http.Controller):
 
         # DEBUG: Probar múltiples formatos de manifest para identificar el correcto
         manifest_formats = [
-            f'id:{data_id};request-id:{x_request_id};ts:{ts};',  # Con trailing ;
-            f'id:{data_id};request-id:{x_request_id};ts:{ts}',   # Sin trailing ;
-            f'id:{data_id};ts:{ts};',                             # Sin request-id, con trailing ;
-            f'id:{data_id};ts:{ts}',                              # Sin request-id, sin trailing ;
-            f'ts:{ts};id:{data_id};request-id:{x_request_id};',  # Orden diferente
-            f'id:{data_id};',                                     # Solo id
+            # Formato documentado por MP
+            f'id:{data_id};request-id:{x_request_id};ts:{ts};',
+            f'id:{data_id};request-id:{x_request_id};ts:{ts}',
+            # Sin request-id
+            f'id:{data_id};ts:{ts};',
+            f'id:{data_id};ts:{ts}',
+            # Con type
+            f'id:{data_id};request-id:{x_request_id};ts:{ts};type:{notification_type};',
+            f'id:{data_id};ts:{ts};type:{notification_type};',
+            # Orden diferente
+            f'ts:{ts};id:{data_id};request-id:{x_request_id};',
+            # Solo data.id (algunos webhooks usan esto)
+            f'id:{data_id};',
+            # Con prefijo data.
+            f'data.id:{data_id};request-id:{x_request_id};ts:{ts};',
         ]
 
         _logger.info(f'[MP Webhook] === DEBUG: Probando formatos de manifest ===')
         _logger.info(f'  - data.id: {data_id}')
         _logger.info(f'  - x-request-id: {x_request_id}')
         _logger.info(f'  - ts: {ts}')
+        _logger.info(f'  - type: {notification_type}')
         _logger.info(f'  - received v1: {v1}')
 
         match = False
         matched_manifest = None
+        matched_key_type = None
 
+        # Probar con secret como string UTF-8
+        _logger.info(f'[MP Webhook] --- Probando con secret como UTF-8 string ---')
         for i, manifest in enumerate(manifest_formats):
             calculated = hmac.new(
                 webhook_secret.encode('utf-8'),
@@ -97,14 +110,38 @@ class MercadoPagoWebhook(http.Controller):
             ).hexdigest()
 
             is_match = hmac.compare_digest(calculated, v1)
-            _logger.info(f'  [{i+1}] manifest: "{manifest}"')
-            _logger.info(f'      calculated: {calculated} | MATCH: {is_match}')
+            _logger.info(f'  [{i+1}] "{manifest}" -> {calculated[:16]}... | {is_match}')
 
             if is_match:
                 match = True
                 matched_manifest = manifest
-                _logger.info(f'  >>> ENCONTRADO! Formato correcto: "{manifest}"')
+                matched_key_type = 'utf8'
+                _logger.info(f'  >>> ENCONTRADO con UTF-8! Formato: "{manifest}"')
                 break
+
+        # Si no coincide, probar con secret decodificado de hex a bytes
+        if not match:
+            _logger.info(f'[MP Webhook] --- Probando con secret decodificado de HEX ---')
+            try:
+                secret_bytes = bytes.fromhex(webhook_secret)
+                for i, manifest in enumerate(manifest_formats):
+                    calculated = hmac.new(
+                        secret_bytes,
+                        manifest.encode('utf-8'),
+                        hashlib.sha256
+                    ).hexdigest()
+
+                    is_match = hmac.compare_digest(calculated, v1)
+                    _logger.info(f'  [{i+1}] "{manifest}" -> {calculated[:16]}... | {is_match}')
+
+                    if is_match:
+                        match = True
+                        matched_manifest = manifest
+                        matched_key_type = 'hex_decoded'
+                        _logger.info(f'  >>> ENCONTRADO con HEX decoded! Formato: "{manifest}"')
+                        break
+            except ValueError as e:
+                _logger.warning(f'[MP Webhook] Secret no es hex válido: {e}')
 
         if not match:
             _logger.warning(f'[MP Webhook] Ningún formato de manifest coincide con v1')
@@ -192,7 +229,7 @@ class MercadoPagoWebhook(http.Controller):
                     status=401
                 )
 
-            is_valid, error_msg = self._verify_signature_v2(x_signature, x_request_id, str(data_id))
+            is_valid, error_msg = self._verify_signature_v2(x_signature, x_request_id, str(data_id), notification_type)
 
             if not is_valid:
                 _logger.warning(f'[MP Webhook] V2 FIRMA INVALIDA: {error_msg}')
