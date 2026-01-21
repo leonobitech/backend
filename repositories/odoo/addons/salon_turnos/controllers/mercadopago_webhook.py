@@ -226,12 +226,21 @@ class MercadoPagoWebhook(http.Controller):
                 _logger.warning('Pago sin external_reference')
                 return {'status': 'ok', 'message': 'No external reference'}
 
+            # Usar sudo con usuario admin (SUPERUSER_ID = 1) para evitar error de singleton
+            # Importante: auth='none' no tiene usuario, necesitamos uno válido para write_uid
+            TurnoModel = request.env['salon.turno'].with_user(1).sudo()
+
             # Buscar turno
-            turno = request.env['salon.turno'].sudo().browse(int(external_reference))
+            turno = TurnoModel.browse(int(external_reference))
 
             if not turno.exists():
                 _logger.warning(f'Turno {external_reference} no encontrado')
                 return {'status': 'error', 'message': 'Turno not found'}
+
+            # Deduplicación: verificar si ya procesamos este pago
+            if turno.mp_payment_id == str(payment_id):
+                _logger.info(f'Pago {payment_id} ya procesado para turno {turno.id}, ignorando duplicado')
+                return {'status': 'ok', 'message': 'Already processed'}
 
             # Actualizar según estado del pago
             if status == 'approved':
