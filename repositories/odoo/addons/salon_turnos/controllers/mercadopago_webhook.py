@@ -341,9 +341,11 @@ class MercadoPagoWebhook(http.Controller):
                     'precio': turno.precio,
                     'sena': turno.sena,
                     'monto_restante': turno.monto_restante,
+                    'mp_preference_id': turno.mp_preference_id,  # Para buscar en Baserow
                 },
                 'payment': {
                     'mp_payment_id': str(payment_id),
+                    'mp_preference_id': turno.mp_preference_id,  # Duplicado para fácil acceso
                     'status': payment_data.get('status'),
                     'status_detail': payment_data.get('status_detail'),
                     'payer_email': payment_data.get('payer', {}).get('email'),
