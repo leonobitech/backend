@@ -20,7 +20,8 @@ class MercadoPagoWebhook(http.Controller):
     - GET /salon_turnos/pago/pendiente - Página de pago pendiente
     """
 
-    def _verify_signature(self, x_signature, x_request_id, data_id, is_ipn_format=False):
+    def _verify_signature(self, x_signature, x_request_id, data_id, is_ipn_format=False,
+                          query_string='', body_raw=''):
         """
         Verifica la firma del webhook de MP.
         https://www.mercadopago.com.ar/developers/es/docs/your-integrations/notifications/webhooks
@@ -64,21 +65,44 @@ class MercadoPagoWebhook(http.Controller):
 
         # Probar múltiples formatos de manifest
         # Según documentación: "Remove any parameters that aren't present"
+        # Nota: El mismo payment_id genera diferentes v1 para IPN vs V2,
+        # lo que sugiere que MP incluye algo específico del formato.
         manifests_to_try = [
-            # Formato estándar (V2 con data.id en URL)
+            # Formato estándar documentado (V2 con data.id en URL)
             f'id:{data_id};request-id:{x_request_id};ts:{ts};',
             # Sin id (para IPN donde no hay data.id en URL)
             f'request-id:{x_request_id};ts:{ts};',
-            # Solo con ts y request-id invertidos
+            # Orden invertido
             f'ts:{ts};request-id:{x_request_id};',
             # Con id al final
             f'request-id:{x_request_id};ts:{ts};id:{data_id};',
         ]
 
+        # Agregar formatos específicos según IPN o V2
+        if is_ipn_format:
+            # Para IPN (?id=xxx&topic=yyy) quizás incluyen topic
+            topic = query_string.split('topic=')[1].split('&')[0] if 'topic=' in query_string else ''
+            if topic:
+                manifests_to_try.extend([
+                    f'id:{data_id};topic:{topic};request-id:{x_request_id};ts:{ts};',
+                    f'topic:{topic};id:{data_id};request-id:{x_request_id};ts:{ts};',
+                    # Sin id pero con topic
+                    f'topic:{topic};request-id:{x_request_id};ts:{ts};',
+                ])
+        else:
+            # Para V2 (?data.id=xxx&type=yyy) quizás incluyen type
+            type_val = query_string.split('type=')[1].split('&')[0] if 'type=' in query_string else ''
+            if type_val:
+                manifests_to_try.extend([
+                    f'data.id:{data_id};type:{type_val};request-id:{x_request_id};ts:{ts};',
+                    f'type:{type_val};data.id:{data_id};request-id:{x_request_id};ts:{ts};',
+                ])
+
         _logger.info(f'Signature verification - data_id: {data_id}')
         _logger.info(f'Signature verification - x_request_id: {x_request_id}')
         _logger.info(f'Signature verification - ts: {ts}')
         _logger.info(f'Signature verification - is_ipn_format: {is_ipn_format}')
+        _logger.info(f'Signature verification - query_string: {query_string}')
         _logger.info(f'Signature verification - received v1: {v1}')
 
         for i, manifest in enumerate(manifests_to_try):
@@ -89,9 +113,11 @@ class MercadoPagoWebhook(http.Controller):
             ).hexdigest()
 
             match = hmac.compare_digest(calculated, v1)
-            _logger.info(f'Signature verification - manifest[{i}]: {manifest}')
-            _logger.info(f'Signature verification - calculated[{i}]: {calculated}')
-            _logger.info(f'Signature verification - match[{i}]: {match}')
+            # Solo loguear los primeros 4 formatos en detalle, los nuevos solo si matchean
+            if i < 4 or match:
+                _logger.info(f'Signature verification - manifest[{i}]: {manifest[:100]}...')
+                _logger.info(f'Signature verification - calculated[{i}]: {calculated}')
+                _logger.info(f'Signature verification - match[{i}]: {match}')
 
             if match:
                 _logger.info(f'Signature verification - SUCCESS with manifest format {i}')
@@ -187,9 +213,14 @@ class MercadoPagoWebhook(http.Controller):
 
                 _logger.info(f'Webhook MP - data_id para firma: {data_id_for_signature}')
 
+                # Obtener query string y body raw para probar más formatos de manifest
+                query_string = request.httprequest.query_string.decode('utf-8') if request.httprequest.query_string else ''
+                body_raw = request.httprequest.data.decode('utf-8') if request.httprequest.data else ''
+
                 if data_id_for_signature:
                     signature_valid = self._verify_signature(
-                        x_signature, x_request_id, str(data_id_for_signature), is_ipn_format
+                        x_signature, x_request_id, str(data_id_for_signature), is_ipn_format,
+                        query_string, body_raw
                     )
 
                     if not signature_valid:
