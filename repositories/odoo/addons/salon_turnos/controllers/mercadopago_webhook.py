@@ -20,15 +20,15 @@ class MercadoPagoWebhook(http.Controller):
     - GET /salon_turnos/pago/pendiente - Página de pago pendiente
     """
 
-    def _verify_signature(self, x_signature, x_request_id, data_id, is_ipn_format=False,
-                          query_string='', body_raw=''):
+    def _verify_signature_v2(self, x_signature, x_request_id, data_id):
         """
-        Verifica la firma del webhook de MP.
-        https://www.mercadopago.com.ar/developers/es/docs/your-integrations/notifications/webhooks
+        Verifica la firma del webhook V2 de MercadoPago.
 
-        IMPORTANTE: La documentación dice "Remove any parameters that aren't present"
-        Para IPN format (?id=xxx), no existe 'data.id' en el URL, solo 'id'.
-        Probamos múltiples formatos de manifest para encontrar el correcto.
+        IMPORTANTE: Solo Webhook V2 (?data.id=xxx&type=xxx) soporta validación de firma.
+        IPN legacy (?id=xxx&topic=xxx) NO soporta validación de firma.
+
+        Manifest format: id:{data.id};request-id:{x-request-id};ts:{ts};
+        https://www.mercadopago.com.ar/developers/es/docs/your-integrations/notifications/webhooks
         """
         webhook_secret = request.env['ir.config_parameter'].sudo().get_param(
             'salon_turnos.mp_webhook_secret'
@@ -38,14 +38,9 @@ class MercadoPagoWebhook(http.Controller):
             _logger.warning('Webhook secret no configurado, omitiendo verificación')
             return True
 
-        # IMPORTANTE: Limpiar espacios en blanco del secret (común al copiar de MP)
         webhook_secret = webhook_secret.strip()
 
-        # Log para debug (solo longitud por seguridad)
-        _logger.info(f'Webhook secret length: {len(webhook_secret)}, first 4 chars: {webhook_secret[:4]}...')
-
-        # Parsear x_signature
-        # Formato: ts=xxx,v1=xxx
+        # Parsear x_signature: ts=xxx,v1=xxx
         parts = {}
         try:
             for part in x_signature.split(','):
@@ -63,68 +58,24 @@ class MercadoPagoWebhook(http.Controller):
             _logger.warning(f'Firma incompleta - ts: {ts}, v1: {v1}')
             return False
 
-        # Probar múltiples formatos de manifest
-        # Según documentación: "Remove any parameters that aren't present"
-        # Nota: El mismo payment_id genera diferentes v1 para IPN vs V2,
-        # lo que sugiere que MP incluye algo específico del formato.
-        manifests_to_try = [
-            # Formato estándar documentado (V2 con data.id en URL)
-            f'id:{data_id};request-id:{x_request_id};ts:{ts};',
-            # Sin id (para IPN donde no hay data.id en URL)
-            f'request-id:{x_request_id};ts:{ts};',
-            # Orden invertido
-            f'ts:{ts};request-id:{x_request_id};',
-            # Con id al final
-            f'request-id:{x_request_id};ts:{ts};id:{data_id};',
-        ]
+        # Manifest exacto para Webhook V2: id:{data.id};request-id:{x-request-id};ts:{ts};
+        manifest = f'id:{data_id};request-id:{x_request_id};ts:{ts};'
 
-        # Agregar formatos específicos según IPN o V2
-        if is_ipn_format:
-            # Para IPN (?id=xxx&topic=yyy) quizás incluyen topic
-            topic = query_string.split('topic=')[1].split('&')[0] if 'topic=' in query_string else ''
-            if topic:
-                manifests_to_try.extend([
-                    f'id:{data_id};topic:{topic};request-id:{x_request_id};ts:{ts};',
-                    f'topic:{topic};id:{data_id};request-id:{x_request_id};ts:{ts};',
-                    # Sin id pero con topic
-                    f'topic:{topic};request-id:{x_request_id};ts:{ts};',
-                ])
-        else:
-            # Para V2 (?data.id=xxx&type=yyy) quizás incluyen type
-            type_val = query_string.split('type=')[1].split('&')[0] if 'type=' in query_string else ''
-            if type_val:
-                manifests_to_try.extend([
-                    f'data.id:{data_id};type:{type_val};request-id:{x_request_id};ts:{ts};',
-                    f'type:{type_val};data.id:{data_id};request-id:{x_request_id};ts:{ts};',
-                ])
+        calculated = hmac.new(
+            webhook_secret.encode('utf-8'),
+            manifest.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
 
-        _logger.info(f'Signature verification - data_id: {data_id}')
-        _logger.info(f'Signature verification - x_request_id: {x_request_id}')
-        _logger.info(f'Signature verification - ts: {ts}')
-        _logger.info(f'Signature verification - is_ipn_format: {is_ipn_format}')
-        _logger.info(f'Signature verification - query_string: {query_string}')
-        _logger.info(f'Signature verification - received v1: {v1}')
+        match = hmac.compare_digest(calculated, v1)
 
-        for i, manifest in enumerate(manifests_to_try):
-            calculated = hmac.new(
-                webhook_secret.encode('utf-8'),
-                manifest.encode('utf-8'),
-                hashlib.sha256
-            ).hexdigest()
+        _logger.info(f'Signature V2 - data_id: {data_id}, x_request_id: {x_request_id}, ts: {ts}')
+        _logger.info(f'Signature V2 - manifest: {manifest}')
+        _logger.info(f'Signature V2 - calculated: {calculated}')
+        _logger.info(f'Signature V2 - received v1: {v1}')
+        _logger.info(f'Signature V2 - match: {match}')
 
-            match = hmac.compare_digest(calculated, v1)
-            # Solo loguear los primeros 4 formatos en detalle, los nuevos solo si matchean
-            if i < 4 or match:
-                _logger.info(f'Signature verification - manifest[{i}]: {manifest[:100]}...')
-                _logger.info(f'Signature verification - calculated[{i}]: {calculated}')
-                _logger.info(f'Signature verification - match[{i}]: {match}')
-
-            if match:
-                _logger.info(f'Signature verification - SUCCESS with manifest format {i}')
-                return True
-
-        _logger.warning(f'Signature verification - FAILED all {len(manifests_to_try)} manifest formats')
-        return False
+        return match
 
     @http.route(
         '/salon_turnos/webhook/mercadopago',
@@ -184,61 +135,39 @@ class MercadoPagoWebhook(http.Controller):
 
             _logger.info(f'Webhook MP - Data normalizada: {json.dumps(data)}')
 
-            # Verificar firma si está configurada
+            # Verificación de firma según tipo de notificación
+            # IMPORTANTE:
+            # - IPN (legacy): ?id=xxx&topic=xxx -> NO soporta validación de firma
+            # - Webhook V2: ?data.id=xxx&type=xxx -> SÍ soporta validación de firma
+            #
+            # Para IPN, la seguridad se basa en verificar el pago contra la API de MP.
             x_signature = request.httprequest.headers.get('x-signature')
             x_request_id = request.httprequest.headers.get('x-request-id')
 
-            # Verificación de firma del webhook
-            # NOTA: Hay un bug conocido de MercadoPago donde la firma falla para pagos reales
-            # pero funciona para tests desde la UI. Ver: github.com/mercadopago/sdk-nodejs/discussions/318
-            #
-            # SEGURIDAD: La verificación real se hace consultando la API de MP antes de confirmar
-            # el pago (líneas 211-217). Esto asegura que el pago existe y está aprobado.
-            #
-            # Configuración: salon_turnos.mp_webhook_strict_signature
-            # - true: rechaza webhooks con firma inválida (puede bloquear pagos reales por bug de MP)
-            # - false: solo logea warning y continúa (recomendado hasta que MP arregle el bug)
-            strict_signature = request.env['ir.config_parameter'].sudo().get_param(
-                'salon_turnos.mp_webhook_strict_signature', 'false'
-            ).lower() == 'true'
-
-            if x_signature and x_request_id:
-                # Determinar data_id para verificación de firma
-                # En IPN: viene de kwargs['id']
-                # En V2: viene de kwargs['data.id'] o body['data']['id']
-                if is_ipn_format:
-                    data_id_for_signature = kwargs.get('id')
-                else:
-                    data_id_for_signature = kwargs.get('data.id') or data.get('data', {}).get('id')
-
-                _logger.info(f'Webhook MP - data_id para firma: {data_id_for_signature}')
-
-                # Obtener query string y body raw para probar más formatos de manifest
-                query_string = request.httprequest.query_string.decode('utf-8') if request.httprequest.query_string else ''
-                body_raw = request.httprequest.data.decode('utf-8') if request.httprequest.data else ''
+            if is_ipn_format:
+                # IPN (legacy) NO soporta validación de firma
+                _logger.info('Webhook MP - IPN format: firma NO aplica, se verificará contra API de MP')
+            elif x_signature and x_request_id:
+                # Webhook V2 SÍ soporta validación de firma
+                data_id_for_signature = kwargs.get('data.id') or data.get('data', {}).get('id')
 
                 if data_id_for_signature:
-                    signature_valid = self._verify_signature(
-                        x_signature, x_request_id, str(data_id_for_signature), is_ipn_format,
-                        query_string, body_raw
+                    _logger.info(f'Webhook MP - V2 format: validando firma para data.id={data_id_for_signature}')
+
+                    signature_valid = self._verify_signature_v2(
+                        x_signature, x_request_id, str(data_id_for_signature)
                     )
 
                     if not signature_valid:
-                        _logger.warning(
-                            f'Firma de webhook inválida para data_id: {data_id_for_signature}. '
-                            f'strict_signature={strict_signature}. '
-                            f'NOTA: Esto es un bug conocido de MercadoPago para pagos reales.'
+                        _logger.warning(f'Webhook MP - V2: Firma inválida para data.id={data_id_for_signature}')
+                        return Response(
+                            json.dumps({'status': 'error', 'message': 'Invalid signature'}),
+                            content_type='application/json',
+                            status=401
                         )
-
-                        if strict_signature:
-                            return Response(
-                                json.dumps({'status': 'error', 'message': 'Invalid signature'}),
-                                content_type='application/json',
-                                status=401
-                            )
-                        # Si no es strict, continuamos pero el pago se validará contra la API de MP
+                    _logger.info('Webhook MP - V2: Firma válida')
                 else:
-                    _logger.warning('No se pudo determinar data_id para verificar firma')
+                    _logger.warning('Webhook MP - V2: No se pudo determinar data.id para verificar firma')
             else:
                 _logger.info('Webhook MP - Sin headers de firma (x-signature/x-request-id)')
 
