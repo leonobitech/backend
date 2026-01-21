@@ -24,12 +24,36 @@ class MercadoPagoWebhook(http.Controller):
     - GET /salon_turnos/pago/pendiente - Página de pago pendiente
     """
 
-    def _verify_signature_v2(self, x_signature, x_request_id, data_id, notification_type=None):
+    # =========================================================================
+    # TODO: Verificación de firma HMAC-SHA256 deshabilitada temporalmente
+    # =========================================================================
+    # La verificación de firma no funciona a pesar de:
+    # - Secret correcto (verificado: primeros/últimos 8 chars coinciden, len=64)
+    # - Formato de manifest según documentación: id:{data.id};request-id:{x-request-id};ts:{ts};
+    # - HMAC-SHA256 con secret.encode('utf-8') y manifest.encode('utf-8')
+    #
+    # Se probaron múltiples variaciones sin éxito:
+    # - Con/sin trailing semicolon
+    # - Con/sin request-id
+    # - Secret como UTF-8 string y como hex-decoded bytes
+    # - Diferentes órdenes de campos
+    #
+    # Seguridad alternativa: Se verifica el pago consultando la API de MP
+    # antes de confirmar el turno (ver _process_payment_notification).
+    #
+    # Refs:
+    # - https://www.mercadopago.com.ar/developers/en/docs/checkout-pro/payment-notifications
+    # - https://github.com/mercadopago/sdk-nodejs/discussions/318 (issue similar reportado)
+    # =========================================================================
+
+    def _verify_signature_v2(self, x_signature, x_request_id, data_id):
         """
         Verifica la firma del webhook V2 de MercadoPago usando HMAC-SHA256.
 
-        Manifest format: id:{data.id};request-id:{x_request_id};ts:{ts};
-        NOTA: El manifest termina en punto y coma (;)
+        TODO: Esta función está deshabilitada porque la firma nunca coincide.
+        Ver comentario arriba para detalles del problema.
+
+        Manifest format según docs: id:{data.id};request-id:{x_request_id};ts:{ts};
 
         Args:
             x_signature: Header x-signature con formato "ts=xxx,v1=xxx"
@@ -44,13 +68,9 @@ class MercadoPagoWebhook(http.Controller):
         )
 
         if not webhook_secret:
-            _logger.warning('[MP Webhook] SECRET NO CONFIGURADO - salon_turnos.mp_webhook_secret')
             return False, 'Webhook secret not configured'
 
         webhook_secret = webhook_secret.strip()
-
-        # DEBUG: Mostrar primeros y últimos caracteres del secret para verificar configuración
-        _logger.info(f'[MP Webhook] Secret configurado: {webhook_secret[:8]}...{webhook_secret[-8:]} (len={len(webhook_secret)})')
 
         # Parsear x_signature: ts=xxx,v1=xxx
         parts = {}
@@ -60,93 +80,24 @@ class MercadoPagoWebhook(http.Controller):
                     key, value = part.split('=', 1)
                     parts[key.strip()] = value.strip()
         except Exception as e:
-            _logger.error(f'[MP Webhook] Error parseando x-signature: {x_signature}, error: {e}')
             return False, f'Invalid x-signature format: {e}'
 
         ts = parts.get('ts')
         v1 = parts.get('v1')
 
         if not ts or not v1:
-            _logger.warning(f'[MP Webhook] Firma incompleta - ts: {ts}, v1: {v1}')
             return False, 'Incomplete signature (missing ts or v1)'
 
-        # DEBUG: Probar múltiples formatos de manifest para identificar el correcto
-        manifest_formats = [
-            # Formato documentado por MP
-            f'id:{data_id};request-id:{x_request_id};ts:{ts};',
-            f'id:{data_id};request-id:{x_request_id};ts:{ts}',
-            # Sin request-id
-            f'id:{data_id};ts:{ts};',
-            f'id:{data_id};ts:{ts}',
-            # Con type
-            f'id:{data_id};request-id:{x_request_id};ts:{ts};type:{notification_type};',
-            f'id:{data_id};ts:{ts};type:{notification_type};',
-            # Orden diferente
-            f'ts:{ts};id:{data_id};request-id:{x_request_id};',
-            # Solo data.id (algunos webhooks usan esto)
-            f'id:{data_id};',
-            # Con prefijo data.
-            f'data.id:{data_id};request-id:{x_request_id};ts:{ts};',
-        ]
+        # Formato documentado por MercadoPago
+        manifest = f'id:{data_id};request-id:{x_request_id};ts:{ts};'
 
-        _logger.info(f'[MP Webhook] === DEBUG: Probando formatos de manifest ===')
-        _logger.info(f'  - data.id: {data_id}')
-        _logger.info(f'  - x-request-id: {x_request_id}')
-        _logger.info(f'  - ts: {ts}')
-        _logger.info(f'  - type: {notification_type}')
-        _logger.info(f'  - received v1: {v1}')
+        calculated = hmac.new(
+            webhook_secret.encode('utf-8'),
+            manifest.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
 
-        match = False
-        matched_manifest = None
-        matched_key_type = None
-
-        # Probar con secret como string UTF-8
-        _logger.info(f'[MP Webhook] --- Probando con secret como UTF-8 string ---')
-        for i, manifest in enumerate(manifest_formats):
-            calculated = hmac.new(
-                webhook_secret.encode('utf-8'),
-                manifest.encode('utf-8'),
-                hashlib.sha256
-            ).hexdigest()
-
-            is_match = hmac.compare_digest(calculated, v1)
-            _logger.info(f'  [{i+1}] "{manifest}" -> {calculated[:16]}... | {is_match}')
-
-            if is_match:
-                match = True
-                matched_manifest = manifest
-                matched_key_type = 'utf8'
-                _logger.info(f'  >>> ENCONTRADO con UTF-8! Formato: "{manifest}"')
-                break
-
-        # Si no coincide, probar con secret decodificado de hex a bytes
-        if not match:
-            _logger.info(f'[MP Webhook] --- Probando con secret decodificado de HEX ---')
-            try:
-                secret_bytes = bytes.fromhex(webhook_secret)
-                for i, manifest in enumerate(manifest_formats):
-                    calculated = hmac.new(
-                        secret_bytes,
-                        manifest.encode('utf-8'),
-                        hashlib.sha256
-                    ).hexdigest()
-
-                    is_match = hmac.compare_digest(calculated, v1)
-                    _logger.info(f'  [{i+1}] "{manifest}" -> {calculated[:16]}... | {is_match}')
-
-                    if is_match:
-                        match = True
-                        matched_manifest = manifest
-                        matched_key_type = 'hex_decoded'
-                        _logger.info(f'  >>> ENCONTRADO con HEX decoded! Formato: "{manifest}"')
-                        break
-            except ValueError as e:
-                _logger.warning(f'[MP Webhook] Secret no es hex válido: {e}')
-
-        if not match:
-            _logger.warning(f'[MP Webhook] Ningún formato de manifest coincide con v1')
-
-        if match:
+        if hmac.compare_digest(calculated, v1):
             return True, None
         else:
             return False, 'Signature mismatch'
@@ -213,26 +164,11 @@ class MercadoPagoWebhook(http.Controller):
             _logger.info(f'[MP Webhook] V2 detectado: data.id={data_id}, type={notification_type}')
 
             # =========================================================
-            # PASO 3: Validar firma x-signature
-            # NOTA: Temporalmente desactivado - la firma no valida correctamente
-            # pero verificamos el pago consultando la API de MP antes de confirmar
-            # TODO: Investigar por qué la firma no coincide y reactivar
+            # PASO 3: Verificación de firma (TODO: deshabilitada)
+            # La firma no valida correctamente - ver TODO en _verify_signature_v2
+            # Seguridad: el pago se verifica via API de MP antes de confirmar
             # =========================================================
-            x_signature = request.httprequest.headers.get('x-signature')
-            x_request_id = request.httprequest.headers.get('x-request-id')
-
-            # Solo verificar que los headers existan (para logging)
-            if x_signature and x_request_id:
-                # Intentar verificar firma (solo para logging, no bloquea)
-                is_valid, error_msg = self._verify_signature_v2(x_signature, x_request_id, str(data_id), notification_type)
-                if not is_valid:
-                    _logger.warning(f'[MP Webhook] FIRMA NO COINCIDE (bypass activo): {error_msg}')
-                else:
-                    _logger.info(f'[MP Webhook] FIRMA VALIDA')
-            else:
-                _logger.warning(f'[MP Webhook] Headers de firma ausentes (bypass activo)')
-
-            _logger.info(f'[MP Webhook] V2 ACEPTADO - Procesando notificación (verificación por API)')
+            _logger.info(f'[MP Webhook] Procesando (verificación de firma omitida, se valida via API)')
 
             # =========================================================
             # PASO 4: Procesar notificación según tipo
