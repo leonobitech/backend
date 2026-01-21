@@ -164,9 +164,9 @@ class SalonTurno(models.Model):
             )
 
         # Crear preferencia de pago
-        webhook_url = self.env['ir.config_parameter'].sudo().get_param(
-            'web.base.url'
-        ) + '/salon_turnos/webhook/mercadopago'
+        # NOTA: notification_url se configura desde el panel de MercadoPago,
+        # no desde el código, para evitar problemas con webhooks IPN legacy.
+        # Configurar en: https://www.mercadopago.com.ar/developers/panel/app/{APP_ID}/webhooks
 
         preference_data = {
             'items': [{
@@ -181,7 +181,7 @@ class SalonTurno(models.Model):
                 'phone': {'number': self.telefono},
             },
             'external_reference': str(self.id),
-            'notification_url': webhook_url,
+            # notification_url: Se configura desde panel MP, no desde código
             'back_urls': {
                 'success': f'{self.env["ir.config_parameter"].sudo().get_param("web.base.url")}/salon_turnos/pago/exito',
                 'failure': f'{self.env["ir.config_parameter"].sudo().get_param("web.base.url")}/salon_turnos/pago/error',

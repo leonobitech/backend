@@ -13,8 +13,12 @@ class MercadoPagoWebhook(http.Controller):
     """
     Webhook para recibir notificaciones de Mercado Pago.
 
+    IMPORTANTE: Solo se aceptan notificaciones Webhook V2.
+    - V2 usa query params: ?data.id=xxx&type=xxx
+    - IPN legacy (?id=xxx&topic=xxx) es RECHAZADO
+
     Endpoints:
-    - POST /salon_turnos/webhook/mercadopago - Webhook principal
+    - POST /salon_turnos/webhook/mercadopago - Webhook principal (solo V2)
     - GET /salon_turnos/pago/exito - Página de pago exitoso
     - GET /salon_turnos/pago/error - Página de error en pago
     - GET /salon_turnos/pago/pendiente - Página de pago pendiente
@@ -22,21 +26,26 @@ class MercadoPagoWebhook(http.Controller):
 
     def _verify_signature_v2(self, x_signature, x_request_id, data_id):
         """
-        Verifica la firma del webhook V2 de MercadoPago.
+        Verifica la firma del webhook V2 de MercadoPago usando HMAC-SHA256.
 
-        IMPORTANTE: Solo Webhook V2 (?data.id=xxx&type=xxx) soporta validación de firma.
-        IPN legacy (?id=xxx&topic=xxx) NO soporta validación de firma.
+        Manifest format: id:{data.id};request-id:{x_request_id};ts:{ts};
+        NOTA: El manifest termina en punto y coma (;)
 
-        Manifest format: id:{data.id};request-id:{x-request-id};ts:{ts};
-        https://www.mercadopago.com.ar/developers/es/docs/your-integrations/notifications/webhooks
+        Args:
+            x_signature: Header x-signature con formato "ts=xxx,v1=xxx"
+            x_request_id: Header x-request-id
+            data_id: Valor de data.id del query param
+
+        Returns:
+            tuple: (is_valid: bool, error_message: str or None)
         """
         webhook_secret = request.env['ir.config_parameter'].sudo().get_param(
             'salon_turnos.mp_webhook_secret'
         )
 
         if not webhook_secret:
-            _logger.warning('Webhook secret no configurado, omitiendo verificación')
-            return True
+            _logger.warning('[MP Webhook] SECRET NO CONFIGURADO - salon_turnos.mp_webhook_secret')
+            return False, 'Webhook secret not configured'
 
         webhook_secret = webhook_secret.strip()
 
@@ -48,17 +57,18 @@ class MercadoPagoWebhook(http.Controller):
                     key, value = part.split('=', 1)
                     parts[key.strip()] = value.strip()
         except Exception as e:
-            _logger.error(f'Error parseando x_signature: {x_signature}, error: {e}')
-            return False
+            _logger.error(f'[MP Webhook] Error parseando x-signature: {x_signature}, error: {e}')
+            return False, f'Invalid x-signature format: {e}'
 
         ts = parts.get('ts')
         v1 = parts.get('v1')
 
         if not ts or not v1:
-            _logger.warning(f'Firma incompleta - ts: {ts}, v1: {v1}')
-            return False
+            _logger.warning(f'[MP Webhook] Firma incompleta - ts: {ts}, v1: {v1}')
+            return False, 'Incomplete signature (missing ts or v1)'
 
-        # Manifest exacto para Webhook V2: id:{data.id};request-id:{x-request-id};ts:{ts};
+        # Manifest exacto para Webhook V2: id:{data.id};request-id:{x_request_id};ts:{ts};
+        # IMPORTANTE: Termina en punto y coma (;)
         manifest = f'id:{data_id};request-id:{x_request_id};ts:{ts};'
 
         calculated = hmac.new(
@@ -69,13 +79,20 @@ class MercadoPagoWebhook(http.Controller):
 
         match = hmac.compare_digest(calculated, v1)
 
-        _logger.info(f'Signature V2 - data_id: {data_id}, x_request_id: {x_request_id}, ts: {ts}')
-        _logger.info(f'Signature V2 - manifest: {manifest}')
-        _logger.info(f'Signature V2 - calculated: {calculated}')
-        _logger.info(f'Signature V2 - received v1: {v1}')
-        _logger.info(f'Signature V2 - match: {match}')
+        # Logging detallado para debugging
+        _logger.info(f'[MP Webhook] Signature verification:')
+        _logger.info(f'  - data.id: {data_id}')
+        _logger.info(f'  - x-request-id: {x_request_id}')
+        _logger.info(f'  - ts: {ts}')
+        _logger.info(f'  - manifest: {manifest}')
+        _logger.info(f'  - calculated: {calculated}')
+        _logger.info(f'  - received v1: {v1}')
+        _logger.info(f'  - MATCH: {match}')
 
-        return match
+        if match:
+            return True, None
+        else:
+            return False, 'Signature mismatch'
 
     @http.route(
         '/salon_turnos/webhook/mercadopago',
@@ -86,102 +103,121 @@ class MercadoPagoWebhook(http.Controller):
     )
     def webhook_mercadopago(self, **kwargs):
         """
-        Recibe notificaciones de Mercado Pago.
+        Recibe notificaciones de Mercado Pago (SOLO WEBHOOK V2).
 
-        Tipos de notificación:
-        - payment: Pago realizado
-        - plan: Suscripción (no usado)
-        - subscription: Suscripción (no usado)
-        - invoice: Factura (no usado)
+        Formato V2 esperado:
+        - Query params: ?data.id=123&type=payment
+        - Headers: x-signature, x-request-id
 
-        Formatos de webhook:
-        1. IPN (legacy): ?id=123&topic=payment
-        2. Webhook V2: ?data.id=123&type=payment (JSON body)
+        Formato IPN legacy (RECHAZADO):
+        - Query params: ?id=123&topic=payment
         """
         try:
-            # Log de toda la request para debug
-            _logger.info(f'Webhook MP - Query params (kwargs): {kwargs}')
-            _logger.info(f'Webhook MP - Headers: x-signature={request.httprequest.headers.get("x-signature")}, x-request-id={request.httprequest.headers.get("x-request-id")}')
+            _logger.info(f'[MP Webhook] === NUEVA NOTIFICACION ===')
+            _logger.info(f'[MP Webhook] Query params: {kwargs}')
+            _logger.info(f'[MP Webhook] Headers: x-signature={request.httprequest.headers.get("x-signature")}, x-request-id={request.httprequest.headers.get("x-request-id")}')
 
-            # MP puede enviar datos como JSON body o query params
-            content_type = request.httprequest.content_type or ''
-
-            # Detectar formato IPN (legacy) vs Webhook V2
-            is_ipn_format = kwargs.get('topic') is not None
-
-            if 'application/json' in content_type:
-                body_data = json.loads(request.httprequest.data.decode('utf-8'))
-                _logger.info(f'Webhook MP - JSON body: {json.dumps(body_data)}')
-                data = body_data
-            else:
-                body_data = {}
-                _logger.info('Webhook MP - No JSON body')
+            # =========================================================
+            # PASO 1: Detectar y RECHAZAR formato IPN legacy
+            # =========================================================
+            is_ipn_format = kwargs.get('topic') is not None or (
+                kwargs.get('id') is not None and kwargs.get('data.id') is None
+            )
 
             if is_ipn_format:
-                # Formato IPN: ?id=123&topic=payment
-                _logger.info('Webhook MP - Detectado formato IPN (legacy)')
-                data = {
-                    'type': kwargs.get('topic'),  # 'payment', 'merchant_order', etc.
-                    'data': {'id': kwargs.get('id')},  # En IPN es 'id', no 'data.id'
-                    'action': None,
-                }
-            elif not body_data:
-                # Formato query params nuevo: ?data.id=123&type=payment
-                data = {
-                    'type': kwargs.get('type'),
-                    'data': {'id': kwargs.get('data.id')},
-                    'action': kwargs.get('action'),
-                }
+                _logger.warning(f'[MP Webhook] RECHAZADO: Formato IPN legacy detectado (id={kwargs.get("id")}, topic={kwargs.get("topic")})')
+                _logger.warning(f'[MP Webhook] Configure webhook V2 en panel de MercadoPago')
+                return Response(
+                    json.dumps({
+                        'status': 'error',
+                        'message': 'IPN legacy format not supported. Use Webhook V2 (?data.id=xxx&type=xxx)'
+                    }),
+                    content_type='application/json',
+                    status=400
+                )
 
-            _logger.info(f'Webhook MP - Data normalizada: {json.dumps(data)}')
+            # =========================================================
+            # PASO 2: Validar formato V2
+            # =========================================================
+            data_id = kwargs.get('data.id')
+            notification_type = kwargs.get('type')
 
-            # Verificación de firma según tipo de notificación
-            # IMPORTANTE:
-            # - IPN (legacy): ?id=xxx&topic=xxx -> NO soporta validación de firma
-            # - Webhook V2: ?data.id=xxx&type=xxx -> SÍ soporta validación de firma
-            #
-            # Para IPN, la seguridad se basa en verificar el pago contra la API de MP.
+            if not data_id or not notification_type:
+                _logger.warning(f'[MP Webhook] RECHAZADO: Faltan parámetros V2 (data.id={data_id}, type={notification_type})')
+                return Response(
+                    json.dumps({
+                        'status': 'error',
+                        'message': 'Missing required V2 params: data.id and type'
+                    }),
+                    content_type='application/json',
+                    status=400
+                )
+
+            _logger.info(f'[MP Webhook] V2 detectado: data.id={data_id}, type={notification_type}')
+
+            # =========================================================
+            # PASO 3: Validar firma x-signature (OBLIGATORIO para V2)
+            # =========================================================
             x_signature = request.httprequest.headers.get('x-signature')
             x_request_id = request.httprequest.headers.get('x-request-id')
 
-            if is_ipn_format:
-                # IPN (legacy) NO soporta validación de firma
-                _logger.info('Webhook MP - IPN format: firma NO aplica, se verificará contra API de MP')
-            elif x_signature and x_request_id:
-                # Webhook V2 SÍ soporta validación de firma
-                data_id_for_signature = kwargs.get('data.id') or data.get('data', {}).get('id')
+            if not x_signature or not x_request_id:
+                _logger.warning(f'[MP Webhook] RECHAZADO: Faltan headers de firma (x-signature={x_signature}, x-request-id={x_request_id})')
+                return Response(
+                    json.dumps({
+                        'status': 'error',
+                        'message': 'Missing signature headers (x-signature, x-request-id)'
+                    }),
+                    content_type='application/json',
+                    status=401
+                )
 
-                if data_id_for_signature:
-                    _logger.info(f'Webhook MP - V2 format: validando firma para data.id={data_id_for_signature}')
+            is_valid, error_msg = self._verify_signature_v2(x_signature, x_request_id, str(data_id))
 
-                    signature_valid = self._verify_signature_v2(
-                        x_signature, x_request_id, str(data_id_for_signature)
-                    )
+            if not is_valid:
+                _logger.warning(f'[MP Webhook] V2 FIRMA INVALIDA: {error_msg}')
+                return Response(
+                    json.dumps({
+                        'status': 'error',
+                        'message': f'Invalid signature: {error_msg}'
+                    }),
+                    content_type='application/json',
+                    status=401
+                )
 
-                    if not signature_valid:
-                        _logger.warning(f'Webhook MP - V2: Firma inválida para data.id={data_id_for_signature}')
-                        return Response(
-                            json.dumps({'status': 'error', 'message': 'Invalid signature'}),
-                            content_type='application/json',
-                            status=401
-                        )
-                    _logger.info('Webhook MP - V2: Firma válida')
-                else:
-                    _logger.warning('Webhook MP - V2: No se pudo determinar data.id para verificar firma')
-            else:
-                _logger.info('Webhook MP - Sin headers de firma (x-signature/x-request-id)')
+            _logger.info(f'[MP Webhook] V2 FIRMA VALIDA - Procesando notificación')
 
-            # Procesar según tipo
-            notification_type = data.get('type')
-            action = data.get('action')
+            # =========================================================
+            # PASO 4: Procesar notificación según tipo
+            # =========================================================
+            # Normalizar datos para procesamiento interno
+            data = {
+                'type': notification_type,
+                'data': {'id': data_id},
+                'action': kwargs.get('action'),
+            }
+
+            # También intentar leer JSON body si existe
+            content_type = request.httprequest.content_type or ''
+            if 'application/json' in content_type:
+                try:
+                    body_data = json.loads(request.httprequest.data.decode('utf-8'))
+                    _logger.info(f'[MP Webhook] JSON body adicional: {json.dumps(body_data)}')
+                    # Merge body data si tiene info adicional
+                    if body_data.get('action'):
+                        data['action'] = body_data.get('action')
+                except Exception as e:
+                    _logger.debug(f'[MP Webhook] No se pudo parsear JSON body: {e}')
 
             if notification_type == 'payment':
                 result = self._process_payment_notification(data)
             elif notification_type == 'merchant_order':
                 result = self._process_merchant_order(data)
             else:
-                _logger.info(f'Tipo de notificación no manejado: {notification_type}')
-                result = {'status': 'ok', 'message': 'Notification type not handled'}
+                _logger.info(f'[MP Webhook] Tipo de notificación no manejado: {notification_type}')
+                result = {'status': 'ok', 'message': f'Notification type {notification_type} not handled'}
+
+            _logger.info(f'[MP Webhook] === FIN NOTIFICACION === Resultado: {result}')
 
             return Response(
                 json.dumps(result),
@@ -190,7 +226,7 @@ class MercadoPagoWebhook(http.Controller):
             )
 
         except Exception as e:
-            _logger.error(f'Error procesando webhook MP: {e}')
+            _logger.error(f'[MP Webhook] ERROR CRITICO: {e}', exc_info=True)
             return Response(
                 json.dumps({'status': 'error', 'message': str(e)}),
                 content_type='application/json',
