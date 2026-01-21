@@ -299,6 +299,9 @@ class MercadoPagoWebhook(http.Controller):
         n8n_webhook_url = request.env['ir.config_parameter'].sudo().get_param(
             'salon_turnos.n8n_webhook_url'
         )
+        n8n_webhook_secret = request.env['ir.config_parameter'].sudo().get_param(
+            'salon_turnos.n8n_webhook_secret'
+        )
 
         if not n8n_webhook_url:
             _logger.warning('n8n webhook URL no configurada, omitiendo notificación')
@@ -329,11 +332,16 @@ class MercadoPagoWebhook(http.Controller):
                 },
             }
 
+            # Headers con autenticación
+            headers = {'Content-Type': 'application/json'}
+            if n8n_webhook_secret:
+                headers['X-Webhook-Secret'] = n8n_webhook_secret
+
             # Llamada async-style (timeout corto, no esperamos respuesta)
             response = requests.post(
                 n8n_webhook_url,
                 json=turno_data,
-                headers={'Content-Type': 'application/json'},
+                headers=headers,
                 timeout=5,  # Timeout corto - fire and forget
             )
 
