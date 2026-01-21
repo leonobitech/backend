@@ -3,7 +3,7 @@ import logging
 import hmac
 import hashlib
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from odoo import http
 from odoo.http import request, Response
 
@@ -328,7 +328,9 @@ class MercadoPagoWebhook(http.Controller):
 
         try:
             # Preparar datos del turno para n8n
-            confirmado_at = datetime.utcnow().isoformat() + 'Z'
+            # Argentina timezone (UTC-3)
+            argentina_tz = timezone(timedelta(hours=-3))
+            confirmado_at = datetime.now(argentina_tz).isoformat()
 
             turno_data = {
                 'event': 'payment_confirmed',
