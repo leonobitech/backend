@@ -17,6 +17,10 @@ class MercadoPagoWebhook(http.Controller):
     - V2 usa query params: ?data.id=xxx&type=xxx
     - IPN legacy (?id=xxx&topic=xxx) es RECHAZADO
 
+    Seguridad:
+    - Verificación de firma HMAC-SHA256 (x-signature header)
+    - Verificación adicional consultando API de MercadoPago
+
     Endpoints:
     - POST /salon_turnos/webhook/mercadopago - Webhook principal (solo V2)
     - GET /salon_turnos/pago/exito - Página de pago exitoso
@@ -24,36 +28,11 @@ class MercadoPagoWebhook(http.Controller):
     - GET /salon_turnos/pago/pendiente - Página de pago pendiente
     """
 
-    # =========================================================================
-    # TODO: Verificación de firma HMAC-SHA256 deshabilitada temporalmente
-    # =========================================================================
-    # La verificación de firma no funciona a pesar de:
-    # - Secret correcto (verificado: primeros/últimos 8 chars coinciden, len=64)
-    # - Formato de manifest según documentación: id:{data.id};request-id:{x-request-id};ts:{ts};
-    # - HMAC-SHA256 con secret.encode('utf-8') y manifest.encode('utf-8')
-    #
-    # Se probaron múltiples variaciones sin éxito:
-    # - Con/sin trailing semicolon
-    # - Con/sin request-id
-    # - Secret como UTF-8 string y como hex-decoded bytes
-    # - Diferentes órdenes de campos
-    #
-    # Seguridad alternativa: Se verifica el pago consultando la API de MP
-    # antes de confirmar el turno (ver _process_payment_notification).
-    #
-    # Refs:
-    # - https://www.mercadopago.com.ar/developers/en/docs/checkout-pro/payment-notifications
-    # - https://github.com/mercadopago/sdk-nodejs/discussions/318 (issue similar reportado)
-    # =========================================================================
-
     def _verify_signature_v2(self, x_signature, x_request_id, data_id):
         """
         Verifica la firma del webhook V2 de MercadoPago usando HMAC-SHA256.
 
-        TODO: Esta función está deshabilitada porque la firma nunca coincide.
-        Ver comentario arriba para detalles del problema.
-
-        Manifest format según docs: id:{data.id};request-id:{x_request_id};ts:{ts};
+        Manifest format: id:{data.id};request-id:{x_request_id};ts:{ts};
 
         Args:
             x_signature: Header x-signature con formato "ts=xxx,v1=xxx"
@@ -121,9 +100,7 @@ class MercadoPagoWebhook(http.Controller):
         - Query params: ?id=123&topic=payment
         """
         try:
-            _logger.info(f'[MP Webhook] === NUEVA NOTIFICACION ===')
-            _logger.info(f'[MP Webhook] Query params: {kwargs}')
-            _logger.info(f'[MP Webhook] Headers: x-signature={request.httprequest.headers.get("x-signature")}, x-request-id={request.httprequest.headers.get("x-request-id")}')
+            _logger.info(f'[MP Webhook] Notificación recibida: type={kwargs.get("type")}, data.id={kwargs.get("data.id")}')
 
             # =========================================================
             # PASO 1: Detectar y RECHAZAR formato IPN legacy
@@ -164,11 +141,35 @@ class MercadoPagoWebhook(http.Controller):
             _logger.info(f'[MP Webhook] V2 detectado: data.id={data_id}, type={notification_type}')
 
             # =========================================================
-            # PASO 3: Verificación de firma (TODO: deshabilitada)
-            # La firma no valida correctamente - ver TODO en _verify_signature_v2
-            # Seguridad: el pago se verifica via API de MP antes de confirmar
+            # PASO 3: Verificación de firma HMAC-SHA256
             # =========================================================
-            _logger.info(f'[MP Webhook] Procesando (verificación de firma omitida, se valida via API)')
+            x_signature = request.httprequest.headers.get('x-signature')
+            x_request_id = request.httprequest.headers.get('x-request-id')
+
+            if x_signature and x_request_id:
+                is_valid, error = self._verify_signature_v2(x_signature, x_request_id, data_id)
+                if is_valid:
+                    _logger.info('[MP Webhook] Firma verificada correctamente')
+                else:
+                    _logger.warning(f'[MP Webhook] Firma inválida: {error}')
+                    return Response(
+                        json.dumps({
+                            'status': 'error',
+                            'message': f'Invalid signature: {error}'
+                        }),
+                        content_type='application/json',
+                        status=401
+                    )
+            else:
+                _logger.warning('[MP Webhook] Headers de firma no presentes, rechazando')
+                return Response(
+                    json.dumps({
+                        'status': 'error',
+                        'message': 'Missing x-signature or x-request-id headers'
+                    }),
+                    content_type='application/json',
+                    status=401
+                )
 
             # =========================================================
             # PASO 4: Procesar notificación según tipo
@@ -180,17 +181,15 @@ class MercadoPagoWebhook(http.Controller):
                 'action': kwargs.get('action'),
             }
 
-            # También intentar leer JSON body si existe
+            # Intentar leer JSON body si existe (MP a veces envía action en body)
             content_type = request.httprequest.content_type or ''
             if 'application/json' in content_type:
                 try:
                     body_data = json.loads(request.httprequest.data.decode('utf-8'))
-                    _logger.info(f'[MP Webhook] JSON body adicional: {json.dumps(body_data)}')
-                    # Merge body data si tiene info adicional
                     if body_data.get('action'):
                         data['action'] = body_data.get('action')
-                except Exception as e:
-                    _logger.debug(f'[MP Webhook] No se pudo parsear JSON body: {e}')
+                except Exception:
+                    pass
 
             if notification_type == 'payment':
                 result = self._process_payment_notification(data)
@@ -200,7 +199,7 @@ class MercadoPagoWebhook(http.Controller):
                 _logger.info(f'[MP Webhook] Tipo de notificación no manejado: {notification_type}')
                 result = {'status': 'ok', 'message': f'Notification type {notification_type} not handled'}
 
-            _logger.info(f'[MP Webhook] === FIN NOTIFICACION === Resultado: {result}')
+            _logger.info(f'[MP Webhook] Procesado: {result.get("status", "unknown")}')
 
             return Response(
                 json.dumps(result),
@@ -241,7 +240,7 @@ class MercadoPagoWebhook(http.Controller):
             response.raise_for_status()
             payment_data = response.json()
 
-            _logger.info(f'Datos del pago: {json.dumps(payment_data)}')
+            _logger.info(f'[MP Webhook] Pago {payment_id}: status={payment_data.get("status")}, external_ref={payment_data.get("external_reference")}')
 
             # Obtener referencia externa (ID del turno)
             external_reference = payment_data.get('external_reference')
