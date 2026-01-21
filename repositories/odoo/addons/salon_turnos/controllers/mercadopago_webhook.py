@@ -143,10 +143,12 @@ class MercadoPagoWebhook(http.Controller):
             # =========================================================
             # PASO 3: Verificación de firma HMAC-SHA256 (opcional)
             # =========================================================
-            # TODO: La verificación de firma funciona con notificaciones simuladas
-            # pero falla con pagos reales. Posibles causas:
-            # - Secrets diferentes entre test y producción en MP
-            # - Formato de firma diferente en pagos reales vs simulados
+            # TODO: La verificación de firma funciona con "Simular notificación"
+            # desde el panel de MP, pero falla con pagos reales.
+            #
+            # Hipótesis: El problema viene de cómo Odoo procesa el request
+            # en el contexto del addon (no es Cloudflare/Traefik).
+            # Investigar: werkzeug request parsing, Odoo http middleware.
             #
             # Por ahora: loguear resultado pero no bloquear.
             # Seguridad garantizada por verificación via API de MP en PASO 4.
