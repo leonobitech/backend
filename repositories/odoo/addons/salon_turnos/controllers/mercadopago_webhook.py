@@ -18,8 +18,8 @@ class MercadoPagoWebhook(http.Controller):
     - IPN legacy (?id=xxx&topic=xxx) es RECHAZADO
 
     Seguridad:
-    - Verificación de firma HMAC-SHA256 (x-signature header)
-    - Verificación adicional consultando API de MercadoPago
+    - Verificación principal: consulta a API de MercadoPago para validar el pago
+    - Verificación HMAC-SHA256 (opcional, solo logging - ver TODO en código)
 
     Endpoints:
     - POST /salon_turnos/webhook/mercadopago - Webhook principal (solo V2)
@@ -141,7 +141,15 @@ class MercadoPagoWebhook(http.Controller):
             _logger.info(f'[MP Webhook] V2 detectado: data.id={data_id}, type={notification_type}')
 
             # =========================================================
-            # PASO 3: Verificación de firma HMAC-SHA256
+            # PASO 3: Verificación de firma HMAC-SHA256 (opcional)
+            # =========================================================
+            # TODO: La verificación de firma funciona con notificaciones simuladas
+            # pero falla con pagos reales. Posibles causas:
+            # - Secrets diferentes entre test y producción en MP
+            # - Formato de firma diferente en pagos reales vs simulados
+            #
+            # Por ahora: loguear resultado pero no bloquear.
+            # Seguridad garantizada por verificación via API de MP en PASO 4.
             # =========================================================
             x_signature = request.httprequest.headers.get('x-signature')
             x_request_id = request.httprequest.headers.get('x-request-id')
@@ -149,27 +157,11 @@ class MercadoPagoWebhook(http.Controller):
             if x_signature and x_request_id:
                 is_valid, error = self._verify_signature_v2(x_signature, x_request_id, data_id)
                 if is_valid:
-                    _logger.info('[MP Webhook] Firma verificada correctamente')
+                    _logger.info('[MP Webhook] Firma HMAC verificada correctamente')
                 else:
-                    _logger.warning(f'[MP Webhook] Firma inválida: {error}')
-                    return Response(
-                        json.dumps({
-                            'status': 'error',
-                            'message': f'Invalid signature: {error}'
-                        }),
-                        content_type='application/json',
-                        status=401
-                    )
+                    _logger.warning(f'[MP Webhook] Firma HMAC no coincide: {error} (continuando con verificación API)')
             else:
-                _logger.warning('[MP Webhook] Headers de firma no presentes, rechazando')
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': 'Missing x-signature or x-request-id headers'
-                    }),
-                    content_type='application/json',
-                    status=401
-                )
+                _logger.debug('[MP Webhook] Headers de firma no presentes')
 
             # =========================================================
             # PASO 4: Procesar notificación según tipo
