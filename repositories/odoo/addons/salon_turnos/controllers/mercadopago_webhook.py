@@ -49,6 +49,9 @@ class MercadoPagoWebhook(http.Controller):
 
         webhook_secret = webhook_secret.strip()
 
+        # DEBUG: Mostrar primeros caracteres del secret para verificar configuración
+        _logger.info(f'[MP Webhook] Secret configurado: {webhook_secret[:8]}... (len={len(webhook_secret)})')
+
         # Parsear x_signature: ts=xxx,v1=xxx
         parts = {}
         try:
