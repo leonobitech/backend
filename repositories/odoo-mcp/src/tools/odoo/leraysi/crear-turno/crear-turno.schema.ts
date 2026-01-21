@@ -36,7 +36,8 @@ export interface CrearTurnoResponse {
   servicio: string;
   precio: number;
   sena: number;
-  link_pago: string | null;
+  link_pago: string;
+  mp_preference_id: string;
   estado: string;
   message: string;
 }

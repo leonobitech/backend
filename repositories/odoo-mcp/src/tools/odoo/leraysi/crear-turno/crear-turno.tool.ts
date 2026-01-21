@@ -49,7 +49,8 @@ export class CrearTurnoLeraysiTool
     logger.info({ turnoId }, "[CrearTurnoLeraysi] Appointment created");
 
     // Intentar generar link de pago
-    let linkPago: string | null = null;
+    let linkPago = "";
+    let mpPreferenceId = "";
     try {
       // Llamar al método del modelo para generar el link
       await this.odooClient.execute(
@@ -58,12 +59,14 @@ export class CrearTurnoLeraysiTool
         [[turnoId]]
       );
 
-      // Leer el link generado
+      // Leer el link generado y el preference_id
       const turnos = await this.odooClient.read("salon.turno", [turnoId], [
         "link_pago",
+        "mp_preference_id",
       ]);
-      if (turnos.length > 0 && turnos[0].link_pago) {
-        linkPago = turnos[0].link_pago;
+      if (turnos.length > 0) {
+        linkPago = turnos[0].link_pago || "";
+        mpPreferenceId = turnos[0].mp_preference_id || "";
       }
     } catch (error) {
       logger.warn(
@@ -83,6 +86,7 @@ export class CrearTurnoLeraysiTool
       precio: params.precio,
       sena,
       link_pago: linkPago,
+      mp_preference_id: mpPreferenceId,
       estado: "pendiente_pago",
       message: linkPago
         ? `Turno creado para ${params.clienta}. Link de pago generado.`

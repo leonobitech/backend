@@ -3,6 +3,7 @@ import logging
 import hmac
 import hashlib
 import requests
+from datetime import datetime
 from odoo import http
 from odoo.http import request, Response
 
@@ -327,6 +328,8 @@ class MercadoPagoWebhook(http.Controller):
 
         try:
             # Preparar datos del turno para n8n
+            confirmado_at = datetime.utcnow().isoformat() + 'Z'
+
             turno_data = {
                 'event': 'payment_confirmed',
                 'turno': {
@@ -341,6 +344,7 @@ class MercadoPagoWebhook(http.Controller):
                     'precio': turno.precio,
                     'sena': turno.sena,
                     'monto_restante': turno.monto_restante,
+                    'estado': turno.estado,  # Ya actualizado a 'confirmado'
                     'mp_preference_id': turno.mp_preference_id,  # Para buscar en Baserow
                 },
                 'payment': {
@@ -349,6 +353,7 @@ class MercadoPagoWebhook(http.Controller):
                     'status': payment_data.get('status'),
                     'status_detail': payment_data.get('status_detail'),
                     'payer_email': payment_data.get('payer', {}).get('email'),
+                    'confirmado_at': confirmado_at,
                 },
             }
 
