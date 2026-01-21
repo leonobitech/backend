@@ -70,27 +70,44 @@ class MercadoPagoWebhook(http.Controller):
             _logger.warning(f'[MP Webhook] Firma incompleta - ts: {ts}, v1: {v1}')
             return False, 'Incomplete signature (missing ts or v1)'
 
-        # Manifest exacto para Webhook V2: id:{data.id};request-id:{x_request_id};ts:{ts};
-        # IMPORTANTE: Termina en punto y coma (;)
-        manifest = f'id:{data_id};request-id:{x_request_id};ts:{ts};'
+        # DEBUG: Probar múltiples formatos de manifest para identificar el correcto
+        manifest_formats = [
+            f'id:{data_id};request-id:{x_request_id};ts:{ts};',  # Con trailing ;
+            f'id:{data_id};request-id:{x_request_id};ts:{ts}',   # Sin trailing ;
+            f'id:{data_id};ts:{ts};',                             # Sin request-id, con trailing ;
+            f'id:{data_id};ts:{ts}',                              # Sin request-id, sin trailing ;
+            f'ts:{ts};id:{data_id};request-id:{x_request_id};',  # Orden diferente
+            f'id:{data_id};',                                     # Solo id
+        ]
 
-        calculated = hmac.new(
-            webhook_secret.encode('utf-8'),
-            manifest.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-
-        match = hmac.compare_digest(calculated, v1)
-
-        # Logging detallado para debugging
-        _logger.info(f'[MP Webhook] Signature verification:')
+        _logger.info(f'[MP Webhook] === DEBUG: Probando formatos de manifest ===')
         _logger.info(f'  - data.id: {data_id}')
         _logger.info(f'  - x-request-id: {x_request_id}')
         _logger.info(f'  - ts: {ts}')
-        _logger.info(f'  - manifest: {manifest}')
-        _logger.info(f'  - calculated: {calculated}')
         _logger.info(f'  - received v1: {v1}')
-        _logger.info(f'  - MATCH: {match}')
+
+        match = False
+        matched_manifest = None
+
+        for i, manifest in enumerate(manifest_formats):
+            calculated = hmac.new(
+                webhook_secret.encode('utf-8'),
+                manifest.encode('utf-8'),
+                hashlib.sha256
+            ).hexdigest()
+
+            is_match = hmac.compare_digest(calculated, v1)
+            _logger.info(f'  [{i+1}] manifest: "{manifest}"')
+            _logger.info(f'      calculated: {calculated} | MATCH: {is_match}')
+
+            if is_match:
+                match = True
+                matched_manifest = manifest
+                _logger.info(f'  >>> ENCONTRADO! Formato correcto: "{manifest}"')
+                break
+
+        if not match:
+            _logger.warning(f'[MP Webhook] Ningún formato de manifest coincide con v1')
 
         if match:
             return True, None
