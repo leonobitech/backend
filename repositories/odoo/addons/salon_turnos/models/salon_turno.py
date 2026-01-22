@@ -28,6 +28,15 @@ class SalonTurno(models.Model):
         tracking=True,
     )
 
+    # Relación con CRM
+    lead_id = fields.Many2one(
+        'crm.lead',
+        string='Oportunidad',
+        ondelete='set null',
+        tracking=True,
+        help='Lead/Oportunidad asociada en el CRM',
+    )
+
     # Datos del servicio
     servicio = fields.Selection(
         selection=[
@@ -278,7 +287,7 @@ class SalonTurno(models.Model):
                 raise UserError(f'Campo requerido faltante: {field}')
 
         # Crear turno
-        turno = self.create({
+        turno_vals = {
             'clienta': data['clienta'],
             'telefono': data['telefono'],
             'servicio': data['servicio'],
@@ -288,7 +297,13 @@ class SalonTurno(models.Model):
             'email': data.get('email'),
             'notas': data.get('notas'),
             'servicio_detalle': data.get('servicio_detalle'),
-        })
+        }
+
+        # Agregar lead_id si se proporciona
+        if data.get('lead_id'):
+            turno_vals['lead_id'] = int(data['lead_id'])
+
+        turno = self.create(turno_vals)
 
         # Generar link de pago si se solicita
         if data.get('generar_link_pago', True):
@@ -359,6 +374,7 @@ class SalonTurno(models.Model):
             'clienta': self.clienta,
             'telefono': self.telefono,
             'email': self.email,
+            'lead_id': self.lead_id.id if self.lead_id else None,
             'servicio': self.servicio,
             'servicio_detalle': self.servicio_detalle,
             'fecha_hora': self.fecha_hora.isoformat() if self.fecha_hora else None,
@@ -369,6 +385,8 @@ class SalonTurno(models.Model):
             'sena_pagada': self.sena_pagada,
             'monto_restante': self.monto_restante,
             'link_pago': self.link_pago,
+            'mp_preference_id': self.mp_preference_id,
+            'mp_payment_id': self.mp_payment_id,
             'estado': self.estado,
             'notas': self.notas,
             'create_date': self.create_date.isoformat() if self.create_date else None,

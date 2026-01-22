@@ -43,6 +43,7 @@ export class CrearTurnoLeraysiTool
     if (params.email) values.email = params.email;
     if (params.notas) values.notas = params.notas;
     if (params.servicio_detalle) values.servicio_detalle = params.servicio_detalle;
+    if (params.lead_id) values.lead_id = params.lead_id;
 
     const turnoId = await this.odooClient.create("salon.turno", values);
 
@@ -153,6 +154,10 @@ export class CrearTurnoLeraysiTool
           servicio_detalle: {
             type: "string",
             description: "Descripción detallada del servicio si es necesario",
+          },
+          lead_id: {
+            type: "number",
+            description: "ID del Lead en CRM (crm.lead) para vincular el turno",
           },
         },
         required: ["clienta", "telefono", "servicio", "fecha_hora", "precio"],

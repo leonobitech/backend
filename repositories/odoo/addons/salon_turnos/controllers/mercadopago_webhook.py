@@ -274,9 +274,13 @@ class MercadoPagoWebhook(http.Controller):
                 )
                 _logger.info(f'Turno {turno.id} confirmado por pago MP {payment_id}')
 
-                # Notificar a n8n para que procese el resto del flujo
-                # (contacto, factura, calendario, email, WhatsApp)
-                self._notify_n8n_payment_confirmed(turno, payment_id, payment_data)
+                # Llamar al MCP para ejecutar el proceso completo de confirmación
+                # (contacto, factura, calendario, email con PDF)
+                mcp_result = self._call_mcp_confirmar_pago(turno, payment_id)
+
+                # Notificar a n8n para el resto del flujo (Baserow, WhatsApp)
+                # Incluye datos enriquecidos del MCP si están disponibles
+                self._notify_n8n_payment_confirmed(turno, payment_id, payment_data, mcp_result)
 
             elif status in ['pending', 'in_process']:
                 turno.message_post(
@@ -301,19 +305,114 @@ class MercadoPagoWebhook(http.Controller):
         _logger.info('Merchant order notification received')
         return {'status': 'ok', 'message': 'Merchant order processed'}
 
-    def _notify_n8n_payment_confirmed(self, turno, payment_id, payment_data):
+    def _call_mcp_confirmar_pago(self, turno, payment_id):
+        """
+        Llama al MCP server para ejecutar el proceso completo de confirmación.
+
+        El MCP ejecuta:
+        - Crear contacto en res.partner (si no existe)
+        - Vincular contacto al Lead
+        - Mover Lead a "Calificado"
+        - Crear evento en calendario
+        - Crear factura
+        - Generar PDF de factura
+        - Enviar email con PDF adjunto
+
+        Args:
+            turno: record del turno
+            payment_id: ID del pago de MercadoPago
+
+        Returns:
+            dict con resultado del MCP o None si falló/no configurado
+        """
+        mcp_url = request.env['ir.config_parameter'].sudo().get_param(
+            'salon_turnos.mcp_url'
+        )
+        mcp_token = request.env['ir.config_parameter'].sudo().get_param(
+            'salon_turnos.mcp_service_token'
+        )
+
+        if not mcp_url:
+            _logger.warning('[MCP] URL no configurada, omitiendo proceso MCP')
+            return None
+
+        if not mcp_token:
+            _logger.warning('[MCP] Service token no configurado, omitiendo proceso MCP')
+            return None
+
+        # Verificar que el turno tenga lead_id
+        lead_id = turno.lead_id.id if turno.lead_id else None
+
+        if not lead_id:
+            _logger.warning(f'[MCP] Turno {turno.id} no tiene lead_id asociado, omitiendo proceso MCP')
+            return None
+
+        try:
+            payload = {
+                'tool': 'leraysi_confirmar_pago_completo',
+                'arguments': {
+                    'turno_id': turno.id,
+                    'mp_payment_id': str(payment_id),
+                    'lead_id': lead_id,
+                }
+            }
+
+            # Agregar email_override si el turno tiene email
+            if turno.email:
+                payload['arguments']['email_override'] = turno.email
+
+            _logger.info(f'[MCP] Llamando a leraysi_confirmar_pago_completo para turno {turno.id}')
+
+            response = requests.post(
+                f'{mcp_url}/internal/mcp/call-tool',
+                json=payload,
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-Service-Token': mcp_token,
+                },
+                timeout=60,  # Timeout más largo porque el proceso es completo
+            )
+
+            if response.ok:
+                result = response.json()
+                _logger.info(f'[MCP] Proceso completado para turno {turno.id}: {result.get("success", False)}')
+                return result
+            else:
+                _logger.error(f'[MCP] Error: {response.status_code} - {response.text}')
+                return None
+
+        except requests.exceptions.Timeout:
+            _logger.error(f'[MCP] Timeout al procesar turno {turno.id}')
+            return None
+        except requests.exceptions.RequestException as e:
+            _logger.error(f'[MCP] Error de conexión: {e}')
+            return None
+        except Exception as e:
+            _logger.error(f'[MCP] Error inesperado: {e}', exc_info=True)
+            return None
+
+    def _notify_n8n_payment_confirmed(self, turno, payment_id, payment_data, mcp_result=None):
         """
         Notifica a n8n que el pago fue confirmado.
 
         n8n se encarga de:
+        - Actualizar Baserow (turno + lead)
+        - Enviar WhatsApp
+
+        Nota: El MCP ya se encargó de:
         - Crear contacto (res.partner)
         - Crear factura (account.move)
         - Crear evento calendario
         - Enviar email con PDF
-        - Enviar WhatsApp
 
         Esta llamada es "fire and forget" - si falla, el pago ya está registrado
         en Odoo y se puede reintentar el enriquecimiento después.
+
+        Args:
+            turno: record del turno
+            payment_id: ID del pago MP
+            payment_data: datos del pago de la API de MP
+            mcp_result: resultado del MCP (opcional, para datos enriquecidos)
         """
         n8n_webhook_url = request.env['ir.config_parameter'].sudo().get_param(
             'salon_turnos.n8n_webhook_url'
@@ -348,6 +447,7 @@ class MercadoPagoWebhook(http.Controller):
                     'monto_restante': turno.monto_restante,
                     'estado': turno.estado,  # Ya actualizado a 'confirmado'
                     'mp_preference_id': turno.mp_preference_id,  # Para buscar en Baserow
+                    'lead_id': turno.lead_id.id if turno.lead_id else None,
                 },
                 'payment': {
                     'mp_payment_id': str(payment_id),
@@ -357,6 +457,8 @@ class MercadoPagoWebhook(http.Controller):
                     'payer_email': payment_data.get('payer', {}).get('email'),
                     'confirmado_at': confirmado_at,
                 },
+                # Datos enriquecidos del MCP (si están disponibles)
+                'mcp': mcp_result if mcp_result else None,
             }
 
             # Headers con autenticación

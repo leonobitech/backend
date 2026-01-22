@@ -25,6 +25,7 @@ export const crearTurnoSchema = z.object({
   email: z.string().email().optional(),
   notas: z.string().optional(),
   servicio_detalle: z.string().optional(),
+  lead_id: z.number().optional().describe("ID del Lead en CRM (crm.lead)"),
 });
 
 export type CrearTurnoInput = z.infer<typeof crearTurnoSchema>;

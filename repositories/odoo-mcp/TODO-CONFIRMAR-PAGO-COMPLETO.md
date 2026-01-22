@@ -1,13 +1,14 @@
-# TODO: Integrar `leraysi_confirmar_pago_completo` con Webhook de Odoo
+# COMPLETADO: Integrar `leraysi_confirmar_pago_completo` con Webhook de Odoo
+
+## Estado: IMPLEMENTADO (2026-01-22)
 
 ## Contexto
 
-Actualmente cuando llega un pago confirmado de MercadoPago:
+Flujo actual cuando llega un pago confirmado de MercadoPago:
 1. Odoo recibe el webhook y actualiza el turno (`sena_pagada=true`, `estado=confirmado`)
-2. Odoo envía webhook a n8n con datos básicos
-3. n8n actualiza Baserow y envía WhatsApp
-
-**Objetivo:** Que Odoo llame a la tool `leraysi_confirmar_pago_completo` vía MCP para ejecutar todo el proceso post-pago en Odoo (contacto, factura, calendario, email) antes de notificar a n8n.
+2. **NUEVO:** Odoo llama al MCP (`leraysi_confirmar_pago_completo`) para ejecutar proceso completo
+3. Odoo envía webhook a n8n con datos enriquecidos
+4. n8n actualiza Baserow y envía WhatsApp
 
 ---
 
@@ -41,25 +42,13 @@ Actualmente cuando llega un pago confirmado de MercadoPago:
 
 ---
 
-## Problema: Falta `lead_id` en `salon.turno`
+## Tareas Completadas
 
-El modelo `salon.turno` no tiene campo `lead_id`. La tool lo necesita para:
-- Vincular contacto al Lead
-- Mover Lead a "Calificado"
-- Crear evento vinculado al Lead
-- Postear en chatter del Lead
-
----
-
-## Tareas Pendientes
-
-### 1. Agregar `lead_id` al modelo `salon.turno`
+### 1. ✅ Agregar `lead_id` al modelo `salon.turno`
 
 **Archivo:** `backend/repositories/odoo/addons/salon_turnos/models/salon_turno.py`
 
 ```python
-# Agregar después de la línea 29 (email)
-
 # Relación con CRM
 lead_id = fields.Many2one(
     'crm.lead',
@@ -70,125 +59,104 @@ lead_id = fields.Many2one(
 )
 ```
 
-### 2. Actualizar `api_crear_turno` para aceptar `lead_id`
+### 2. ✅ Actualizar `api_crear_turno` para aceptar `lead_id`
 
-**Archivo:** `backend/repositories/odoo/addons/salon_turnos/models/salon_turno.py`
+Se actualizo para recibir `lead_id` y pasarlo al crear el turno.
 
-En el método `api_crear_turno` (línea ~281), agregar `lead_id`:
+### 3. ✅ Actualizar `_to_dict` para incluir `lead_id`
 
-```python
-turno = self.create({
-    'clienta': data['clienta'],
-    # ... otros campos ...
-    'lead_id': data.get('lead_id'),  # <-- Agregar
-})
-```
+El método ahora retorna `lead_id` en el diccionario.
 
-### 3. Actualizar `_to_dict` para incluir `lead_id`
+### 4. ✅ Actualizar `leraysi_crear_turno` tool
 
-**Archivo:** `backend/repositories/odoo/addons/salon_turnos/models/salon_turno.py`
+**Archivos actualizados:**
+- `crear-turno.schema.ts` - Agregado `lead_id` al schema Zod
+- `crear-turno.tool.ts` - Agregado `lead_id` a valores y al inputSchema
 
-En el método `_to_dict` (línea ~354), agregar:
-
-```python
-return {
-    'id': self.id,
-    # ... otros campos ...
-    'lead_id': self.lead_id.id if self.lead_id else None,  # <-- Agregar
-}
-```
-
-### 4. Actualizar `leraysi_crear_turno` tool
-
-**Archivo:** `backend/repositories/odoo-mcp/src/tools/odoo/leraysi/crear-turno/crear-turno.tool.ts`
-
-- Agregar `lead_id` al input schema
-- Pasar `lead_id` al crear el turno en Odoo
-
-### 5. Modificar webhook para llamar al MCP
+### 5. ✅ Modificar webhook para llamar al MCP
 
 **Archivo:** `backend/repositories/odoo/addons/salon_turnos/controllers/mercadopago_webhook.py`
 
-Modificar `_notify_n8n_payment_confirmed` para:
-
-1. Primero llamar al MCP:
-```python
-mcp_url = request.env['ir.config_parameter'].sudo().get_param('salon_turnos.mcp_url')
-mcp_token = request.env['ir.config_parameter'].sudo().get_param('salon_turnos.mcp_service_token')
-
-response = requests.post(
-    f'{mcp_url}/internal/mcp/call-tool',
-    json={
-        'tool': 'leraysi_confirmar_pago_completo',
-        'arguments': {
-            'turno_id': turno.id,
-            'mp_payment_id': str(payment_id),
-            'lead_id': turno.lead_id.id if turno.lead_id else None,
-        }
-    },
-    headers={
-        'Content-Type': 'application/json',
-        'X-Service-Token': mcp_token,
-    },
-    timeout=30,
-)
-```
-
-2. Incluir datos enriquecidos (partner_id, invoice_id, event_id) en el webhook a n8n
-
-### 6. Agregar parámetros de sistema en Odoo
-
-En Odoo > Ajustes > Parámetros del Sistema, agregar:
-- `salon_turnos.mcp_url` = URL del servidor MCP (ej: `http://odoo-mcp:3002`)
-- `salon_turnos.mcp_service_token` = Token de servicio del MCP
+Se agregó el método `_call_mcp_confirmar_pago` que:
+1. Lee parámetros `salon_turnos.mcp_url` y `salon_turnos.mcp_service_token`
+2. Llama a `leraysi_confirmar_pago_completo` vía HTTP POST
+3. Pasa resultado enriquecido a `_notify_n8n_payment_confirmed`
 
 ---
 
-## Flujo Final
+## ⚠️ Configuración Pendiente en Odoo
+
+### Agregar parámetros de sistema en Odoo
+
+En **Odoo > Ajustes > Técnico > Parámetros del Sistema**, agregar:
+
+| Clave | Valor | Descripción |
+|-------|-------|-------------|
+| `salon_turnos.mcp_url` | `http://odoo_mcp:8100` | URL del servidor MCP (nombre del container Docker + puerto interno) |
+| `salon_turnos.mcp_service_token` | `<token>` | Token del MCP (ver `.env` del odoo-mcp) |
+
+**Nota:** El token se configura en `backend/repositories/odoo-mcp/.env` como `SERVICE_TOKEN`
+
+---
+
+## Flujo Implementado
 
 ```
-MercadoPago → Odoo Webhook
+MercadoPago → POST /salon_turnos/webhook/mercadopago
                     ↓
-              Valida pago
+              _process_payment_notification()
+              - Valida pago con API de MP
+              - Actualiza turno (estado=confirmado)
                     ↓
-              Llama MCP (leraysi_confirmar_pago_completo)
+              _call_mcp_confirmar_pago()
+              POST /internal/mcp/call-tool
+              X-Service-Token: <token>
                     ↓
-              MCP ejecuta en Odoo:
-              - Crea contacto
-              - Vincula a Lead
-              - Mueve Lead a Calificado
-              - Crea evento calendario
-              - Crea factura
-              - Genera PDF
-              - Envía email
+              MCP ejecuta leraysi_confirmar_pago_completo:
+              ✓ Crea contacto (res.partner)
+              ✓ Vincula contacto a Lead
+              ✓ Mueve Lead a "Calificado"
+              ✓ Crea evento en calendario
+              ✓ Crea factura (account.move)
+              ✓ Genera PDF de factura
+              ✓ Envía email con PDF adjunto
                     ↓
-              Retorna resultado a Odoo
+              Retorna resultado a Odoo (mcp_result)
                     ↓
-              Odoo envía webhook a n8n con datos enriquecidos
+              _notify_n8n_payment_confirmed()
+              POST <n8n_webhook_url>
+              Incluye: turno, payment, mcp (datos enriquecidos)
                     ↓
               n8n actualiza Baserow y envía WhatsApp
 ```
 
 ---
 
-## Archivos a Modificar
+## Archivos Modificados
 
-1. `backend/repositories/odoo/addons/salon_turnos/models/salon_turno.py`
-2. `backend/repositories/odoo/addons/salon_turnos/controllers/mercadopago_webhook.py`
-3. `backend/repositories/odoo-mcp/src/tools/odoo/leraysi/crear-turno/crear-turno.tool.ts`
-4. `backend/repositories/odoo-mcp/src/tools/odoo/leraysi/crear-turno/crear-turno.schema.ts`
+| Archivo | Cambio |
+|---------|--------|
+| `backend/repositories/odoo/addons/salon_turnos/models/salon_turno.py` | ✅ Agregado `lead_id`, actualizado `api_crear_turno` y `_to_dict` |
+| `backend/repositories/odoo/addons/salon_turnos/controllers/mercadopago_webhook.py` | ✅ Agregado `_call_mcp_confirmar_pago`, actualizado `_notify_n8n_payment_confirmed` |
+| `backend/repositories/odoo-mcp/src/tools/odoo/leraysi/crear-turno/crear-turno.tool.ts` | ✅ Agregado `lead_id` a values e inputSchema |
+| `backend/repositories/odoo-mcp/src/tools/odoo/leraysi/crear-turno/crear-turno.schema.ts` | ✅ Agregado `lead_id` al schema Zod |
 
 ---
 
-## Notas Adicionales
+## Notas Técnicas
 
-- El MCP ya tiene el endpoint `/internal/mcp/call-tool` funcionando
+- El MCP endpoint `/internal/mcp/call-tool` está funcionando
 - La autenticación es via header `X-Service-Token`
-- La tool `leraysi_confirmar_pago_completo` ya está completa y testeada
-- Solo falta el campo `lead_id` para conectar todo
+- La tool `leraysi_confirmar_pago_completo` está completa y testeada
+- El campo `lead_id` ha sido agregado y conecta todo el flujo
 
 ---
 
-## Fecha
+## Historial
 
-Documentado: 2026-01-22 ~01:00 Argentina
+- **2026-01-22 ~01:00** - Documentación inicial del TODO
+- **2026-01-22 ~03:00** - Implementación completada:
+  - Agregado `lead_id` al modelo `salon.turno`
+  - Actualizado `api_crear_turno` y `_to_dict`
+  - Actualizado `crear-turno.tool.ts` y schema
+  - Agregado `_call_mcp_confirmar_pago` al webhook

@@ -45,10 +45,11 @@ Este documento explica la arquitectura modular y granular del conector Odoo MCP.
 ### 2. Modularidad Extrema
 
 Cada tool, resource y prompt está en su propia carpeta con:
+
 - ✅ README.md - Documentación completa
-- ✅ *.tool.ts - Implementación
-- ✅ *.schema.ts - Validación Zod
-- ✅ *.test.ts - Tests unitarios (futuro)
+- ✅ \*.tool.ts - Implementación
+- ✅ \*.schema.ts - Validación Zod
+- ✅ \*.test.ts - Tests unitarios (futuro)
 
 ### 3. Separación de Responsabilidades
 
@@ -247,18 +248,23 @@ cd src/tools/odoo/categoria/nombre-tool
 # Tool: odoo_nombre_tool
 
 ## Descripción
+
 [Qué hace la tool]
 
 ## Categoría
+
 [Categoría]
 
 ## Parámetros
+
 [Tabla de parámetros]
 
 ## Respuesta
+
 [Schema de respuesta]
 
 ## Ejemplos
+
 [Ejemplos de uso]
 ```
 
@@ -332,18 +338,18 @@ tests/
 ### Ejemplo de Test
 
 ```typescript
-import { GetLeadsTool } from './get-leads.tool';
+import { GetLeadsTool } from "./get-leads.tool";
 
-describe('GetLeadsTool', () => {
-  it('should validate input parameters', () => {
+describe("GetLeadsTool", () => {
+  it("should validate input parameters", () => {
     const tool = new GetLeadsTool(mockOdooClient);
 
     expect(() => {
       tool.execute({ limit: -1 });
-    }).toThrow('limit must be positive');
+    }).toThrow("limit must be positive");
   });
 
-  it('should fetch leads from Odoo', async () => {
+  it("should fetch leads from Odoo", async () => {
     const tool = new GetLeadsTool(mockOdooClient);
     const result = await tool.execute({ limit: 5 });
 
@@ -387,6 +393,19 @@ Para agregar nuevas tools, resources o prompts, sigue la estructura modular:
 4. Registra en ToolRegistry
 5. Agrega tests
 6. Actualiza documentación
+
+---
+
+El SERVICE_TOKEN es compartido para todos los servicios internos que necesitan llamar al MCP:
+
+┌─────────┐ ┌─────────┐
+│ Odoo │──X-Service-Token──▶│ MCP │
+└─────────┘ └─────────┘
+▲
+┌─────────┐ │
+│ n8n │──X-Service-Token────────┘
+└─────────┘
+Ambos usan el mismo token para autenticarse con el MCP. Es un "secreto compartido" entre los servicios de tu infraestructura Docker.
 
 ---
 
