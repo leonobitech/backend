@@ -4,7 +4,7 @@ export const createContactSchema = z.object({
   name: z.string().min(1),
   email: z.string().email().optional(),
   phone: z.string().optional(),
-  mobile: z.string().optional(),
+  // Note: 'mobile' field removed - not available in Odoo 19 res.partner
   isCompany: z.boolean().optional(),
   street: z.string().optional(),
   city: z.string().optional(),

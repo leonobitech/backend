@@ -33,6 +33,7 @@ const args = {
 if (params.email) args.email = params.email;
 if (params.duracion) args.duracion = Number(params.duracion);
 if (params.servicio_detalle) args.servicio_detalle = params.servicio_detalle;
+if (params.lead_id) args.lead_id = Number(params.lead_id);
 
 // Output para MCP
 return [{

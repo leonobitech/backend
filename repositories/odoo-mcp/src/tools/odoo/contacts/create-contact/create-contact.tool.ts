@@ -15,7 +15,7 @@ export class CreateContactTool implements ITool<CreateContactInput, CreateContac
 
     if (params.email) values.email = params.email;
     if (params.phone) values.phone = params.phone;
-    if (params.mobile) values.mobile = params.mobile;
+    // Note: 'mobile' field removed - not available in Odoo 19 res.partner
     if (params.street) values.street = params.street;
     if (params.city) values.city = params.city;
     if (params.website) values.website = params.website;
@@ -46,10 +46,6 @@ export class CreateContactTool implements ITool<CreateContactInput, CreateContac
           phone: {
             type: "string",
             description: "Phone number"
-          },
-          mobile: {
-            type: "string",
-            description: "Mobile number"
           },
           isCompany: {
             type: "boolean",

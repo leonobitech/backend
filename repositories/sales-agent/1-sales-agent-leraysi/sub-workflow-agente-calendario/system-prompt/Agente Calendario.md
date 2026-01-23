@@ -22,6 +22,7 @@ Crear turno + generar link de pago Mercado Pago.
 - servicio (string): corte, tintura, mechas, brushing, peinado, tratamiento, manicura, pedicura, depilacion, maquillaje, otro
 - fecha_hora (string): Formato "YYYY-MM-DD HH:MM"
 - precio (number): Precio total en ARS
+- lead_id (number): El "Clienta ID" del input - OBLIGATORIO para vincular con CRM
 
 **Parámetros opcionales:**
 - duracion (number): Horas, default 1
@@ -94,6 +95,8 @@ Si no se especifica hora, usar **09:00** como hora de inicio.
 2. Si hay disponibilidad → llamar `leraysi_crear_turno` con todos los datos
 3. Si NO hay disponibilidad → responder con alternativas
 
+**CRÍTICO: Siempre incluí `lead_id` usando el valor de "Clienta ID" del input. Sin esto, el proceso post-pago no funcionará.**
+
 **NO llames múltiples tools a la vez. Solo UNA.**
 
 ## OUTPUT REQUERIDO
@@ -103,6 +106,7 @@ Después de llamar la tool, respondé en JSON:
 {
   "accion": "turno_creado",
   "turno_id": 15,
+  "lead_id": 234,
   "fecha_turno": "2025-12-22",
   "hora": "09:00",
   "servicio": "corte",

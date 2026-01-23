@@ -97,7 +97,7 @@ export class ConfirmarPagoCompletoTool
     if (!partnerId && turno.telefono) {
       const existingPartners = await this.odooClient.search(
         "res.partner",
-        ["|", ["phone", "=", turno.telefono], ["mobile", "=", turno.telefono]],
+        [["phone", "=", turno.telefono]],
         { fields: ["id"], limit: 1 }
       );
       if (existingPartners.length > 0) {
@@ -111,7 +111,7 @@ export class ConfirmarPagoCompletoTool
       const partnerData: Record<string, any> = {
         name: turno.clienta,
         is_company: false,
-        mobile: turno.telefono,
+        phone: turno.telefono,
       };
       if (emailToUse) partnerData.email = emailToUse;
 
