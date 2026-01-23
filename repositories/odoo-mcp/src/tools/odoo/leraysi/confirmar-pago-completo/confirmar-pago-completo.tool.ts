@@ -163,14 +163,15 @@ export class ConfirmarPagoCompletoTool
     let activityId: number | null = null;
 
     try {
-      // Formatear fecha para calendario
-      const fechaHora = new Date(turno.fecha_hora);
-      const fechaFormateada = fechaHora.toISOString().replace("T", " ").substring(0, 19);
+      // turno.fecha_hora está en hora local Argentina (UTC-3): "YYYY-MM-DD HH:MM:SS"
+      // Odoo Calendar espera UTC, así que convertimos agregando 3 horas
+      const startUTC = this.argentinaToUTC(turno.fecha_hora);
+      const stopUTC = this.addHoursToOdooDatetime(startUTC, turno.duracion || 1);
 
       const eventValues: Record<string, any> = {
         name: `Turno: ${turno.servicio} - ${turno.clienta}`,
-        start: fechaFormateada,
-        stop: this.calculateEndTime(fechaFormateada, turno.duracion || 1),
+        start: startUTC,
+        stop: stopUTC,
         duration: turno.duracion || 1,
         description: `Servicio: ${turno.servicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${turno.sena}`,
         partner_ids: [[6, 0, [partnerId]]],
@@ -180,8 +181,8 @@ export class ConfirmarPagoCompletoTool
       eventId = await this.odooClient.create("calendar.event", eventValues);
       logger.info({ eventId, leadId: params.lead_id }, "[ConfirmarPagoCompleto] Calendar event created");
 
-      // Crear actividad vinculada
-      const deadlineDate = fechaHora.toISOString().split("T")[0];
+      // Crear actividad vinculada (extraer fecha de la hora local Argentina)
+      const deadlineDate = turno.fecha_hora.split(" ")[0];
       activityId = await this.odooClient.createActivity({
         activityType: "meeting",
         summary: `Turno: ${turno.servicio} - ${turno.clienta}`,
@@ -413,12 +414,36 @@ export class ConfirmarPagoCompletoTool
   }
 
   /**
-   * Calcular hora de fin del evento
+   * Agregar horas a un datetime en formato Odoo (YYYY-MM-DD HH:MM:SS)
+   * Sin conversión de timezone - manipula el string directamente
    */
-  private calculateEndTime(start: string, durationHours: number): string {
-    const startDate = new Date(start.replace(" ", "T"));
-    startDate.setHours(startDate.getHours() + durationHours);
-    return startDate.toISOString().replace("T", " ").substring(0, 19);
+  private addHoursToOdooDatetime(odooDatetime: string, hours: number): string {
+    // Parse: "2026-01-23 09:00:00" -> parts
+    const [datePart, timePart] = odooDatetime.split(" ");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = timePart.split(":").map(Number);
+
+    // Crear fecha en UTC para evitar conversión de timezone
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    date.setUTCHours(date.getUTCHours() + hours);
+
+    // Formatear de vuelta a formato Odoo
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    const h = String(date.getUTCHours()).padStart(2, "0");
+    const min = String(date.getUTCMinutes()).padStart(2, "0");
+    const s = String(date.getUTCSeconds()).padStart(2, "0");
+
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+
+  /**
+   * Convertir hora local Argentina (UTC-3) a UTC
+   * Agrega 3 horas para obtener UTC
+   */
+  private argentinaToUTC(argentinaDatetime: string): string {
+    return this.addHoursToOdooDatetime(argentinaDatetime, 3);
   }
 
   /**
