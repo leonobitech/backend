@@ -147,13 +147,13 @@ export class ConfirmarPagoCompletoTool
     logger.info({ leadId: params.lead_id, partnerId }, "[ConfirmarPagoCompleto] Partner linked to Lead");
 
     // =========================================================================
-    // PASO 4: Mover Lead a "Calificado"
+    // PASO 4: Mover Lead a "Qualified"
     // =========================================================================
     try {
-      await this.odooClient.updateDealStage(params.lead_id, "Calificado");
-      logger.info({ leadId: params.lead_id }, "[ConfirmarPagoCompleto] Lead moved to Calificado");
+      await this.odooClient.updateDealStage(params.lead_id, "Qualified");
+      logger.info({ leadId: params.lead_id }, "[ConfirmarPagoCompleto] Lead moved to Qualified");
     } catch (error) {
-      logger.warn({ error, leadId: params.lead_id }, "[ConfirmarPagoCompleto] Could not move Lead to Calificado");
+      logger.warn({ error, leadId: params.lead_id }, "[ConfirmarPagoCompleto] Could not move Lead to Qualified");
     }
 
     // =========================================================================
