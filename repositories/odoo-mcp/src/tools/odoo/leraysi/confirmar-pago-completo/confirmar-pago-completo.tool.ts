@@ -168,6 +168,12 @@ export class ConfirmarPagoCompletoTool
       const startUTC = this.argentinaToUTC(turno.fecha_hora);
       const stopUTC = this.addHoursToOdooDatetime(startUTC, turno.duracion || 1);
 
+      // Obtener user_id del Lead para asignar el evento al calendario correcto
+      const leads = await this.odooClient.read("crm.lead", [params.lead_id], ["user_id"]);
+      const leadUserId = leads.length > 0 && leads[0].user_id && Array.isArray(leads[0].user_id)
+        ? leads[0].user_id[0]
+        : undefined;
+
       const eventValues: Record<string, any> = {
         name: `Turno: ${turno.servicio} - ${turno.clienta}`,
         start: startUTC,
@@ -176,6 +182,7 @@ export class ConfirmarPagoCompletoTool
         description: `Servicio: ${turno.servicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${turno.sena}`,
         partner_ids: [[6, 0, [partnerId]]],
         opportunity_id: params.lead_id,
+        user_id: leadUserId,
       };
 
       eventId = await this.odooClient.create("calendar.event", eventValues);
