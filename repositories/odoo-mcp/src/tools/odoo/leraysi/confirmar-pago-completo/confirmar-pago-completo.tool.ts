@@ -364,7 +364,82 @@ export class ConfirmarPagoCompletoTool
     }
 
     // =========================================================================
-    // PASO 8: Construir mensaje para WhatsApp
+    // PASO 8: Enviar notificación al vendedor (user_id del Lead)
+    // =========================================================================
+    // Mismo patrón que scheduleMeeting: notificar al vendedor responsable
+    try {
+      const leads = await this.odooClient.read("crm.lead", [params.lead_id], ["user_id"]);
+
+      if (leads.length > 0 && leads[0].user_id && Array.isArray(leads[0].user_id) && leads[0].user_id[0]) {
+        const userId = leads[0].user_id[0];
+        const users = await this.odooClient.read("res.users", [userId], ["name", "email"]);
+
+        if (users.length > 0 && users[0].email) {
+          const vendorName = users[0].name || "Usuario";
+          const vendorEmail = users[0].email;
+
+          const fechaHoraNotif = new Date(turno.fecha_hora);
+          const fechaFormateadaNotif = fechaHoraNotif.toLocaleDateString("es-AR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          });
+          const horaFormateadaNotif = fechaHoraNotif.toLocaleTimeString("es-AR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          const notificationBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+              <h2 style="color: #22c55e;">💰 Pago de Seña Confirmado</h2>
+              <p>Hola <strong>${vendorName}</strong>,</p>
+              <p>Se ha confirmado el pago de seña para el siguiente turno:</p>
+
+              <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #22c55e;">
+                <h3 style="margin: 0 0 15px 0; color: #166534;">Turno Confirmado</h3>
+                <p style="margin: 5px 0;"><strong>👤 Clienta:</strong> ${turno.clienta}</p>
+                <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${turno.servicio}${turno.servicio_detalle ? ` - ${turno.servicio_detalle}` : ''}</p>
+                <p style="margin: 5px 0;"><strong>📅 Fecha:</strong> ${fechaFormateadaNotif}</p>
+                <p style="margin: 5px 0;"><strong>⏰ Hora:</strong> ${horaFormateadaNotif}</p>
+                <p style="margin: 5px 0;"><strong>📱 Teléfono:</strong> ${turno.telefono}</p>
+              </div>
+
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <h4 style="margin: 0 0 10px 0; color: #166534;">💳 Detalle del Pago</h4>
+                <p style="margin: 5px 0;"><strong>Precio total:</strong> $${turno.precio.toLocaleString('es-AR')}</p>
+                <p style="margin: 5px 0;"><strong>Seña pagada:</strong> $${turno.sena.toLocaleString('es-AR')}</p>
+                <p style="margin: 5px 0;"><strong>Restante:</strong> $${(turno.precio - turno.sena).toLocaleString('es-AR')}</p>
+                <p style="margin: 5px 0; color: #666; font-size: 12px;"><strong>MP ID:</strong> ${params.mp_payment_id}</p>
+              </div>
+
+              <p style="color: #666; font-size: 14px;">El turno ya está registrado en tu calendario de Odoo.</p>
+              <p style="color: #999; font-size: 12px; margin-top: 20px;"><em>Sistema automatizado Leonobitech - Estilos Leraysi</em></p>
+            </div>
+          `;
+
+          const vendorMailId = await this.odooClient.create("mail.mail", {
+            subject: `💰 Pago Confirmado: ${turno.servicio} - ${turno.clienta}`,
+            body_html: notificationBody,
+            email_to: vendorEmail,
+            auto_delete: false,
+            state: "outgoing"
+          });
+
+          try {
+            await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
+            logger.info({ vendorMailId, vendorEmail }, "[ConfirmarPagoCompleto] Vendor notification sent");
+          } catch (sendError) {
+            logger.warn({ sendError, vendorMailId }, "[ConfirmarPagoCompleto] Vendor notification queued");
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not send vendor notification");
+    }
+
+    // =========================================================================
+    // PASO 9: Construir mensaje para WhatsApp
     // =========================================================================
     const fechaHora = new Date(turno.fecha_hora);
     const fechaFormateada = fechaHora.toLocaleDateString("es-AR", {
