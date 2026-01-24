@@ -174,13 +174,23 @@ export class ConfirmarPagoCompletoTool
         ? leads[0].user_id[0]
         : undefined;
 
+      // Obtener partner_id del vendedor para agregarlo como asistente
+      // Esto hace que el evento aparezca en el calendario del vendedor
+      const eventPartnerIds: number[] = [partnerId]; // Cliente
+      if (leadUserId) {
+        const users = await this.odooClient.read("res.users", [leadUserId], ["partner_id"]);
+        if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
+          eventPartnerIds.push(users[0].partner_id[0]); // Vendedor
+        }
+      }
+
       const eventValues: Record<string, any> = {
         name: `Turno: ${turno.servicio} - ${turno.clienta}`,
         start: startUTC,
         stop: stopUTC,
         duration: turno.duracion || 1,
         description: `Servicio: ${turno.servicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${turno.sena}`,
-        partner_ids: [[6, 0, [partnerId]]],
+        partner_ids: [[6, 0, eventPartnerIds]],
         opportunity_id: params.lead_id,
         user_id: leadUserId,
       };
