@@ -176,6 +176,8 @@ export class ConfirmarPagoCompletoTool
       }
 
       const lead = leads[0];
+      logger.info({ lead_partner_id: lead.partner_id, lead_user_id: lead.user_id }, "[ConfirmarPagoCompleto] Lead data for calendar event");
+
       const eventPartnerIds: number[] = [];
 
       // Agregar el partner del Lead (cliente) como asistente
@@ -185,6 +187,10 @@ export class ConfirmarPagoCompletoTool
 
       // Obtener user_id del Lead
       const leadUserId = lead.user_id && Array.isArray(lead.user_id) ? lead.user_id[0] : undefined;
+
+      if (!leadUserId) {
+        logger.warn({ lead_id: params.lead_id }, "[ConfirmarPagoCompleto] Lead has no user_id (salesperson) - calendar event may not appear in any user's calendar");
+      }
 
       // Agregar el partner del vendedor como asistente (esto hace que aparezca en su calendario)
       if (leadUserId) {
@@ -218,6 +224,7 @@ export class ConfirmarPagoCompletoTool
         resModel: "crm.lead",
         resId: params.lead_id,
         dateDeadline: deadlineDate,
+        userId: leadUserId, // Asignar al vendedor del Lead (igual que scheduleMeeting)
         note: `Turno confirmado para ${turno.clienta}`,
         calendarEventId: eventId,
       });
