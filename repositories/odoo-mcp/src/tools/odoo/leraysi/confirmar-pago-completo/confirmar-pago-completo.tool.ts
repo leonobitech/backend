@@ -31,8 +31,8 @@ export class ConfirmarPagoCompletoTool
     const params = confirmarPagoCompletoSchema.parse(input);
 
     logger.info(
-      { turnoId: params.turno_id, leadId: params.lead_id, mpPaymentId: params.mp_payment_id },
-      "[ConfirmarPagoCompleto] Starting payment confirmation process"
+      { turnoId: params.turno_id, mpPaymentId: params.mp_payment_id },
+      "[ConfirmarPagoCompleto] Processing"
     );
 
     // =========================================================================
@@ -73,8 +73,6 @@ export class ConfirmarPagoCompletoTool
       mp_payment_id: params.mp_payment_id,
     });
 
-    logger.info({ turnoId: params.turno_id }, "[ConfirmarPagoCompleto] Turno confirmed");
-
     // =========================================================================
     // PASO 2: Crear o obtener contacto (res.partner)
     // =========================================================================
@@ -90,7 +88,6 @@ export class ConfirmarPagoCompletoTool
       );
       if (existingPartners.length > 0) {
         partnerId = existingPartners[0].id;
-        logger.info({ partnerId, email: emailToUse }, "[ConfirmarPagoCompleto] Found existing partner by email");
       }
     }
 
@@ -102,7 +99,6 @@ export class ConfirmarPagoCompletoTool
       );
       if (existingPartners.length > 0) {
         partnerId = existingPartners[0].id;
-        logger.info({ partnerId, telefono: turno.telefono }, "[ConfirmarPagoCompleto] Found existing partner by phone");
       }
     }
 
@@ -116,7 +112,6 @@ export class ConfirmarPagoCompletoTool
       if (emailToUse) partnerData.email = emailToUse;
 
       partnerId = await this.odooClient.create("res.partner", partnerData);
-      logger.info({ partnerId, clienta: turno.clienta }, "[ConfirmarPagoCompleto] Created new partner");
     }
 
     // =========================================================================
@@ -144,16 +139,13 @@ export class ConfirmarPagoCompletoTool
       messageType: "comment",
     });
 
-    logger.info({ leadId: params.lead_id, partnerId }, "[ConfirmarPagoCompleto] Partner linked to Lead");
-
     // =========================================================================
     // PASO 4: Mover Lead a "Qualified"
     // =========================================================================
     try {
       await this.odooClient.updateDealStage(params.lead_id, "Qualified");
-      logger.info({ leadId: params.lead_id }, "[ConfirmarPagoCompleto] Lead moved to Qualified");
     } catch (error) {
-      logger.warn({ error, leadId: params.lead_id }, "[ConfirmarPagoCompleto] Could not move Lead to Qualified");
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not move Lead to Qualified");
     }
 
     // =========================================================================
@@ -176,8 +168,6 @@ export class ConfirmarPagoCompletoTool
       }
 
       const lead = leads[0];
-      logger.info({ lead_partner_id: lead.partner_id, lead_user_id: lead.user_id }, "[ConfirmarPagoCompleto] Lead data for calendar event");
-
       const eventPartnerIds: number[] = [];
 
       // Agregar el partner del Lead (cliente) como asistente
@@ -191,9 +181,6 @@ export class ConfirmarPagoCompletoTool
       if (!effectiveUserId) {
         // El Lead no tiene salesperson asignado - usar el usuario del servicio
         effectiveUserId = await this.odooClient.getUid();
-        logger.info({ lead_id: params.lead_id, serviceUserId: effectiveUserId }, "[ConfirmarPagoCompleto] Lead has no salesperson - assigning service account user");
-
-        // Asignar el usuario al Lead para que tenga un salesperson
         await this.odooClient.write("crm.lead", [params.lead_id], {
           user_id: effectiveUserId
         });
@@ -204,8 +191,6 @@ export class ConfirmarPagoCompletoTool
       if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
         eventPartnerIds.push(users[0].partner_id[0]);
       }
-
-      logger.info({ eventPartnerIds, effectiveUserId }, "[ConfirmarPagoCompleto] Calendar event attendees")
 
       const eventValues: Record<string, any> = {
         name: `Turno: ${turno.servicio} - ${turno.clienta}`,
@@ -219,7 +204,6 @@ export class ConfirmarPagoCompletoTool
       };
 
       eventId = await this.odooClient.create("calendar.event", eventValues);
-      logger.info({ eventId, leadId: params.lead_id }, "[ConfirmarPagoCompleto] Calendar event created");
 
       // Crear actividad vinculada (extraer fecha de la hora local Argentina)
       const deadlineDate = turno.fecha_hora.split(" ")[0];
@@ -229,12 +213,10 @@ export class ConfirmarPagoCompletoTool
         resModel: "crm.lead",
         resId: params.lead_id,
         dateDeadline: deadlineDate,
-        userId: effectiveUserId, // Asignar al vendedor del Lead (igual que scheduleMeeting)
+        userId: effectiveUserId,
         note: `Turno confirmado para ${turno.clienta}`,
         calendarEventId: eventId,
       });
-
-      logger.info({ activityId, eventId }, "[ConfirmarPagoCompleto] Activity created and linked");
     } catch (error) {
       logger.warn({ error }, "[ConfirmarPagoCompleto] Could not create calendar event/activity");
     }
@@ -294,14 +276,12 @@ export class ConfirmarPagoCompletoTool
         };
 
         invoiceId = await this.odooClient.create("account.move", invoiceValues);
-        logger.info({ invoiceId, partnerId }, "[ConfirmarPagoCompleto] Invoice created in account.move");
 
         // Confirmar/publicar la factura (action_post)
         try {
           await this.odooClient.execute("account.move", "action_post", [[invoiceId]], {});
-          logger.info({ invoiceId }, "[ConfirmarPagoCompleto] Invoice posted");
         } catch (postError) {
-          logger.warn({ postError, invoiceId }, "[ConfirmarPagoCompleto] Could not post invoice, left as draft");
+          logger.warn({ postError }, "[ConfirmarPagoCompleto] Could not post invoice");
         }
 
         // Obtener nombre/número de factura
@@ -321,10 +301,9 @@ export class ConfirmarPagoCompletoTool
 
           if (reportResult && reportResult[0]) {
             invoicePdfBase64 = Buffer.from(reportResult[0], "binary").toString("base64");
-            logger.info({ invoiceId, invoiceName }, "[ConfirmarPagoCompleto] Invoice PDF generated");
           }
         } catch (pdfError) {
-          logger.warn({ pdfError, invoiceId }, "[ConfirmarPagoCompleto] Could not generate invoice PDF");
+          logger.warn({ pdfError }, "[ConfirmarPagoCompleto] Could not generate invoice PDF");
         }
       }
     } catch (error) {
@@ -383,14 +362,13 @@ export class ConfirmarPagoCompletoTool
           mailValues.attachment_ids = [[6, 0, [attachmentId]]];
         }
 
-        const mailId = await this.odooClient.create("mail.mail", mailValues);
+        await this.odooClient.create("mail.mail", mailValues);
 
         // Procesar cola de emails
         try {
           await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
-          logger.info({ mailId, email: emailToUse }, "[ConfirmarPagoCompleto] Confirmation email sent");
-        } catch (sendError) {
-          logger.warn({ sendError, mailId }, "[ConfirmarPagoCompleto] Email queued, will be sent by cron");
+        } catch {
+          // Email quedará en cola, será enviado por el cron de Odoo
         }
       } catch (error) {
         logger.warn({ error }, "[ConfirmarPagoCompleto] Could not send confirmation email");
@@ -452,7 +430,7 @@ export class ConfirmarPagoCompletoTool
             </div>
           `;
 
-          const vendorMailId = await this.odooClient.create("mail.mail", {
+          await this.odooClient.create("mail.mail", {
             subject: `💰 Pago Confirmado: ${turno.servicio} - ${turno.clienta}`,
             body_html: notificationBody,
             email_to: vendorEmail,
@@ -462,9 +440,8 @@ export class ConfirmarPagoCompletoTool
 
           try {
             await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
-            logger.info({ vendorMailId, vendorEmail }, "[ConfirmarPagoCompleto] Vendor notification sent");
-          } catch (sendError) {
-            logger.warn({ sendError, vendorMailId }, "[ConfirmarPagoCompleto] Vendor notification queued");
+          } catch {
+            // Email quedará en cola, será enviado por el cron de Odoo
           }
         }
       }
@@ -500,8 +477,8 @@ export class ConfirmarPagoCompletoTool
     // RETORNAR RESULTADO
     // =========================================================================
     logger.info(
-      { turnoId: params.turno_id, leadId: params.lead_id, partnerId, eventId, invoiceId, invoiceName },
-      "[ConfirmarPagoCompleto] Payment confirmation completed successfully"
+      { turnoId: params.turno_id, eventId, invoiceId },
+      "[ConfirmarPagoCompleto] Completed"
     );
 
     return {
