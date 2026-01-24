@@ -168,21 +168,33 @@ export class ConfirmarPagoCompletoTool
       const startUTC = this.argentinaToUTC(turno.fecha_hora);
       const stopUTC = this.addHoursToOdooDatetime(startUTC, turno.duracion || 1);
 
-      // Obtener user_id del Lead para asignar el evento al calendario correcto
-      const leads = await this.odooClient.read("crm.lead", [params.lead_id], ["user_id"]);
-      const leadUserId = leads.length > 0 && leads[0].user_id && Array.isArray(leads[0].user_id)
-        ? leads[0].user_id[0]
-        : undefined;
+      // Obtener partner_id y user_id del Lead (igual que scheduleMeeting)
+      const leads = await this.odooClient.read("crm.lead", [params.lead_id], ["partner_id", "user_id"]);
 
-      // Obtener partner_id del vendedor para agregarlo como asistente
-      // Esto hace que el evento aparezca en el calendario del vendedor
-      const eventPartnerIds: number[] = [partnerId]; // Cliente
+      if (leads.length === 0) {
+        throw new Error(`Lead #${params.lead_id} not found`);
+      }
+
+      const lead = leads[0];
+      const eventPartnerIds: number[] = [];
+
+      // Agregar el partner del Lead (cliente) como asistente
+      if (lead.partner_id && Array.isArray(lead.partner_id) && lead.partner_id[0]) {
+        eventPartnerIds.push(lead.partner_id[0]);
+      }
+
+      // Obtener user_id del Lead
+      const leadUserId = lead.user_id && Array.isArray(lead.user_id) ? lead.user_id[0] : undefined;
+
+      // Agregar el partner del vendedor como asistente (esto hace que aparezca en su calendario)
       if (leadUserId) {
         const users = await this.odooClient.read("res.users", [leadUserId], ["partner_id"]);
         if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
-          eventPartnerIds.push(users[0].partner_id[0]); // Vendedor
+          eventPartnerIds.push(users[0].partner_id[0]);
         }
       }
+
+      logger.info({ eventPartnerIds, leadUserId }, "[ConfirmarPagoCompleto] Calendar event attendees")
 
       const eventValues: Record<string, any> = {
         name: `Turno: ${turno.servicio} - ${turno.clienta}`,
