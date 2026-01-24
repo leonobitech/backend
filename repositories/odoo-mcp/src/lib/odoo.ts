@@ -104,6 +104,17 @@ export class OdooClient {
   }
 
   /**
+   * Obtiene el UID del usuario autenticado
+   * Útil para asignar como user_id por defecto cuando un Lead no tiene salesperson
+   */
+  async getUid(): Promise<number> {
+    if (!this.uid) {
+      await this.authenticate();
+    }
+    return this.uid!;
+  }
+
+  /**
    * Ejecuta un método en un modelo de Odoo
    */
   private async execute_kw(

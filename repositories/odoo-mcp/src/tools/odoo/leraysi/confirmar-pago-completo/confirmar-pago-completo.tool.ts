@@ -185,22 +185,27 @@ export class ConfirmarPagoCompletoTool
         eventPartnerIds.push(lead.partner_id[0]);
       }
 
-      // Obtener user_id del Lead
-      const leadUserId = lead.user_id && Array.isArray(lead.user_id) ? lead.user_id[0] : undefined;
+      // Obtener user_id del Lead (o asignar el usuario del servicio si no tiene)
+      let effectiveUserId = lead.user_id && Array.isArray(lead.user_id) ? lead.user_id[0] : undefined;
 
-      if (!leadUserId) {
-        logger.warn({ lead_id: params.lead_id }, "[ConfirmarPagoCompleto] Lead has no user_id (salesperson) - calendar event may not appear in any user's calendar");
+      if (!effectiveUserId) {
+        // El Lead no tiene salesperson asignado - usar el usuario del servicio
+        effectiveUserId = await this.odooClient.getUid();
+        logger.info({ lead_id: params.lead_id, serviceUserId: effectiveUserId }, "[ConfirmarPagoCompleto] Lead has no salesperson - assigning service account user");
+
+        // Asignar el usuario al Lead para que tenga un salesperson
+        await this.odooClient.write("crm.lead", [params.lead_id], {
+          user_id: effectiveUserId
+        });
       }
 
       // Agregar el partner del vendedor como asistente (esto hace que aparezca en su calendario)
-      if (leadUserId) {
-        const users = await this.odooClient.read("res.users", [leadUserId], ["partner_id"]);
-        if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
-          eventPartnerIds.push(users[0].partner_id[0]);
-        }
+      const users = await this.odooClient.read("res.users", [effectiveUserId], ["partner_id"]);
+      if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
+        eventPartnerIds.push(users[0].partner_id[0]);
       }
 
-      logger.info({ eventPartnerIds, leadUserId }, "[ConfirmarPagoCompleto] Calendar event attendees")
+      logger.info({ eventPartnerIds, effectiveUserId }, "[ConfirmarPagoCompleto] Calendar event attendees")
 
       const eventValues: Record<string, any> = {
         name: `Turno: ${turno.servicio} - ${turno.clienta}`,
@@ -210,7 +215,7 @@ export class ConfirmarPagoCompletoTool
         description: `Servicio: ${turno.servicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${turno.sena}`,
         partner_ids: [[6, 0, eventPartnerIds]],
         opportunity_id: params.lead_id,
-        user_id: leadUserId,
+        user_id: effectiveUserId,
       };
 
       eventId = await this.odooClient.create("calendar.event", eventValues);
@@ -224,7 +229,7 @@ export class ConfirmarPagoCompletoTool
         resModel: "crm.lead",
         resId: params.lead_id,
         dateDeadline: deadlineDate,
-        userId: leadUserId, // Asignar al vendedor del Lead (igual que scheduleMeeting)
+        userId: effectiveUserId, // Asignar al vendedor del Lead (igual que scheduleMeeting)
         note: `Turno confirmado para ${turno.clienta}`,
         calendarEventId: eventId,
       });
