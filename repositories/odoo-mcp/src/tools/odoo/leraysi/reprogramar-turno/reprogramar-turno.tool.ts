@@ -16,14 +16,35 @@ export class ReprogramarTurnoTool
     const params = reprogramarTurnoSchema.parse(input);
 
     logger.info(
-      { turnoId: params.turno_id, nuevaFecha: params.nueva_fecha_hora },
+      { leadId: params.lead_id, nuevaFecha: params.nueva_fecha_hora },
       "[ReprogramarTurno] Processing"
     );
 
     // =========================================================================
-    // PASO 1: Obtener turno y validar estado
+    // PASO 1: Buscar turno activo por lead_id
     // =========================================================================
-    const turnos = await this.odooClient.read("salon.turno", [params.turno_id], [
+    const turnosEncontrados = await this.odooClient.search(
+      "salon.turno",
+      [
+        ["lead_id", "=", params.lead_id],
+        ["estado", "in", ["pendiente_pago", "confirmado"]],
+      ],
+      { fields: ["id"], limit: 1, order: "id desc" }
+    );
+
+    if (turnosEncontrados.length === 0) {
+      throw new Error(
+        `No se encontró turno activo para lead #${params.lead_id}. ` +
+        `Solo se pueden reprogramar turnos pendiente_pago o confirmados.`
+      );
+    }
+
+    const turnoId = turnosEncontrados[0].id;
+
+    // =========================================================================
+    // PASO 2: Obtener turno completo y validar estado
+    // =========================================================================
+    const turnos = await this.odooClient.read("salon.turno", [turnoId], [
       "clienta",
       "telefono",
       "email",
@@ -38,7 +59,7 @@ export class ReprogramarTurnoTool
     ]);
 
     if (turnos.length === 0) {
-      throw new Error(`Turno #${params.turno_id} no encontrado`);
+      throw new Error(`Turno #${turnoId} no encontrado`);
     }
 
     const turno = turnos[0];
@@ -47,7 +68,7 @@ export class ReprogramarTurnoTool
 
     if (!["pendiente_pago", "confirmado"].includes(estadoActual)) {
       throw new Error(
-        `El turno #${params.turno_id} no puede reprogramarse (estado: ${estadoActual}). ` +
+        `El turno #${turnoId} no puede reprogramarse (estado: ${estadoActual}). ` +
         `Solo se pueden reprogramar turnos pendiente_pago o confirmados.`
       );
     }
@@ -71,10 +92,10 @@ export class ReprogramarTurnoTool
     // =========================================================================
     if (estadoActual === "pendiente_pago") {
       // 1. Cancelar turno viejo
-      await this.odooClient.write("salon.turno", [params.turno_id], {
+      await this.odooClient.write("salon.turno", [turnoId], {
         estado: "cancelado",
       });
-      await this.odooClient.execute("salon.turno", "message_post", [[params.turno_id]], {
+      await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
         body: `<p><strong>🔄 Turno reprogramado</strong></p>
                <p>Motivo: ${params.motivo}</p>
                <p>Este turno fue cancelado y se creó uno nuevo con la fecha actualizada.</p>`,
@@ -116,7 +137,7 @@ export class ReprogramarTurnoTool
       // 4. Registrar en nuevo turno
       await this.odooClient.execute("salon.turno", "message_post", [[nuevoTurnoId]], {
         body: `<p><strong>🔄 Turno creado por reprogramación</strong></p>
-               <p>Turno original: #${params.turno_id}</p>
+               <p>Turno original: #${turnoId}</p>
                <p>Fecha anterior: ${fechaHoraAnterior}</p>
                <p>Nueva fecha: ${nuevaFechaHora}</p>
                <p>Motivo: ${params.motivo}</p>`,
@@ -133,7 +154,7 @@ export class ReprogramarTurnoTool
         : turno.lead_id;
 
       // 1. Actualizar fecha en turno
-      await this.odooClient.write("salon.turno", [params.turno_id], {
+      await this.odooClient.write("salon.turno", [turnoId], {
         fecha_hora: nuevaFechaHora,
       });
       acciones.push("Fecha actualizada en turno");
@@ -248,7 +269,7 @@ export class ReprogramarTurnoTool
       }
 
       // 4. Registrar en chatter del turno
-      await this.odooClient.execute("salon.turno", "message_post", [[params.turno_id]], {
+      await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
         body: `<p><strong>🔄 Turno reprogramado</strong></p>
                <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
                <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
@@ -264,12 +285,12 @@ export class ReprogramarTurnoTool
     const fechaHumana = this.formatearFechaHumana(nuevaFechaHora);
 
     logger.info(
-      { turnoIdAnterior: params.turno_id, turnoIdNuevo: nuevoTurnoId, acciones },
+      { turnoIdAnterior: turnoId, turnoIdNuevo: nuevoTurnoId, acciones },
       "[ReprogramarTurno] Completed"
     );
 
     return {
-      turno_id_anterior: params.turno_id,
+      turno_id_anterior: turnoId,
       turno_id_nuevo: nuevoTurnoId,
       clienta: turno.clienta,
       telefono: turno.telefono,
@@ -299,15 +320,15 @@ export class ReprogramarTurnoTool
     return {
       name: "leraysi_reprogramar_turno",
       description:
-        "Reprograma un turno en Estilos Leraysi. " +
+        "Reprograma un turno en Estilos Leraysi buscándolo por lead_id. " +
         "Si está pendiente_pago: cancela el viejo y crea uno nuevo con nuevo link MP. " +
         "Si está confirmado: actualiza turno, borra/crea evento calendario, envía email.",
       inputSchema: {
         type: "object",
         properties: {
-          turno_id: {
+          lead_id: {
             type: "number",
-            description: "ID del turno a reprogramar",
+            description: "ID del Lead (crm.lead) de la clienta",
           },
           nueva_fecha_hora: {
             type: "string",
@@ -318,7 +339,7 @@ export class ReprogramarTurnoTool
             description: "Motivo de la reprogramación",
           },
         },
-        required: ["turno_id", "nueva_fecha_hora", "motivo"],
+        required: ["lead_id", "nueva_fecha_hora", "motivo"],
       },
     };
   }

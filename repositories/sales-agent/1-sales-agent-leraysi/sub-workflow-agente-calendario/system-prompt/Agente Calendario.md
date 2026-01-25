@@ -66,9 +66,11 @@ Reprograma un turno existente a una nueva fecha/hora.
 
 | Parámetro | Tipo | Requerido | Descripción |
 |-----------|------|-----------|-------------|
-| turno_id | number | ✅ | ID del turno a reprogramar |
+| lead_id | number | ✅ | ID del Lead (crm.lead) de la clienta |
 | nueva_fecha_hora | string | ✅ | Nueva fecha/hora en formato "YYYY-MM-DD HH:MM" |
 | motivo | string | ✅ | Motivo de la reprogramación |
+
+*Nota: La tool busca automáticamente el turno activo del lead.*
 
 **Respuesta de la tool (pendiente_pago):**
 

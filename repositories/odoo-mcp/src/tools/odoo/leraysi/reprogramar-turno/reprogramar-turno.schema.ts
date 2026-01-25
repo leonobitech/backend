@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const reprogramarTurnoSchema = z.object({
   // === Campos obligatorios ===
-  turno_id: z.number().positive("ID de turno inválido"),
+  lead_id: z.number().positive("ID de lead inválido"),
   nueva_fecha_hora: z.string().regex(
     /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?$/,
     "Formato de fecha inválido. Use: YYYY-MM-DD HH:MM"

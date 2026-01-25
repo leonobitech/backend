@@ -13,7 +13,7 @@ const params = typeof raw.query === 'string'
   : raw.query || raw;
 
 // Validar campos requeridos
-const required = ['turno_id', 'nueva_fecha_hora', 'motivo'];
+const required = ['lead_id', 'nueva_fecha_hora', 'motivo'];
 const missing = required.filter(f => !params[f]);
 
 if (missing.length > 0) {
@@ -22,7 +22,7 @@ if (missing.length > 0) {
 
 // Construir arguments
 const args = {
-  turno_id: Number(params.turno_id),
+  lead_id: Number(params.lead_id),
   nueva_fecha_hora: params.nueva_fecha_hora,
   motivo: params.motivo
 };

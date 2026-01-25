@@ -31,12 +31,57 @@ const fechaHumana = formatearFechaHumana(data.fecha_solicitada);
 const servicioDisplay = data.servicio_detalle || data.servicio || 'servicio';
 
 // ============================================================================
-// CASO 1: FECHA DISPONIBLE - Crear turno
+// DETECTAR SI ES REPROGRAMACIÓN
+// ============================================================================
+const esReprogramacion = data.turno_agendado === true;
+
+// ============================================================================
+// CASO 0: REPROGRAMAR TURNO EXISTENTE
 // ============================================================================
 let instruccionTarea = '';
 let jsonRespuestaEsperada = '';
 
-if (data.fecha_disponible) {
+if (esReprogramacion && data.fecha_disponible) {
+  const mensajeClientaReprogramado = `¡Listo ${data.nombre_clienta || 'reina'}! Tu turno fue reprogramado para el ${fechaHumana} a las ${horaDeseada}. Te enviamos un email de confirmación.`;
+
+  instruccionTarea = `## 🔄 REPROGRAMAR TURNO
+
+### PASO 1: Llamar a la tool \`leraysi_reprogramar_turno\`
+
+Usar EXACTAMENTE estos parámetros:
+
+\`\`\`json
+{
+  "lead_id": ${data.lead_id || 'null'},
+  "nueva_fecha_hora": "${fechaHoraCompleta}",
+  "motivo": "Solicitud de la clienta"
+}
+\`\`\`
+
+### PASO 2: Después de llamar la tool, responder con este JSON
+
+Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
+
+\`\`\`json
+{
+  "estado": "turno_reprogramado",
+  "turno_id_anterior": {turno_id_anterior de la respuesta},
+  "turno_id_nuevo": {turno_id_nuevo de la respuesta o null},
+  "lead_id": ${data.lead_id || 'null'},
+  "fecha_hora_anterior": "{fecha_hora_anterior de la respuesta}",
+  "fecha_hora_nueva": "${fechaHoraCompleta}",
+  "servicio": "${data.servicio || 'otro'}",
+  "link_pago": "{link_pago de la respuesta si existe, o null}",
+  "mensaje_para_clienta": "${mensajeClientaReprogramado}"
+}
+\`\`\`
+
+**NOTA:** Si la respuesta incluye \`link_pago\`, actualizar el mensaje para incluir: "Necesitás pagar la nueva seña en: {link_pago}"`;
+
+// ============================================================================
+// CASO 1: FECHA DISPONIBLE - Crear turno nuevo
+// ============================================================================
+} else if (data.fecha_disponible) {
   // Pre-construir el mensaje para la clienta (template)
   const mensajeClientaTemplate = `¡Listo ${data.nombre_clienta || 'reina'}! Tu turno de ${servicioDisplay.toLowerCase()} está reservado para el ${fechaHumana} a las ${horaDeseada}. Para confirmarlo, pagá la seña de $${senaCalculada.toLocaleString('es-AR')} en este link: {LINK_PAGO}`;
 

@@ -42,9 +42,14 @@ const input = {
   // === Del STATE (datos que el LLM no puede ver en el userPrompt) ===
   telefono: state.phone,
   clienta_id: state.lead_id,
+  lead_id: state.lead_id,  // Alias para uso en tools
   lead_row_id: state.row_id,
   conversation_id: state.conversation_id,
   image_analysis: state.image_analysis || null,
+
+  // Estado de turno existente (para reprogramación)
+  turno_agendado: state.turno_agendado || false,
+  turno_fecha: state.turno_fecha || null,
 
   // Complejidad y largo del cabello (del image_analysis)
   complejidad: state.image_analysis?.complexity || 'media',
@@ -194,8 +199,13 @@ return [{
     complejidad,
 
     // IDs de contexto
+    lead_id: input.lead_id,
     lead_row_id,
     conversation_id,
+
+    // Estado de turno (para reprogramación)
+    turno_agendado: input.turno_agendado,
+    turno_fecha: input.turno_fecha,
 
     // Metadata
     received_at: new Date().toISOString()
