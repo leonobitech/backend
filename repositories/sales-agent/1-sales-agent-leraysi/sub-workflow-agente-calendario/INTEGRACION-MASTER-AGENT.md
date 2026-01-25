@@ -30,7 +30,7 @@ confirmar o cancelar.
 
 ### Parámetros OPCIONALES (si están disponibles):
 - email (string): Email de la clienta → state.email
-- hora_deseada (string): Hora preferida HH:MM → extraer del mensaje, default "09:00"
+- hora_deseada (string): Hora preferida HH:MM → **CRÍTICO: extraer del mensaje (2pm→14:00), si no hay hora preguntar antes de llamar**
 - row_id (number): ID de fila en Baserow → state.row_id
 - conversation_id (number): ID de conversación Chatwoot → state.conversation_id
 - image_analysis (object): Análisis de foto → state.image_analysis
@@ -38,20 +38,30 @@ confirmar o cancelar.
 - largo_cabello (string): Largo del cabello → state.image_analysis.length
 
 ### Ejemplo de invocación:
+
+**Cliente dijo:** "Quiero turno para el miércoles 22 a las 2 de la tarde"
+
+```json
 {
   "clienta_id": 210,
   "nombre_clienta": "Andrea Figueroa",
   "telefono": "+5491133851987",
   "email": "andrea@gmail.com",
   "servicio": ["Alisado brasileño"],
-  "fecha_deseada": "2026-01-22",
-  "hora_deseada": "09:00",
+  "fecha_deseada": "2026-01-22T14:00:00",
+  "hora_deseada": "14:00",
   "precio": 60000,
   "row_id": 73,
   "conversation_id": 390,
   "complejidad": "alta",
   "largo_cabello": "largo"
 }
+```
+
+**Conversión de horas:**
+- "2pm" / "a las 2" / "2 de la tarde" → "14:00"
+- "10am" / "10 de la mañana" → "10:00"
+- "5 de la tarde" → "17:00"
 ```
 
 ---
@@ -67,8 +77,8 @@ El sub-workflow espera dos campos:
   "llm_output": {
     "nombre_clienta": "Andrea Figueroa",
     "servicio": ["Alisado brasileño"],
-    "fecha_deseada": "2026-01-22",
-    "hora_deseada": "09:00",
+    "fecha_deseada": "2026-01-22T14:00:00",
+    "hora_deseada": "14:00",
     "precio": 60000
   },
   "state": {

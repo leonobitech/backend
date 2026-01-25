@@ -105,7 +105,11 @@ for (let i = 0; i < 7; i++) {
 // ============================================================================
 // VERIFICAR DISPONIBILIDAD DEL DÍA SOLICITADO Y GENERAR ALTERNATIVAS
 // ============================================================================
-const fechaSolicitada = input.fecha_deseada;
+// Extraer solo la fecha (sin hora) para comparación - soporta ISO con T o solo fecha
+const fechaSolicitadaRaw = input.fecha_deseada || '';
+const fechaSolicitada = fechaSolicitadaRaw.includes('T')
+  ? fechaSolicitadaRaw.split('T')[0]
+  : fechaSolicitadaRaw.split(' ')[0];
 const diaSolicitado = dias.find(d => d.fecha === fechaSolicitada);
 
 // Determinar si la fecha está disponible
@@ -159,7 +163,8 @@ return [{
     capacidad_config: CAPACIDAD,
     turnos_existentes: turnos.length,
     // Nuevos campos para el agente
-    fecha_solicitada: fechaSolicitada,
+    // Mantener fecha original completa (con hora si viene) para BuildAgentPrompt
+    fecha_solicitada: fechaSolicitadaRaw,
     fecha_disponible: fechaDisponible,
     motivo_no_disponible: motivoNoDisponible,
     alternativas: alternativas

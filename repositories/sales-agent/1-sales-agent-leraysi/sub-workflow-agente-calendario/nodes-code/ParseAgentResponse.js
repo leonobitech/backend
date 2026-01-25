@@ -122,16 +122,28 @@ if (llmResponse.estado === 'turno_reprogramado') {
   // Extraer fecha y hora nueva (formato "YYYY-MM-DD HH:MM")
   const [fechaNueva, horaNueva] = (llmResponse.fecha_hora_nueva || '').split(' ');
 
+  // Extraer mp_preference_id si hay nuevo link_pago (caso pendiente_pago reprogramado)
+  const mpPreferenceId = llmResponse.link_pago
+    ? (llmResponse.link_pago.match(/pref_id=([^&\s]+)/)?.[1] || '')
+    : '';
+
   resultado = {
     ...resultado,
     // Datos del turno reprogramado
-    odoo_turno_id: llmResponse.turno_id,
+    // odoo_turno_id viene directamente del LLM (ya calculado según turno_id_nuevo o turno_id_anterior)
+    odoo_turno_id: llmResponse.odoo_turno_id,
+    turno_id_anterior: llmResponse.turno_id_anterior,
+    turno_id_nuevo: llmResponse.turno_id_nuevo,
     fecha_turno: fechaNueva,
     hora_sugerida: horaNueva || '09:00',
     fecha_hora_anterior: llmResponse.fecha_hora_anterior,
     fecha_hora_nueva: llmResponse.fecha_hora_nueva,
-    calendario_actualizado: llmResponse.calendario_actualizado || false,
-    motivo_reprogramacion: llmResponse.motivo || input.motivo_reprogramacion || ''
+    // Para caso pendiente_pago reprogramado (nuevo link de pago)
+    mp_preference_id: mpPreferenceId,
+    link_pago: llmResponse.link_pago || null,
+    // Flags
+    calendario_actualizado: true, // Si llegamos aquí, el MCP ya actualizó calendario
+    motivo_reprogramacion: llmResponse.motivo || 'Solicitud de la clienta'
   };
 }
 

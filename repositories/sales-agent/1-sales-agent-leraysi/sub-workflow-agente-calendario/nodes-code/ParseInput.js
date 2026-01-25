@@ -11,18 +11,21 @@ const raw = $input.first().json;
 // ============================================================================
 // PASO 1: EXTRAER LLM_OUTPUT Y STATE
 // ============================================================================
-// El tool debe enviar:
-// {
-//   "llm_output": {...lo que el LLM extrajo del mensaje...},
-//   "state": {...el state completo de Input Main...}
-// }
+// El tool puede enviar los datos de dos formas:
+// 1. Directo: { "llm_output": {...}, "state": {...} }
+// 2. Wrapped: { "query": { "llm_output": {...}, "state": {...} } }
+//
+// Soportamos ambos formatos para compatibilidad
+
+// Unwrap si viene dentro de "query"
+const data = raw.query || raw;
 
 // Extraer llm_output (lo que el LLM extrajo del mensaje del cliente)
-const llmOutput = typeof raw.llm_output === 'string'
-  ? JSON.parse(raw.llm_output)
-  : (raw.llm_output || {});
+const llmOutput = typeof data.llm_output === 'string'
+  ? JSON.parse(data.llm_output)
+  : (data.llm_output || {});
 
-const state = typeof raw.state === 'string' ? JSON.parse(raw.state) : (raw.state || {});
+const state = typeof data.state === 'string' ? JSON.parse(data.state) : (data.state || {});
 
 // ============================================================================
 // PASO 2: COMBINAR LLM_OUTPUT + STATE

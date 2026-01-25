@@ -214,15 +214,129 @@ export class ReprogramarTurnoTool
               user_id: effectiveUserId,
             };
 
-            await this.odooClient.create("calendar.event", eventValues);
+            const nuevoEventoId = await this.odooClient.create("calendar.event", eventValues);
             acciones.push("Nuevo evento de calendario creado");
+
+            // 2b. Crear actividad en el Lead vinculada al evento
+            try {
+              // Buscar tipo de actividad "Meeting"
+              const activityTypes = await this.odooClient.search(
+                "mail.activity.type",
+                [["name", "ilike", "Meeting"]],
+                { fields: ["id"], limit: 1 }
+              );
+
+              const activityTypeId = activityTypes.length > 0 ? activityTypes[0].id : 1;
+              const fechaSoloDate = nuevaFechaHora.split(" ")[0];
+
+              await this.odooClient.create("mail.activity", {
+                res_model_id: await this.getModelId("crm.lead"),
+                res_id: leadId,
+                activity_type_id: activityTypeId,
+                summary: `Turno REPROGRAMADO: ${turno.servicio}`,
+                note: `<p>Turno reprogramado para ${turno.clienta}</p>
+                       <p><strong>Servicio:</strong> ${turno.servicio_detalle || turno.servicio}</p>
+                       <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
+                       <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
+                       <p><strong>Motivo:</strong> ${params.motivo}</p>`,
+                date_deadline: fechaSoloDate,
+                user_id: effectiveUserId,
+                calendar_event_id: nuevoEventoId,
+              });
+              acciones.push("Actividad creada en Lead");
+            } catch (actError) {
+              logger.warn({ actError }, "[ReprogramarTurno] Could not create activity on Lead");
+            }
+
+            // 2c. Registrar en chatter del Lead
+            try {
+              await this.odooClient.execute("crm.lead", "message_post", [[leadId]], {
+                body: `<p><strong>🔄 Turno reprogramado</strong></p>
+                       <p><strong>Clienta:</strong> ${turno.clienta}</p>
+                       <p><strong>Servicio:</strong> ${turno.servicio_detalle || turno.servicio}</p>
+                       <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
+                       <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
+                       <p><strong>Motivo:</strong> ${params.motivo}</p>`,
+                message_type: "comment",
+              });
+              acciones.push("Mensaje registrado en chatter del Lead");
+            } catch (msgError) {
+              logger.warn({ msgError }, "[ReprogramarTurno] Could not post to Lead chatter");
+            }
           }
         } catch (error) {
           logger.warn({ error }, "[ReprogramarTurno] Could not update calendar");
         }
       }
 
-      // 3. Enviar email de reprogramación
+      // 3. Enviar notificación al vendedor (user_id del Lead)
+      if (leadId) {
+        try {
+          const leadsForNotif = await this.odooClient.read("crm.lead", [leadId], ["user_id"]);
+
+          if (leadsForNotif.length > 0 && leadsForNotif[0].user_id && Array.isArray(leadsForNotif[0].user_id) && leadsForNotif[0].user_id[0]) {
+            const userId = leadsForNotif[0].user_id[0];
+            const users = await this.odooClient.read("res.users", [userId], ["name", "email"]);
+
+            if (users.length > 0 && users[0].email) {
+              const vendorName = users[0].name || "Usuario";
+              const vendorEmail = users[0].email;
+
+              const fechaHumanaAnterior = this.formatearFechaHumana(fechaHoraAnterior);
+              const fechaHumanaNueva = this.formatearFechaHumana(nuevaFechaHora);
+
+              const notificationBody = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                  <h2 style="color: #f59e0b;">🔄 Turno Reprogramado</h2>
+                  <p>Hola <strong>${vendorName}</strong>,</p>
+                  <p>Se ha reprogramado el siguiente turno:</p>
+
+                  <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                    <h3 style="margin: 0 0 15px 0; color: #92400e;">Cambio de Fecha</h3>
+                    <p style="margin: 5px 0; text-decoration: line-through; color: #92400e;">
+                      <strong>Fecha anterior:</strong> ${fechaHumanaAnterior}
+                    </p>
+                    <p style="margin: 5px 0; color: #059669; font-size: 18px;">
+                      <strong>Nueva fecha:</strong> ${fechaHumanaNueva}
+                    </p>
+                  </div>
+
+                  <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>👤 Clienta:</strong> ${turno.clienta}</p>
+                    <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${turno.servicio}${turno.servicio_detalle ? ` - ${turno.servicio_detalle}` : ''}</p>
+                    <p style="margin: 5px 0;"><strong>📱 Teléfono:</strong> ${turno.telefono}</p>
+                    <p style="margin: 5px 0;"><strong>💰 Precio:</strong> $${turno.precio.toLocaleString('es-AR')}</p>
+                    <p style="margin: 5px 0; color: #666;"><strong>Motivo:</strong> ${params.motivo}</p>
+                  </div>
+
+                  <p style="color: #666; font-size: 14px;">El calendario de Odoo ya fue actualizado con la nueva fecha.</p>
+                  <p style="color: #999; font-size: 12px; margin-top: 20px;"><em>Sistema automatizado Leonobitech - Estilos Leraysi</em></p>
+                </div>
+              `;
+
+              await this.odooClient.create("mail.mail", {
+                subject: `🔄 Turno Reprogramado: ${turno.servicio} - ${turno.clienta}`,
+                body_html: notificationBody,
+                email_to: vendorEmail,
+                auto_delete: false,
+                state: "outgoing"
+              });
+
+              try {
+                await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
+              } catch {
+                // Email quedará en cola, será enviado por el cron de Odoo
+              }
+
+              acciones.push("Notificación enviada al vendedor");
+            }
+          }
+        } catch (error) {
+          logger.warn({ error }, "[ReprogramarTurno] Could not send vendor notification");
+        }
+      }
+
+      // 4. Enviar email de reprogramación a la clienta
       if (turno.email) {
         try {
           const fechaHumana = this.formatearFechaHumana(nuevaFechaHora);
@@ -268,7 +382,7 @@ export class ReprogramarTurnoTool
         }
       }
 
-      // 4. Registrar en chatter del turno
+      // 5. Registrar en chatter del turno
       await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
         body: `<p><strong>🔄 Turno reprogramado</strong></p>
                <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
@@ -314,6 +428,18 @@ export class ReprogramarTurnoTool
     const fecha = new Date(fechaStr.replace(" ", "T"));
     const hora = fechaStr.split(" ")[1]?.slice(0, 5) || "00:00";
     return `${dias[fecha.getDay()]} ${fecha.getDate()} de ${meses[fecha.getMonth()]} a las ${hora}`;
+  }
+
+  private async getModelId(modelName: string): Promise<number> {
+    const models = await this.odooClient.search(
+      "ir.model",
+      [["model", "=", modelName]],
+      { fields: ["id"], limit: 1 }
+    );
+    if (models.length === 0) {
+      throw new Error(`Model ${modelName} not found`);
+    }
+    return models[0].id;
   }
 
   definition(): ToolDefinition {

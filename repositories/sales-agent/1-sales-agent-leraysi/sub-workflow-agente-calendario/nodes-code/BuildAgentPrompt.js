@@ -12,15 +12,31 @@ const data = $input.first().json;
 // ============================================================================
 // VALORES PRE-CALCULADOS
 // ============================================================================
-const horaDeseada = data.hora_deseada || '09:00';
+// Extraer fecha y hora de fecha_solicitada (soporta ISO "2026-01-26T16:00:00" o "2026-01-26 16:00")
+const fechaSolicitadaRaw = data.fecha_solicitada || '';
+const fechaSoloParte = fechaSolicitadaRaw.includes('T')
+  ? fechaSolicitadaRaw.split('T')[0]
+  : fechaSolicitadaRaw.split(' ')[0];
+const horaSolicitadaParte = fechaSolicitadaRaw.includes('T')
+  ? fechaSolicitadaRaw.split('T')[1]?.slice(0, 5)
+  : fechaSolicitadaRaw.split(' ')[1]?.slice(0, 5);
+
+// Usar hora de la fecha solicitada, o la hora_deseada del input, o default 09:00
+const horaDeseada = horaSolicitadaParte || data.hora_deseada || '09:00';
 const duracionHoras = Math.ceil((data.duracion_estimada || 60) / 60);
 const senaCalculada = Math.round((data.precio || 0) * 0.3);
-const fechaHoraCompleta = `${data.fecha_solicitada} ${horaDeseada}`;
+// Formato correcto: "2026-01-26 16:00" (fecha espacio hora)
+const fechaHoraCompleta = `${fechaSoloParte} ${horaDeseada}`;
 
 // Formatear fecha para mensaje humano (ej: "miércoles 29 de enero")
 const formatearFechaHumana = (fechaStr) => {
   if (!fechaStr) return 'fecha no especificada';
-  const fecha = new Date(fechaStr + 'T12:00:00');
+  // Extraer solo la parte de la fecha si viene con hora
+  const soloFecha = fechaStr.includes('T')
+    ? fechaStr.split('T')[0]
+    : fechaStr.split(' ')[0];
+  const fecha = new Date(soloFecha + 'T12:00:00');
+  if (isNaN(fecha.getTime())) return 'fecha inválida';
   const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
                  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -65,6 +81,7 @@ Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
 \`\`\`json
 {
   "estado": "turno_reprogramado",
+  "odoo_turno_id": {turno_id_nuevo de la respuesta si existe, sino turno_id_anterior},
   "turno_id_anterior": {turno_id_anterior de la respuesta},
   "turno_id_nuevo": {turno_id_nuevo de la respuesta o null},
   "lead_id": ${data.lead_id || 'null'},
@@ -75,6 +92,10 @@ Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
   "mensaje_para_clienta": "${mensajeClientaReprogramado}"
 }
 \`\`\`
+
+**IMPORTANTE:** El campo \`odoo_turno_id\` debe ser el ID del turno activo:
+- Si la respuesta tiene \`turno_id_nuevo\` (caso pendiente_pago): usar ese valor
+- Si \`turno_id_nuevo\` es null (caso confirmado): usar \`turno_id_anterior\`
 
 **NOTA:** Si la respuesta incluye \`link_pago\`, actualizar el mensaje para incluir: "Necesitás pagar la nueva seña en: {link_pago}"`;
 
