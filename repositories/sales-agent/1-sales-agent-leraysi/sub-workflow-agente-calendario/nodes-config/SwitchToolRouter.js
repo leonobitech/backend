@@ -1,7 +1,7 @@
 // ============================================================================
 // SWITCH TOOL ROUTER - Agente Calendario Leraysi
 // ============================================================================
-// Reemplaza el nodo IF_Agendar por un Switch que rutea a las 5 herramientas MCP
+// Reemplaza el nodo IF_Agendar por un Switch que rutea a las 6 herramientas MCP
 //
 // CONFIGURACIÓN EN n8n:
 // - Tipo de nodo: Switch
@@ -17,7 +17,8 @@ const SWITCH_OUTPUTS = {
   2: 'leraysi_consultar_disponibilidad', // Output 2: Consultar disponibilidad
   3: 'leraysi_confirmar_turno',       // Output 3: Confirmar turno (post-pago)
   4: 'leraysi_cancelar_turno',        // Output 4: Cancelar turno
-  5: 'fallback'                       // Output 5: Tool no reconocida
+  5: 'leraysi_reprogramar_turno',     // Output 5: Reprogramar turno existente
+  6: 'fallback'                       // Output 6: Tool no reconocida
 };
 
 // ============================================================================
@@ -55,7 +56,13 @@ const SWITCH_OUTPUTS = {
 //   - Value 2: leraysi_cancelar_turno
 //   - Output: 4
 //
-// Fallback: Output 5 (cuando ninguna regla coincide)
+// Rule 5:
+//   - Operation: Equal
+//   - Value 1: {{ $json.tool }}
+//   - Value 2: leraysi_reprogramar_turno
+//   - Output: 5
+//
+// Fallback: Output 6 (cuando ninguna regla coincide)
 // ============================================================================
 
 // Alternativamente, usar este Code node antes del Switch para normalizar:
@@ -81,7 +88,8 @@ const TOOLS_VALIDAS = [
   'leraysi_consultar_turnos_dia',
   'leraysi_consultar_disponibilidad',
   'leraysi_confirmar_turno',
-  'leraysi_cancelar_turno'
+  'leraysi_cancelar_turno',
+  'leraysi_reprogramar_turno'
 ];
 
 if (!TOOLS_VALIDAS.includes(tool)) {

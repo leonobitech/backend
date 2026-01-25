@@ -1,21 +1,29 @@
 // ============================================================================
 // PARSE AGENT RESPONSE - Agente Calendario Leraysi
 // ============================================================================
+// Parsea la respuesta del agente y mapea al formato del workflow
+// Compatible con el nuevo formato determinístico de la LLM
+// ============================================================================
 
 const input = $('AnalizarDisponibilidad').first().json;
 const agentOutput = $input.first().json.output;
 
-// Parsear JSON de la respuesta del agente (robusto)
+// ============================================================================
+// PARSEAR JSON DE LA RESPUESTA (robusto)
+// ============================================================================
 function extractJSON(text) {
+  // Intento directo
   try {
     return JSON.parse(text);
   } catch (e) {}
 
+  // Limpiar markdown code blocks
   let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   try {
     return JSON.parse(cleaned);
   } catch (e) {}
 
+  // Buscar JSON embebido
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     try {
@@ -23,66 +31,113 @@ function extractJSON(text) {
     } catch (e) {}
   }
 
-  return { accion: "error", mensaje_para_clienta: "Error procesando la solicitud de turno" };
+  // Fallback de error
+  return {
+    estado: "error",
+    mensaje_para_clienta: "Error procesando la solicitud de turno"
+  };
 }
 
-const agentDecision = extractJSON(agentOutput);
+const llmResponse = extractJSON(agentOutput);
 
-// Extraer datos del tool response si existe (puede estar en .data o directamente)
-const toolData = agentDecision.data || {};
+// ============================================================================
+// MAPEO DE ESTADO → ACCION (compatibilidad con nodos downstream)
+// ============================================================================
+const ESTADO_A_ACCION = {
+  'turno_creado': 'turno_creado',
+  'fecha_no_disponible': 'sin_disponibilidad',
+  'turno_reprogramado': 'turno_reprogramado',
+  'error': 'error'
+};
 
-// Extraer turnoId - puede venir como turno_id, turnoId, o en data.turnoId
-const odooTurnoId = agentDecision.turno_id
-  || agentDecision.turnoId
-  || toolData.turnoId
-  || null;
+const accion = ESTADO_A_ACCION[llmResponse.estado] || llmResponse.estado || 'error';
 
-// Extraer link_pago - puede estar en diferentes lugares
-const linkPago = agentDecision.link_pago
-  || toolData.link_pago
-  || '';
+// ============================================================================
+// EXTRAER DATOS SEGÚN EL CASO
+// ============================================================================
+let resultado = {
+  // === Datos de contexto (vienen de AnalizarDisponibilidad) ===
+  clienta_id: input.clienta_id,
+  nombre_clienta: input.nombre_clienta,
+  telefono: input.telefono,
+  email: input.email || '',
+  lead_row_id: input.lead_row_id,
+  conversation_id: input.conversation_id || null,
+  precio: input.precio,
+  servicio: input.servicio,
+  servicio_detalle: input.servicio_detalle || '',
 
-// Extraer mp_preference_id - puede estar en data, o parsearlo de link_pago
-const mpPreferenceId = agentDecision.mp_preference_id
-  || toolData.mp_preference_id
-  || (linkPago.match(/pref_id=([^&\s]+)/)?.[1])
-  || '';
+  // === Decisión del agente (mapeada) ===
+  accion: accion,
+  mensaje_para_clienta: llmResponse.mensaje_para_clienta,
+  alternativas: llmResponse.alternativas || []
+};
 
-// Extraer estado
-const estadoTurno = agentDecision.estado
-  || toolData.estado
-  || 'pendiente_pago';
+// ============================================================================
+// CASO: TURNO CREADO
+// ============================================================================
+if (llmResponse.estado === 'turno_creado') {
+  // Extraer mp_preference_id del link_pago
+  const mpPreferenceId = llmResponse.link_pago
+    ? (llmResponse.link_pago.match(/pref_id=([^&\s]+)/)?.[1] || '')
+    : '';
 
-// Combinar input original con decisión del agente
-return [{
-  json: {
-    // Datos de la clienta
-    clienta_id: input.clienta_id,
-    nombre_clienta: input.nombre_clienta,
-    telefono: input.telefono,
-    email: input.email || '',
-    lead_row_id: input.lead_row_id,
-    conversation_id: input.conversation_id || null,
-    precio: input.precio,
-    servicio: input.servicio,
-    servicio_detalle: input.servicio_detalle || '',
+  // Extraer fecha y hora de fecha_hora (formato "YYYY-MM-DD HH:MM")
+  const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || '').split(' ');
 
-    // Decisión del agente
-    accion: agentDecision.accion,
-    fecha_turno: agentDecision.fecha_turno,
-    hora_sugerida: agentDecision.hora_sugerida || agentDecision.hora,
-    tipo_servicio: agentDecision.tipo_servicio,
-    duracion_min: agentDecision.duracion_min,
-    mensaje_para_clienta: agentDecision.mensaje_para_clienta,
-    alternativas: agentDecision.alternativas || [],
+  resultado = {
+    ...resultado,
+    // Datos del turno
+    fecha_turno: fechaTurno || input.fecha_solicitada,
+    hora_sugerida: horaTurno || input.hora_deseada || '09:00',
 
-    // Datos del turno creado en Odoo (extraídos robustamente)
-    odoo_turno_id: odooTurnoId,
+    // IDs de Odoo
+    odoo_turno_id: llmResponse.turno_id,
+
+    // MercadoPago
     mp_preference_id: mpPreferenceId,
-    link_pago: linkPago,
-    estado_turno: estadoTurno,
+    link_pago: llmResponse.link_pago || '',
 
-    // Seña (del agente, del tool, o calculada)
-    sena_monto: agentDecision.sena || toolData.sena || Math.round((input.precio || 0) * 0.30)
-  }
+    // Estado y montos
+    estado_turno: 'pendiente_pago',
+    sena_monto: llmResponse.sena || Math.round((input.precio || 0) * 0.30)
+  };
+}
+
+// ============================================================================
+// CASO: FECHA NO DISPONIBLE
+// ============================================================================
+if (llmResponse.estado === 'fecha_no_disponible') {
+  resultado = {
+    ...resultado,
+    fecha_solicitada: llmResponse.fecha_solicitada || input.fecha_solicitada,
+    motivo_no_disponible: llmResponse.motivo
+  };
+}
+
+// ============================================================================
+// CASO: TURNO REPROGRAMADO
+// ============================================================================
+if (llmResponse.estado === 'turno_reprogramado') {
+  // Extraer fecha y hora nueva (formato "YYYY-MM-DD HH:MM")
+  const [fechaNueva, horaNueva] = (llmResponse.fecha_hora_nueva || '').split(' ');
+
+  resultado = {
+    ...resultado,
+    // Datos del turno reprogramado
+    odoo_turno_id: llmResponse.turno_id,
+    fecha_turno: fechaNueva,
+    hora_sugerida: horaNueva || '09:00',
+    fecha_hora_anterior: llmResponse.fecha_hora_anterior,
+    fecha_hora_nueva: llmResponse.fecha_hora_nueva,
+    calendario_actualizado: llmResponse.calendario_actualizado || false,
+    motivo_reprogramacion: llmResponse.motivo || input.motivo_reprogramacion || ''
+  };
+}
+
+// ============================================================================
+// OUTPUT
+// ============================================================================
+return [{
+  json: resultado
 }];

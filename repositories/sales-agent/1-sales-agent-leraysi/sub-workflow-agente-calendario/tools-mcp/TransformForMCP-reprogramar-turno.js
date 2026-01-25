@@ -1,5 +1,5 @@
 // ============================================================================
-// TRANSFORM FOR MCP - leraysi_crear_turno
+// TRANSFORM FOR MCP - leraysi_reprogramar_turno
 // ============================================================================
 // INPUT: { query: "{...}" } donde query es JSON string con los parámetros
 // OUTPUT: { tool, arguments } para el MCP de Odoo
@@ -13,43 +13,24 @@ const params = typeof raw.query === 'string'
   : raw.query || raw;
 
 // Validar campos requeridos
-const required = [
-  'clienta',
-  'telefono',
-  'email',
-  'servicio',
-  'servicio_detalle',
-  'fecha_hora',
-  'precio',
-  'duracion',
-  'lead_id'
-];
+const required = ['turno_id', 'nueva_fecha_hora', 'motivo'];
 const missing = required.filter(f => !params[f]);
 
 if (missing.length > 0) {
-  throw new Error(`[leraysi_crear_turno] Faltantes: ${missing.join(', ')}`);
+  throw new Error(`[leraysi_reprogramar_turno] Faltantes: ${missing.join(', ')}`);
 }
 
-// Construir arguments (todos requeridos)
+// Construir arguments
 const args = {
-  clienta: params.clienta,
-  telefono: params.telefono,
-  email: params.email,
-  servicio: params.servicio,
-  servicio_detalle: params.servicio_detalle,
-  fecha_hora: params.fecha_hora,
-  precio: Number(params.precio),
-  duracion: Number(params.duracion),
-  lead_id: Number(params.lead_id)
+  turno_id: Number(params.turno_id),
+  nueva_fecha_hora: params.nueva_fecha_hora,
+  motivo: params.motivo
 };
-
-// Campo opcional
-if (params.notas) args.notas = params.notas;
 
 // Output para MCP
 return [{
   json: {
-    tool: "leraysi_crear_turno",
+    tool: "leraysi_reprogramar_turno",
     arguments: args
   }
 }];

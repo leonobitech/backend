@@ -1,0 +1,325 @@
+import {
+  reprogramarTurnoSchema,
+  type ReprogramarTurnoInput,
+  type ReprogramarTurnoResponse,
+} from "./reprogramar-turno.schema";
+import type { OdooClient } from "@/lib/odoo";
+import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
+import { logger } from "@/lib/logger";
+
+export class ReprogramarTurnoTool
+  implements ITool<ReprogramarTurnoInput, ReprogramarTurnoResponse>
+{
+  constructor(private readonly odooClient: OdooClient) {}
+
+  async execute(input: unknown): Promise<ReprogramarTurnoResponse> {
+    const params = reprogramarTurnoSchema.parse(input);
+
+    logger.info(
+      { turnoId: params.turno_id, nuevaFecha: params.nueva_fecha_hora },
+      "[ReprogramarTurno] Processing"
+    );
+
+    // =========================================================================
+    // PASO 1: Obtener turno y validar estado
+    // =========================================================================
+    const turnos = await this.odooClient.read("salon.turno", [params.turno_id], [
+      "clienta",
+      "telefono",
+      "email",
+      "servicio",
+      "servicio_detalle",
+      "fecha_hora",
+      "estado",
+      "duracion",
+      "precio",
+      "sena",
+      "lead_id",
+    ]);
+
+    if (turnos.length === 0) {
+      throw new Error(`Turno #${params.turno_id} no encontrado`);
+    }
+
+    const turno = turnos[0];
+    const fechaHoraAnterior = turno.fecha_hora;
+    const estadoActual = turno.estado as "pendiente_pago" | "confirmado";
+
+    if (!["pendiente_pago", "confirmado"].includes(estadoActual)) {
+      throw new Error(
+        `El turno #${params.turno_id} no puede reprogramarse (estado: ${estadoActual}). ` +
+        `Solo se pueden reprogramar turnos pendiente_pago o confirmados.`
+      );
+    }
+
+    // Normalizar nueva fecha
+    let nuevaFechaHora = params.nueva_fecha_hora;
+    if (nuevaFechaHora.includes("T")) {
+      nuevaFechaHora = nuevaFechaHora.replace("T", " ");
+    }
+    if (nuevaFechaHora.length === 16) {
+      nuevaFechaHora += ":00";
+    }
+
+    const acciones: string[] = [];
+    let nuevoTurnoId: number | null = null;
+    let linkPago: string | undefined;
+    let sena: number | undefined;
+
+    // =========================================================================
+    // CASO A: PENDIENTE_PAGO → Cancelar viejo + Crear nuevo turno
+    // =========================================================================
+    if (estadoActual === "pendiente_pago") {
+      // 1. Cancelar turno viejo
+      await this.odooClient.write("salon.turno", [params.turno_id], {
+        estado: "cancelado",
+      });
+      await this.odooClient.execute("salon.turno", "message_post", [[params.turno_id]], {
+        body: `<p><strong>🔄 Turno reprogramado</strong></p>
+               <p>Motivo: ${params.motivo}</p>
+               <p>Este turno fue cancelado y se creó uno nuevo con la fecha actualizada.</p>`,
+        message_type: "comment",
+      });
+      acciones.push("Turno anterior cancelado");
+
+      // 2. Crear nuevo turno
+      const nuevoTurnoValues: Record<string, any> = {
+        clienta: turno.clienta,
+        telefono: turno.telefono,
+        email: turno.email,
+        servicio: turno.servicio,
+        servicio_detalle: turno.servicio_detalle,
+        fecha_hora: nuevaFechaHora,
+        precio: turno.precio,
+        duracion: turno.duracion || 1,
+        lead_id: turno.lead_id && Array.isArray(turno.lead_id) ? turno.lead_id[0] : turno.lead_id,
+        estado: "pendiente_pago",
+      };
+
+      nuevoTurnoId = await this.odooClient.create("salon.turno", nuevoTurnoValues);
+      acciones.push(`Nuevo turno #${nuevoTurnoId} creado`);
+
+      // 3. Generar link de pago
+      try {
+        await this.odooClient.execute("salon.turno", "action_generar_link_pago", [[nuevoTurnoId]]);
+        const nuevosTurnos = await this.odooClient.read("salon.turno", [nuevoTurnoId], ["link_pago", "sena"]);
+        if (nuevosTurnos.length > 0) {
+          linkPago = nuevosTurnos[0].link_pago || "";
+          sena = nuevosTurnos[0].sena || Math.round(turno.precio * 0.3);
+        }
+        acciones.push("Nuevo link de pago generado");
+      } catch (error) {
+        logger.warn({ error }, "[ReprogramarTurno] Could not generate payment link");
+        sena = Math.round(turno.precio * 0.3);
+      }
+
+      // 4. Registrar en nuevo turno
+      await this.odooClient.execute("salon.turno", "message_post", [[nuevoTurnoId]], {
+        body: `<p><strong>🔄 Turno creado por reprogramación</strong></p>
+               <p>Turno original: #${params.turno_id}</p>
+               <p>Fecha anterior: ${fechaHoraAnterior}</p>
+               <p>Nueva fecha: ${nuevaFechaHora}</p>
+               <p>Motivo: ${params.motivo}</p>`,
+        message_type: "comment",
+      });
+    }
+
+    // =========================================================================
+    // CASO B: CONFIRMADO → Actualizar turno + Borrar/crear calendario + Email
+    // =========================================================================
+    if (estadoActual === "confirmado") {
+      const leadId = turno.lead_id && Array.isArray(turno.lead_id)
+        ? turno.lead_id[0]
+        : turno.lead_id;
+
+      // 1. Actualizar fecha en turno
+      await this.odooClient.write("salon.turno", [params.turno_id], {
+        fecha_hora: nuevaFechaHora,
+      });
+      acciones.push("Fecha actualizada en turno");
+
+      // 2. Borrar evento de calendario viejo y crear uno nuevo
+      if (leadId) {
+        try {
+          const eventosViejos = await this.odooClient.search(
+            "calendar.event",
+            [["opportunity_id", "=", leadId]],
+            { fields: ["id"], limit: 10 }
+          );
+
+          // Borrar eventos viejos
+          for (const evento of eventosViejos) {
+            await this.odooClient.unlink("calendar.event", [evento.id]);
+          }
+          if (eventosViejos.length > 0) {
+            acciones.push(`${eventosViejos.length} evento(s) de calendario eliminado(s)`);
+          }
+
+          // Crear nuevo evento
+          const duracion = turno.duracion || 1;
+          const fechaLocal = new Date(nuevaFechaHora.replace(" ", "T") + "-03:00");
+          const startUTC = fechaLocal.toISOString().replace("T", " ").slice(0, 19);
+          const fechaFin = new Date(fechaLocal.getTime() + duracion * 60 * 60 * 1000);
+          const stopUTC = fechaFin.toISOString().replace("T", " ").slice(0, 19);
+
+          // Obtener partner_ids
+          const leads = await this.odooClient.read("crm.lead", [leadId], ["partner_id", "user_id"]);
+          const eventPartnerIds: number[] = [];
+
+          if (leads.length > 0) {
+            const lead = leads[0];
+            if (lead.partner_id && Array.isArray(lead.partner_id) && lead.partner_id[0]) {
+              eventPartnerIds.push(lead.partner_id[0]);
+            }
+
+            let effectiveUserId = lead.user_id && Array.isArray(lead.user_id) ? lead.user_id[0] : undefined;
+            if (!effectiveUserId) {
+              effectiveUserId = await this.odooClient.getUid();
+            }
+
+            const users = await this.odooClient.read("res.users", [effectiveUserId], ["partner_id"]);
+            if (users.length > 0 && users[0].partner_id && Array.isArray(users[0].partner_id)) {
+              eventPartnerIds.push(users[0].partner_id[0]);
+            }
+
+            const eventValues: Record<string, any> = {
+              name: `Turno REPROGRAMADO: ${turno.servicio} - ${turno.clienta}`,
+              start: startUTC,
+              stop: stopUTC,
+              duration: duracion,
+              description: `TURNO REPROGRAMADO\n\nFecha anterior: ${fechaHoraAnterior}\nMotivo: ${params.motivo}\n\nServicio: ${turno.servicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio: $${turno.precio}`,
+              partner_ids: [[6, 0, eventPartnerIds]],
+              opportunity_id: leadId,
+              user_id: effectiveUserId,
+            };
+
+            await this.odooClient.create("calendar.event", eventValues);
+            acciones.push("Nuevo evento de calendario creado");
+          }
+        } catch (error) {
+          logger.warn({ error }, "[ReprogramarTurno] Could not update calendar");
+        }
+      }
+
+      // 3. Enviar email de reprogramación
+      if (turno.email) {
+        try {
+          const fechaHumana = this.formatearFechaHumana(nuevaFechaHora);
+          const fechaAnteriorHumana = this.formatearFechaHumana(fechaHoraAnterior);
+
+          const emailBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #8B5CF6;">🔄 Tu turno ha sido reprogramado</h2>
+              <p>Hola ${turno.clienta},</p>
+              <p>Te informamos que tu turno ha sido reprogramado:</p>
+              <div style="background: #FEF3C7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 5px 0; text-decoration: line-through; color: #92400E;">
+                  <strong>Fecha anterior:</strong> ${fechaAnteriorHumana}
+                </p>
+                <p style="margin: 5px 0; color: #059669; font-size: 18px;">
+                  <strong>Nueva fecha:</strong> ${fechaHumana}
+                </p>
+              </div>
+              <div style="background: #F3F4F6; padding: 15px; border-radius: 8px;">
+                <p style="margin: 5px 0;"><strong>Servicio:</strong> ${turno.servicio_detalle || turno.servicio}</p>
+                <p style="margin: 5px 0;"><strong>Motivo:</strong> ${params.motivo}</p>
+              </div>
+              <p style="margin-top: 20px;">Tu seña ya está confirmada, no necesitás hacer nada más.</p>
+              <p style="color: #8B5CF6; margin-top: 30px;">⋆˚🧚‍♀️ Te esperamos en Estilos Leraysi</p>
+            </div>
+          `;
+
+          await this.odooClient.create("mail.mail", {
+            subject: `🔄 Turno Reprogramado: ${turno.servicio} - ${fechaHumana}`,
+            body_html: emailBody,
+            email_to: turno.email,
+            auto_delete: false,
+            state: "outgoing",
+          });
+
+          try {
+            await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
+          } catch { /* Email quedará en cola */ }
+
+          acciones.push("Email de notificación enviado");
+        } catch (error) {
+          logger.warn({ error }, "[ReprogramarTurno] Could not send email");
+        }
+      }
+
+      // 4. Registrar en chatter del turno
+      await this.odooClient.execute("salon.turno", "message_post", [[params.turno_id]], {
+        body: `<p><strong>🔄 Turno reprogramado</strong></p>
+               <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
+               <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
+               <p><strong>Motivo:</strong> ${params.motivo}</p>
+               <p><strong>Acciones:</strong> ${acciones.join(", ")}</p>`,
+        message_type: "comment",
+      });
+    }
+
+    // =========================================================================
+    // RETORNAR RESULTADO
+    // =========================================================================
+    const fechaHumana = this.formatearFechaHumana(nuevaFechaHora);
+
+    logger.info(
+      { turnoIdAnterior: params.turno_id, turnoIdNuevo: nuevoTurnoId, acciones },
+      "[ReprogramarTurno] Completed"
+    );
+
+    return {
+      turno_id_anterior: params.turno_id,
+      turno_id_nuevo: nuevoTurnoId,
+      clienta: turno.clienta,
+      telefono: turno.telefono,
+      servicio: turno.servicio,
+      fecha_hora_anterior: fechaHoraAnterior,
+      fecha_hora_nueva: nuevaFechaHora,
+      estado_anterior: estadoActual,
+      acciones,
+      link_pago: linkPago,
+      sena,
+      message: estadoActual === "pendiente_pago"
+        ? `Turno reprogramado. Nuevo turno #${nuevoTurnoId} para el ${fechaHumana}. Nuevo link de pago generado.`
+        : `Turno reprogramado para el ${fechaHumana}. Calendario actualizado y notificación enviada.`,
+    };
+  }
+
+  private formatearFechaHumana(fechaStr: string): string {
+    const dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+    const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+    const fecha = new Date(fechaStr.replace(" ", "T"));
+    const hora = fechaStr.split(" ")[1]?.slice(0, 5) || "00:00";
+    return `${dias[fecha.getDay()]} ${fecha.getDate()} de ${meses[fecha.getMonth()]} a las ${hora}`;
+  }
+
+  definition(): ToolDefinition {
+    return {
+      name: "leraysi_reprogramar_turno",
+      description:
+        "Reprograma un turno en Estilos Leraysi. " +
+        "Si está pendiente_pago: cancela el viejo y crea uno nuevo con nuevo link MP. " +
+        "Si está confirmado: actualiza turno, borra/crea evento calendario, envía email.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          turno_id: {
+            type: "number",
+            description: "ID del turno a reprogramar",
+          },
+          nueva_fecha_hora: {
+            type: "string",
+            description: "Nueva fecha y hora en formato YYYY-MM-DD HH:MM",
+          },
+          motivo: {
+            type: "string",
+            description: "Motivo de la reprogramación",
+          },
+        },
+        required: ["turno_id", "nueva_fecha_hora", "motivo"],
+      },
+    };
+  }
+}

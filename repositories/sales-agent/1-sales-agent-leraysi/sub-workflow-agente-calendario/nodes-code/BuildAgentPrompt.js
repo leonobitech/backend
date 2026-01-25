@@ -3,55 +3,156 @@
 // ============================================================================
 // INPUT: Datos combinados de ParseInput + AnalizarDisponibilidad
 // OUTPUT: userMessage para el AI Agent del calendario
+//
+// DISEÑO: 100% determinístico - el agente solo ejecuta y mapea datos
 // ============================================================================
 
 const data = $input.first().json;
 
-// Formatear hora deseada
-const horaDeseada = data.hora_deseada || 'Sin preferencia';
+// ============================================================================
+// VALORES PRE-CALCULADOS
+// ============================================================================
+const horaDeseada = data.hora_deseada || '09:00';
+const duracionHoras = Math.ceil((data.duracion_estimada || 60) / 60);
+const senaCalculada = Math.round((data.precio || 0) * 0.3);
+const fechaHoraCompleta = `${data.fecha_solicitada} ${horaDeseada}`;
 
-const userMessage = `## SOLICITUD DE TURNO
+// Formatear fecha para mensaje humano (ej: "miércoles 29 de enero")
+const formatearFechaHumana = (fechaStr) => {
+  if (!fechaStr) return 'fecha no especificada';
+  const fecha = new Date(fechaStr + 'T12:00:00');
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return `${dias[fecha.getDay()]} ${fecha.getDate()} de ${meses[fecha.getMonth()]}`;
+};
 
-### Datos de la Clienta
-- Nombre: ${data.nombre_clienta || 'No proporcionado'}
-- Teléfono: ${data.telefono || 'No proporcionado'}
-- Email: ${data.email || 'No proporcionado'}
-- Clienta ID: ${data.clienta_id || 'N/A'}
+const fechaHumana = formatearFechaHumana(data.fecha_solicitada);
+const servicioDisplay = data.servicio_detalle || data.servicio || 'servicio';
 
-### Servicio Solicitado
-- Servicio: ${data.servicio_detalle || JSON.stringify(data.servicio)}
-- Categoría: ${data.categoria_servicio || 'No clasificado'}
-- Duración estimada: ${data.duracion_estimada || 60} minutos
-- Precio acordado: $${data.precio || 0}
+// ============================================================================
+// CASO 1: FECHA DISPONIBLE - Crear turno
+// ============================================================================
+let instruccionTarea = '';
+let jsonRespuestaEsperada = '';
 
-### Fecha y Hora
-- Fecha deseada: ${data.fecha_deseada || 'No especificada'}
-- Hora preferida: ${horaDeseada}
+if (data.fecha_disponible) {
+  // Pre-construir el mensaje para la clienta (template)
+  const mensajeClientaTemplate = `¡Listo ${data.nombre_clienta || 'reina'}! Tu turno de ${servicioDisplay.toLowerCase()} está reservado para el ${fechaHumana} a las ${horaDeseada}. Para confirmarlo, pagá la seña de $${senaCalculada.toLocaleString('es-AR')} en este link: {LINK_PAGO}`;
 
-### Análisis de Cabello
-- Largo: ${data.largo_cabello || 'medio'}
-- Complejidad: ${data.complejidad || 'media'}
+  instruccionTarea = `## ✅ FECHA DISPONIBLE - CREAR TURNO
 
-### Disponibilidad de la Semana
+### PASO 1: Llamar a la tool \`leraysi_crear_turno\`
+
+Usar EXACTAMENTE estos parámetros:
+
+\`\`\`json
+{
+  "clienta": "${data.nombre_clienta || ''}",
+  "telefono": "${data.telefono || ''}",
+  "servicio": "${data.servicio || 'otro'}",
+  "fecha_hora": "${fechaHoraCompleta}",
+  "precio": ${data.precio || 0},
+  "duracion": ${duracionHoras},
+  "lead_id": ${data.lead_id || 'null'}${data.email ? `,\n  "email": "${data.email}"` : ''}${data.servicio_detalle ? `,\n  "servicio_detalle": "${data.servicio_detalle}"` : ''}
+}
+\`\`\`
+
+### PASO 2: Después de llamar la tool, responder con este JSON
+
+Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
+
+\`\`\`json
+{
+  "estado": "turno_creado",
+  "turno_id": {turnoId de la respuesta},
+  "lead_id": ${data.lead_id || 'null'},
+  "fecha_hora": "${fechaHoraCompleta}",
+  "servicio": "${data.servicio || 'otro'}",
+  "servicio_detalle": "${servicioDisplay}",
+  "precio": ${data.precio || 0},
+  "sena": {sena de la respuesta},
+  "link_pago": "{link_pago de la respuesta}",
+  "mensaje_para_clienta": "${mensajeClientaTemplate}"
+}
+\`\`\`
+
+**IMPORTANTE:** En "mensaje_para_clienta", reemplazar {LINK_PAGO} con el link_pago real de la respuesta.`;
+
+// ============================================================================
+// CASO 2: FECHA NO DISPONIBLE - Responder alternativas
+// ============================================================================
+} else {
+  const alternativasTexto = data.alternativas?.length > 0
+    ? data.alternativas.map(a => `${a.nombre_dia} ${a.fecha}`).join(', ')
+    : 'No hay disponibilidad esta semana';
+
+  const alternativasArray = data.alternativas?.map(a => `"${a.nombre_dia} ${a.fecha}"`) || [];
+
+  const mensajeClientaNoDisponible = `Disculpá, el ${fechaHumana} no tenemos disponibilidad (${(data.motivo_no_disponible || 'agenda completa').toLowerCase()}). Te puedo ofrecer: ${alternativasTexto}. ¿Cuál te queda mejor?`;
+
+  instruccionTarea = `## ❌ FECHA NO DISPONIBLE
+
+**NO llamar ninguna tool.**
+
+Responder ÚNICAMENTE con este JSON (copiarlo exacto):
+
+\`\`\`json
+{
+  "estado": "fecha_no_disponible",
+  "fecha_solicitada": "${data.fecha_solicitada}",
+  "motivo": "${data.motivo_no_disponible || 'Sin disponibilidad'}",
+  "alternativas": [${alternativasArray.join(', ')}],
+  "mensaje_para_clienta": "${mensajeClientaNoDisponible}"
+}
+\`\`\``;
+}
+
+// ============================================================================
+// CONSTRUIR MENSAJE COMPLETO
+// ============================================================================
+const userMessage = `# SOLICITUD DE TURNO - Estilos Leraysi
+
+## Datos de la Solicitud
+
+| Campo | Valor |
+|-------|-------|
+| **Clienta** | ${data.nombre_clienta || 'No proporcionado'} |
+| **Teléfono** | ${data.telefono || 'No proporcionado'} |
+| **Email** | ${data.email || 'No proporcionado'} |
+| **Lead ID** | ${data.lead_id || 'N/A'} |
+| **Servicio** | ${servicioDisplay} |
+| **Categoría** | ${data.categoria_servicio || 'No clasificado'} |
+| **Duración** | ${data.duracion_estimada || 60} min (${duracionHoras}h) |
+| **Precio** | $${(data.precio || 0).toLocaleString('es-AR')} |
+| **Seña (30%)** | $${senaCalculada.toLocaleString('es-AR')} |
+| **Fecha solicitada** | ${data.fecha_solicitada} (${fechaHumana}) |
+| **Hora** | ${horaDeseada} |
+| **Disponibilidad** | ${data.fecha_disponible ? '✅ DISPONIBLE' : '❌ NO DISPONIBLE'} |
+
+## Disponibilidad de la Semana
+
 ${data.resumen_disponibilidad || 'No disponible'}
-
-### Configuración de Capacidad
-- Máx servicios pesados/día: ${data.capacidad_config?.max_pesados || 2}
-- Máx muy pesados/día: ${data.capacidad_config?.max_muy_pesados || 1}
-- Máx turnos totales/día: ${data.capacidad_config?.max_turnos_dia || 6}
 
 ---
 
-TAREA: Crear el turno directamente.
+${instruccionTarea}`;
 
-La fecha solicitada es ${data.fecha_deseada}. Revisá el resumen de disponibilidad arriba.
-
-- Si ${data.fecha_deseada} está DISPONIBLE → llamar leraysi_crear_turno con hora ${data.hora_deseada || '09:00'}
-- Si ${data.fecha_deseada} NO está disponible → responder JSON con alternativas (NO llamar ninguna tool)`;
-
+// ============================================================================
+// RETORNAR
+// ============================================================================
 return [{
   json: {
     ...data,
-    userMessage
+    userMessage,
+    // Datos pre-calculados para uso posterior
+    _precalculado: {
+      hora: horaDeseada,
+      duracion_horas: duracionHoras,
+      sena: senaCalculada,
+      fecha_hora_completa: fechaHoraCompleta,
+      fecha_humana: fechaHumana,
+      servicio_display: servicioDisplay
+    }
   }
 }];

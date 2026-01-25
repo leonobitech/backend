@@ -33,17 +33,18 @@ export class CrearTurnoLeraysiTool
     const values: Record<string, any> = {
       clienta: params.clienta,
       telefono: params.telefono,
+      email: params.email,
       servicio: params.servicio,
+      servicio_detalle: params.servicio_detalle,
       fecha_hora: fechaHora,
       precio: params.precio,
-      duracion: params.duracion || 1,
+      duracion: params.duracion,
+      lead_id: params.lead_id,
       estado: "pendiente_pago",
     };
 
-    if (params.email) values.email = params.email;
+    // Campo opcional
     if (params.notas) values.notas = params.notas;
-    if (params.servicio_detalle) values.servicio_detalle = params.servicio_detalle;
-    if (params.lead_id) values.lead_id = params.lead_id;
 
     const turnoId = await this.odooClient.create("salon.turno", values);
 
@@ -99,9 +100,9 @@ export class CrearTurnoLeraysiTool
     return {
       name: "leraysi_crear_turno",
       description:
-        "Crear un nuevo turno en el salón de belleza Estilos Leraysi. " +
-        "Genera automáticamente un link de pago de Mercado Pago para la seña (30% del precio). " +
-        "El turno queda en estado 'pendiente_pago' hasta que se confirme el pago.",
+        "Crea un turno en Estilos Leraysi y genera link de pago MercadoPago (seña 30%). " +
+        "Requiere todos los datos de la clienta y del servicio. " +
+        "El turno queda en 'pendiente_pago' hasta confirmar el pago.",
       inputSchema: {
         type: "object",
         properties: {
@@ -111,7 +112,11 @@ export class CrearTurnoLeraysiTool
           },
           telefono: {
             type: "string",
-            description: "Número de teléfono de la clienta (ej: +5491112345678)",
+            description: "Teléfono con código de país (ej: +5491112345678)",
+          },
+          email: {
+            type: "string",
+            description: "Email de la clienta (para enviar confirmación y factura)",
           },
           servicio: {
             type: "string",
@@ -128,39 +133,44 @@ export class CrearTurnoLeraysiTool
               "maquillaje",
               "otro",
             ],
-            description: "Tipo de servicio solicitado",
-          },
-          fecha_hora: {
-            type: "string",
-            description:
-              "Fecha y hora del turno en formato YYYY-MM-DD HH:MM (ej: 2025-01-15 10:00)",
-          },
-          precio: {
-            type: "number",
-            description: "Precio total del servicio en pesos argentinos",
-          },
-          duracion: {
-            type: "number",
-            description: "Duración estimada en horas (default: 1)",
-          },
-          email: {
-            type: "string",
-            description: "Email de la clienta (opcional)",
-          },
-          notas: {
-            type: "string",
-            description: "Notas adicionales sobre el turno",
+            description: "Código del tipo de servicio",
           },
           servicio_detalle: {
             type: "string",
-            description: "Descripción detallada del servicio si es necesario",
+            description: "Descripción completa del servicio (ej: 'Alisado brasileño, cabello largo')",
+          },
+          fecha_hora: {
+            type: "string",
+            description: "Fecha y hora en formato YYYY-MM-DD HH:MM (ej: 2025-01-29 10:00)",
+          },
+          precio: {
+            type: "number",
+            description: "Precio total del servicio en ARS",
+          },
+          duracion: {
+            type: "number",
+            description: "Duración en horas (para bloquear calendario correctamente)",
           },
           lead_id: {
             type: "number",
-            description: "ID del Lead en CRM (crm.lead) para vincular el turno",
+            description: "ID del Lead en CRM (crítico para flujo post-pago)",
+          },
+          notas: {
+            type: "string",
+            description: "Notas adicionales sobre el turno (opcional)",
           },
         },
-        required: ["clienta", "telefono", "servicio", "fecha_hora", "precio"],
+        required: [
+          "clienta",
+          "telefono",
+          "email",
+          "servicio",
+          "servicio_detalle",
+          "fecha_hora",
+          "precio",
+          "duracion",
+          "lead_id",
+        ],
       },
     };
   }

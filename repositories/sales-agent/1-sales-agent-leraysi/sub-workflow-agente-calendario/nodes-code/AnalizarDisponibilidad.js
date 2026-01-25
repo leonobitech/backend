@@ -1,6 +1,9 @@
 // ============================================================================
 // ANALIZAR DISPONIBILIDAD - Agente Calendario Leraysi
 // ============================================================================
+// INPUT: ParseInput (datos del turno) + GetTurnosSemana (turnos existentes)
+// OUTPUT: Disponibilidad calculada + alternativas pre-calculadas si no hay cupo
+// ============================================================================
 
 // Obtener turnos (puede ser array vacío)
 const turnosRaw = $('GetTurnosSemana').all();
@@ -99,6 +102,41 @@ for (let i = 0; i < 7; i++) {
   });
 }
 
+// ============================================================================
+// VERIFICAR DISPONIBILIDAD DEL DÍA SOLICITADO Y GENERAR ALTERNATIVAS
+// ============================================================================
+const fechaSolicitada = input.fecha_deseada;
+const diaSolicitado = dias.find(d => d.fecha === fechaSolicitada);
+
+// Determinar si la fecha está disponible
+const fechaDisponible = diaSolicitado?.abierto && diaSolicitado?.disponible;
+
+// Pre-calcular alternativas si el día NO está disponible
+let alternativas = [];
+let motivoNoDisponible = null;
+
+if (!fechaDisponible) {
+  // Determinar el motivo
+  if (!diaSolicitado) {
+    motivoNoDisponible = 'Fecha fuera de rango (solo se pueden agendar turnos en los próximos 7 días)';
+  } else if (!diaSolicitado.abierto) {
+    motivoNoDisponible = 'Cerrado (Domingo)';
+  } else if (!diaSolicitado.disponible) {
+    motivoNoDisponible = `Agenda llena (${diaSolicitado.turnos_agendados} turnos, ${diaSolicitado.carga_porcentaje}% de capacidad)`;
+  }
+
+  // Buscar los próximos 3 días disponibles como alternativas
+  alternativas = dias
+    .filter(d => d.abierto && d.disponible)
+    .slice(0, 3)
+    .map(d => ({
+      fecha: d.fecha,
+      nombre_dia: d.nombre_dia,
+      turnos_agendados: d.turnos_agendados,
+      carga_porcentaje: d.carga_porcentaje
+    }));
+}
+
 // Resumen para el agente
 const resumen = dias
   .filter(d => d.abierto)
@@ -119,6 +157,11 @@ return [{
     disponibilidad: dias,
     resumen_disponibilidad: resumen,
     capacidad_config: CAPACIDAD,
-    turnos_existentes: turnos.length
+    turnos_existentes: turnos.length,
+    // Nuevos campos para el agente
+    fecha_solicitada: fechaSolicitada,
+    fecha_disponible: fechaDisponible,
+    motivo_no_disponible: motivoNoDisponible,
+    alternativas: alternativas
   }
 }];

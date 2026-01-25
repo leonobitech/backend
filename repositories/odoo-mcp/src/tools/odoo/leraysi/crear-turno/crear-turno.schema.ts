@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 export const crearTurnoSchema = z.object({
+  // === Campos obligatorios ===
   clienta: z.string().min(1, "Nombre de la clienta es requerido"),
   telefono: z.string().min(1, "Teléfono es requerido"),
+  email: z.string().email("Email inválido").min(1, "Email es requerido para enviar confirmación"),
   servicio: z.enum([
     "corte",
     "tintura",
@@ -16,16 +18,17 @@ export const crearTurnoSchema = z.object({
     "maquillaje",
     "otro",
   ]),
+  servicio_detalle: z.string().min(1, "Detalle del servicio es requerido"),
   fecha_hora: z.string().regex(
     /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?$/,
     "Formato de fecha inválido. Use: YYYY-MM-DD HH:MM o YYYY-MM-DDTHH:MM:SS"
   ),
   precio: z.number().positive("El precio debe ser mayor a 0"),
-  duracion: z.number().positive().optional().default(1),
-  email: z.string().email().optional(),
+  duracion: z.number().positive("La duración debe ser mayor a 0"),
+  lead_id: z.number().positive("ID del Lead es requerido para vincular el turno"),
+
+  // === Campos opcionales ===
   notas: z.string().optional(),
-  servicio_detalle: z.string().optional(),
-  lead_id: z.number().optional().describe("ID del Lead en CRM (crm.lead)"),
 });
 
 export type CrearTurnoInput = z.infer<typeof crearTurnoSchema>;
