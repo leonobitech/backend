@@ -12,6 +12,8 @@ import {
   handleGetTelemetry,
   handleGetCommands,
   handleDeleteDevice,
+  handleDevicesAction,
+  handleDeviceAction,
 } from "@controllers/iot.controllers";
 import authenticate from "@middlewares/authenticate";
 
@@ -41,16 +43,19 @@ iotRoutes.post("/devices/:deviceId/status", handleStatus);
 // Dashboard API - Called by frontend (requires user authentication)
 // =============================================================================
 
-// GET /api/iot/devices - List all devices for user
+// GET /api/iot/devices - List all devices for user (legacy)
 iotRoutes.get("/devices", authenticate, handleListDevices);
 
-// POST /api/iot/devices - Create a new device (generates credentials)
-iotRoutes.post("/devices", authenticate, handleCreateDevice);
+// POST /api/iot/devices - List (action: "list") or Create device (with meta)
+iotRoutes.post("/devices", authenticate, handleDevicesAction);
 
-// GET /api/iot/devices/:deviceId - Get device details
+// GET /api/iot/devices/:deviceId - Get device details (legacy)
 iotRoutes.get("/devices/:deviceId", authenticate, handleGetDevice);
 
-// DELETE /api/iot/devices/:deviceId - Delete a device
+// POST /api/iot/devices/:deviceId - Get (action: "get") or Delete (action: "delete")
+iotRoutes.post("/devices/:deviceId", authenticate, handleDeviceAction);
+
+// DELETE /api/iot/devices/:deviceId - Delete a device (legacy)
 iotRoutes.delete("/devices/:deviceId", authenticate, handleDeleteDevice);
 
 // GET /api/iot/devices/:deviceId/telemetry - Get telemetry history

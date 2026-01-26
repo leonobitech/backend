@@ -399,3 +399,78 @@ export const handleDeleteDevice = catchErrors(
     res.status(HTTP_CODE.OK).json(result);
   }
 );
+
+// =============================================================================
+// Action-based handlers (POST with action in body)
+// These allow frontend to send metadata for clientKey validation
+// =============================================================================
+
+/**
+ * POST /api/iot/devices (with action: "list")
+ * List all devices OR create device based on action
+ */
+export const handleDevicesAction = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+
+    const { action, name, type, firmwareVersion, metadata } = req.body;
+
+    // If action is "list", return all devices
+    if (action === "list") {
+      const result = await getAllDevices();
+      loggerEvent("iot.devices.listed", { total: result.total }, req, "handleDevicesAction");
+      res.status(HTTP_CODE.OK).json(result);
+      return;
+    }
+
+    // Otherwise, treat as device creation
+    appAssert(name, HTTP_CODE.BAD_REQUEST, "Device name is required", ERROR_CODE.BAD_REQUEST);
+    appAssert(type, HTTP_CODE.BAD_REQUEST, "Device type is required", ERROR_CODE.BAD_REQUEST);
+
+    const result = await createDeviceForUser({
+      name,
+      type,
+      firmwareVersion,
+      metadata,
+      ownerId: req.userId,
+    });
+
+    loggerEvent(
+      "iot.device.created",
+      { deviceId: result.device.deviceId, name },
+      req,
+      "handleDevicesAction"
+    );
+
+    res.status(HTTP_CODE.CREATED).json(result);
+  }
+);
+
+/**
+ * POST /api/iot/devices/:deviceId (with action: "get" or "delete")
+ * Get device details OR delete device based on action
+ */
+export const handleDeviceAction = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { deviceId } = req.params;
+    const { action } = req.body;
+
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+    appAssert(action, HTTP_CODE.BAD_REQUEST, "Action is required", ERROR_CODE.BAD_REQUEST);
+
+    if (action === "get") {
+      const result = await getDeviceDetails({ deviceId });
+      res.status(HTTP_CODE.OK).json(result);
+      return;
+    }
+
+    if (action === "delete") {
+      const result = await deleteDevice({ deviceId });
+      loggerEvent("iot.device.deleted", { deviceId }, req, "handleDeviceAction");
+      res.status(HTTP_CODE.OK).json(result);
+      return;
+    }
+
+    appAssert(false, HTTP_CODE.BAD_REQUEST, "Invalid action", ERROR_CODE.BAD_REQUEST);
+  }
+);
