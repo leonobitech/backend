@@ -47,6 +47,7 @@ model User {
   securityEventLogs SecurityEventLog[]
   passkeys          Passkey[]
   podcasts          Podcast[]
+  iotDevices        IotDevice[]
 }
 
 model Device {
@@ -192,4 +193,86 @@ model Podcast {
 
   @@index([createdBy])
   @@index([publishedAt])
+}
+
+// =============================================================================
+// IoT Device Models - ESP32 and other embedded devices
+// =============================================================================
+
+model IotDevice {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  deviceId        String   @unique // Unique device identifier (set during provisioning)
+  apiKey          String   // API key for device authentication (hashed)
+  name            String?  // User-friendly name
+  firmwareVersion String?  // Current firmware version
+
+  // Device status
+  isOnline        Boolean  @default(false)
+  lastSeenAt      DateTime?
+
+  // Owner (admin who registered the device)
+  ownerId         String?  @map("ownerId") @db.ObjectId
+  owner           User?    @relation(fields: [ownerId], references: [id])
+
+  // Metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  telemetry       IotTelemetry[]
+  commands        IotCommand[]
+
+  @@index([ownerId])
+  @@index([isOnline])
+}
+
+model IotTelemetry {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  deviceId        String   @map("deviceId") @db.ObjectId
+  device          IotDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  // Telemetry data
+  freeHeap        Int      // Free heap memory in bytes
+  wifiRssi        Int      // WiFi signal strength (RSSI)
+  uptimeSecs      Int      // Uptime in seconds
+  sensors         Json?    // Custom sensor data (JSON)
+
+  createdAt       DateTime @default(now())
+
+  @@index([deviceId])
+  @@index([createdAt])
+}
+
+model IotCommand {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  deviceId        String   @map("deviceId") @db.ObjectId
+  device          IotDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  // Command details
+  action          String   // Command action (e.g., "led_on", "restart", "get_status")
+  params          Json?    // Command parameters
+
+  // Execution status
+  status          IotCommandStatus @default(PENDING)
+  result          String?  // Result message from device
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  executedAt      DateTime?
+  acknowledgedAt  DateTime?
+
+  // Who sent the command
+  sentBy          String?  @map("sentBy") @db.ObjectId
+
+  @@index([deviceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum IotCommandStatus {
+  PENDING
+  SENT
+  EXECUTED
+  FAILED
+  EXPIRED
 }

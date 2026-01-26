@@ -34,6 +34,7 @@ import passkeyRoutes from "@routes/passkey.routes";
 import serviceRoutes from "@routes/service.routes";
 import uploadRouter from "@routes/upload.routes";
 import podcastRouter from "@routes/podcast.routes";
+import iotRoutes from "@routes/iot.routes";
 
 // controllers (for specific routes)
 import { updateAvatarFromN8n } from "@controllers/user.controllers";
@@ -86,8 +87,10 @@ app.use(
       "X-Request-ID",
       "Idempotency-Key",
       "x-core-access-key",
-      "X-Upload-Token"
-    ], // FIXED: was malformed string, now proper array
+      "X-Upload-Token",
+      "x-device-id",
+      "x-api-key"
+    ], // Headers for web clients and IoT devices
     credentials: true, // allow session cookie from browser to pass through
     maxAge: 86400, // Cache preflight requests for 24 hours
   })
@@ -146,6 +149,11 @@ app.use("/upload", uploadRouter);
 
 // 📻 Public podcast routes (read-only, no auth required)
 app.use("/podcasts", podcastRouter);
+
+// 🤖 IoT Device routes (uses x-device-id and x-api-key headers for auth)
+// Device API: register, telemetry, commands - no user auth needed
+// Admin API: list/manage devices - requires admin auth (handled in routes)
+app.use("/api/devices", iotRoutes);
 
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
