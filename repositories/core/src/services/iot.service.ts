@@ -293,6 +293,194 @@ export const saveDeviceStatus = async (
 // Admin Functions
 // =============================================================================
 
+/**
+ * Create a new device from the dashboard
+ * Generates secure deviceId and apiKey
+ */
+export const createDeviceForUser = async (params: {
+  name: string;
+  type: string;
+  firmwareVersion?: string;
+  metadata?: Record<string, unknown>;
+  ownerId: string;
+}): Promise<{
+  status: string;
+  message: string;
+  device: {
+    id: string;
+    deviceId: string;
+    name: string;
+    type: string;
+  };
+  credentials: {
+    deviceId: string;
+    apiKey: string;
+  };
+}> => {
+  const { name, type, firmwareVersion, metadata, ownerId } = params;
+
+  // Generate secure deviceId (16 chars hex)
+  const crypto = await import("crypto");
+  const deviceId = crypto.randomBytes(8).toString("hex");
+
+  // Generate secure apiKey (32 chars hex)
+  const apiKey = crypto.randomBytes(16).toString("hex");
+
+  // Hash the apiKey for storage
+  const hashedApiKey = hmacHash(apiKey, CLIENT_KEY_SECRET);
+
+  // Create device
+  const device = await prisma.iotDevice.create({
+    data: {
+      deviceId,
+      apiKey: hashedApiKey,
+      name,
+      type,
+      firmwareVersion: firmwareVersion || null,
+      metadata: (metadata as Prisma.InputJsonValue) || null,
+      ownerId,
+      isOnline: false,
+    },
+  });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    message: "Device created successfully",
+    device: {
+      id: device.id,
+      deviceId: device.deviceId,
+      name: device.name || "",
+      type: device.type || "",
+    },
+    credentials: {
+      deviceId,
+      apiKey, // Return plain apiKey only once!
+    },
+  };
+};
+
+/**
+ * Get telemetry history for a device
+ */
+export const getDeviceTelemetry = async (params: {
+  deviceId: string;
+  limit?: number;
+  since?: Date;
+}): Promise<{
+  status: string;
+  telemetry: Array<{
+    id: string;
+    timestamp: string;
+    sensors: Record<string, unknown> | null;
+    battery: number | null;
+    rssi: number | null;
+    createdAt: string;
+  }>;
+}> => {
+  const { deviceId, limit = 50, since } = params;
+
+  // Get device by deviceId string
+  const device = await prisma.iotDevice.findUnique({
+    where: { deviceId },
+  });
+
+  appAssert(device, HTTP_CODE.NOT_FOUND, "Device not found", ERROR_CODE.NOT_FOUND);
+
+  const telemetry = await prisma.iotTelemetry.findMany({
+    where: {
+      deviceId: device.id,
+      ...(since && { createdAt: { gte: since } }),
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    telemetry: telemetry.map((t) => ({
+      id: t.id,
+      timestamp: t.createdAt.toISOString(),
+      sensors: t.sensors as Record<string, unknown> | null,
+      battery: null, // Add if field exists
+      rssi: t.wifiRssi,
+      createdAt: t.createdAt.toISOString(),
+    })),
+  };
+};
+
+/**
+ * Get command history for a device
+ */
+export const getDeviceCommands = async (params: {
+  deviceId: string;
+  limit?: number;
+}): Promise<{
+  status: string;
+  commands: Array<{
+    id: string;
+    command: string;
+    payload: Record<string, unknown> | null;
+    status: string;
+    sentAt: string | null;
+    acknowledgedAt: string | null;
+    createdAt: string;
+  }>;
+}> => {
+  const { deviceId, limit = 20 } = params;
+
+  // Get device by deviceId string
+  const device = await prisma.iotDevice.findUnique({
+    where: { deviceId },
+  });
+
+  appAssert(device, HTTP_CODE.NOT_FOUND, "Device not found", ERROR_CODE.NOT_FOUND);
+
+  const commands = await prisma.iotCommand.findMany({
+    where: { deviceId: device.id },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    commands: commands.map((c) => ({
+      id: c.id,
+      command: c.action,
+      payload: c.params as Record<string, unknown> | null,
+      status: c.status.toLowerCase(),
+      sentAt: null,
+      acknowledgedAt: c.acknowledgedAt?.toISOString() || null,
+      createdAt: c.createdAt.toISOString(),
+    })),
+  };
+};
+
+/**
+ * Delete a device
+ */
+export const deleteDevice = async (params: {
+  deviceId: string;
+}): Promise<{ status: string; message: string }> => {
+  const { deviceId } = params;
+
+  // Get device by deviceId string
+  const device = await prisma.iotDevice.findUnique({
+    where: { deviceId },
+  });
+
+  appAssert(device, HTTP_CODE.NOT_FOUND, "Device not found", ERROR_CODE.NOT_FOUND);
+
+  // Delete telemetry, commands, and device
+  await prisma.iotTelemetry.deleteMany({ where: { deviceId: device.id } });
+  await prisma.iotCommand.deleteMany({ where: { deviceId: device.id } });
+  await prisma.iotDevice.delete({ where: { id: device.id } });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    message: "Device deleted",
+  };
+};
+
 export const sendCommandToDevice = async (
   params: SendCommandParams
 ): Promise<SendCommandResponse> => {

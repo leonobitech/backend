@@ -16,6 +16,10 @@ import {
   getAllDevices,
   getDeviceDetails,
   verifyDeviceApiKey,
+  createDeviceForUser,
+  getDeviceTelemetry,
+  getDeviceCommands,
+  deleteDevice,
 } from "@services/iot.service";
 
 import type {
@@ -308,5 +312,90 @@ export const handleSendCommand = catchErrors(
     );
 
     res.status(HTTP_CODE.CREATED).json(result);
+  }
+);
+
+/**
+ * POST /api/iot/devices/register
+ * Create a new device from dashboard (generates credentials)
+ */
+export const handleCreateDevice = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+
+    const { name, type, firmwareVersion, metadata } = req.body;
+
+    appAssert(name, HTTP_CODE.BAD_REQUEST, "Device name is required", ERROR_CODE.BAD_REQUEST);
+    appAssert(type, HTTP_CODE.BAD_REQUEST, "Device type is required", ERROR_CODE.BAD_REQUEST);
+
+    const result = await createDeviceForUser({
+      name,
+      type,
+      firmwareVersion,
+      metadata,
+      ownerId: req.userId,
+    });
+
+    loggerEvent(
+      "iot.device.created",
+      { deviceId: result.device.deviceId, name },
+      req,
+      "handleCreateDevice"
+    );
+
+    res.status(HTTP_CODE.CREATED).json(result);
+  }
+);
+
+/**
+ * GET /api/iot/devices/:deviceId/telemetry
+ * Get telemetry history for device
+ */
+export const handleGetTelemetry = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { deviceId } = req.params;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const since = req.query.since ? new Date(req.query.since as string) : undefined;
+
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+
+    const result = await getDeviceTelemetry({ deviceId, limit, since });
+
+    res.status(HTTP_CODE.OK).json(result);
+  }
+);
+
+/**
+ * GET /api/iot/devices/:deviceId/commands
+ * Get command history for device
+ */
+export const handleGetCommands = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { deviceId } = req.params;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+
+    const result = await getDeviceCommands({ deviceId, limit });
+
+    res.status(HTTP_CODE.OK).json(result);
+  }
+);
+
+/**
+ * DELETE /api/iot/devices/:deviceId
+ * Delete a device
+ */
+export const handleDeleteDevice = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { deviceId } = req.params;
+
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+
+    const result = await deleteDevice({ deviceId });
+
+    loggerEvent("iot.device.deleted", { deviceId }, req, "handleDeleteDevice");
+
+    res.status(HTTP_CODE.OK).json(result);
   }
 );

@@ -204,7 +204,9 @@ model IotDevice {
   deviceId        String   @unique // Unique device identifier (set during provisioning)
   apiKey          String   // API key for device authentication (hashed)
   name            String?  // User-friendly name
+  type            String?  // Device type (sensor, actuator, gateway, etc.)
   firmwareVersion String?  // Current firmware version
+  metadata        Json?    // Additional device metadata
 
   // Device status
   isOnline        Boolean  @default(false)
@@ -214,7 +216,7 @@ model IotDevice {
   ownerId         String?  @map("ownerId") @db.ObjectId
   owner           User?    @relation(fields: [ownerId], references: [id])
 
-  // Metadata
+  // Timestamps
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -224,6 +226,7 @@ model IotDevice {
 
   @@index([ownerId])
   @@index([isOnline])
+  @@index([type])
 }
 
 model IotTelemetry {

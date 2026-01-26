@@ -8,10 +8,12 @@ import {
   handleListDevices,
   handleGetDevice,
   handleSendCommand,
+  handleCreateDevice,
+  handleGetTelemetry,
+  handleGetCommands,
+  handleDeleteDevice,
 } from "@controllers/iot.controllers";
 import authenticate from "@middlewares/authenticate";
-import authorize from "@middlewares/authorize";
-import { UserRole } from "@constants/userRole";
 
 const iotRoutes = Router();
 
@@ -20,32 +22,44 @@ const iotRoutes = Router();
 // These routes use x-device-id and x-api-key headers for authentication
 // =============================================================================
 
-// POST /api/devices/register - Register device on startup
-iotRoutes.post("/register", handleRegister);
+// POST /api/iot/devices/register - Register device on startup (device API)
+iotRoutes.post("/devices/register", handleRegister);
 
-// POST /api/devices/:deviceId/telemetry - Send telemetry data
-iotRoutes.post("/:deviceId/telemetry", handleTelemetry);
+// POST /api/iot/devices/:deviceId/telemetry - Send telemetry data
+iotRoutes.post("/devices/:deviceId/telemetry", handleTelemetry);
 
-// GET /api/devices/:deviceId/commands/pending - Get pending commands
-iotRoutes.get("/:deviceId/commands/pending", handleGetPendingCommands);
+// GET /api/iot/devices/:deviceId/commands/pending - Get pending commands
+iotRoutes.get("/devices/:deviceId/commands/pending", handleGetPendingCommands);
 
-// POST /api/devices/:deviceId/commands/:commandId/ack - Acknowledge command
-iotRoutes.post("/:deviceId/commands/:commandId/ack", handleAckCommand);
+// POST /api/iot/devices/:deviceId/commands/:commandId/ack - Acknowledge command
+iotRoutes.post("/devices/:deviceId/commands/:commandId/ack", handleAckCommand);
 
-// POST /api/devices/:deviceId/status - Send device status
-iotRoutes.post("/:deviceId/status", handleStatus);
+// POST /api/iot/devices/:deviceId/status - Send device status
+iotRoutes.post("/devices/:deviceId/status", handleStatus);
 
 // =============================================================================
-// Admin API - Called by frontend dashboard (requires admin authentication)
+// Dashboard API - Called by frontend (requires user authentication)
 // =============================================================================
 
-// GET /api/devices - List all devices (admin only)
-iotRoutes.get("/", authenticate, authorize(UserRole.Admin), handleListDevices);
+// GET /api/iot/devices - List all devices for user
+iotRoutes.get("/devices", authenticate, handleListDevices);
 
-// GET /api/devices/:deviceId - Get device details (admin only)
-iotRoutes.get("/:deviceId", authenticate, authorize(UserRole.Admin), handleGetDevice);
+// POST /api/iot/devices - Create a new device (generates credentials)
+iotRoutes.post("/devices", authenticate, handleCreateDevice);
 
-// POST /api/devices/:deviceId/command - Send command to device (admin only)
-iotRoutes.post("/:deviceId/command", authenticate, authorize(UserRole.Admin), handleSendCommand);
+// GET /api/iot/devices/:deviceId - Get device details
+iotRoutes.get("/devices/:deviceId", authenticate, handleGetDevice);
+
+// DELETE /api/iot/devices/:deviceId - Delete a device
+iotRoutes.delete("/devices/:deviceId", authenticate, handleDeleteDevice);
+
+// GET /api/iot/devices/:deviceId/telemetry - Get telemetry history
+iotRoutes.get("/devices/:deviceId/telemetry", authenticate, handleGetTelemetry);
+
+// GET /api/iot/devices/:deviceId/commands - Get command history
+iotRoutes.get("/devices/:deviceId/commands", authenticate, handleGetCommands);
+
+// POST /api/iot/devices/:deviceId/commands - Send command to device
+iotRoutes.post("/devices/:deviceId/commands", authenticate, handleSendCommand);
 
 export default iotRoutes;

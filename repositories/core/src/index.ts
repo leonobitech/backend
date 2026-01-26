@@ -150,10 +150,10 @@ app.use("/upload", uploadRouter);
 // 📻 Public podcast routes (read-only, no auth required)
 app.use("/podcasts", podcastRouter);
 
-// 🤖 IoT Device routes (uses x-device-id and x-api-key headers for auth)
-// Device API: register, telemetry, commands - no user auth needed
-// Admin API: list/manage devices - requires admin auth (handled in routes)
-app.use("/api/devices", iotRoutes);
+// 🤖 IoT Device routes
+// Device API: register, telemetry, commands - uses x-device-id and x-api-key headers
+// Dashboard API: list/manage devices - requires user auth (handled in routes)
+app.use("/api/iot", iotRoutes);
 
 // 🛡️ Aplicar X-API-KEY solo a rutas sensibles
 app.use(apiKeyGuard); // <–– desde acá para abajo requieren la clave
