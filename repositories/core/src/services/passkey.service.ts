@@ -1515,15 +1515,26 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 2️⃣ Generar opciones de autenticación SIN allowCredentials (discoverable mode)
-  // Esto permite que el autenticador muestre TODAS las passkeys para el rpId
-  // y evita problemas de credential ID matching en cross-device authentication
+  // 2️⃣ Obtener los passkeys del usuario para allowCredentials
+  const passkeys = await prisma.passkey.findMany({
+    where: { userId },
+    select: { credentialId: true, transports: true },
+  });
+
+  // 3️⃣ Construir allowCredentials con SOLO "hybrid" transport
+  // Forzamos hybrid para que el navegador muestre el QR code
+  const allowCredentials = passkeys.map((passkey) => ({
+    id: passkey.credentialId,
+    type: "public-key" as const,
+    transports: ["hybrid"] as AuthenticatorTransportFuture[],
+  }));
+
+  // 4️⃣ Generar opciones con hints para forzar el flujo híbrido (QR)
   const options = await generateAuthenticationOptions({
     rpID: webAuthnConfig.rpId,
     timeout: webAuthnConfig.timeout,
     userVerification: "required",
-    // NO allowCredentials = discoverable credentials mode
-    // El autenticador mostrará todas las passkeys para leonobitech.com
+    allowCredentials,
   });
 
   loggerEvent(
