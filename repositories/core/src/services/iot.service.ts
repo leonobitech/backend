@@ -371,9 +371,10 @@ export const getDeviceTelemetry = async (params: {
   telemetry: Array<{
     id: string;
     timestamp: string;
+    freeHeap: number;
+    wifiRssi: number;
+    uptimeSecs: number;
     sensors: Record<string, unknown> | null;
-    battery: number | null;
-    rssi: number | null;
     createdAt: string;
   }>;
 }> => {
@@ -400,9 +401,10 @@ export const getDeviceTelemetry = async (params: {
     telemetry: telemetry.map((t) => ({
       id: t.id,
       timestamp: t.createdAt.toISOString(),
+      freeHeap: t.freeHeap,
+      wifiRssi: t.wifiRssi,
+      uptimeSecs: t.uptimeSecs,
       sensors: t.sensors as Record<string, unknown> | null,
-      battery: null, // Add if field exists
-      rssi: t.wifiRssi,
       createdAt: t.createdAt.toISOString(),
     })),
   };
