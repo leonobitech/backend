@@ -1476,9 +1476,12 @@ export async function verifyPasskeySetupAndLogin(
 /**
  * 🔐 2FA CHALLENGE: Generar challenge para verificar passkey existente
  *
- * Enviamos allowCredentials con TODOS los transportes incluyendo 'hybrid'
- * para que el navegador muestre la opción de QR code y el teléfono
- * pueda encontrar la passkey específica.
+ * IMPORTANTE: Usamos "discoverable credentials" (sin allowCredentials) para
+ * que el autenticador muestre TODAS las passkeys del usuario para este dominio.
+ * Esto evita problemas de matching de credential IDs en autenticación cross-device.
+ *
+ * El autenticador (phone) mostrará todas las passkeys guardadas para leonobitech.com
+ * y el usuario selecciona cuál usar.
  *
  * @param userId - ID del usuario
  * @param meta - Metadata de la petición
@@ -1492,71 +1495,50 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 1️⃣ Obtener los passkeys del usuario
-  const passkeys = await prisma.passkey.findMany({
+  // 1️⃣ Verificar que el usuario tiene al menos un passkey
+  const passkeyCount = await prisma.passkey.count({
     where: { userId },
-    select: { credentialId: true, transports: true, name: true },
   });
 
-  if (passkeys.length === 0) {
+  if (passkeyCount === 0) {
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.PASSKEY_NOT_FOUND,
-      "NoPasskeysFound"
+      "PasskeyNotFound"
     );
   }
 
   loggerEvent(
-    "passkey.service.2fa.challenge.passkeys-found",
-    {
-      userId,
-      passkeyCount: passkeys.length,
-      passkeys: passkeys.map(p => ({
-        credentialId: p.credentialId.substring(0, 20) + "...",
-        transports: p.transports,
-        name: p.name
-      }))
-    },
+    "passkey.service.2fa.challenge.passkeys-count",
+    { userId, passkeyCount },
     undefined,
     "passkey.service"
   );
 
-  // 2️⃣ Construir allowCredentials con transportes explícitos
-  // Siempre incluir 'hybrid' para permitir QR code authentication
-  const allowCredentials = passkeys.map((passkey) => {
-    // Combinar los transports guardados con 'hybrid' para asegurar que el QR funcione
-    const storedTransports = (passkey.transports as AuthenticatorTransportFuture[]) || [];
-    const allTransports = Array.from(new Set([...storedTransports, "hybrid", "internal"]));
-
-    return {
-      id: passkey.credentialId,
-      type: "public-key" as const,
-      transports: allTransports as AuthenticatorTransportFuture[],
-    };
-  });
-
-  loggerEvent(
-    "passkey.service.2fa.challenge.allowCredentials",
-    {
-      userId,
-      allowCredentials: allowCredentials.map(c => ({
-        id: c.id.substring(0, 20) + "...",
-        transports: c.transports
-      }))
-    },
-    undefined,
-    "passkey.service"
-  );
-
-  // 3️⃣ Generar opciones de autenticación con allowCredentials explícitos
+  // 2️⃣ Generar opciones de autenticación SIN allowCredentials (discoverable mode)
+  // Esto permite que el autenticador muestre TODAS las passkeys para el rpId
+  // y evita problemas de credential ID matching en cross-device authentication
   const options = await generateAuthenticationOptions({
     rpID: webAuthnConfig.rpId,
     timeout: webAuthnConfig.timeout,
     userVerification: "required",
-    allowCredentials,
+    // NO allowCredentials = discoverable credentials mode
+    // El autenticador mostrará todas las passkeys para leonobitech.com
   });
 
-  // 4️⃣ Guardar challenge en Redis (con userId para seguridad)
+  loggerEvent(
+    "passkey.service.2fa.challenge.options-generated",
+    {
+      userId,
+      rpId: webAuthnConfig.rpId,
+      discoverable: true,
+      challengePreview: options.challenge.substring(0, 20) + "...",
+    },
+    undefined,
+    "passkey.service"
+  );
+
+  // 3️⃣ Guardar challenge en Redis (con userId para seguridad)
   const challengeKey = `passkey:2fa:challenge:${userId}:${options.challenge}`;
   const challengeData: StoredChallenge = {
     challenge: options.challenge,
@@ -1574,9 +1556,9 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service.2fa.challenge.complete",
     {
       userId,
-      passkeyCount: passkeys.length,
+      passkeyCount,
       rpId: webAuthnConfig.rpId,
-      hasAllowCredentials: true
+      mode: "discoverable",
     },
     undefined,
     "passkey.service"
@@ -1642,7 +1624,7 @@ export async function verifyPasskey2FAAndLogin(
     throw new HttpException(
       HTTP_CODE.UNAUTHORIZED,
       ERROR_CODE.INVALID_PASSKEY,
-      "UserIdMismatch"
+      "InvalidPasskey"
     );
   }
 
