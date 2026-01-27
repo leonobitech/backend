@@ -1515,7 +1515,7 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
 
   loggerEvent(
     "passkey.service.2fa.challenge.complete",
-    { userId, allowCredentialsCount: passkeys.length },
+    { userId, passkeyCount, discoverableMode: true },
     undefined,
     "passkey.service"
   );
