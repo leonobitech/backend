@@ -1476,9 +1476,9 @@ export async function verifyPasskeySetupAndLogin(
 /**
  * 🔐 2FA CHALLENGE: Generar challenge para verificar passkey existente
  *
- * MODO DISCOVERABLE: No enviamos allowCredentials específicos.
- * El teléfono buscará TODOS los passkeys que tiene para el RP ID.
- * Esto es más confiable para cross-device authentication.
+ * Enviamos allowCredentials con TODOS los transportes incluyendo 'hybrid'
+ * para que el navegador muestre la opción de QR code y el teléfono
+ * pueda encontrar la passkey específica.
  *
  * @param userId - ID del usuario
  * @param meta - Metadata de la petición
@@ -1492,12 +1492,13 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 1️⃣ Verificar que el usuario tenga passkeys registrados
-  const passkeyCount = await prisma.passkey.count({
+  // 1️⃣ Obtener los passkeys del usuario
+  const passkeys = await prisma.passkey.findMany({
     where: { userId },
+    select: { credentialId: true, transports: true, name: true },
   });
 
-  if (passkeyCount === 0) {
+  if (passkeys.length === 0) {
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.PASSKEY_NOT_FOUND,
@@ -1507,20 +1508,52 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
 
   loggerEvent(
     "passkey.service.2fa.challenge.passkeys-found",
-    { userId, passkeyCount },
+    {
+      userId,
+      passkeyCount: passkeys.length,
+      passkeys: passkeys.map(p => ({
+        credentialId: p.credentialId.substring(0, 20) + "...",
+        transports: p.transports,
+        name: p.name
+      }))
+    },
     undefined,
     "passkey.service"
   );
 
-  // 2️⃣ Generar opciones de autenticación en MODO DISCOVERABLE
-  // No enviamos allowCredentials - el teléfono buscará por RP ID únicamente
-  // Esto es más confiable para passkeys creadas con cross-platform
+  // 2️⃣ Construir allowCredentials con transportes explícitos
+  // Siempre incluir 'hybrid' para permitir QR code authentication
+  const allowCredentials = passkeys.map((passkey) => {
+    // Combinar los transports guardados con 'hybrid' para asegurar que el QR funcione
+    const storedTransports = (passkey.transports as AuthenticatorTransportFuture[]) || [];
+    const allTransports = Array.from(new Set([...storedTransports, "hybrid", "internal"]));
+
+    return {
+      id: passkey.credentialId,
+      type: "public-key" as const,
+      transports: allTransports as AuthenticatorTransportFuture[],
+    };
+  });
+
+  loggerEvent(
+    "passkey.service.2fa.challenge.allowCredentials",
+    {
+      userId,
+      allowCredentials: allowCredentials.map(c => ({
+        id: c.id.substring(0, 20) + "...",
+        transports: c.transports
+      }))
+    },
+    undefined,
+    "passkey.service"
+  );
+
+  // 3️⃣ Generar opciones de autenticación con allowCredentials explícitos
   const options = await generateAuthenticationOptions({
     rpID: webAuthnConfig.rpId,
     timeout: webAuthnConfig.timeout,
     userVerification: "required",
-    // Sin allowCredentials = modo discoverable
-    // El autenticador muestra TODOS los passkeys para este RP ID
+    allowCredentials,
   });
 
   // 4️⃣ Guardar challenge en Redis (con userId para seguridad)
@@ -1539,7 +1572,12 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
 
   loggerEvent(
     "passkey.service.2fa.challenge.complete",
-    { userId, passkeyCount, discoverableMode: true },
+    {
+      userId,
+      passkeyCount: passkeys.length,
+      rpId: webAuthnConfig.rpId,
+      hasAllowCredentials: true
+    },
     undefined,
     "passkey.service"
   );
