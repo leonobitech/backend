@@ -1521,13 +1521,30 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     select: { credentialId: true, transports: true },
   });
 
-  // 3️⃣ Construir allowCredentials con SOLO "hybrid" transport
-  // Forzamos hybrid para que el navegador muestre el QR code
-  const allowCredentials = passkeys.map((passkey) => ({
-    id: passkey.credentialId,
-    type: "public-key" as const,
-    transports: ["hybrid"] as AuthenticatorTransportFuture[],
-  }));
+  // 3️⃣ Construir allowCredentials con todos los transports posibles
+  const allowCredentials = passkeys.map((passkey) => {
+    const storedTransports = (passkey.transports as AuthenticatorTransportFuture[]) || [];
+
+    loggerEvent(
+      "passkey.service.2fa.challenge.credential-debug",
+      {
+        credentialId: passkey.credentialId,
+        credentialIdLength: passkey.credentialId.length,
+        storedTransports,
+        // Check if it's valid base64url
+        isValidBase64url: /^[A-Za-z0-9_-]+$/.test(passkey.credentialId),
+      },
+      undefined,
+      "passkey.service"
+    );
+
+    return {
+      id: passkey.credentialId,
+      type: "public-key" as const,
+      // Incluir TODOS los transports posibles para máxima compatibilidad
+      transports: ["internal", "hybrid", "usb", "ble", "nfc"] as AuthenticatorTransportFuture[],
+    };
+  });
 
   // 4️⃣ Generar opciones con hints para forzar el flujo híbrido (QR)
   const options = await generateAuthenticationOptions({
@@ -1542,7 +1559,12 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     {
       userId,
       rpId: webAuthnConfig.rpId,
-      discoverable: true,
+      allowCredentialsCount: allowCredentials.length,
+      // Log the full allowCredentials for debugging
+      allowCredentials: allowCredentials.map(c => ({
+        id: c.id,
+        transports: c.transports,
+      })),
       challengePreview: options.challenge.substring(0, 20) + "...",
     },
     undefined,
