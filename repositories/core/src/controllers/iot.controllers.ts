@@ -45,7 +45,7 @@ export const handleRegister = catchErrors(
   async (req: Request, res: Response<RegisterDeviceResponse>): Promise<void> => {
     const deviceId = req.get("x-device-id");
     const apiKey = req.get("x-api-key");
-    const { firmware_version } = req.body;
+    const { firmware_version, chip_info } = req.body;
 
     appAssert(
       deviceId && apiKey,
@@ -58,6 +58,7 @@ export const handleRegister = catchErrors(
       {
         deviceId,
         firmwareVersion: firmware_version,
+        chipInfo: chip_info,
       },
       apiKey
     );
@@ -97,7 +98,7 @@ export const handleTelemetry = catchErrors(
     const { valid } = await verifyDeviceApiKey(deviceId, apiKey);
     appAssert(valid, HTTP_CODE.UNAUTHORIZED, "Invalid device credentials", ERROR_CODE.UNAUTHORIZED);
 
-    const { device_id, free_heap, wifi_rssi, uptime_secs, sensors } = req.body;
+    const { device_id, free_heap, wifi_rssi, uptime_secs, wifi_ssid, ip_address, sensors } = req.body;
 
     const result = await saveTelemetry({
       deviceId,
@@ -106,6 +107,8 @@ export const handleTelemetry = catchErrors(
         freeHeap: free_heap,
         wifiRssi: wifi_rssi,
         uptimeSecs: uptime_secs,
+        wifiSsid: wifi_ssid,
+        ipAddress: ip_address,
         sensors,
       },
     });

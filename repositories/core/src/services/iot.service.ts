@@ -61,8 +61,11 @@ export const registerDevice = async (
   params: RegisterDeviceParams,
   apiKey: string
 ): Promise<RegisterDeviceResponse> => {
-  const { deviceId, firmwareVersion } = params;
+  const { deviceId, firmwareVersion, chipInfo } = params;
   const hashedApiKey = hmacHash(apiKey, CLIENT_KEY_SECRET);
+
+  // Build metadata with chip info if provided
+  const metadata = chipInfo ? { chipInfo } : undefined;
 
   // Check if device exists
   let device = await prisma.iotDevice.findUnique({
@@ -77,6 +80,7 @@ export const registerDevice = async (
         firmwareVersion: firmwareVersion || device.firmwareVersion,
         isOnline: true,
         lastSeenAt: new Date(),
+        ...(metadata && { metadata }),
       },
     });
   } else {
@@ -88,6 +92,7 @@ export const registerDevice = async (
         firmwareVersion,
         isOnline: true,
         lastSeenAt: new Date(),
+        metadata,
       },
     });
   }
@@ -119,14 +124,20 @@ export const saveTelemetry = async (
 
   appAssert(device, HTTP_CODE.NOT_FOUND, "Device not found", ERROR_CODE.NOT_FOUND);
 
-  // Save telemetry
+  // Save telemetry (include wifiSsid and ipAddress in sensors JSON)
+  const sensorsData = {
+    ...(data.sensors as Record<string, unknown> || {}),
+    ...(data.wifiSsid && { wifiSsid: data.wifiSsid }),
+    ...(data.ipAddress && { ipAddress: data.ipAddress }),
+  };
+
   await prisma.iotTelemetry.create({
     data: {
       deviceId: device.id,
       freeHeap: data.freeHeap,
       wifiRssi: data.wifiRssi,
       uptimeSecs: data.uptimeSecs,
-      sensors: (data.sensors as Prisma.InputJsonValue) || null,
+      sensors: Object.keys(sensorsData).length > 0 ? (sensorsData as Prisma.InputJsonValue) : null,
     },
   });
 

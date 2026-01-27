@@ -5,9 +5,17 @@ import { IotCommandStatus } from "@prisma/client";
 // Device Registration
 // =============================================================================
 
+export type ChipInfo = {
+  model: string;
+  revision: number;
+  cores: number;
+  idf_version: string;
+};
+
 export type RegisterDeviceParams = {
   deviceId: string;
   firmwareVersion?: string;
+  chipInfo?: ChipInfo;
 };
 
 export type RegisterDeviceResponse = {
@@ -29,6 +37,8 @@ export type TelemetryData = {
   freeHeap: number;
   wifiRssi: number;
   uptimeSecs: number;
+  wifiSsid?: string;
+  ipAddress?: string;
   sensors?: Record<string, unknown>;
 };
 
