@@ -10,7 +10,7 @@ import {
 } from "@utils/auth/getAccessKeysFromRequest";
 import { verifyToken } from "@utils/auth/jwt";
 import { Audience } from "@constants/audience";
-import { AccessTokenPayload } from "@schemas/tokenSchemas";
+import { AccessTokenPayload, AccessTokenValidatedPayload } from "@schemas/tokenSchemas";
 import HttpException from "@utils/http/HttpException";
 import { getTokenAudience } from "@utils/auth/getTokenAudience";
 import logger from "@utils/logging/logger";
@@ -71,7 +71,7 @@ function setAuthenticatedUser(
 }
 
 /**
- * Construye un AccessTokenPayload desde datos de DB (usado en grace period)
+ * Construye un AccessTokenValidatedPayload desde datos de DB (usado en grace period)
  */
 function buildPayloadFromDbData(
   userId: string,
@@ -79,7 +79,7 @@ function buildPayloadFromDbData(
   role: string,
   accessKey: string,
   ttl: number
-): AccessTokenPayload {
+): AccessTokenValidatedPayload {
   const expiresAt = Date.now() + ttl * 1000;
   return {
     userId,
@@ -190,6 +190,11 @@ const authenticate: RequestHandler = catchErrors(
 
     // Validar clientKey si NO viene de DB (en DB ya se validó)
     if (!refreshed && clientKey !== clientKeyHash) {
+      logger.warn("🧹 ClientKey mismatch - limpiando cookies", {
+        ...meta,
+        event: "auth.clientkey.mismatch.cleanup",
+      });
+      clearAuthCookies(res);
       throw new HttpException(
         HTTP_CODE.UNAUTHORIZED,
         "Invalid client key (mismatch with stored key).",
@@ -410,6 +415,13 @@ const authenticate: RequestHandler = catchErrors(
             expectedLegacy: expectedClientKeyLegacy,
           },
         });
+
+        logger.warn("🧹 Fingerprint mismatch - limpiando cookies", {
+          ...meta,
+          userId: tokenPayload.userId,
+          event: "auth.fingerprint.mismatch.cleanup",
+        });
+        clearAuthCookies(res);
 
         throw new HttpException(
           HTTP_CODE.UNAUTHORIZED,
