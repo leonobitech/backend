@@ -25,7 +25,7 @@ export const generateClientKeyFromMeta = async (
     platform: meta.platform,
     timezone: meta.timezone,
     screenResolution: meta.screenResolution,
-    label: meta.label,
+    label: "leonobitech", // Valor fijo para consistencia entre páginas
   };
 
   // 3️⃣ Montamos la cadena
