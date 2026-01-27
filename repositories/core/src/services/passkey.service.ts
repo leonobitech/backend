@@ -1361,6 +1361,19 @@ export async function verifyPasskeySetupAndLogin(
     new Set(credential.response.transports || [])
   );
 
+  loggerEvent(
+    "passkey.service.setup.verify.saving-passkey",
+    {
+      userId,
+      credentialIdLength: credential.id.length,
+      transportsFromBrowser: credential.response.transports,
+      transportsToSave,
+      rpId: webAuthnConfig.rpId,
+    },
+    undefined,
+    "passkey.service"
+  );
+
   const passkey = await prisma.passkey.create({
     data: {
       userId,
@@ -1463,6 +1476,10 @@ export async function verifyPasskeySetupAndLogin(
 /**
  * 🔐 2FA CHALLENGE: Generar challenge para verificar passkey existente
  *
+ * MODO DISCOVERABLE: No enviamos allowCredentials específicos.
+ * El teléfono buscará TODOS los passkeys que tiene para el RP ID.
+ * Esto es más confiable para cross-device authentication.
+ *
  * @param userId - ID del usuario
  * @param meta - Metadata de la petición
  * @returns Opciones de autenticación
@@ -1475,13 +1492,12 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 1️⃣ Obtener passkeys del usuario con sus transports
-  const passkeys = await prisma.passkey.findMany({
+  // 1️⃣ Verificar que el usuario tenga passkeys registrados
+  const passkeyCount = await prisma.passkey.count({
     where: { userId },
-    select: { credentialId: true, transports: true },
   });
 
-  if (passkeys.length === 0) {
+  if (passkeyCount === 0) {
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.PASSKEY_NOT_FOUND,
@@ -1489,44 +1505,22 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     );
   }
 
-  // 2️⃣ Construir allowCredentials con transports que incluyan AMBOS 'internal' y 'hybrid'
-  // Esto permite que el browser muestre TODAS las opciones:
-  // - 'internal': Touch ID / Windows Hello / iCloud Keychain local
-  // - 'hybrid': Scan QR code con otro dispositivo (phone)
-  const allowCredentials = passkeys.map((passkey) => {
-    const storedTransports = (passkey.transports as AuthenticatorTransportFuture[]) || [];
-
-    // Crear un Set con los transports almacenados + internal + hybrid
-    const allTransports = new Set([
-      ...storedTransports,
-      "internal" as AuthenticatorTransportFuture,
-      "hybrid" as AuthenticatorTransportFuture,
-    ]);
-
-    return {
-      id: passkey.credentialId,
-      type: "public-key" as const,
-      transports: Array.from(allTransports),
-    };
-  });
-
   loggerEvent(
-    "passkey.service.2fa.challenge.allowCredentials",
-    {
-      userId,
-      credentialCount: allowCredentials.length,
-      transports: allowCredentials.map((c) => c.transports),
-    },
+    "passkey.service.2fa.challenge.passkeys-found",
+    { userId, passkeyCount },
     undefined,
     "passkey.service"
   );
 
-  // 3️⃣ Generar opciones de autenticación CON allowCredentials
+  // 2️⃣ Generar opciones de autenticación en MODO DISCOVERABLE
+  // No enviamos allowCredentials - el teléfono buscará por RP ID únicamente
+  // Esto es más confiable para passkeys creadas con cross-platform
   const options = await generateAuthenticationOptions({
     rpID: webAuthnConfig.rpId,
     timeout: webAuthnConfig.timeout,
     userVerification: "required",
-    allowCredentials, // Lista específica de passkeys del usuario
+    // Sin allowCredentials = modo discoverable
+    // El autenticador muestra TODOS los passkeys para este RP ID
   });
 
   // 4️⃣ Guardar challenge en Redis (con userId para seguridad)
@@ -1545,7 +1539,7 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
 
   loggerEvent(
     "passkey.service.2fa.challenge.complete",
-    { userId, passkeyCount: passkeys.length, allowCredentialsCount: allowCredentials.length },
+    { userId, passkeyCount, discoverableMode: true },
     undefined,
     "passkey.service"
   );
