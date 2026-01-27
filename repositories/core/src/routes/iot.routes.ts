@@ -7,13 +7,13 @@ import {
   handleStatus,
   handleListDevices,
   handleGetDevice,
-  handleSendCommand,
-  handleCreateDevice,
   handleGetTelemetry,
   handleGetCommands,
   handleDeleteDevice,
   handleDevicesAction,
   handleDeviceAction,
+  handleTelemetryAction,
+  handleCommandsAction,
 } from "@controllers/iot.controllers";
 import authenticate from "@middlewares/authenticate";
 
@@ -58,13 +58,16 @@ iotRoutes.post("/devices/:deviceId", authenticate, handleDeviceAction);
 // DELETE /api/iot/devices/:deviceId - Delete a device (legacy)
 iotRoutes.delete("/devices/:deviceId", authenticate, handleDeleteDevice);
 
-// GET /api/iot/devices/:deviceId/telemetry - Get telemetry history
+// GET /api/iot/devices/:deviceId/telemetry - Get telemetry history (legacy)
 iotRoutes.get("/devices/:deviceId/telemetry", authenticate, handleGetTelemetry);
 
-// GET /api/iot/devices/:deviceId/commands - Get command history
+// POST /api/iot/devices/:deviceId/telemetry - Get telemetry (action: "list") with meta
+iotRoutes.post("/devices/:deviceId/telemetry", authenticate, handleTelemetryAction);
+
+// GET /api/iot/devices/:deviceId/commands - Get command history (legacy)
 iotRoutes.get("/devices/:deviceId/commands", authenticate, handleGetCommands);
 
-// POST /api/iot/devices/:deviceId/commands - Send command to device
-iotRoutes.post("/devices/:deviceId/commands", authenticate, handleSendCommand);
+// POST /api/iot/devices/:deviceId/commands - List (action: "list") or Send (action: "send") with meta
+iotRoutes.post("/devices/:deviceId/commands", authenticate, handleCommandsAction);
 
 export default iotRoutes;

@@ -474,3 +474,71 @@ export const handleDeviceAction = catchErrors(
     appAssert(false, HTTP_CODE.BAD_REQUEST, "Invalid action", ERROR_CODE.BAD_REQUEST);
   }
 );
+
+/**
+ * POST /api/iot/devices/:deviceId/telemetry (with action: "list")
+ * Get telemetry history for device with metadata support
+ */
+export const handleTelemetryAction = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { deviceId } = req.params;
+    const { action, limit = 50, since } = req.body;
+
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+    appAssert(action === "list", HTTP_CODE.BAD_REQUEST, "Action must be 'list'", ERROR_CODE.BAD_REQUEST);
+
+    const result = await getDeviceTelemetry({
+      deviceId,
+      limit: typeof limit === "number" ? limit : 50,
+      since: since ? new Date(since) : undefined,
+    });
+
+    res.status(HTTP_CODE.OK).json(result);
+  }
+);
+
+/**
+ * POST /api/iot/devices/:deviceId/commands (with action: "list" or "send")
+ * Get command history or send command with metadata support
+ */
+export const handleCommandsAction = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { deviceId } = req.params;
+    const { action, limit = 20, command, params } = req.body;
+
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+    appAssert(action, HTTP_CODE.BAD_REQUEST, "Action is required", ERROR_CODE.BAD_REQUEST);
+
+    if (action === "list") {
+      const result = await getDeviceCommands({
+        deviceId,
+        limit: typeof limit === "number" ? limit : 20,
+      });
+      res.status(HTTP_CODE.OK).json(result);
+      return;
+    }
+
+    if (action === "send") {
+      appAssert(command, HTTP_CODE.BAD_REQUEST, "Command is required", ERROR_CODE.BAD_REQUEST);
+
+      const result = await sendCommandToDevice({
+        deviceId,
+        action: command,
+        params,
+        sentBy: req.userId,
+      });
+
+      loggerEvent(
+        "iot.command.sent",
+        { deviceId, command, commandId: result.command.id },
+        req,
+        "handleCommandsAction"
+      );
+
+      res.status(HTTP_CODE.CREATED).json(result);
+      return;
+    }
+
+    appAssert(false, HTTP_CODE.BAD_REQUEST, "Invalid action", ERROR_CODE.BAD_REQUEST);
+  }
+);
