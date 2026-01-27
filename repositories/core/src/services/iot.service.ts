@@ -13,9 +13,9 @@ import { IotCommandStatus, Prisma } from "@prisma/client";
 
 /**
  * Device is considered offline if no heartbeat received in this time (seconds)
- * ESP32 typically sends telemetry every 30 seconds, so 60s timeout is safe
+ * ESP32 sends telemetry every 30 seconds, so 35s gives a small buffer
  */
-const DEVICE_OFFLINE_THRESHOLD_SECONDS = 60;
+const DEVICE_OFFLINE_THRESHOLD_SECONDS = 35;
 
 /**
  * Helper to determine if a device is online based on lastSeenAt
