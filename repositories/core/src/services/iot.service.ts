@@ -589,6 +589,7 @@ export const getDeviceDetails = async (
         createdAt: t.createdAt.toISOString(),
       })),
       pendingCommands: device.commands.length,
+      metadata: device.metadata as Record<string, unknown> | null,
     },
   };
 };

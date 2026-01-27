@@ -164,6 +164,7 @@ export type DeviceDetails = DeviceInfo & {
     createdAt: string;
   }[];
   pendingCommands: number;
+  metadata: Record<string, unknown> | null;
 };
 
 export type GetDeviceDetailsResponse = {
