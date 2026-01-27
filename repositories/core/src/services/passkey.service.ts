@@ -1489,19 +1489,24 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     );
   }
 
-  // 2️⃣ Construir allowCredentials con transports que incluyan 'hybrid'
-  // 'hybrid' es CRÍTICO para habilitar la opción de QR code (cross-platform)
+  // 2️⃣ Construir allowCredentials con transports que incluyan AMBOS 'internal' y 'hybrid'
+  // Esto permite que el browser muestre TODAS las opciones:
+  // - 'internal': Touch ID / Windows Hello / iCloud Keychain local
+  // - 'hybrid': Scan QR code con otro dispositivo (phone)
   const allowCredentials = passkeys.map((passkey) => {
-    // Asegurar que 'hybrid' esté incluido para permitir QR code scanning
     const storedTransports = (passkey.transports as AuthenticatorTransportFuture[]) || [];
-    const transportsWithHybrid = storedTransports.includes("hybrid")
-      ? storedTransports
-      : [...storedTransports, "hybrid" as AuthenticatorTransportFuture];
+
+    // Crear un Set con los transports almacenados + internal + hybrid
+    const allTransports = new Set([
+      ...storedTransports,
+      "internal" as AuthenticatorTransportFuture,
+      "hybrid" as AuthenticatorTransportFuture,
+    ]);
 
     return {
       id: passkey.credentialId,
       type: "public-key" as const,
-      transports: transportsWithHybrid,
+      transports: Array.from(allTransports),
     };
   });
 
