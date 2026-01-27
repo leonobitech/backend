@@ -2,6 +2,7 @@
 
 import { Request } from "express";
 import { createDecipheriv } from "crypto";
+import type { RequestMeta } from "@utils/request/getRequestMeta";
 
 export type ClientMeta = {
   deviceInfo: {
@@ -116,6 +117,9 @@ export const getClientMeta = (req: Request): RequestMeta | null => {
       path: req.originalUrl || "/",
       method: req.method || "GET",
       host: req.hostname || "unknown",
+      // 🔐 Security fields for ForwardAuth validation
+      sessionId: partial.sessionId || undefined,
+      createdAt: partial.createdAt || undefined,
     };
 
     return meta;

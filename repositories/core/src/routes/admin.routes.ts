@@ -16,24 +16,25 @@ const uploadMiddleware = fileUpload({
 // Solo los administradores pueden acceder a este panel
 adminRouter.get("/info", getAdminInfo);
 
-adminRouter.post("/n8n", (_req, res) => {
-  res.json({ url: "https://n8n.leonobitech.com" });
+// 🔐 Todas las rutas de admin ahora retornan sessionId para binding con clientMeta
+adminRouter.post("/n8n", (req, res) => {
+  res.json({ url: "https://n8n.leonobitech.com", sessionId: req.sessionId });
 });
 
-adminRouter.post("/odoo", (_req, res) => {
-  res.json({ url: "https://odoo.leonobitech.com" });
+adminRouter.post("/odoo", (req, res) => {
+  res.json({ url: "https://odoo.leonobitech.com", sessionId: req.sessionId });
 });
 
-adminRouter.post("/baserow", (_req, res) => {
-  res.json({ url: "https://br.leonobitech.com" });
+adminRouter.post("/baserow", (req, res) => {
+  res.json({ url: "https://br.leonobitech.com", sessionId: req.sessionId });
 });
 
-adminRouter.post("/chatwoot", (_req, res) => {
-  res.json({ url: "https://chat.leonobitech.com" });
+adminRouter.post("/chatwoot", (req, res) => {
+  res.json({ url: "https://chat.leonobitech.com", sessionId: req.sessionId });
 });
 
-adminRouter.post("/leonobit", (_req, res) => {
-  res.json({ url: "https://leonobit.leonobitech.com" });
+adminRouter.post("/leonobit", (req, res) => {
+  res.json({ url: "https://leonobit.leonobitech.com", sessionId: req.sessionId });
 });
 
 // 📹 Upload podcast video (legacy - requires apiKeyGuard)

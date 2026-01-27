@@ -76,6 +76,9 @@ export interface RequestMeta {
   path: string;
   method: string;
   host: string;
+  // 🔐 Security fields for ForwardAuth validation
+  sessionId?: string;  // Bound to authenticated session
+  createdAt?: number;  // Timestamp for expiry validation
 }
 
 const MetaSchema = z.object({
