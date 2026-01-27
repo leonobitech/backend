@@ -444,34 +444,83 @@ const authenticate: RequestHandler = catchErrors(
 
       payload = tokenPayload;
     } catch (err) {
-      if (err instanceof HttpException) {
-        logger.warn("⚠️ Token inválido detectado", {
-          ...meta,
-          errorCode: err.errorCode,
-          message: err.message,
-          details: err.details,
-          event:
-            err.errorCode === ERROR_CODE.TOKEN_REVOKED
-              ? "auth.token.revoked"
-              : "auth.token.invalid",
-        });
-        return next(err);
-      }
-
-      logger.error("💥 Error inesperado al verificar token", {
+      // =========================================================================
+      // 🔄 RECOVERY: Intentar silent refresh antes de limpiar cookies
+      // =========================================================================
+      // El token JWT puede estar inválido/expirado en Redis, pero la sesión
+      // puede seguir válida en DB. Intentamos recuperar antes de forzar re-login.
+      logger.info("🔄 Token inválido en Redis - intentando recovery desde DB", {
         ...meta,
-        err,
-        event: "auth.token.error",
+        originalError: err instanceof Error ? err.message : "Unknown",
+        event: "auth.token.recovery.attempt",
       });
 
-      return next(
-        new HttpException(
-          HTTP_CODE.UNAUTHORIZED,
-          getErrorMessage("INVALID_ACCESS_TOKEN", lang),
-          ERROR_CODE.INVALID_ACCESS_TOKEN,
-          ["Verifica firma del token, expiración y formato."]
-        )
-      );
+      try {
+        const result = await refreshAccessTokenService(
+          clientKey,
+          meta,
+          lang,
+          req,
+          clientKeyHash // Formato alternativo para backward compatibility
+        );
+
+        const { payload: recoveredPayload } = await verifyToken(
+          result.tokens.accessToken,
+          lang,
+          req
+        );
+        validateAccessTokenPayload(recoveredPayload, lang);
+
+        // ✅ Recovery exitoso - actualizar cookies
+        logger.info("✅ Recovery exitoso - actualizando cookies", {
+          ...meta,
+          userId: result.data.userId,
+          sessionId: result.data.sessionId,
+          event: "auth.token.recovery.success",
+        });
+
+        refreshAuthCookies({
+          res,
+          accessKey: result.tokens.accessTokenId,
+          clientKey: result.tokens.hashedPublicKey,
+        });
+
+        setAuthenticatedUser(req, res, recoveredPayload);
+
+        loggerEvent("token.recovered", {
+          ...meta,
+          userId: recoveredPayload.userId,
+          sessionId: recoveredPayload.sessionId,
+          event: "auth.token.recovery",
+          source: "auth.middleware.recovery",
+        });
+
+        return next();
+      } catch (recoveryErr) {
+        // ❌ Recovery falló - ahora sí limpiar cookies y forzar re-login
+        logger.warn("🧹 Recovery falló - limpiando cookies y forzando re-login", {
+          ...meta,
+          originalError: err instanceof Error ? err.message : "Unknown",
+          recoveryError: recoveryErr instanceof Error ? recoveryErr.message : "Unknown",
+          event: "auth.token.recovery.failed",
+        });
+
+        clearAuthCookies(res);
+
+        // Usar el error original si es HttpException, sino crear uno nuevo
+        if (err instanceof HttpException) {
+          return next(err);
+        }
+
+        return next(
+          new HttpException(
+            HTTP_CODE.UNAUTHORIZED,
+            getErrorMessage("INVALID_ACCESS_TOKEN", lang),
+            ERROR_CODE.INVALID_ACCESS_TOKEN,
+            ["Session expirada. Por favor inicia sesión nuevamente."]
+          )
+        );
+      }
     }
 
     //==========================================================================
