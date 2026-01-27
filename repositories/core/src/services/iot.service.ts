@@ -7,6 +7,25 @@ import { hmacHash } from "@utils/crypto/hmacHash";
 import { API_STATUS } from "@constants/apiStatus";
 import { IotCommandStatus, Prisma } from "@prisma/client";
 
+// =============================================================================
+// Constants
+// =============================================================================
+
+/**
+ * Device is considered offline if no heartbeat received in this time (seconds)
+ * ESP32 typically sends telemetry every 30 seconds, so 60s timeout is safe
+ */
+const DEVICE_OFFLINE_THRESHOLD_SECONDS = 60;
+
+/**
+ * Helper to determine if a device is online based on lastSeenAt
+ */
+const isDeviceOnline = (lastSeenAt: Date | null): boolean => {
+  if (!lastSeenAt) return false;
+  const thresholdMs = DEVICE_OFFLINE_THRESHOLD_SECONDS * 1000;
+  return Date.now() - lastSeenAt.getTime() < thresholdMs;
+};
+
 import type {
   RegisterDeviceParams,
   RegisterDeviceResponse,
@@ -543,7 +562,8 @@ export const getAllDevices = async (): Promise<GetDevicesResponse> => {
       deviceId: d.deviceId,
       name: d.name,
       firmwareVersion: d.firmwareVersion,
-      status: d.isOnline ? "online" : "offline",
+      // Calculate online status dynamically based on lastSeenAt threshold
+      status: isDeviceOnline(d.lastSeenAt) ? "online" : "offline",
       lastSeen: d.lastSeenAt?.toISOString() || null,
       createdAt: d.createdAt.toISOString(),
     })),
@@ -579,7 +599,8 @@ export const getDeviceDetails = async (
       deviceId: device.deviceId,
       name: device.name,
       firmwareVersion: device.firmwareVersion,
-      status: device.isOnline ? "online" : "offline",
+      // Calculate online status dynamically based on lastSeenAt threshold
+      status: isDeviceOnline(device.lastSeenAt) ? "online" : "offline",
       lastSeen: device.lastSeenAt?.toISOString() || null,
       createdAt: device.createdAt.toISOString(),
       recentTelemetry: device.telemetry.map((t) => ({
