@@ -1475,13 +1475,12 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 1️⃣ Obtener passkeys del usuario
-  const passkeys = await prisma.passkey.findMany({
+  // 1️⃣ Verificar que el usuario tiene passkeys
+  const passkeyCount = await prisma.passkey.count({
     where: { userId },
-    select: { credentialId: true, transports: true },
   });
 
-  if (passkeys.length === 0) {
+  if (passkeyCount === 0) {
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.PASSKEY_NOT_FOUND,
@@ -1489,16 +1488,15 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     );
   }
 
-  // 2️⃣ Generar opciones de autenticación
+  // 2️⃣ Generar opciones de autenticación en modo DISCOVERABLE
+  // No enviamos allowCredentials para que el phone muestre todas las passkeys
+  // registradas para este RP ID (leonobitech.com)
   const options = await generateAuthenticationOptions({
     rpID: webAuthnConfig.rpId,
     timeout: webAuthnConfig.timeout,
     userVerification: "required",
-    allowCredentials: passkeys.map((passkey) => ({
-      id: passkey.credentialId,
-      type: "public-key" as const,
-      transports: (passkey.transports as AuthenticatorTransportFuture[]) || [],
-    })),
+    // allowCredentials: undefined = modo discoverable
+    // El phone/browser mostrará todas las passkeys para este rpId
   });
 
   // 3️⃣ Guardar challenge en Redis (con userId para seguridad)
