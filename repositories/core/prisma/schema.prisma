@@ -155,6 +155,30 @@ model SecurityEventLog {
   @@index([sessionId])
 }
 
+// 🚨 Log de ataques e intentos de acceso no autorizados (sin requerir userId/sessionId)
+model AttackLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  type        String   // Tipo de ataque: "missing_cookies", "session_mismatch", "expired_meta", "invalid_token"
+  severity    String   @default("medium") // low, medium, high, critical
+  ipAddress   String
+  userAgent   String
+  path        String
+  method      String
+  host        String
+  details     String?  // JSON con detalles adicionales
+  blocked     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  // Opcional: si logramos identificar al usuario/sesión del token robado
+  attemptedUserId    String?
+  attemptedSessionId String?
+
+  @@index([ipAddress])
+  @@index([type])
+  @@index([createdAt])
+  @@index([severity])
+}
+
 model Passkey {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId
   userId          String   @map("userId") @db.ObjectId

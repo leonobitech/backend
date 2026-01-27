@@ -6,6 +6,7 @@ import { UserRole } from "@constants/userRole";
 import { HTTP_CODE } from "@constants/httpCode";
 import prisma from "@config/prisma";
 import logger from "@utils/logging/logger";
+import { logAttack } from "@utils/logging/logAttack";
 
 const securityRoutes = Router();
 
@@ -42,6 +43,25 @@ const validateClientMeta = (req: Request, res: Response, next: NextFunction): vo
       ipAddress: meta.ipAddress,
       event: "security.forwardauth.session_mismatch",
     });
+
+    // 🚨 Registrar intento de uso de cookie robada
+    logAttack({
+      type: "session_mismatch",
+      severity: "high",
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      path: req.path,
+      method: req.method,
+      host: req.hostname || meta.host,
+      details: {
+        metaSessionId: meta.sessionId,
+        authSessionId: req.sessionId,
+        deviceInfo: meta.deviceInfo,
+      },
+      attemptedUserId: req.userId,
+      attemptedSessionId: req.sessionId,
+    });
+
     res.status(HTTP_CODE.UNAUTHORIZED).send("❌ Session mismatch");
     return;
   }
@@ -56,6 +76,26 @@ const validateClientMeta = (req: Request, res: Response, next: NextFunction): vo
       sessionId: req.sessionId,
       event: "security.forwardauth.meta_expired",
     });
+
+    // 🚨 Registrar intento con cookie expirada (posible replay attack)
+    logAttack({
+      type: "expired_meta",
+      severity: "medium",
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      path: req.path,
+      method: req.method,
+      host: req.hostname || meta.host,
+      details: {
+        createdAt: new Date(meta.createdAt).toISOString(),
+        ageMs: age,
+        maxAgeMs: CLIENT_META_TTL_MS,
+        sessionId: meta.sessionId,
+      },
+      attemptedUserId: req.userId,
+      attemptedSessionId: req.sessionId,
+    });
+
     res.status(HTTP_CODE.UNAUTHORIZED).send("❌ Session expired - please refresh");
     return;
   }

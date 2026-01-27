@@ -22,6 +22,9 @@ declare global {
     path: string;
     method: string;
     host: string;
+    // 🔐 Security fields for ForwardAuth validation
+    sessionId?: string;  // Bound to authenticated session
+    createdAt?: number;  // Timestamp for expiry validation
   }
 
   // Definimos la interfaz para el objeto de configuración de la petición
