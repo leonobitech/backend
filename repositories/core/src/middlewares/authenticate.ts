@@ -156,23 +156,79 @@ const authenticate: RequestHandler = catchErrors(
         true // useFallback: Si no está en Redis, buscar en DB
       );
     } catch (err) {
-      // Si el token no existe en DB, limpiar cookies y forzar re-login
-      // NO limpiar si es INVALID_CLIENT_KEY (puede ser refresh temporal)
+      // =======================================================================
+      // 🔄 RECOVERY: Si ACCESS token no existe, intentar refresh con clientKey
+      // =======================================================================
+      // El ACCESS token puede haber expirado/eliminado de DB, pero el REFRESH
+      // token aún puede ser válido. Intentamos recuperar antes de forzar re-login.
       if (
         err instanceof HttpException &&
         err.errorCode === ERROR_CODE.TOKEN_REVOKED
       ) {
-        logger.warn(
-          "🧹 Token revocado - limpiando cookies y forzando re-login",
+        logger.info(
+          "🔄 ACCESS token no encontrado - intentando recovery via REFRESH token",
           {
             ...meta,
             errorCode: err.errorCode,
-            event: "auth.token.revoked.cleanup",
+            event: "auth.token.revoked.recovery.attempt",
           }
         );
 
-        clearAuthCookies(res);
-        throw err;
+        try {
+          const result = await refreshAccessTokenService(
+            clientKey,
+            meta,
+            lang,
+            req
+          );
+
+          const { payload: recoveredPayload } = await verifyToken(
+            result.tokens.accessToken,
+            lang,
+            req
+          );
+          validateAccessTokenPayload(recoveredPayload, lang);
+
+          // ✅ Recovery exitoso - actualizar cookies
+          logger.info("✅ Recovery via REFRESH exitoso - actualizando cookies", {
+            ...meta,
+            userId: result.data.userId,
+            sessionId: result.data.sessionId,
+            event: "auth.token.revoked.recovery.success",
+          });
+
+          refreshAuthCookies({
+            res,
+            accessKey: result.tokens.accessTokenId,
+            clientKey: result.tokens.hashedPublicKey,
+          });
+
+          setAuthenticatedUser(req, res, recoveredPayload);
+
+          loggerEvent("token.recovered.from.refresh", {
+            ...meta,
+            userId: recoveredPayload.userId,
+            sessionId: recoveredPayload.sessionId,
+            event: "auth.token.recovery.refresh",
+            source: "auth.middleware.token_revoked_recovery",
+          });
+
+          return next();
+        } catch (recoveryErr) {
+          // ❌ Recovery falló - ahora sí limpiar cookies y forzar re-login
+          logger.warn(
+            "🧹 Recovery via REFRESH falló - limpiando cookies y forzando re-login",
+            {
+              ...meta,
+              originalError: err instanceof Error ? err.message : "Unknown",
+              recoveryError: recoveryErr instanceof Error ? recoveryErr.message : "Unknown",
+              event: "auth.token.revoked.recovery.failed",
+            }
+          );
+
+          clearAuthCookies(res);
+          throw err;
+        }
       }
       throw err;
     }
