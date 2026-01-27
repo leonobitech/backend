@@ -1515,43 +1515,22 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 2️⃣ Obtener los passkeys del usuario para allowCredentials
-  const passkeys = await prisma.passkey.findMany({
-    where: { userId },
-    select: { credentialId: true, transports: true },
-  });
+  // 2️⃣ Usar DISCOVERABLE CREDENTIALS (sin allowCredentials)
+  // Esto permite que el autenticador (teléfono) muestre TODAS las passkeys
+  // guardadas para este rpId, sin importar cómo se registraron.
+  // El usuario elige cuál usar.
+  //
+  // IMPORTANTE: Esto resuelve el problema de que Google Password Manager
+  // no encuentra la passkey cuando el dominio es www.leonobitech.com
+  // pero el rpId es leonobitech.com
 
-  // 3️⃣ Construir allowCredentials con todos los transports posibles
-  const allowCredentials = passkeys.map((passkey) => {
-    const storedTransports = (passkey.transports as AuthenticatorTransportFuture[]) || [];
-
-    loggerEvent(
-      "passkey.service.2fa.challenge.credential-debug",
-      {
-        credentialId: passkey.credentialId,
-        credentialIdLength: passkey.credentialId.length,
-        storedTransports,
-        // Check if it's valid base64url
-        isValidBase64url: /^[A-Za-z0-9_-]+$/.test(passkey.credentialId),
-      },
-      undefined,
-      "passkey.service"
-    );
-
-    return {
-      id: passkey.credentialId,
-      type: "public-key" as const,
-      // Incluir TODOS los transports posibles para máxima compatibilidad
-      transports: ["internal", "hybrid", "usb", "ble", "nfc"] as AuthenticatorTransportFuture[],
-    };
-  });
-
-  // 4️⃣ Generar opciones con hints para forzar el flujo híbrido (QR)
+  // 3️⃣ Generar opciones SIN allowCredentials (discoverable mode)
   const options = await generateAuthenticationOptions({
     rpID: webAuthnConfig.rpId,
     timeout: webAuthnConfig.timeout,
     userVerification: "required",
-    allowCredentials,
+    // NO allowCredentials = discoverable credentials mode
+    // El teléfono mostrará todas las passkeys para leonobitech.com
   });
 
   loggerEvent(
@@ -1559,12 +1538,7 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     {
       userId,
       rpId: webAuthnConfig.rpId,
-      allowCredentialsCount: allowCredentials.length,
-      // Log the full allowCredentials for debugging
-      allowCredentials: allowCredentials.map(c => ({
-        id: c.id,
-        transports: c.transports,
-      })),
+      mode: "discoverable", // Sin allowCredentials
       challengePreview: options.challenge.substring(0, 20) + "...",
     },
     undefined,
