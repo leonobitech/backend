@@ -189,3 +189,43 @@ export type ResetPasswordResponse =
       expiresIn: number;
       resend: true;
     };
+
+//==============================================================================
+//                          Passkey 2FA Responses
+//==============================================================================
+
+export type LoginPasskeySetupRequiredResponse = {
+  status: typeof API_STATUS.PASSKEY_SETUP_REQUIRED;
+  message: string;
+  data: {
+    userId: string;
+    email: string;
+    pendingToken: string;
+    expiresIn: number;
+  };
+};
+
+export type LoginPasskeyVerifyRequiredResponse = {
+  status: typeof API_STATUS.PASSKEY_VERIFY_REQUIRED;
+  message: string;
+  data: {
+    userId: string;
+    email: string;
+    pendingToken: string;
+    expiresIn: number;
+  };
+};
+
+export type LoginPasskeyPendingResponse =
+  | LoginPasskeySetupRequiredResponse
+  | LoginPasskeyVerifyRequiredResponse;
+
+export type PasskeyRecoverySentResponse = {
+  status: typeof API_STATUS.PASSKEY_RECOVERY_SENT;
+  message: string;
+  data: {
+    email: string;
+    requestId: string;
+    expiresIn: number;
+  };
+};

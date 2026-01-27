@@ -13,6 +13,10 @@ export const API_STATUS = {
   ERROR: "error",
   PASSWORD_RESET_CODE_SENT: "passwordResetCodeSent",
   PASSWORD_RESET_SUCCESS: "passwordResetSuccess",
+  // 🔐 Passkey 2FA states
+  PASSKEY_SETUP_REQUIRED: "passkeySetupRequired",
+  PASSKEY_VERIFY_REQUIRED: "passkeyVerifyRequired",
+  PASSKEY_RECOVERY_SENT: "passkeyRecoverySent",
 } as const;
 
 export type ApiStatus = (typeof API_STATUS)[keyof typeof API_STATUS];

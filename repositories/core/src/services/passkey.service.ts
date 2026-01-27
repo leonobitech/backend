@@ -1142,3 +1142,593 @@ export async function deletePasskey(userId: string, passkeyId: string) {
   // 3️⃣ Retornar confirmación
   return { passkeyId };
 }
+
+//==============================================================================
+//                    🔐 PASSKEY 2FA MANDATORY FUNCTIONS
+//==============================================================================
+
+/**
+ * 🔐 SETUP CHALLENGE: Generar challenge para configurar passkey obligatorio
+ *
+ * IMPORTANTE: Este endpoint fuerza `authenticatorAttachment: "cross-platform"`
+ * para que SOLO se pueda usar un dispositivo externo (teléfono).
+ * No permite usar Keychain local, Windows Hello, etc.
+ *
+ * @param userId - ID del usuario (extraído del pendingToken)
+ * @param email - Email del usuario
+ * @param meta - Metadata de la petición
+ * @returns Opciones de registro con cross-platform forzado
+ */
+export async function generatePasskeySetupChallenge(
+  userId: string,
+  email: string,
+  meta: RequestMeta
+) {
+  loggerEvent(
+    "passkey.service.setup.challenge.start",
+    { userId, email },
+    undefined,
+    "passkey.service"
+  );
+
+  // 1️⃣ Buscar al usuario en la base de datos
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true },
+  });
+
+  if (!user) {
+    throw new HttpException(
+      HTTP_CODE.NOT_FOUND,
+      ERROR_CODE.USER_NOT_FOUND,
+      "UserNotFound"
+    );
+  }
+
+  // 2️⃣ Verificar que no tenga passkeys (doble check de seguridad)
+  const existingPasskeys = await prisma.passkey.findMany({
+    where: { userId },
+    select: { credentialId: true, transports: true },
+  });
+
+  // 3️⃣ Generar opciones de registro con CROSS-PLATFORM forzado
+  const options = await generateRegistrationOptions({
+    rpName: webAuthnConfig.rpName,
+    rpID: webAuthnConfig.rpId,
+    userID: isoUint8Array.fromUTF8String(user.id),
+    userName: user.email,
+    userDisplayName:
+      user.name && user.name.trim() !== ""
+        ? user.name
+        : user.email.split("@")[0],
+    timeout: webAuthnConfig.timeout,
+    attestationType: webAuthnConfig.attestation,
+    excludeCredentials: existingPasskeys.map((passkey) => ({
+      id: passkey.credentialId,
+      type: "public-key",
+      transports: passkey.transports as AuthenticatorTransportFuture[],
+    })),
+    // 🔐 CRÍTICO: Forzar cross-platform (solo teléfono, no Keychain local)
+    authenticatorSelection: {
+      authenticatorAttachment: "cross-platform", // 🔐 SOLO dispositivos externos
+      requireResidentKey: true,
+      residentKey: "required",
+      userVerification: "required",
+    },
+    supportedAlgorithmIDs: [...webAuthnConfig.supportedAlgorithms],
+  });
+
+  // 4️⃣ Guardar challenge en Redis
+  const challengeKey = `passkey:setup:challenge:${userId}`;
+  const challengeData: StoredChallenge = {
+    challenge: options.challenge,
+    userId,
+    expiresAt: Date.now() + webAuthnConfig.challengeTTL,
+  };
+
+  await redis.setEx(
+    challengeKey,
+    Math.floor(webAuthnConfig.challengeTTL / 1000),
+    JSON.stringify(challengeData)
+  );
+
+  loggerEvent(
+    "passkey.service.setup.challenge.complete",
+    { userId, rpId: options.rp.id, crossPlatformEnforced: true },
+    undefined,
+    "passkey.service"
+  );
+
+  return options;
+}
+
+/**
+ * ✅ VERIFY SETUP: Verificar passkey creado y completar login
+ *
+ * Este endpoint:
+ * 1. Verifica el passkey creado
+ * 2. Lo guarda en la base de datos
+ * 3. Crea una sesión completa
+ * 4. Genera tokens JWT
+ *
+ * @param userId - ID del usuario
+ * @param credential - Credencial del navegador
+ * @param name - Nombre del passkey
+ * @param meta - Metadata de la petición
+ * @returns Usuario, sesión y tokens
+ */
+export async function verifyPasskeySetupAndLogin(
+  userId: string,
+  credential: RegistrationResponseJSON,
+  name: string | undefined,
+  meta: RequestMeta
+) {
+  loggerEvent(
+    "passkey.service.setup.verify.start",
+    { userId, credentialId: credential.id },
+    undefined,
+    "passkey.service"
+  );
+
+  // 1️⃣ Recuperar challenge de Redis
+  const challengeKey = `passkey:setup:challenge:${userId}`;
+  const storedChallengeData = await redis.get(challengeKey);
+
+  if (!storedChallengeData) {
+    throw new HttpException(
+      HTTP_CODE.BAD_REQUEST,
+      ERROR_CODE.CHALLENGE_NOT_FOUND_OR_EXPIRED,
+      "ChallengeNotFoundOrExpired"
+    );
+  }
+
+  const storedChallenge: StoredChallenge = JSON.parse(storedChallengeData);
+
+  // 2️⃣ Verificar expiración
+  if (storedChallenge.expiresAt < Date.now()) {
+    await redis.del(challengeKey);
+    throw new HttpException(
+      HTTP_CODE.BAD_REQUEST,
+      ERROR_CODE.CHALLENGE_EXPIRED,
+      "ChallengeExpired"
+    );
+  }
+
+  // 3️⃣ Verificar credencial
+  const verification = await verifyRegistrationResponse({
+    response: credential,
+    expectedChallenge: storedChallenge.challenge,
+    expectedOrigin: webAuthnConfig.origin,
+    expectedRPID: webAuthnConfig.rpId,
+    requireUserVerification: true,
+  });
+
+  if (!verification.verified || !verification.registrationInfo) {
+    throw new HttpException(
+      HTTP_CODE.BAD_REQUEST,
+      ERROR_CODE.PASSKEY_VERIFICATION_FAILED,
+      "PasskeyVerificationFailed"
+    );
+  }
+
+  const { credential: credentialInfo } = verification.registrationInfo;
+
+  // 4️⃣ Buscar usuario
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, role: true },
+  });
+
+  if (!user) {
+    throw new HttpException(
+      HTTP_CODE.NOT_FOUND,
+      ERROR_CODE.USER_NOT_FOUND,
+      "UserNotFound"
+    );
+  }
+
+  // 5️⃣ Crear/actualizar dispositivo
+  const device = await prisma.device.upsert({
+    where: {
+      unique_device: {
+        userId,
+        device: meta.deviceInfo.device,
+        os: meta.deviceInfo.os,
+        browser: meta.deviceInfo.browser,
+      },
+    },
+    update: {
+      lastUsedAt: new Date(),
+      ipAddress: meta.ipAddress,
+    },
+    create: {
+      userId,
+      device: meta.deviceInfo.device,
+      os: meta.deviceInfo.os,
+      browser: meta.deviceInfo.browser,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      language: meta.language,
+      timezone: meta.timezone,
+      platform: meta.platform,
+      screenResolution: meta.screenResolution,
+      label: meta.label,
+    },
+  });
+
+  // 6️⃣ Guardar passkey
+  const transportsToSave = Array.from(
+    new Set(credential.response.transports || [])
+  );
+
+  const passkey = await prisma.passkey.create({
+    data: {
+      userId,
+      deviceId: device.id,
+      credentialId: credential.id,
+      publicKey: Buffer.from(credentialInfo.publicKey).toString("base64url"),
+      counter: credentialInfo.counter,
+      name: name || `${meta.deviceInfo.device} (${meta.deviceInfo.os})`,
+      transports: transportsToSave,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  // 7️⃣ Eliminar challenge
+  await redis.del(challengeKey);
+
+  // 8️⃣ Crear sesión completa
+  const session = await prisma.session.create({
+    data: {
+      userId: user.id,
+      deviceId: device.id,
+      clientKey: "",
+      expiresAt: thirtyDaysFromNow(),
+    },
+  });
+
+  // 9️⃣ Generar clientKey
+  const hashedPublicKey = await generateClientKeyFromMeta(meta, user.id, session.id);
+
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { clientKey: hashedPublicKey },
+  });
+
+  // 🔟 Generar tokens
+  const { token: accessToken, hashedJti: accessTokenId } =
+    await generateAccessToken(user.id, session.id, user.role as UserRole, hashedPublicKey);
+
+  const { token: refreshToken, hashedJti: refreshTokenId } =
+    await generateRefreshToken(user.id, session.id, user.role as UserRole, hashedPublicKey);
+
+  // 1️⃣1️⃣ Registrar tokens
+  await prisma.tokenRecord.createMany({
+    data: [
+      {
+        jti: accessTokenId,
+        type: "ACCESS",
+        token: accessToken,
+        sessionId: session.id,
+        userId: user.id,
+        publicKey: hashedPublicKey,
+        expiresAt: await getJwtExpiration(accessToken),
+        revoked: false,
+      },
+      {
+        jti: refreshTokenId,
+        type: "REFRESH",
+        token: refreshToken,
+        sessionId: session.id,
+        userId: user.id,
+        publicKey: hashedPublicKey,
+        expiresAt: await getJwtExpiration(refreshToken),
+        revoked: false,
+      },
+    ],
+  });
+
+  loggerEvent(
+    "passkey.service.setup.verify.complete",
+    { userId, sessionId: session.id, passkeyId: passkey.id },
+    undefined,
+    "passkey.service"
+  );
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    },
+    session: {
+      id: session.id,
+      expiresAt: session.expiresAt,
+    },
+    tokens: {
+      accessTokenId,
+      hashedPublicKey,
+    },
+    passkey: {
+      id: passkey.id,
+      name: passkey.name,
+    },
+  };
+}
+
+/**
+ * 🔐 2FA CHALLENGE: Generar challenge para verificar passkey existente
+ *
+ * @param userId - ID del usuario
+ * @param meta - Metadata de la petición
+ * @returns Opciones de autenticación
+ */
+export async function generatePasskey2FAChallenge(userId: string, meta?: RequestMeta) {
+  loggerEvent(
+    "passkey.service.2fa.challenge.start",
+    { userId },
+    undefined,
+    "passkey.service"
+  );
+
+  // 1️⃣ Obtener passkeys del usuario
+  const passkeys = await prisma.passkey.findMany({
+    where: { userId },
+    select: { credentialId: true, transports: true },
+  });
+
+  if (passkeys.length === 0) {
+    throw new HttpException(
+      HTTP_CODE.NOT_FOUND,
+      ERROR_CODE.PASSKEY_NOT_FOUND,
+      "NoPasskeysFound"
+    );
+  }
+
+  // 2️⃣ Generar opciones de autenticación
+  const options = await generateAuthenticationOptions({
+    rpID: webAuthnConfig.rpId,
+    timeout: webAuthnConfig.timeout,
+    userVerification: "required",
+    allowCredentials: passkeys.map((passkey) => ({
+      id: passkey.credentialId,
+      type: "public-key" as const,
+      transports: (passkey.transports as AuthenticatorTransportFuture[]) || [],
+    })),
+  });
+
+  // 3️⃣ Guardar challenge en Redis (con userId para seguridad)
+  const challengeKey = `passkey:2fa:challenge:${userId}:${options.challenge}`;
+  const challengeData: StoredChallenge = {
+    challenge: options.challenge,
+    userId,
+    expiresAt: Date.now() + webAuthnConfig.challengeTTL,
+  };
+
+  await redis.setEx(
+    challengeKey,
+    Math.floor(webAuthnConfig.challengeTTL / 1000),
+    JSON.stringify(challengeData)
+  );
+
+  loggerEvent(
+    "passkey.service.2fa.challenge.complete",
+    { userId, allowCredentialsCount: passkeys.length },
+    undefined,
+    "passkey.service"
+  );
+
+  return options;
+}
+
+/**
+ * ✅ VERIFY 2FA: Verificar passkey y completar login
+ *
+ * @param userId - ID del usuario
+ * @param credential - Credencial firmada
+ * @param meta - Metadata de la petición
+ * @returns Usuario, sesión y tokens
+ */
+export async function verifyPasskey2FAAndLogin(
+  userId: string,
+  credential: AuthenticationResponseJSON,
+  meta: RequestMeta
+) {
+  loggerEvent(
+    "passkey.service.2fa.verify.start",
+    { userId, credentialId: credential.id },
+    undefined,
+    "passkey.service"
+  );
+
+  // 1️⃣ Decodificar clientDataJSON para extraer challenge
+  const clientDataJSON = Buffer.from(
+    credential.response.clientDataJSON,
+    "base64url"
+  ).toString("utf-8");
+  const clientData = JSON.parse(clientDataJSON);
+  const receivedChallenge = clientData.challenge;
+
+  // 2️⃣ Buscar challenge en Redis
+  const challengeKey = `passkey:2fa:challenge:${userId}:${receivedChallenge}`;
+  const storedChallengeData = await redis.get(challengeKey);
+
+  if (!storedChallengeData) {
+    throw new HttpException(
+      HTTP_CODE.BAD_REQUEST,
+      ERROR_CODE.CHALLENGE_NOT_FOUND_OR_EXPIRED,
+      "ChallengeNotFoundOrExpired"
+    );
+  }
+
+  const storedChallenge: StoredChallenge = JSON.parse(storedChallengeData);
+
+  // 3️⃣ Verificar expiración
+  if (storedChallenge.expiresAt < Date.now()) {
+    await redis.del(challengeKey);
+    throw new HttpException(
+      HTTP_CODE.BAD_REQUEST,
+      ERROR_CODE.CHALLENGE_EXPIRED,
+      "ChallengeExpired"
+    );
+  }
+
+  // 4️⃣ Verificar que el userId coincide
+  if (storedChallenge.userId !== userId) {
+    throw new HttpException(
+      HTTP_CODE.UNAUTHORIZED,
+      ERROR_CODE.INVALID_PASSKEY,
+      "UserIdMismatch"
+    );
+  }
+
+  // 5️⃣ Buscar passkey
+  const passkey = await prisma.passkey.findUnique({
+    where: { credentialId: credential.id },
+    include: {
+      user: {
+        select: { id: true, email: true, name: true, role: true, isActive: true },
+      },
+    },
+  });
+
+  if (!passkey || passkey.userId !== userId) {
+    throw new HttpException(
+      HTTP_CODE.NOT_FOUND,
+      ERROR_CODE.INVALID_PASSKEY,
+      "InvalidPasskey"
+    );
+  }
+
+  if (!passkey.user.isActive) {
+    throw new HttpException(
+      HTTP_CODE.FORBIDDEN,
+      ERROR_CODE.USER_ACCOUNT_IS_DEACTIVATED,
+      "UserAccountIsDeactivated"
+    );
+  }
+
+  // 6️⃣ Verificar autenticación
+  const verification = await verifyAuthenticationResponse({
+    response: credential,
+    expectedChallenge: storedChallenge.challenge,
+    expectedOrigin: webAuthnConfig.origin,
+    expectedRPID: webAuthnConfig.rpId,
+    credential: {
+      id: passkey.credentialId,
+      publicKey: Buffer.from(passkey.publicKey, "base64url"),
+      counter: passkey.counter,
+    },
+    requireUserVerification: true,
+  });
+
+  if (!verification.verified) {
+    throw new HttpException(
+      HTTP_CODE.UNAUTHORIZED,
+      ERROR_CODE.INVALID_PASSKEY,
+      "InvalidPasskey"
+    );
+  }
+
+  // 7️⃣ Actualizar contador
+  await prisma.passkey.update({
+    where: { id: passkey.id },
+    data: {
+      counter: verification.authenticationInfo.newCounter,
+      lastUsedAt: new Date(),
+    },
+  });
+
+  // 8️⃣ Eliminar challenge
+  await redis.del(challengeKey);
+
+  // 9️⃣ Crear dispositivo y sesión
+  const device = await findOrCreateDevice(passkey.user.id, meta);
+
+  const session = await prisma.session.create({
+    data: {
+      userId: passkey.user.id,
+      deviceId: device.id,
+      clientKey: "",
+      expiresAt: thirtyDaysFromNow(),
+    },
+  });
+
+  const hashedPublicKey = await generateClientKeyFromMeta(
+    meta,
+    passkey.user.id,
+    session.id
+  );
+
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { clientKey: hashedPublicKey },
+  });
+
+  // 🔟 Generar tokens
+  const { token: accessToken, hashedJti: accessTokenId } =
+    await generateAccessToken(
+      passkey.user.id,
+      session.id,
+      passkey.user.role as UserRole,
+      hashedPublicKey
+    );
+
+  const { token: refreshToken, hashedJti: refreshTokenId } =
+    await generateRefreshToken(
+      passkey.user.id,
+      session.id,
+      passkey.user.role as UserRole,
+      hashedPublicKey
+    );
+
+  // 1️⃣1️⃣ Registrar tokens
+  await prisma.tokenRecord.createMany({
+    data: [
+      {
+        jti: accessTokenId,
+        type: "ACCESS",
+        token: accessToken,
+        sessionId: session.id,
+        userId: passkey.user.id,
+        publicKey: hashedPublicKey,
+        expiresAt: await getJwtExpiration(accessToken),
+        revoked: false,
+      },
+      {
+        jti: refreshTokenId,
+        type: "REFRESH",
+        token: refreshToken,
+        sessionId: session.id,
+        userId: passkey.user.id,
+        publicKey: hashedPublicKey,
+        expiresAt: await getJwtExpiration(refreshToken),
+        revoked: false,
+      },
+    ],
+  });
+
+  loggerEvent(
+    "passkey.service.2fa.verify.complete",
+    { userId: passkey.user.id, sessionId: session.id, passkeyId: passkey.id },
+    undefined,
+    "passkey.service"
+  );
+
+  return {
+    user: passkey.user,
+    session: {
+      id: session.id,
+      expiresAt: session.expiresAt,
+    },
+    tokens: {
+      accessTokenId,
+      hashedPublicKey,
+    },
+    passkeyId: passkey.id,
+  };
+}

@@ -233,3 +233,89 @@ export const getDeviceValidationTemplate = (code: string) => {
       `,
   };
 };
+
+/**
+ * 🔐 Template para recuperación de passkey
+ * Se envía cuando el usuario pierde acceso a su teléfono y necesita configurar un nuevo passkey.
+ */
+export const getPasskeyRecoveryTemplate = (code: string) => {
+  return {
+    subject: "🔐 Código de recuperación de Passkey - Leonobitech",
+    text: `Tu código de recuperación de passkey es: ${code}. Este código expirará en 10 minutos. Si no solicitaste este código, ignora este mensaje.`,
+    html: `
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Recuperación de Passkey</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    background-color: #f4f4f4;
+                    margin: 0;
+                    padding: 0;
+                    text-align: center;
+                }
+                .container {
+                    width: 100%;
+                    max-width: 600px;
+                    margin: 30px auto;
+                    background: #ffffff;
+                    padding: 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                }
+                h1 {
+                    color: #333;
+                }
+                p {
+                    font-size: 16px;
+                    color: #555;
+                }
+                .warning {
+                    background: #fff3cd;
+                    border: 1px solid #ffc107;
+                    border-radius: 5px;
+                    padding: 15px;
+                    margin: 20px 0;
+                    color: #856404;
+                }
+                .code {
+                    font-size: 28px;
+                    font-weight: bold;
+                    color: #dc3545;
+                    margin: 20px 0;
+                    padding: 15px 25px;
+                    background: #f8d7da;
+                    border-radius: 8px;
+                    display: inline-block;
+                    letter-spacing: 4px;
+                }
+                .footer {
+                    font-size: 12px;
+                    color: #777;
+                    margin-top: 20px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🔐 Recuperación de Passkey</h1>
+                <p>Recibimos una solicitud para recuperar el acceso a tu cuenta en <strong>Leonobitech</strong>.</p>
+                <div class="warning">
+                    <strong>⚠️ Importante:</strong> Si no solicitaste este código, alguien podría estar intentando acceder a tu cuenta. Ignora este mensaje y considera cambiar tu contraseña.
+                </div>
+                <p>Ingresa el siguiente código para continuar con la recuperación:</p>
+                <div class="code">${code}</div>
+                <p>Este código expirará en <strong>10 minutos</strong>.</p>
+                <p>Después de verificar el código, podrás configurar un nuevo passkey desde tu teléfono.</p>
+                <div class="footer">
+                    <p>&copy; ${new Date().getFullYear()} Leonobitech. Todos los derechos reservados.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+      `,
+  };
+};

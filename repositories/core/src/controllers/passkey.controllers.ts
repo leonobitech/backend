@@ -21,7 +21,17 @@ import {
   verifyPasskeyAuthentication,
   listUserPasskeys,
   deletePasskey,
+  // 🔐 Mandatory 2FA functions
+  generatePasskeySetupChallenge,
+  verifyPasskeySetupAndLogin,
+  generatePasskey2FAChallenge,
+  verifyPasskey2FAAndLogin,
 } from "@services/passkey.service";
+import {
+  requestPasskeyRecovery,
+  verifyRecoveryCode,
+} from "@services/passkeyRecovery.service";
+import { verifyPendingToken } from "@utils/auth/pendingToken";
 import { setAuthCookies } from "@utils/auth/cookies";
 import { HTTP_CODE } from "@constants/httpCode";
 import type {
@@ -348,6 +358,392 @@ export const deletePasskeyById = catchErrors(
     res.status(HTTP_CODE.OK).json({
       message: "Passkey deleted successfully",
       passkeyId: result.passkeyId,
+    });
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🔐 MANDATORY 2FA ENDPOINTS
+// Estos endpoints manejan el flujo obligatorio de passkey después del login
+// con email/password. El usuario DEBE configurar o verificar su passkey.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 📝 POST /account/passkey/setup/challenge
+ *
+ * PASO 1 DE SETUP OBLIGATORIO: Generar challenge para crear passkey
+ *
+ * Requiere: pendingToken (emitido después del login con email/password)
+ *
+ * IMPORTANTE: Solo permite passkeys cross-platform (teléfono), NO Keychain
+ *
+ * Request body:
+ * - pendingToken: string (token temporal del login)
+ * - meta: RequestMeta
+ *
+ * Response:
+ * - options: Opciones de registro WebAuthn (authenticatorAttachment: "cross-platform")
+ */
+export const generateSetupChallenge = catchErrors(
+  async (req: Request, res: Response) => {
+    const { pendingToken, meta } = req.body;
+
+    // Verificar pending token
+    const tokenData = await verifyPendingToken(pendingToken);
+
+    loggerEvent(
+      "passkey.setup.challenge.start",
+      {
+        userId: tokenData.userId,
+        email: tokenData.email,
+        device: meta.deviceInfo.device,
+        os: meta.deviceInfo.os,
+      },
+      req,
+      "passkey.controller"
+    );
+
+    // Generar challenge (cross-platform ONLY)
+    const options = await generatePasskeySetupChallenge(
+      tokenData.userId,
+      tokenData.email,
+      meta
+    );
+
+    loggerEvent(
+      "passkey.setup.challenge.success",
+      { userId: tokenData.userId, challengeLength: options.challenge.length },
+      req,
+      "passkey.controller"
+    );
+
+    res.status(HTTP_CODE.OK).json({
+      message: "Setup challenge generated (cross-platform only)",
+      options,
+      userId: tokenData.userId,
+      email: tokenData.email,
+    });
+  }
+);
+
+/**
+ * ✅ POST /account/passkey/setup/verify
+ *
+ * PASO 2 DE SETUP OBLIGATORIO: Verificar passkey y crear sesión
+ *
+ * Flujo:
+ * 1. Usuario creó passkey con navigator.credentials.create()
+ * 2. Backend verifica la credencial
+ * 3. Backend guarda el passkey
+ * 4. Backend crea sesión completa y establece cookies
+ *
+ * Request body:
+ * - pendingToken: string
+ * - credential: RegistrationResponseJSON
+ * - name: string (nombre del passkey, ej: "iPhone de Felix")
+ * - meta: RequestMeta
+ *
+ * Response:
+ * - user: Datos del usuario
+ * - session: Datos de la sesión
+ *
+ * Side effects:
+ * - Establece cookies HttpOnly: accessKey, clientKey
+ */
+export const verifySetupAndLogin = catchErrors(
+  async (req: Request, res: Response) => {
+    const { pendingToken, credential, name, meta } = req.body;
+
+    // Verificar pending token
+    const tokenData = await verifyPendingToken(pendingToken);
+
+    loggerEvent(
+      "passkey.setup.verify.start",
+      { userId: tokenData.userId, credentialId: credential.id, name },
+      req,
+      "passkey.controller"
+    );
+
+    // Verificar, guardar passkey y crear sesión
+    const result = await verifyPasskeySetupAndLogin(
+      tokenData.userId,
+      credential,
+      name,
+      meta
+    );
+
+    loggerAudit(
+      "passkey.setup.complete",
+      {
+        performedBy: result.user.id,
+        sessionId: result.session.id,
+        passkeyId: result.passkey.id,
+        passkeyName: result.passkey.name,
+        device: meta.deviceInfo.device,
+        os: meta.deviceInfo.os,
+        ipAddress: meta.ipAddress,
+      },
+      req
+    );
+
+    // Establecer cookies de autenticación
+    setAuthCookies({
+      res,
+      accessKey: result.tokens.accessTokenId,
+      clientKey: result.tokens.hashedPublicKey,
+    });
+
+    res.status(HTTP_CODE.CREATED).json({
+      message: "Passkey setup complete - logged in",
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        role: result.user.role,
+      },
+      session: {
+        id: result.session.id,
+        expiresAt: result.session.expiresAt,
+      },
+      passkey: {
+        id: result.passkey.id,
+        name: result.passkey.name,
+      },
+    });
+  }
+);
+
+/**
+ * 🔑 POST /account/passkey/2fa/challenge
+ *
+ * PASO 1 DE VERIFICACIÓN 2FA: Generar challenge para autenticar
+ *
+ * Requiere: pendingToken (emitido después del login con email/password)
+ *
+ * Request body:
+ * - pendingToken: string
+ * - meta: RequestMeta
+ *
+ * Response:
+ * - options: Opciones de autenticación WebAuthn
+ */
+export const generate2FAChallenge = catchErrors(
+  async (req: Request, res: Response) => {
+    const { pendingToken, meta } = req.body;
+
+    // Verificar pending token
+    const tokenData = await verifyPendingToken(pendingToken);
+
+    loggerEvent(
+      "passkey.2fa.challenge.start",
+      { userId: tokenData.userId, email: tokenData.email },
+      req,
+      "passkey.controller"
+    );
+
+    // Generar challenge para los passkeys del usuario
+    const options = await generatePasskey2FAChallenge(tokenData.userId, meta);
+
+    loggerEvent(
+      "passkey.2fa.challenge.success",
+      {
+        userId: tokenData.userId,
+        challengeLength: options.challenge.length,
+        allowCredentialsCount: options.allowCredentials?.length || 0,
+      },
+      req,
+      "passkey.controller"
+    );
+
+    res.status(HTTP_CODE.OK).json({
+      message: "2FA challenge generated",
+      options,
+      userId: tokenData.userId,
+      email: tokenData.email,
+    });
+  }
+);
+
+/**
+ * ✅ POST /account/passkey/2fa/verify
+ *
+ * PASO 2 DE VERIFICACIÓN 2FA: Verificar passkey y crear sesión
+ *
+ * Request body:
+ * - pendingToken: string
+ * - credential: AuthenticationResponseJSON
+ * - meta: RequestMeta
+ *
+ * Response:
+ * - user: Datos del usuario
+ * - session: Datos de la sesión
+ *
+ * Side effects:
+ * - Establece cookies HttpOnly: accessKey, clientKey
+ */
+export const verify2FAAndLogin = catchErrors(
+  async (req: Request, res: Response) => {
+    const { pendingToken, credential, meta } = req.body;
+
+    // Verificar pending token
+    const tokenData = await verifyPendingToken(pendingToken);
+
+    loggerEvent(
+      "passkey.2fa.verify.start",
+      { userId: tokenData.userId, credentialId: credential.id },
+      req,
+      "passkey.controller"
+    );
+
+    // Verificar passkey y crear sesión
+    const result = await verifyPasskey2FAAndLogin(
+      tokenData.userId,
+      credential,
+      meta
+    );
+
+    loggerAudit(
+      "passkey.2fa.login.success",
+      {
+        performedBy: result.user.id,
+        sessionId: result.session.id,
+        passkeyId: result.passkeyId,
+        device: meta.deviceInfo.device,
+        os: meta.deviceInfo.os,
+        ipAddress: meta.ipAddress,
+      },
+      req
+    );
+
+    // Establecer cookies de autenticación
+    setAuthCookies({
+      res,
+      accessKey: result.tokens.accessTokenId,
+      clientKey: result.tokens.hashedPublicKey,
+    });
+
+    res.status(HTTP_CODE.OK).json({
+      message: "2FA verification successful - logged in",
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        role: result.user.role,
+      },
+      session: {
+        id: result.session.id,
+        expiresAt: result.session.expiresAt,
+      },
+    });
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🔐 RECOVERY ENDPOINTS
+// Para cuando el usuario pierde acceso a su teléfono y no puede verificar passkey
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 📧 POST /account/passkey/recovery/request
+ *
+ * Solicitar código de recuperación por email
+ *
+ * Flujo:
+ * 1. Usuario intenta login pero no tiene acceso a su passkey
+ * 2. Solicita recuperación con su pendingToken
+ * 3. Backend envía código OTP al email
+ * 4. Usuario ingresa código en /recovery/verify
+ *
+ * Request body:
+ * - pendingToken: string (del login con email/password)
+ *
+ * Response:
+ * - requestId: string (para usar en /recovery/verify)
+ * - email: string (parcialmente enmascarado)
+ * - expiresIn: number (segundos)
+ */
+export const requestRecovery = catchErrors(
+  async (req: Request, res: Response) => {
+    const { pendingToken } = req.body;
+
+    loggerEvent(
+      "passkey.recovery.request.controller.start",
+      {},
+      req,
+      "passkey.controller"
+    );
+
+    const result = await requestPasskeyRecovery(pendingToken);
+
+    // Enmascarar email para la respuesta
+    const maskedEmail = result.email.replace(
+      /^(.{2})(.*)(@.*)$/,
+      (_, start, middle, domain) => start + "*".repeat(middle.length) + domain
+    );
+
+    loggerEvent(
+      "passkey.recovery.request.controller.success",
+      { requestId: result.requestId, maskedEmail },
+      req,
+      "passkey.controller"
+    );
+
+    res.status(HTTP_CODE.OK).json({
+      message: "Recovery code sent to email",
+      requestId: result.requestId,
+      email: maskedEmail,
+      expiresIn: result.expiresIn,
+    });
+  }
+);
+
+/**
+ * ✅ POST /account/passkey/recovery/verify
+ *
+ * Verificar código de recuperación y obtener nuevo pendingToken
+ *
+ * Flujo:
+ * 1. Usuario ingresa código OTP recibido por email
+ * 2. Backend verifica el código
+ * 3. Backend elimina passkeys existentes (perdió el teléfono)
+ * 4. Backend genera nuevo pendingToken
+ * 5. Usuario puede ir a /setup para crear nuevo passkey
+ *
+ * Request body:
+ * - requestId: string (del paso anterior)
+ * - code: string (código OTP de 6 dígitos)
+ *
+ * Response:
+ * - pendingToken: string (nuevo token para setup)
+ * - expiresIn: number (segundos)
+ */
+export const verifyRecovery = catchErrors(
+  async (req: Request, res: Response) => {
+    const { requestId, code } = req.body;
+
+    loggerEvent(
+      "passkey.recovery.verify.controller.start",
+      { requestId },
+      req,
+      "passkey.controller"
+    );
+
+    const result = await verifyRecoveryCode(requestId, code);
+
+    loggerAudit(
+      "passkey.recovery.verified",
+      {
+        performedBy: result.userId,
+        email: result.email,
+      },
+      req
+    );
+
+    res.status(HTTP_CODE.OK).json({
+      message: "Recovery verified - passkeys cleared",
+      pendingToken: result.pendingToken,
+      expiresIn: result.expiresIn,
+      email: result.email,
     });
   }
 );

@@ -39,6 +39,7 @@ import {
   type LoginParams,
   type LoginResponse,
   type LoginDeviceCheckResponse,
+  type LoginPasskeyPendingResponse,
   type RefreshTokenResponse,
   type LogoutResponse,
   type LogoutOthersResponse,
@@ -47,6 +48,7 @@ import {
   type ResetPasswordRequestResponse,
   type ResetPasswordResponse,
 } from "@custom-types/modules/auth/account";
+import { generatePendingToken } from "@utils/auth/pendingToken";
 import { API_STATUS } from "@constants/apiStatus";
 import { getJwtExpiration } from "@utils/auth/getJwtExpiration";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
@@ -364,7 +366,7 @@ export const loginService = async ({
   email,
   password,
   meta,
-}: LoginParams): Promise<LoginResponse | LoginDeviceCheckResponse> => {
+}: LoginParams): Promise<LoginResponse | LoginDeviceCheckResponse | LoginPasskeyPendingResponse> => {
   const user = await prisma.user.findUnique({ where: { email } });
 
   appAssert(
@@ -404,84 +406,51 @@ export const loginService = async ({
     return result;
   }
 
-  // 🧠 Crear la sesión
-  const session = await prisma.session.create({
-    data: {
-      userId: user.id,
-      deviceId: result.data.deviceId,
-      clientKey: "",
-      expiresAt: thirtyDaysFromNow(),
-    },
+  // 🔐 PASSKEY 2FA: Verificar si el usuario necesita validar/configurar passkey
+  const passkeyCount = await prisma.passkey.count({
+    where: { userId: user.id },
   });
+  const hasPasskey = passkeyCount > 0;
 
-  // 🔐 Generar huella digital (clientKey)
-  const hashedPublicKey = await generateClientKeyFromMeta(
-    meta,
+  // 🔐 Generar token pendiente para flujo de passkey (siempre, ya que 2FA es obligatorio)
+  const pendingTokenResult = await generatePendingToken(
     user.id,
-    session.id
+    user.email,
+    hasPasskey
   );
 
-  // ⬇️ Guardar clientKey en la sesión
-  await prisma.session.update({
-    where: { id: session.id },
-    data: { clientKey: hashedPublicKey },
+  loggerEvent("user.login.passkey_pending", {
+    userId: user.id,
+    email: user.email,
+    hasPasskey,
+    requiresSetup: !hasPasskey,
+    requiresVerify: hasPasskey,
+    source: "loginService",
   });
 
-  // 🔐 Firmar tokens
-  const { token: accessToken, hashedJti: accessTokenId } =
-    await generateAccessToken(
-      user.id,
-      session.id,
-      user.role as UserRole,
-      hashedPublicKey
-    );
-
-  const { token: refreshToken, hashedJti: refreshTokenId } =
-    await generateRefreshToken(
-      user.id,
-      session.id,
-      user.role as UserRole,
-      hashedPublicKey
-    );
-
-  // 🧾 Registrar tokens en TokenRecord
-  await prisma.tokenRecord.createMany({
-    data: [
-      {
-        jti: accessTokenId,
-        type: "ACCESS",
-        token: accessToken,
-        sessionId: session.id,
+  // Si no tiene passkey, debe configurar uno
+  if (!hasPasskey) {
+    return {
+      status: API_STATUS.PASSKEY_SETUP_REQUIRED,
+      message: "Passkey setup required. Please configure your phone as authenticator.",
+      data: {
         userId: user.id,
-        publicKey: hashedPublicKey,
-        expiresAt: await getJwtExpiration(accessToken),
-        revoked: false,
+        email: user.email,
+        pendingToken: pendingTokenResult.pendingToken,
+        expiresIn: pendingTokenResult.expiresIn,
       },
-      {
-        jti: refreshTokenId,
-        type: "REFRESH",
-        token: refreshToken,
-        sessionId: session.id,
-        userId: user.id,
-        publicKey: hashedPublicKey,
-        expiresAt: await getJwtExpiration(refreshToken),
-        revoked: false,
-      },
-    ],
-  });
+    };
+  }
 
+  // Si tiene passkey, debe verificar con él
   return {
-    status: API_STATUS.SUCCESS,
-    message: "Login successful.",
+    status: API_STATUS.PASSKEY_VERIFY_REQUIRED,
+    message: "Passkey verification required. Please authenticate with your phone.",
     data: {
       userId: user.id,
       email: user.email,
-      sessionId: session.id,
-      role: user.role as UserRole,
-    },
-    tokens: {
-      accessTokenId,
-      hashedPublicKey,
+      pendingToken: pendingTokenResult.pendingToken,
+      expiresIn: pendingTokenResult.expiresIn,
     },
   };
 };

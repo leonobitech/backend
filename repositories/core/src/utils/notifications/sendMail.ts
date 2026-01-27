@@ -5,6 +5,7 @@ import {
   getVerifyEmailTemplate,
   getPasswordResetTemplate,
   getDeviceValidationTemplate,
+  getPasskeyRecoveryTemplate,
 } from "./emailTemplates";
 
 type Params = {
@@ -88,6 +89,24 @@ export const sendDeviceValidationEmail = async (
   verificationCode: string
 ) => {
   const template = getDeviceValidationTemplate(verificationCode);
+
+  await sendMail({
+    to,
+    subject: template.subject,
+    text: template.text,
+    html: template.html,
+  });
+};
+
+/**
+ * 🔐 Enviar código OTP para recuperación de passkey.
+ * Se usa cuando el usuario pierde acceso a su teléfono.
+ */
+export const sendPasskeyRecoveryEmail = async (
+  to: string,
+  recoveryCode: string
+) => {
+  const template = getPasskeyRecoveryTemplate(recoveryCode);
 
   await sendMail({
     to,
