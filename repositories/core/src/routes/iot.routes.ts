@@ -61,8 +61,8 @@ iotRoutes.delete("/devices/:deviceId", authenticate, handleDeleteDevice);
 // GET /api/iot/devices/:deviceId/telemetry - Get telemetry history (legacy)
 iotRoutes.get("/devices/:deviceId/telemetry", authenticate, handleGetTelemetry);
 
-// POST /api/iot/devices/:deviceId/telemetry - Get telemetry (action: "list") with meta
-iotRoutes.post("/devices/:deviceId/telemetry", authenticate, handleTelemetryAction);
+// POST /api/iot/devices/:deviceId/telemetry/list - Get telemetry with meta (dashboard)
+iotRoutes.post("/devices/:deviceId/telemetry/list", authenticate, handleTelemetryAction);
 
 // GET /api/iot/devices/:deviceId/commands - Get command history (legacy)
 iotRoutes.get("/devices/:deviceId/commands", authenticate, handleGetCommands);
