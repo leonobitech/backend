@@ -126,8 +126,8 @@ export type DeviceInfo = {
   deviceId: string;
   name: string | null;
   firmwareVersion: string | null;
-  isOnline: boolean;
-  lastSeenAt: string | null;
+  status: "online" | "offline" | "provisioning";
+  lastSeen: string | null;
   createdAt: string;
 };
 
