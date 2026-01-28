@@ -7,9 +7,9 @@ export const AUTH_COOKIE_PATH = "/";
 
 // 🧱 Configuración base para todas las cookies de autenticación
 const baseCookieOptions: CookieOptions = {
-  sameSite: "none", // ✅ ← "none" requerido para Safari cross-subdomain (ITP bloquea "lax" en fetch cross-origin)
+  sameSite: "lax", // ✅ ← "lax" permite Set-Cookie same-site (www↔core). Cross-origin reads se manejan via proxy server-side.
   httpOnly: true,
-  secure: true, // ✅ ← Requerido con SameSite=None
+  secure: true,
   domain: ".leonobitech.com", // ✅ ← Punto inicial para compartir entre TODOS los subdominios (www, core, etc)
   path: AUTH_COOKIE_PATH,
 };
@@ -36,7 +36,7 @@ export const clientKeyCookieOptions = (): CookieOptions => ({
 const clearCookieOptions: CookieOptions = {
   domain: ".leonobitech.com",
   path: AUTH_COOKIE_PATH,
-  sameSite: "none",
+  sameSite: "lax",
   httpOnly: true,
   secure: true,
 };
