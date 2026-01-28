@@ -1480,15 +1480,15 @@ export async function verifyPasskeySetupAndLogin(
 /**
  * 🔐 2FA CHALLENGE: Generar challenge para verificar passkey existente
  *
- * Usamos allowCredentials CON TODOS los transports posibles para maximizar
- * compatibilidad con cross-device authentication (Mac → Samsung via QR).
+ * IMPORTANTE: Usamos el mismo enfoque que el login electivo que funcionaba:
+ * Modo DISCOVERABLE (sin allowCredentials) para máxima compatibilidad cross-device.
  *
- * Google Password Manager necesita allowCredentials para encontrar la passkey
- * correctamente en autenticación cross-device.
+ * El protocolo hybrid/caBLE funciona mejor cuando el teléfono puede mostrar
+ * TODOS sus passkeys para el rpId, sin necesidad de coincidir credential IDs.
  *
- * @param userId - ID del usuario
+ * @param userId - ID del usuario (para guardar en Redis y validar después)
  * @param meta - Metadata de la petición
- * @returns Opciones de autenticación
+ * @returns Opciones de autenticación en modo discoverable
  */
 export async function generatePasskey2FAChallenge(userId: string, meta?: RequestMeta) {
   loggerEvent(
@@ -1498,13 +1498,12 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 1️⃣ Obtener todos los passkeys del usuario
-  const passkeys = await prisma.passkey.findMany({
+  // 1️⃣ Verificar que el usuario tenga al menos un passkey
+  const passkeyCount = await prisma.passkey.count({
     where: { userId },
-    select: { credentialId: true, transports: true },
   });
 
-  if (passkeys.length === 0) {
+  if (passkeyCount === 0) {
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.PASSKEY_NOT_FOUND,
@@ -1514,37 +1513,19 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
 
   loggerEvent(
     "passkey.service.2fa.challenge.passkeys-found",
-    { userId, passkeyCount: passkeys.length },
+    { userId, passkeyCount },
     undefined,
     "passkey.service"
   );
 
-  // 2️⃣ Preparar allowCredentials con los transports DE LA BASE DE DATOS
-  // Igual que el flujo de login normal que SÍ funciona cross-device
-  const allowCredentials = passkeys.map((passkey) => ({
-    id: passkey.credentialId,
-    type: "public-key" as const,
-    // Usar los transports tal como están guardados en la DB
-    transports: (passkey.transports as AuthenticatorTransportFuture[]) || [],
-  }));
-
-  loggerEvent(
-    "passkey.service.2fa.challenge.allowCredentials-prepared",
-    {
-      userId,
-      credentialIds: passkeys.map(p => p.credentialId.substring(0, 10) + "..."),
-      transportsFromDB: passkeys.map(p => p.transports),
-    },
-    undefined,
-    "passkey.service"
-  );
-
-  // 3️⃣ Generar opciones CON allowCredentials
+  // 2️⃣ Generar opciones en modo DISCOVERABLE (sin allowCredentials)
+  // Este es el mismo enfoque que el login electivo que SÍ funcionaba cross-device
   const options = await generateAuthenticationOptions({
     rpID: webAuthnConfig.rpId,
     timeout: webAuthnConfig.timeout,
     userVerification: "required",
-    allowCredentials, // Especificar los credential IDs del usuario
+    // NO especificamos allowCredentials = modo discoverable
+    // El teléfono mostrará TODOS los passkeys para leonobitech.com
   });
 
   loggerEvent(
@@ -1552,19 +1533,21 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     {
       userId,
       rpId: webAuthnConfig.rpId,
-      mode: "allowCredentials",
-      allowCredentialsCount: allowCredentials.length,
+      mode: "discoverable",
+      allowCredentialsCount: 0,
       challengePreview: options.challenge.substring(0, 20) + "...",
     },
     undefined,
     "passkey.service"
   );
 
-  // 4️⃣ Guardar challenge en Redis (con userId para seguridad)
-  const challengeKey = `passkey:2fa:challenge:${userId}:${options.challenge}`;
+  // 3️⃣ Guardar challenge en Redis con userId
+  // Usamos el mismo formato de key que login: passkey:login:challenge:${challenge}
+  // PERO también guardamos el userId para validar después
+  const challengeKey = `passkey:2fa:challenge:${options.challenge}`;
   const challengeData: StoredChallenge = {
     challenge: options.challenge,
-    userId,
+    userId, // Guardamos userId para validar que el passkey pertenece al usuario correcto
     expiresAt: Date.now() + webAuthnConfig.challengeTTL,
   };
 
@@ -1578,9 +1561,9 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service.2fa.challenge.complete",
     {
       userId,
-      passkeyCount: passkeys.length,
+      passkeyCount,
       rpId: webAuthnConfig.rpId,
-      mode: "allowCredentials",
+      mode: "discoverable",
     },
     undefined,
     "passkey.service"
@@ -1617,8 +1600,8 @@ export async function verifyPasskey2FAAndLogin(
   const clientData = JSON.parse(clientDataJSON);
   const receivedChallenge = clientData.challenge;
 
-  // 2️⃣ Buscar challenge en Redis
-  const challengeKey = `passkey:2fa:challenge:${userId}:${receivedChallenge}`;
+  // 2️⃣ Buscar challenge en Redis (nuevo formato sin userId en la key)
+  const challengeKey = `passkey:2fa:challenge:${receivedChallenge}`;
   const storedChallengeData = await redis.get(challengeKey);
 
   if (!storedChallengeData) {
