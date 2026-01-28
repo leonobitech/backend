@@ -521,14 +521,21 @@ export async function generatePasskeyAuthenticationChallenge(
       );
 
       // Mapear los passkeys a la estructura que espera WebAuthn
-      allowCredentials = passkeys.map((passkey) => ({
-        id: passkey.credentialId, // ID único de cada passkey
-        type: "public-key" as const,
-        // Usar los transports tal como están guardados en la DB
-        // Si ya incluyen 'hybrid', Safari lo mostrará como opción
-        // Si solo tienen 'internal', Safari usará autenticación local
-        transports: (passkey.transports as AuthenticatorTransportFuture[]) || [],
-      }));
+      // IMPORTANTE: Siempre incluir 'hybrid' para permitir cross-device authentication
+      // Aunque el authenticator solo haya reportado 'internal', el passkey puede ser
+      // accedido via caBLE/QR desde otro dispositivo si está sincronizado (Google Password Manager, iCloud)
+      allowCredentials = passkeys.map((passkey) => {
+        const storedTransports = (passkey.transports as AuthenticatorTransportFuture[]) || [];
+        // Asegurar que 'hybrid' siempre esté presente para cross-device
+        const transportsWithHybrid = storedTransports.includes("hybrid")
+          ? storedTransports
+          : [...storedTransports, "hybrid" as AuthenticatorTransportFuture];
+        return {
+          id: passkey.credentialId,
+          type: "public-key" as const,
+          transports: transportsWithHybrid,
+        };
+      });
     }
   } else {
     loggerEvent(
