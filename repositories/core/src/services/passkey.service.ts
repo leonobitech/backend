@@ -1519,22 +1519,13 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 2️⃣ Preparar allowCredentials con TODOS los transports posibles
-  // Esto es crítico para cross-device authentication
-  // Incluimos todos los transports para maximizar compatibilidad
-  const allTransports: AuthenticatorTransportFuture[] = [
-    "internal",  // Local auth (Touch ID, Windows Hello)
-    "hybrid",    // Cross-device via QR/caBLE (CRÍTICO para Mac → Samsung)
-    "ble",       // Bluetooth
-    "nfc",       // NFC
-    "usb",       // USB security keys
-  ];
-
+  // 2️⃣ Preparar allowCredentials con los transports DE LA BASE DE DATOS
+  // Igual que el flujo de login normal que SÍ funciona cross-device
   const allowCredentials = passkeys.map((passkey) => ({
     id: passkey.credentialId,
     type: "public-key" as const,
-    // Usar TODOS los transports para maximizar compatibilidad cross-device
-    transports: allTransports,
+    // Usar los transports tal como están guardados en la DB
+    transports: (passkey.transports as AuthenticatorTransportFuture[]) || [],
   }));
 
   loggerEvent(
@@ -1542,7 +1533,7 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     {
       userId,
       credentialIds: passkeys.map(p => p.credentialId.substring(0, 10) + "..."),
-      transportsUsed: allTransports,
+      transportsFromDB: passkeys.map(p => p.transports),
     },
     undefined,
     "passkey.service"
