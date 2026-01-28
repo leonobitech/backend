@@ -77,9 +77,9 @@ iotRoutes.post("/devices/:deviceId/commands", authenticate, handleCommandsAction
 // WebSocket Authentication - Get token for WS connection
 // =============================================================================
 
-// GET /api/iot/ws-token - Get a short-lived token for WebSocket auth
-// Uses GET because SameSite=Lax doesn't send cookies with cross-origin POST
-iotRoutes.get("/ws-token", authenticate, handleGetWsToken);
+// POST /api/iot/ws-token - Get a short-lived token for WebSocket auth
+// Uses POST with meta in body for proper fingerprint validation via Next.js proxy
+iotRoutes.post("/ws-token", authenticate, handleGetWsToken);
 
 // =============================================================================
 // Light Control API - Schedule management and light state
