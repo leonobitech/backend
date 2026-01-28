@@ -1191,7 +1191,10 @@ export async function generatePasskeySetupChallenge(
     select: { credentialId: true, transports: true },
   });
 
-  // 3️⃣ Generar opciones de registro con CROSS-PLATFORM forzado
+  // 3️⃣ Generar opciones de registro SIN forzar authenticatorAttachment
+  // Permitimos cualquier tipo de autenticador para máxima compatibilidad:
+  // - Desde Mac: usuario puede elegir QR (phone) o Touch ID local
+  // - Desde Phone: usuario puede crear passkey localmente
   const options = await generateRegistrationOptions({
     rpName: webAuthnConfig.rpName,
     rpID: webAuthnConfig.rpId,
@@ -1208,9 +1211,10 @@ export async function generatePasskeySetupChallenge(
       type: "public-key",
       transports: passkey.transports as AuthenticatorTransportFuture[],
     })),
-    // 🔐 CRÍTICO: Forzar cross-platform (solo teléfono, no Keychain local)
+    // NO forzamos authenticatorAttachment - permitimos cualquier tipo
+    // El usuario decide si usar phone local, phone via QR, o desktop
     authenticatorSelection: {
-      authenticatorAttachment: "cross-platform", // 🔐 SOLO dispositivos externos
+      // authenticatorAttachment: undefined = cualquier autenticador
       requireResidentKey: true,
       residentKey: "required",
       userVerification: "required",
