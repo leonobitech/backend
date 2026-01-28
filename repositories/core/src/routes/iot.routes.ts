@@ -77,9 +77,9 @@ iotRoutes.post("/devices/:deviceId/commands", authenticate, handleCommandsAction
 // WebSocket Authentication - Get token for WS connection
 // =============================================================================
 
-// POST /api/iot/ws-token - Get a short-lived token for WebSocket auth
-// This is needed because Safari doesn't send cookies on cross-subdomain WebSocket
-iotRoutes.post("/ws-token", authenticate, handleGetWsToken);
+// GET /api/iot/ws-token - Get a short-lived token for WebSocket auth
+// Uses GET because SameSite=Lax doesn't send cookies with cross-origin POST
+iotRoutes.get("/ws-token", authenticate, handleGetWsToken);
 
 // =============================================================================
 // Light Control API - Schedule management and light state
