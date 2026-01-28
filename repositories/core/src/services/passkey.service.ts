@@ -1476,12 +1476,11 @@ export async function verifyPasskeySetupAndLogin(
 /**
  * 🔐 2FA CHALLENGE: Generar challenge para verificar passkey existente
  *
- * IMPORTANTE: Usamos "discoverable credentials" (sin allowCredentials) para
- * que el autenticador muestre TODAS las passkeys del usuario para este dominio.
- * Esto evita problemas de matching de credential IDs en autenticación cross-device.
+ * Usamos allowCredentials CON TODOS los transports posibles para maximizar
+ * compatibilidad con cross-device authentication (Mac → Samsung via QR).
  *
- * El autenticador (phone) mostrará todas las passkeys guardadas para leonobitech.com
- * y el usuario selecciona cuál usar.
+ * Google Password Manager necesita allowCredentials para encontrar la passkey
+ * correctamente en autenticación cross-device.
  *
  * @param userId - ID del usuario
  * @param meta - Metadata de la petición
@@ -1495,12 +1494,13 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service"
   );
 
-  // 1️⃣ Verificar que el usuario tiene al menos un passkey
-  const passkeyCount = await prisma.passkey.count({
+  // 1️⃣ Obtener todos los passkeys del usuario
+  const passkeys = await prisma.passkey.findMany({
     where: { userId },
+    select: { credentialId: true, transports: true },
   });
 
-  if (passkeyCount === 0) {
+  if (passkeys.length === 0) {
     throw new HttpException(
       HTTP_CODE.NOT_FOUND,
       ERROR_CODE.PASSKEY_NOT_FOUND,
@@ -1509,28 +1509,47 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
   }
 
   loggerEvent(
-    "passkey.service.2fa.challenge.passkeys-count",
-    { userId, passkeyCount },
+    "passkey.service.2fa.challenge.passkeys-found",
+    { userId, passkeyCount: passkeys.length },
     undefined,
     "passkey.service"
   );
 
-  // 2️⃣ Usar DISCOVERABLE CREDENTIALS (sin allowCredentials)
-  // Esto permite que el autenticador (teléfono) muestre TODAS las passkeys
-  // guardadas para este rpId, sin importar cómo se registraron.
-  // El usuario elige cuál usar.
-  //
-  // IMPORTANTE: Esto resuelve el problema de que Google Password Manager
-  // no encuentra la passkey cuando el dominio es www.leonobitech.com
-  // pero el rpId es leonobitech.com
+  // 2️⃣ Preparar allowCredentials con TODOS los transports posibles
+  // Esto es crítico para cross-device authentication
+  // Incluimos todos los transports para maximizar compatibilidad
+  const allTransports: AuthenticatorTransportFuture[] = [
+    "internal",  // Local auth (Touch ID, Windows Hello)
+    "hybrid",    // Cross-device via QR/caBLE (CRÍTICO para Mac → Samsung)
+    "ble",       // Bluetooth
+    "nfc",       // NFC
+    "usb",       // USB security keys
+  ];
 
-  // 3️⃣ Generar opciones SIN allowCredentials (discoverable mode)
+  const allowCredentials = passkeys.map((passkey) => ({
+    id: passkey.credentialId,
+    type: "public-key" as const,
+    // Usar TODOS los transports para maximizar compatibilidad cross-device
+    transports: allTransports,
+  }));
+
+  loggerEvent(
+    "passkey.service.2fa.challenge.allowCredentials-prepared",
+    {
+      userId,
+      credentialIds: passkeys.map(p => p.credentialId.substring(0, 10) + "..."),
+      transportsUsed: allTransports,
+    },
+    undefined,
+    "passkey.service"
+  );
+
+  // 3️⃣ Generar opciones CON allowCredentials
   const options = await generateAuthenticationOptions({
     rpID: webAuthnConfig.rpId,
     timeout: webAuthnConfig.timeout,
     userVerification: "required",
-    // NO allowCredentials = discoverable credentials mode
-    // El teléfono mostrará todas las passkeys para leonobitech.com
+    allowCredentials, // Especificar los credential IDs del usuario
   });
 
   loggerEvent(
@@ -1538,14 +1557,15 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     {
       userId,
       rpId: webAuthnConfig.rpId,
-      mode: "discoverable", // Sin allowCredentials
+      mode: "allowCredentials",
+      allowCredentialsCount: allowCredentials.length,
       challengePreview: options.challenge.substring(0, 20) + "...",
     },
     undefined,
     "passkey.service"
   );
 
-  // 3️⃣ Guardar challenge en Redis (con userId para seguridad)
+  // 4️⃣ Guardar challenge en Redis (con userId para seguridad)
   const challengeKey = `passkey:2fa:challenge:${userId}:${options.challenge}`;
   const challengeData: StoredChallenge = {
     challenge: options.challenge,
@@ -1563,9 +1583,9 @@ export async function generatePasskey2FAChallenge(userId: string, meta?: Request
     "passkey.service.2fa.challenge.complete",
     {
       userId,
-      passkeyCount,
+      passkeyCount: passkeys.length,
       rpId: webAuthnConfig.rpId,
-      mode: "discoverable",
+      mode: "allowCredentials",
     },
     undefined,
     "passkey.service"
