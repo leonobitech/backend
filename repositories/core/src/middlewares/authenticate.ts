@@ -19,7 +19,6 @@ import { createHash } from "crypto";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
 import { generateClientKeyLegacy } from "@utils/auth/generateClientKeyLegacy";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
-import { logAttack, extractAttackInfo } from "@utils/logging/logAttack";
 import { clearAuthCookies } from "@utils/auth/cookies";
 import { refreshAccessTokenService } from "@services/account.service";
 import { refreshAuthCookies } from "@utils/auth/cookies";
@@ -130,23 +129,11 @@ const authenticate: RequestHandler = catchErrors(
     const clientKey = getClientKey(req);
 
     if (!accessKey || !clientKey) {
-      logger.warn("🛑 Acceso denegado: Faltan cookies de autenticación", {
-        ...meta,
-        reason: "Missing authentication cookies.",
+      // No es un ataque - simplemente un usuario no autenticado
+      // (visitante, bot, sesión expirada, primer acceso, etc.)
+      logger.debug("🔓 Acceso sin autenticación", {
+        path: req.originalUrl,
         event: "auth.token.missing",
-      });
-
-      // 🚨 Registrar intento de acceso sin cookies (posible ataque)
-      const attackInfo = extractAttackInfo(req);
-      await logAttack({
-        type: "missing_cookies",
-        severity: "medium",
-        ...attackInfo,
-        details: {
-          hasAccessKey: !!accessKey,
-          hasClientKey: !!clientKey,
-          path: req.originalUrl,
-        },
       });
 
       throw new HttpException(
