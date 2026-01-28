@@ -171,11 +171,24 @@ services:
       - "traefik.enable=true"
 
       #########################################
+      # 🔌 Router: WebSocket IoT (higher priority)
+      #########################################
+      - "traefik.http.routers.core-ws.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`) && PathPrefix(`/ws/`)"
+      - "traefik.http.routers.core-ws.entrypoints=websecure"
+      - "traefik.http.routers.core-ws.tls.certresolver=le"
+      - "traefik.http.routers.core-ws.priority=20"
+      - "traefik.http.routers.core-ws.middlewares=ws-safe@file"
+      - "traefik.http.routers.core-ws.service=core"
+      - "traefik.http.services.core-ws.loadbalancer.server.port=8000"
+      - "traefik.http.services.core-ws.loadbalancer.serversTransport=ws-transport@file"
+
+      #########################################
       # 🌐 Router: Microservicio Core público
       #########################################
       - "traefik.http.routers.core.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`)"
       - "traefik.http.routers.core.entrypoints=websecure"
       - "traefik.http.routers.core.tls.certresolver=le"
+      - "traefik.http.routers.core.priority=10"
       - "traefik.http.services.core.loadbalancer.server.port=8000"
 
       #########################################
