@@ -12,6 +12,60 @@ import { parse as parseUrl } from "url";
 import { verifyDeviceApiKey } from "@services/iot.service";
 import logger from "@utils/logging/logger";
 import prisma from "@config/prisma";
+import crypto from "crypto";
+
+// =============================================================================
+// WebSocket Token Store (short-lived tokens for dashboard auth)
+// =============================================================================
+
+interface WsToken {
+  userId: string;
+  createdAt: number;
+}
+
+// In-memory store for WebSocket tokens (expire after 30 seconds)
+const wsTokenStore = new Map<string, WsToken>();
+const WS_TOKEN_EXPIRY_MS = 30_000; // 30 seconds
+
+// Cleanup expired tokens periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of wsTokenStore) {
+    if (now - data.createdAt > WS_TOKEN_EXPIRY_MS) {
+      wsTokenStore.delete(token);
+    }
+  }
+}, 10_000); // Check every 10 seconds
+
+/**
+ * Generate a short-lived token for WebSocket authentication
+ * Called from REST endpoint after cookie-based auth
+ */
+export function generateWsToken(userId: string): string {
+  const token = crypto.randomBytes(32).toString("hex");
+  wsTokenStore.set(token, { userId, createdAt: Date.now() });
+  return token;
+}
+
+/**
+ * Validate and consume a WebSocket token
+ */
+function validateWsToken(token: string): { valid: boolean; userId?: string } {
+  const data = wsTokenStore.get(token);
+  if (!data) {
+    return { valid: false };
+  }
+
+  // Check expiry
+  if (Date.now() - data.createdAt > WS_TOKEN_EXPIRY_MS) {
+    wsTokenStore.delete(token);
+    return { valid: false };
+  }
+
+  // Consume token (one-time use)
+  wsTokenStore.delete(token);
+  return { valid: true, userId: data.userId };
+}
 import type {
   ConnectionInfo,
   DeviceConnection,
@@ -336,8 +390,26 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
 
     // Route: /ws/iot/dashboard - Web dashboard
     if (pathname === "/ws/iot/dashboard") {
-      const auth = await authenticateDashboard(request.headers.cookie);
+      // Try token auth first (for browsers that don't send cookies on WS)
+      const wsToken = query.token as string | undefined;
+      let auth: { valid: boolean; userId?: string };
+
+      if (wsToken) {
+        // Token-based auth (from /api/iot/ws-token endpoint)
+        auth = validateWsToken(wsToken);
+        if (auth.valid) {
+          logger.info(`Dashboard connected via token: user ${auth.userId}`);
+        }
+      } else {
+        // Fallback to cookie-based auth
+        auth = await authenticateDashboard(request.headers.cookie);
+      }
+
       if (!auth.valid || !auth.userId) {
+        logger.warn("Dashboard WebSocket auth failed", {
+          hasToken: !!wsToken,
+          hasCookie: !!request.headers.cookie,
+        });
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
         socket.destroy();
         return;

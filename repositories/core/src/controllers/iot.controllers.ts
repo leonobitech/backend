@@ -5,6 +5,7 @@ import { HTTP_CODE } from "@constants/httpCode";
 import { ERROR_CODE } from "@constants/errorCode";
 import { loggerEvent } from "@utils/logging/loggerEvent";
 import logger from "@utils/logging/logger";
+import { generateWsToken } from "@websockets/server";
 
 import {
   registerDevice,
@@ -680,5 +681,26 @@ export const handleLightStateAction = catchErrors(
     });
 
     res.status(HTTP_CODE.OK).json(result);
+  }
+);
+
+// =============================================================================
+// WebSocket Authentication
+// =============================================================================
+
+/**
+ * POST /api/iot/ws-token
+ * Generate a short-lived token for WebSocket authentication
+ * This is needed because Safari doesn't send cookies on cross-subdomain WebSocket
+ */
+export const handleGetWsToken = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+
+    const token = generateWsToken(req.userId);
+
+    logger.info(`WebSocket token generated for user ${req.userId}`);
+
+    res.status(HTTP_CODE.OK).json({ token });
   }
 );
