@@ -24,9 +24,9 @@ import {
   // 🔐 Mandatory 2FA functions
   generatePasskeySetupChallenge,
   verifyPasskeySetupAndLogin,
-  generatePasskey2FAChallenge,
-  verifyPasskey2FAAndLogin,
 } from "@services/passkey.service";
+import HttpException from "@utils/http/HttpException";
+import { ERROR_CODE } from "@constants/errorCode";
 import {
   requestPasskeyRecovery,
   verifyRecoveryCode,
@@ -541,8 +541,9 @@ export const generate2FAChallenge = catchErrors(
       "passkey.controller"
     );
 
-    // Generar challenge para los passkeys del usuario
-    const options = await generatePasskey2FAChallenge(tokenData.userId, meta);
+    // Usar EXACTAMENTE la misma función del login electivo que funcionaba
+    // Pasamos el email para que use allowCredentials con los passkeys del usuario
+    const options = await generatePasskeyAuthenticationChallenge(tokenData.email, meta);
 
     loggerEvent(
       "passkey.2fa.challenge.success",
@@ -595,19 +596,23 @@ export const verify2FAAndLogin = catchErrors(
       "passkey.controller"
     );
 
-    // Verificar passkey y crear sesión
-    const result = await verifyPasskey2FAAndLogin(
-      tokenData.userId,
-      credential,
-      meta
-    );
+    // Usar EXACTAMENTE la misma función del login electivo que funcionaba
+    const result = await verifyPasskeyAuthentication(credential, meta);
+
+    // Validar que el passkey pertenece al usuario del pendingToken
+    if (result.user.id !== tokenData.userId) {
+      throw new HttpException(
+        HTTP_CODE.UNAUTHORIZED,
+        ERROR_CODE.INVALID_PASSKEY,
+        "InvalidPasskey"
+      );
+    }
 
     loggerAudit(
       "passkey.2fa.login.success",
       {
         performedBy: result.user.id,
         sessionId: result.session.id,
-        passkeyId: result.passkeyId,
         device: meta.deviceInfo.device,
         os: meta.deviceInfo.os,
         ipAddress: meta.ipAddress,
