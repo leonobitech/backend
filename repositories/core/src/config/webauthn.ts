@@ -6,20 +6,16 @@ import { APP_ORIGIN } from "./env";
 // and allows the passkey to work on both www and non-www versions of the site
 const rpId = new URL(APP_ORIGIN).hostname.replace(/^www\./, '');
 
-// Generate all valid origins (with and without www)
-// This allows users to access from either https://leonobitech.com or https://www.leonobitech.com
-const baseOrigin = APP_ORIGIN.replace(/^(https?:\/\/)www\./, '$1');
-const wwwOrigin = APP_ORIGIN.includes('www.') ? APP_ORIGIN : APP_ORIGIN.replace(/^(https?:\/\/)/, '$1www.');
-const validOrigins = [baseOrigin, wwwOrigin].filter((v, i, a) => a.indexOf(v) === i);
+// Single origin from environment variable
+const origin = APP_ORIGIN;
 
 export const webAuthnConfig = {
   // Relying Party (RP) - Your application
   rpName: "LeonobiTech",
   rpId, // Registrable domain (e.g., "leonobitech.com" without www)
 
-  // Origins for verification - supports both www and non-www
-  origin: validOrigins, // Array of valid origins
-  primaryOrigin: APP_ORIGIN, // Primary origin from env
+  // Origin for verification
+  origin, // Single origin from APP_ORIGIN
 
   // Challenge TTL (5 minutes)
   challengeTTL: 5 * 60 * 1000,
