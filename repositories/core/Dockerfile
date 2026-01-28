@@ -1,5 +1,5 @@
 # 🔧 Build Stage
-FROM node:23-slim AS builder
+FROM node:24-slim AS builder
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -23,7 +23,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # 🛡️ Production Stage
-FROM node:23-slim AS production
+FROM node:24-slim AS production
 
 # Instalar OpenSSL en el stage de producción
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && \
