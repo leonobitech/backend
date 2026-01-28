@@ -189,6 +189,7 @@ services:
       - "traefik.http.routers.core.entrypoints=websecure"
       - "traefik.http.routers.core.tls.certresolver=le"
       - "traefik.http.routers.core.priority=10"
+      - "traefik.http.routers.core.service=core"
       - "traefik.http.services.core.loadbalancer.server.port=8000"
 
       #########################################
