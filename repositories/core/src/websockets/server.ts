@@ -8,7 +8,6 @@
 
 import { Server as HttpServer } from "http";
 import { WebSocket, WebSocketServer } from "ws";
-import { parse as parseUrl } from "url";
 import { verifyDeviceApiKey } from "@services/iot.service";
 import logger from "@utils/logging/logger";
 import prisma from "@config/prisma";
@@ -371,12 +370,12 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
 
   // Handle upgrade requests
   server.on("upgrade", async (request, socket, head) => {
-    const { pathname, query } = parseUrl(request.url || "", true);
+    const url = new URL(request.url || "", `http://${request.headers.host}`);
 
     // Route: /ws/iot/device - ESP32 devices
-    if (pathname === "/ws/iot/device") {
-      const deviceId = query.device_id as string;
-      const apiKey = query.api_key as string;
+    if (url.pathname === "/ws/iot/device") {
+      const deviceId = url.searchParams.get("device_id") as string;
+      const apiKey = url.searchParams.get("api_key") as string;
 
       if (!deviceId || !apiKey) {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -404,9 +403,9 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
     }
 
     // Route: /ws/iot/dashboard - Web dashboard
-    if (pathname === "/ws/iot/dashboard") {
+    if (url.pathname === "/ws/iot/dashboard") {
       // Try token auth first (for browsers that don't send cookies on WS)
-      const wsToken = query.token as string | undefined;
+      const wsToken = url.searchParams.get("token") ?? undefined;
       let auth: { valid: boolean; userId?: string };
 
       if (wsToken) {
