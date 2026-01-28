@@ -20,6 +20,12 @@ import {
   getDeviceTelemetry,
   getDeviceCommands,
   deleteDevice,
+  getDeviceSchedules,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  activateSchedule,
+  updateLightState,
 } from "@services/iot.service";
 
 import type {
@@ -543,5 +549,136 @@ export const handleCommandsAction = catchErrors(
     }
 
     appAssert(false, HTTP_CODE.BAD_REQUEST, "Invalid action", ERROR_CODE.BAD_REQUEST);
+  }
+);
+
+// =============================================================================
+// Schedule Management (called by frontend dashboard)
+// =============================================================================
+
+/**
+ * POST /api/iot/devices/:deviceId/schedules
+ * Manage schedules - list, create, update, delete, activate
+ */
+export const handleSchedulesAction = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { deviceId } = req.params;
+    const { action, scheduleId, name, description, points, isActive } = req.body;
+
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+    appAssert(action, HTTP_CODE.BAD_REQUEST, "Action is required", ERROR_CODE.BAD_REQUEST);
+
+    switch (action) {
+      case "list": {
+        const result = await getDeviceSchedules({ deviceId });
+        res.status(HTTP_CODE.OK).json(result);
+        return;
+      }
+
+      case "create": {
+        appAssert(name, HTTP_CODE.BAD_REQUEST, "Schedule name is required", ERROR_CODE.BAD_REQUEST);
+        appAssert(
+          Array.isArray(points) && points.length > 0,
+          HTTP_CODE.BAD_REQUEST,
+          "Schedule points are required",
+          ERROR_CODE.BAD_REQUEST
+        );
+
+        const result = await createSchedule({
+          deviceId,
+          name,
+          description,
+          points,
+        });
+
+        loggerEvent(
+          "iot.schedule.created",
+          { deviceId, scheduleId: result.schedule.id, name },
+          req,
+          "handleSchedulesAction"
+        );
+
+        res.status(HTTP_CODE.CREATED).json(result);
+        return;
+      }
+
+      case "update": {
+        appAssert(scheduleId, HTTP_CODE.BAD_REQUEST, "Schedule ID is required", ERROR_CODE.BAD_REQUEST);
+
+        const result = await updateSchedule({
+          scheduleId,
+          name,
+          description,
+          points,
+        });
+
+        loggerEvent(
+          "iot.schedule.updated",
+          { deviceId, scheduleId },
+          req,
+          "handleSchedulesAction"
+        );
+
+        res.status(HTTP_CODE.OK).json(result);
+        return;
+      }
+
+      case "delete": {
+        appAssert(scheduleId, HTTP_CODE.BAD_REQUEST, "Schedule ID is required", ERROR_CODE.BAD_REQUEST);
+
+        const result = await deleteSchedule({ scheduleId });
+
+        loggerEvent(
+          "iot.schedule.deleted",
+          { deviceId, scheduleId },
+          req,
+          "handleSchedulesAction"
+        );
+
+        res.status(HTTP_CODE.OK).json(result);
+        return;
+      }
+
+      case "activate": {
+        appAssert(scheduleId, HTTP_CODE.BAD_REQUEST, "Schedule ID is required", ERROR_CODE.BAD_REQUEST);
+
+        const result = await activateSchedule({ deviceId, scheduleId });
+
+        loggerEvent(
+          "iot.schedule.activated",
+          { deviceId, scheduleId },
+          req,
+          "handleSchedulesAction"
+        );
+
+        res.status(HTTP_CODE.OK).json(result);
+        return;
+      }
+
+      default:
+        appAssert(false, HTTP_CODE.BAD_REQUEST, "Invalid action", ERROR_CODE.BAD_REQUEST);
+    }
+  }
+);
+
+/**
+ * POST /api/iot/devices/:deviceId/light
+ * Update light state - intensity, temperature, mode
+ */
+export const handleLightStateAction = catchErrors(
+  async (req: Request, res: Response): Promise<void> => {
+    const { deviceId } = req.params;
+    const { intensity, temperature, mode } = req.body;
+
+    appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
+
+    const result = await updateLightState({
+      deviceId,
+      intensity,
+      temperature,
+      mode,
+    });
+
+    res.status(HTTP_CODE.OK).json(result);
   }
 );

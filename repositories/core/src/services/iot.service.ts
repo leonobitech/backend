@@ -614,3 +614,365 @@ export const getDeviceDetails = async (
     },
   };
 };
+
+// =============================================================================
+// Light Schedule Functions
+// =============================================================================
+
+export interface SchedulePoint {
+  hour: number;
+  minute: number;
+  intensity: number;
+  temperature: number;
+}
+
+/**
+ * Get all schedules for a device
+ */
+export const getDeviceSchedules = async (params: {
+  deviceId: string;
+}): Promise<{
+  status: string;
+  schedules: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    points: SchedulePoint[];
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+}> => {
+  const { deviceId } = params;
+
+  // Get device by deviceId string
+  const device = await prisma.iotDevice.findUnique({
+    where: { deviceId },
+  });
+
+  appAssert(device, HTTP_CODE.NOT_FOUND, "Device not found", ERROR_CODE.NOT_FOUND);
+
+  const schedules = await prisma.lightSchedule.findMany({
+    where: { deviceId: device.id },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    schedules: schedules.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      points: s.points as SchedulePoint[],
+      isActive: s.isActive,
+      createdAt: s.createdAt.toISOString(),
+      updatedAt: s.updatedAt.toISOString(),
+    })),
+  };
+};
+
+/**
+ * Create a new schedule for a device
+ */
+export const createSchedule = async (params: {
+  deviceId: string;
+  name: string;
+  description?: string;
+  points: SchedulePoint[];
+}): Promise<{
+  status: string;
+  schedule: {
+    id: string;
+    name: string;
+    description: string | null;
+    points: SchedulePoint[];
+    isActive: boolean;
+  };
+}> => {
+  const { deviceId, name, description, points } = params;
+
+  // Get device by deviceId string
+  const device = await prisma.iotDevice.findUnique({
+    where: { deviceId },
+  });
+
+  appAssert(device, HTTP_CODE.NOT_FOUND, "Device not found", ERROR_CODE.NOT_FOUND);
+
+  // Validate points
+  for (const point of points) {
+    appAssert(
+      point.hour >= 0 && point.hour <= 23,
+      HTTP_CODE.BAD_REQUEST,
+      "Hour must be between 0 and 23",
+      ERROR_CODE.BAD_REQUEST
+    );
+    appAssert(
+      point.minute >= 0 && point.minute <= 59,
+      HTTP_CODE.BAD_REQUEST,
+      "Minute must be between 0 and 59",
+      ERROR_CODE.BAD_REQUEST
+    );
+    appAssert(
+      point.intensity >= 0 && point.intensity <= 100,
+      HTTP_CODE.BAD_REQUEST,
+      "Intensity must be between 0 and 100",
+      ERROR_CODE.BAD_REQUEST
+    );
+    appAssert(
+      point.temperature >= 0 && point.temperature <= 100,
+      HTTP_CODE.BAD_REQUEST,
+      "Temperature must be between 0 and 100",
+      ERROR_CODE.BAD_REQUEST
+    );
+  }
+
+  const schedule = await prisma.lightSchedule.create({
+    data: {
+      deviceId: device.id,
+      name,
+      description: description || null,
+      points: points as Prisma.InputJsonValue,
+      isActive: false,
+    },
+  });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    schedule: {
+      id: schedule.id,
+      name: schedule.name,
+      description: schedule.description,
+      points: schedule.points as SchedulePoint[],
+      isActive: schedule.isActive,
+    },
+  };
+};
+
+/**
+ * Update an existing schedule
+ */
+export const updateSchedule = async (params: {
+  scheduleId: string;
+  name?: string;
+  description?: string;
+  points?: SchedulePoint[];
+}): Promise<{
+  status: string;
+  schedule: {
+    id: string;
+    name: string;
+    description: string | null;
+    points: SchedulePoint[];
+    isActive: boolean;
+  };
+}> => {
+  const { scheduleId, name, description, points } = params;
+
+  const schedule = await prisma.lightSchedule.findUnique({
+    where: { id: scheduleId },
+  });
+
+  appAssert(schedule, HTTP_CODE.NOT_FOUND, "Schedule not found", ERROR_CODE.NOT_FOUND);
+
+  // Validate points if provided
+  if (points) {
+    for (const point of points) {
+      appAssert(
+        point.hour >= 0 && point.hour <= 23,
+        HTTP_CODE.BAD_REQUEST,
+        "Hour must be between 0 and 23",
+        ERROR_CODE.BAD_REQUEST
+      );
+      appAssert(
+        point.minute >= 0 && point.minute <= 59,
+        HTTP_CODE.BAD_REQUEST,
+        "Minute must be between 0 and 59",
+        ERROR_CODE.BAD_REQUEST
+      );
+      appAssert(
+        point.intensity >= 0 && point.intensity <= 100,
+        HTTP_CODE.BAD_REQUEST,
+        "Intensity must be between 0 and 100",
+        ERROR_CODE.BAD_REQUEST
+      );
+      appAssert(
+        point.temperature >= 0 && point.temperature <= 100,
+        HTTP_CODE.BAD_REQUEST,
+        "Temperature must be between 0 and 100",
+        ERROR_CODE.BAD_REQUEST
+      );
+    }
+  }
+
+  const updated = await prisma.lightSchedule.update({
+    where: { id: scheduleId },
+    data: {
+      ...(name && { name }),
+      ...(description !== undefined && { description }),
+      ...(points && { points: points as Prisma.InputJsonValue }),
+    },
+  });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    schedule: {
+      id: updated.id,
+      name: updated.name,
+      description: updated.description,
+      points: updated.points as SchedulePoint[],
+      isActive: updated.isActive,
+    },
+  };
+};
+
+/**
+ * Delete a schedule
+ */
+export const deleteSchedule = async (params: {
+  scheduleId: string;
+}): Promise<{ status: string; message: string }> => {
+  const { scheduleId } = params;
+
+  const schedule = await prisma.lightSchedule.findUnique({
+    where: { id: scheduleId },
+  });
+
+  appAssert(schedule, HTTP_CODE.NOT_FOUND, "Schedule not found", ERROR_CODE.NOT_FOUND);
+
+  await prisma.lightSchedule.delete({ where: { id: scheduleId } });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    message: "Schedule deleted",
+  };
+};
+
+/**
+ * Activate a schedule (deactivates all others for the device)
+ */
+export const activateSchedule = async (params: {
+  deviceId: string;
+  scheduleId: string;
+}): Promise<{
+  status: string;
+  message: string;
+  schedule: {
+    id: string;
+    name: string;
+    points: SchedulePoint[];
+  };
+}> => {
+  const { deviceId, scheduleId } = params;
+
+  // Get device by deviceId string
+  const device = await prisma.iotDevice.findUnique({
+    where: { deviceId },
+  });
+
+  appAssert(device, HTTP_CODE.NOT_FOUND, "Device not found", ERROR_CODE.NOT_FOUND);
+
+  const schedule = await prisma.lightSchedule.findUnique({
+    where: { id: scheduleId },
+  });
+
+  appAssert(schedule, HTTP_CODE.NOT_FOUND, "Schedule not found", ERROR_CODE.NOT_FOUND);
+  appAssert(
+    schedule.deviceId === device.id,
+    HTTP_CODE.FORBIDDEN,
+    "Schedule does not belong to this device",
+    ERROR_CODE.FORBIDDEN
+  );
+
+  // Deactivate all other schedules for this device
+  await prisma.lightSchedule.updateMany({
+    where: { deviceId: device.id },
+    data: { isActive: false },
+  });
+
+  // Activate the selected schedule
+  const activated = await prisma.lightSchedule.update({
+    where: { id: scheduleId },
+    data: { isActive: true },
+  });
+
+  // Update device with active schedule reference and set to auto mode
+  await prisma.iotDevice.update({
+    where: { id: device.id },
+    data: {
+      activeScheduleId: scheduleId,
+      lightMode: "auto",
+    },
+  });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    message: "Schedule activated",
+    schedule: {
+      id: activated.id,
+      name: activated.name,
+      points: activated.points as SchedulePoint[],
+    },
+  };
+};
+
+/**
+ * Update device light state
+ */
+export const updateLightState = async (params: {
+  deviceId: string;
+  intensity?: number;
+  temperature?: number;
+  mode?: "manual" | "auto";
+}): Promise<{
+  status: string;
+  lightState: {
+    intensity: number;
+    temperature: number;
+    mode: string;
+  };
+}> => {
+  const { deviceId, intensity, temperature, mode } = params;
+
+  // Get device by deviceId string
+  const device = await prisma.iotDevice.findUnique({
+    where: { deviceId },
+  });
+
+  appAssert(device, HTTP_CODE.NOT_FOUND, "Device not found", ERROR_CODE.NOT_FOUND);
+
+  // Validate values
+  if (intensity !== undefined) {
+    appAssert(
+      intensity >= 0 && intensity <= 100,
+      HTTP_CODE.BAD_REQUEST,
+      "Intensity must be between 0 and 100",
+      ERROR_CODE.BAD_REQUEST
+    );
+  }
+  if (temperature !== undefined) {
+    appAssert(
+      temperature >= 0 && temperature <= 100,
+      HTTP_CODE.BAD_REQUEST,
+      "Temperature must be between 0 and 100",
+      ERROR_CODE.BAD_REQUEST
+    );
+  }
+
+  const updated = await prisma.iotDevice.update({
+    where: { id: device.id },
+    data: {
+      ...(intensity !== undefined && { lightIntensity: intensity }),
+      ...(temperature !== undefined && { lightTemperature: temperature }),
+      ...(mode && { lightMode: mode }),
+    },
+  });
+
+  return {
+    status: API_STATUS.SUCCESS,
+    lightState: {
+      intensity: updated.lightIntensity,
+      temperature: updated.lightTemperature,
+      mode: updated.lightMode,
+    },
+  };
+};

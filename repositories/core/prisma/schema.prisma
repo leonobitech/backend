@@ -236,6 +236,12 @@ model IotDevice {
   isOnline        Boolean  @default(false)
   lastSeenAt      DateTime?
 
+  // Light control state
+  lightIntensity  Int      @default(0)      // 0-100 current intensity
+  lightTemperature Int     @default(50)     // 0-100 color temperature (0=warm, 100=cool)
+  lightMode       String   @default("manual") // "manual" or "auto"
+  activeScheduleId String? @map("activeScheduleId") @db.ObjectId
+
   // Owner (admin who registered the device)
   ownerId         String?  @map("ownerId") @db.ObjectId
   owner           User?    @relation(fields: [ownerId], references: [id])
@@ -247,6 +253,7 @@ model IotDevice {
   // Relations
   telemetry       IotTelemetry[]
   commands        IotCommand[]
+  schedules       LightSchedule[]
 
   @@index([ownerId])
   @@index([isOnline])
@@ -302,4 +309,32 @@ enum IotCommandStatus {
   EXECUTED
   FAILED
   EXPIRED
+}
+
+// =============================================================================
+// Light Schedule Model - For automated light control
+// =============================================================================
+
+model LightSchedule {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String   // Schedule name (e.g., "Vegetative Cycle", "Flowering Cycle")
+  description     String?  // Optional description
+
+  // Device relation
+  deviceId        String   @map("deviceId") @db.ObjectId
+  device          IotDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  // Schedule state
+  isActive        Boolean  @default(false) // Only one schedule per device should be active
+
+  // Schedule points (JSON array of SchedulePoint)
+  // Each point: { hour: 0-23, minute: 0-59, intensity: 0-100, temperature: 0-100 }
+  points          Json     // SchedulePoint[]
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([deviceId])
+  @@index([isActive])
 }

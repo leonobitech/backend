@@ -1,4 +1,5 @@
 import { webcrypto } from "node:crypto";
+import { createServer } from "node:http";
 
 if (!globalThis.crypto) {
   globalThis.crypto = webcrypto as unknown as Crypto;
@@ -182,8 +183,17 @@ app.use("/api", testRouter);
 app.use(errorHandler);
 
 // 🚀 Bootstrap controlado
-app.listen(PORT, async () => {
+const server = createServer(app);
+
+// 🔌 WebSocket server para IoT en tiempo real
+import { createWebSocketServer } from "@websockets/server";
+createWebSocketServer(server);
+
+server.listen(PORT, async () => {
   console.log(`Server listening on ${API_ORIGIN} in ${NODE_ENV} environment`);
+  console.log(`WebSocket endpoints:`);
+  console.log(`  - Device: ws://${API_ORIGIN.replace(/^https?:\/\//, "")}/ws/iot/device`);
+  console.log(`  - Dashboard: ws://${API_ORIGIN.replace(/^https?:\/\//, "")}/ws/iot/dashboard`);
 
   // 🧹 Iniciar servicio de limpieza automática de tokens expirados
   const { scheduleTokenCleanup } = await import("@services/token-cleanup.service");

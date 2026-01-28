@@ -14,6 +14,8 @@ import {
   handleDeviceAction,
   handleTelemetryAction,
   handleCommandsAction,
+  handleSchedulesAction,
+  handleLightStateAction,
 } from "@controllers/iot.controllers";
 import authenticate from "@middlewares/authenticate";
 
@@ -69,5 +71,15 @@ iotRoutes.get("/devices/:deviceId/commands", authenticate, handleGetCommands);
 
 // POST /api/iot/devices/:deviceId/commands - List (action: "list") or Send (action: "send") with meta
 iotRoutes.post("/devices/:deviceId/commands", authenticate, handleCommandsAction);
+
+// =============================================================================
+// Light Control API - Schedule management and light state
+// =============================================================================
+
+// POST /api/iot/devices/:deviceId/schedules - CRUD schedules (list, create, update, delete, activate)
+iotRoutes.post("/devices/:deviceId/schedules", authenticate, handleSchedulesAction);
+
+// POST /api/iot/devices/:deviceId/light - Update light state (intensity, temperature, mode)
+iotRoutes.post("/devices/:deviceId/light", authenticate, handleLightStateAction);
 
 export default iotRoutes;
