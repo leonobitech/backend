@@ -6,6 +6,7 @@ import appAssert from "@utils/validation/appAssert";
 import { hmacHash } from "@utils/crypto/hmacHash";
 import { API_STATUS } from "@constants/apiStatus";
 import { IotCommandStatus, Prisma } from "@prisma/client";
+import { isDeviceConnected as isDeviceWsConnected } from "@websockets/connectionRegistry";
 
 // =============================================================================
 // Constants
@@ -13,14 +14,19 @@ import { IotCommandStatus, Prisma } from "@prisma/client";
 
 /**
  * Device is considered offline if no heartbeat received in this time (seconds)
- * ESP32 sends telemetry every 30 seconds, so 35s gives a small buffer
+ * AND has no active WebSocket connection.
+ * ESP32 sends telemetry every 60 seconds via WebSocket.
  */
-const DEVICE_OFFLINE_THRESHOLD_SECONDS = 35;
+const DEVICE_OFFLINE_THRESHOLD_SECONDS = 90;
 
 /**
- * Helper to determine if a device is online based on lastSeenAt
+ * Helper to determine if a device is online.
+ * Checks both: active WebSocket connection OR recent lastSeenAt.
  */
-const isDeviceOnline = (lastSeenAt: Date | null): boolean => {
+const isDeviceOnline = (lastSeenAt: Date | null, deviceId?: string): boolean => {
+  // If device has an active WebSocket connection, it's online
+  if (deviceId && isDeviceWsConnected(deviceId)) return true;
+  // Fallback to lastSeenAt threshold
   if (!lastSeenAt) return false;
   const thresholdMs = DEVICE_OFFLINE_THRESHOLD_SECONDS * 1000;
   return Date.now() - lastSeenAt.getTime() < thresholdMs;
@@ -562,8 +568,7 @@ export const getAllDevices = async (): Promise<GetDevicesResponse> => {
       deviceId: d.deviceId,
       name: d.name,
       firmwareVersion: d.firmwareVersion,
-      // Calculate online status dynamically based on lastSeenAt threshold
-      status: isDeviceOnline(d.lastSeenAt) ? "online" : "offline",
+      status: isDeviceOnline(d.lastSeenAt, d.deviceId) ? "online" : "offline",
       lastSeen: d.lastSeenAt?.toISOString() || null,
       createdAt: d.createdAt.toISOString(),
     })),
@@ -599,8 +604,7 @@ export const getDeviceDetails = async (
       deviceId: device.deviceId,
       name: device.name,
       firmwareVersion: device.firmwareVersion,
-      // Calculate online status dynamically based on lastSeenAt threshold
-      status: isDeviceOnline(device.lastSeenAt) ? "online" : "offline",
+      status: isDeviceOnline(device.lastSeenAt, device.deviceId) ? "online" : "offline",
       lastSeen: device.lastSeenAt?.toISOString() || null,
       createdAt: device.createdAt.toISOString(),
       recentTelemetry: device.telemetry.map((t) => ({
@@ -663,7 +667,7 @@ export const getDeviceSchedules = async (params: {
       id: s.id,
       name: s.name,
       description: s.description,
-      points: s.points as SchedulePoint[],
+      points: s.points as unknown as SchedulePoint[],
       isActive: s.isActive,
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
@@ -731,7 +735,7 @@ export const createSchedule = async (params: {
       deviceId: device.id,
       name,
       description: description || null,
-      points: points as Prisma.InputJsonValue,
+      points: points as unknown as Prisma.InputJsonValue,
       isActive: false,
     },
   });
@@ -742,7 +746,7 @@ export const createSchedule = async (params: {
       id: schedule.id,
       name: schedule.name,
       description: schedule.description,
-      points: schedule.points as SchedulePoint[],
+      points: schedule.points as unknown as SchedulePoint[],
       isActive: schedule.isActive,
     },
   };
@@ -809,7 +813,7 @@ export const updateSchedule = async (params: {
     data: {
       ...(name && { name }),
       ...(description !== undefined && { description }),
-      ...(points && { points: points as Prisma.InputJsonValue }),
+      ...(points && { points: points as unknown as Prisma.InputJsonValue }),
     },
   });
 
@@ -819,7 +823,7 @@ export const updateSchedule = async (params: {
       id: updated.id,
       name: updated.name,
       description: updated.description,
-      points: updated.points as SchedulePoint[],
+      points: updated.points as unknown as SchedulePoint[],
       isActive: updated.isActive,
     },
   };
@@ -910,7 +914,7 @@ export const activateSchedule = async (params: {
     schedule: {
       id: activated.id,
       name: activated.name,
-      points: activated.points as SchedulePoint[],
+      points: activated.points as unknown as SchedulePoint[],
     },
   };
 };

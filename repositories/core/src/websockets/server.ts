@@ -13,6 +13,10 @@ import { verifyDeviceApiKey } from "@services/iot.service";
 import logger from "@utils/logging/logger";
 import prisma from "@config/prisma";
 import crypto from "crypto";
+import {
+  deviceSockets,
+  dashboardSockets,
+} from "./connectionRegistry";
 
 // =============================================================================
 // WebSocket Token Store (short-lived tokens for dashboard auth)
@@ -86,11 +90,7 @@ import type {
 // Map WebSocket -> ConnectionInfo
 const connections = new Map<WebSocket, ConnectionInfo>();
 
-// Map deviceId -> WebSocket (for quick device lookup)
-const deviceSockets = new Map<string, WebSocket>();
-
-// Map userId -> Set<WebSocket> (users can have multiple dashboard tabs)
-const dashboardSockets = new Map<string, Set<WebSocket>>();
+// deviceSockets and dashboardSockets imported from connectionRegistry
 
 // =============================================================================
 // Helper Functions
@@ -165,11 +165,18 @@ async function authenticateDashboard(
     const { findAccessTokenOrThrow } = await import("@utils/auth/tokenRedis");
 
     // Create minimal meta for the lookup
-    const meta = {
-      ip: "websocket",
+    const meta: RequestMeta = {
+      ipAddress: "websocket",
+      deviceInfo: { browser: "unknown", os: "unknown", device: "unknown" },
       userAgent: "WebSocket Dashboard",
+      language: "",
+      platform: "",
+      timezone: "",
+      screenResolution: "",
+      label: "ws-dashboard",
       path: "/ws/iot/dashboard",
       method: "WS",
+      host: "",
     };
 
     const tokenResult = await findAccessTokenOrThrow(
@@ -212,6 +219,14 @@ function handleDeviceMessage(ws: WebSocket, conn: DeviceConnection, data: unknow
         ...message,
         deviceId: conn.deviceId,
       });
+
+      // Update lastSeenAt in DB so REST API also reflects online status
+      prisma.iotDevice
+        .update({
+          where: { id: conn.dbId },
+          data: { lastSeenAt: new Date() },
+        })
+        .catch((err) => logger.error("Failed to update lastSeenAt on telemetry:", err));
       break;
 
     case "ack":
@@ -478,13 +493,10 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
 // Utility Exports
 // =============================================================================
 
-export function getConnectedDevices(): string[] {
-  return Array.from(deviceSockets.keys());
-}
-
-export function isDeviceConnected(deviceId: string): boolean {
-  return deviceSockets.has(deviceId);
-}
+export {
+  isDeviceConnected,
+  getConnectedDevices,
+} from "./connectionRegistry";
 
 export function sendToDevice(deviceId: string, message: WsMessage): boolean {
   const ws = deviceSockets.get(deviceId);
