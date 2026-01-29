@@ -18,3 +18,31 @@ export function isDeviceConnected(deviceId: string): boolean {
 export function getConnectedDevices(): string[] {
   return Array.from(deviceSockets.keys());
 }
+
+/**
+ * Close all dashboard WebSocket connections for a specific user.
+ * Used when user logs out or session is revoked.
+ */
+export function closeAllDashboardSockets(
+  userId: string,
+  reason: "token_expired" | "session_revoked" | "logout" = "logout"
+): number {
+  const userSockets = dashboardSockets.get(userId);
+  if (!userSockets || userSockets.size === 0) return 0;
+
+  let closed = 0;
+  for (const ws of userSockets) {
+    try {
+      // Send session_expired message before closing
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "session_expired", reason }));
+        ws.close(4001, "Session expired");
+        closed++;
+      }
+    } catch {
+      // Socket may already be closing
+    }
+  }
+
+  return closed;
+}

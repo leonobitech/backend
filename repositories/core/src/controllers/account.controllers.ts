@@ -28,6 +28,7 @@ import { sanitizeInput } from "@utils/validation/sanitizeInput";
 import { loggerEvent } from "@utils/logging/loggerEvent";
 import { API_STATUS } from "@constants/apiStatus";
 import { getClientKey } from "@utils/auth/getAccessKeysFromRequest";
+import { closeAllDashboardSockets } from "@websockets/connectionRegistry";
 
 export const registerController = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
@@ -402,6 +403,12 @@ export const logoutController = catchErrors(
 
     // 🧼 Limpiar cookies de autenticación
     clearAuthCookies(res);
+
+    // 🔌 Cerrar todas las conexiones WebSocket del usuario
+    const closedWs = closeAllDashboardSockets(result.data.userId, "logout");
+    if (closedWs > 0) {
+      logger.info(`Closed ${closedWs} WebSocket connection(s) on logout for user ${result.data.userId}`);
+    }
 
     // 📋 Log de evento de logout
     loggerEvent("user.logged_out", {

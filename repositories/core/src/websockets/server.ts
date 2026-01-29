@@ -80,6 +80,8 @@ import type {
   WelcomeMessage,
   DeviceConnectedMessage,
   DeviceDisconnectedMessage,
+  CommandAckMessage,
+  SessionExpiredMessage,
 } from "./protocol";
 
 // =============================================================================
@@ -88,6 +90,10 @@ import type {
 
 // Map WebSocket -> ConnectionInfo
 const connections = new Map<WebSocket, ConnectionInfo>();
+
+// Session revalidation timers for dashboard connections
+const sessionTimers = new Map<WebSocket, NodeJS.Timeout>();
+const SESSION_REVALIDATION_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // deviceSockets and dashboardSockets imported from connectionRegistry
 
@@ -245,12 +251,35 @@ function handleDeviceMessage(ws: WebSocket, conn: DeviceConnection, data: unknow
       });
       break;
 
+    case "command_ack": {
+      const ack = message as CommandAckMessage;
+      // Broadcast command_ack to subscribed dashboards
+      broadcastToDeviceSubscribers(conn.deviceId, {
+        ...ack,
+        deviceId: conn.deviceId,
+      });
+
+      // Update command status in DB
+      prisma.iotCommand
+        .update({
+          where: { id: ack.commandId },
+          data: {
+            status: ack.success ? "EXECUTED" : "FAILED",
+            result: ack.error || (ack.result ? JSON.stringify(ack.result) : null),
+            executedAt: new Date(),
+            acknowledgedAt: new Date(),
+          },
+        })
+        .catch((err) => logger.error("Failed to update command status:", err));
+      break;
+    }
+
     default:
       logger.warn(`Unknown device message type: ${(message as WsMessage).type}`);
   }
 }
 
-function handleDashboardMessage(ws: WebSocket, conn: DashboardConnection, data: unknown) {
+async function handleDashboardMessage(ws: WebSocket, conn: DashboardConnection, data: unknown) {
   const message = data as DashboardToDeviceMessage & { deviceId?: string };
 
   // Dashboard messages need a target deviceId
@@ -270,9 +299,92 @@ function handleDashboardMessage(ws: WebSocket, conn: DashboardConnection, data: 
     return;
   }
 
+  // Route commands: generate commandId, save to DB, forward to device
+  if (message.type === "command") {
+    const commandMsg = message as DashboardToDeviceMessage & { deviceId?: string; action: string; params?: Record<string, unknown> };
+
+    try {
+      // Resolve device DB id from deviceId string
+      const device = await prisma.iotDevice.findUnique({
+        where: { deviceId: targetDeviceId },
+        select: { id: true },
+      });
+
+      if (!device) {
+        sendError(ws, "DEVICE_NOT_FOUND", `Device ${targetDeviceId} not found`);
+        return;
+      }
+
+      // Save command to DB with status SENT
+      const cmd = await prisma.iotCommand.create({
+        data: {
+          deviceId: device.id,
+          action: commandMsg.action,
+          params: commandMsg.params ?? undefined,
+          status: "SENT",
+          sentBy: conn.userId,
+        },
+      });
+
+      // Forward command to device with generated commandId
+      sendJson(deviceWs, {
+        type: "command",
+        commandId: cmd.id,
+        action: commandMsg.action,
+        params: commandMsg.params,
+      } as WsMessage);
+    } catch (err) {
+      logger.error("Failed to route command:", err);
+      sendError(ws, "COMMAND_FAILED", "Failed to save command");
+    }
+    return;
+  }
+
   // Forward message to device (without deviceId, device knows who it is)
   const { deviceId: _, ...messageWithoutDeviceId } = message;
   sendJson(deviceWs, messageWithoutDeviceId as WsMessage);
+}
+
+// =============================================================================
+// Session Revalidation
+// =============================================================================
+
+function startSessionRevalidation(ws: WebSocket, userId: string) {
+  const timer = setInterval(async () => {
+    try {
+      // Check if user still has at least one active, non-revoked session
+      const activeSession = await prisma.session.findFirst({
+        where: {
+          userId,
+          isRevoked: false,
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      });
+
+      if (!activeSession) {
+        logger.info(`Session expired for WS user ${userId}, closing connection`);
+        const expired: SessionExpiredMessage = {
+          type: "session_expired",
+          reason: "token_expired",
+        };
+        sendJson(ws, expired);
+        ws.close(4001, "Session expired");
+      }
+    } catch (err) {
+      logger.error("Session revalidation error:", err);
+    }
+  }, SESSION_REVALIDATION_INTERVAL_MS);
+
+  sessionTimers.set(ws, timer);
+}
+
+function stopSessionRevalidation(ws: WebSocket) {
+  const timer = sessionTimers.get(ws);
+  if (timer) {
+    clearInterval(timer);
+    sessionTimers.delete(ws);
+  }
 }
 
 // =============================================================================
@@ -309,6 +421,9 @@ function handleConnection(ws: WebSocket, connectionInfo: ConnectionInfo) {
       dashboardSockets.set(connectionInfo.userId, userSockets);
     }
     userSockets.add(ws);
+
+    // Start session revalidation timer
+    startSessionRevalidation(ws, connectionInfo.userId);
 
     logger.info(`Dashboard connected: user ${connectionInfo.userId}`);
   }
@@ -347,6 +462,8 @@ function handleDisconnection(ws: WebSocket) {
     logger.info(`Device disconnected: ${conn.deviceId}`);
   } else {
     // Dashboard disconnection
+    stopSessionRevalidation(ws);
+
     const userSockets = dashboardSockets.get(conn.userId);
     if (userSockets) {
       userSockets.delete(ws);
@@ -495,6 +612,7 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
 export {
   isDeviceConnected,
   getConnectedDevices,
+  closeAllDashboardSockets,
 } from "./connectionRegistry";
 
 export function sendToDevice(deviceId: string, message: WsMessage): boolean {
