@@ -236,6 +236,14 @@ function handleDeviceMessage(ws: WebSocket, conn: DeviceConnection, data: unknow
             freeHeap: message.freeHeap,
             wifiRssi: message.wifiRssi,
             uptimeSecs: message.uptimeSecs,
+            ...(message.wifiSsid || message.ipAddress
+              ? {
+                  sensors: {
+                    ...(message.wifiSsid && { wifiSsid: message.wifiSsid }),
+                    ...(message.ipAddress && { ipAddress: message.ipAddress }),
+                  },
+                }
+              : {}),
           },
         }),
         prisma.iotDevice.update({
