@@ -43,7 +43,7 @@ export const registerController = catchErrors(
     const parsed = registerSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      const validationErrors = parsed.error.errors.map((e) => ({
+      const validationErrors = parsed.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
@@ -121,7 +121,7 @@ export const verifyEmailController = catchErrors(
     const parsed = verifyEmailSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      const validationErrors = parsed.error.errors.map((e) => ({
+      const validationErrors = parsed.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
@@ -255,7 +255,7 @@ export const loginController = catchErrors(
     const parsed = loginSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      const validationErrors = parsed.error.errors.map((e) => ({
+      const validationErrors = parsed.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
@@ -465,7 +465,7 @@ export const requestPasswordResetController = catchErrors(
     if (!parsed.success) {
       const fallbackEmail =
         typeof req.body.email === "string" ? req.body.email : "unknown";
-      const validationErrors = parsed.error.errors.map((e) => ({
+      const validationErrors = parsed.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
@@ -529,7 +529,7 @@ export const resetPasswordController = catchErrors(
       const fallbackEmail =
         typeof req.body.email === "string" ? req.body.email : "unknown";
 
-      const validationErrors = parsed.error.errors.map((e) => ({
+      const validationErrors = parsed.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
