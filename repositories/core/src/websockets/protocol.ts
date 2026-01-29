@@ -61,6 +61,7 @@ export interface TelemetryMessage {
   wifiRssi: number;
   uptimeSecs: number;
   timestamp: number;
+  localTime?: string; // ESP32 local time "YYYY-MM-DD HH:MM:SS" (from NTP)
 }
 
 export interface AckMessage {
