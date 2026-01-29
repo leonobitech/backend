@@ -178,7 +178,7 @@ services:
       - "traefik.http.routers.core-ws.tls.certresolver=le"
       - "traefik.http.routers.core-ws.priority=20"
       - "traefik.http.routers.core-ws.middlewares=ws-safe@file"
-      - "traefik.http.routers.core-ws.service=core"
+      - "traefik.http.routers.core-ws.service=core-ws"
       - "traefik.http.services.core-ws.loadbalancer.server.port=8000"
       - "traefik.http.services.core-ws.loadbalancer.serversTransport=ws-transport@file"
 

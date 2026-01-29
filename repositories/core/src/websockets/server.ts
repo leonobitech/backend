@@ -95,6 +95,9 @@ const connections = new Map<WebSocket, ConnectionInfo>();
 const sessionTimers = new Map<WebSocket, NodeJS.Timeout>();
 const SESSION_REVALIDATION_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+// Track pong responses for dead connection detection
+const aliveMap = new Map<WebSocket, boolean>();
+
 // deviceSockets and dashboardSockets imported from connectionRegistry
 
 // =============================================================================
@@ -476,6 +479,7 @@ function handleDisconnection(ws: WebSocket) {
   }
 
   connections.delete(ws);
+  aliveMap.delete(ws);
 }
 
 // =============================================================================
@@ -567,6 +571,12 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
   wss.on("connection", (ws: WebSocket, _request: unknown, conn: ConnectionInfo) => {
     handleConnection(ws, conn);
 
+    // Track pong responses for dead connection detection
+    aliveMap.set(ws, true);
+    ws.on("pong", () => {
+      aliveMap.set(ws, true);
+    });
+
     ws.on("message", (data) => {
       try {
         const message = JSON.parse(data.toString());
@@ -591,24 +601,42 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code, reason) => {
+      const conn = connections.get(ws);
+      const connType = conn?.type ?? "unknown";
+      const connId = conn?.type === "device" ? conn.deviceId : conn?.type === "dashboard" ? conn.userId : "?";
+      logger.info(`WebSocket close event: ${connType} ${connId} code=${code} reason="${reason?.toString() || ""}"`);
       handleDisconnection(ws);
     });
 
     ws.on("error", (error) => {
-      logger.error("WebSocket error:", error);
+      const conn = connections.get(ws);
+      const connType = conn?.type ?? "unknown";
+      const connId = conn?.type === "device" ? conn.deviceId : conn?.type === "dashboard" ? conn.userId : "?";
+      logger.error(`WebSocket error: ${connType} ${connId}`, error);
       handleDisconnection(ws);
     });
   });
 
   // Keep-alive: ping all connected clients every 30s to prevent
-  // Traefik/proxy idle timeout from killing WebSocket connections
+  // Traefik/proxy idle timeout from killing WebSocket connections.
+  // Also detects dead connections: if no pong received since last ping, terminate.
   const PING_INTERVAL_MS = 30_000;
   const pingInterval = setInterval(() => {
     for (const [ws] of connections) {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.ping();
+      if (ws.readyState !== WebSocket.OPEN) continue;
+
+      if (aliveMap.get(ws) === false) {
+        // No pong received since last ping - connection is dead
+        const conn = connections.get(ws);
+        const connId = conn?.type === "device" ? conn.deviceId : conn?.type === "dashboard" ? conn.userId : "?";
+        logger.warn(`No pong received from ${conn?.type} ${connId}, terminating`);
+        ws.terminate();
+        continue;
       }
+
+      aliveMap.set(ws, false);
+      ws.ping();
     }
   }, PING_INTERVAL_MS);
 
