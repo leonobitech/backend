@@ -601,7 +601,22 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
     });
   });
 
-  logger.info("WebSocket server initialized");
+  // Keep-alive: ping all connected clients every 30s to prevent
+  // Traefik/proxy idle timeout from killing WebSocket connections
+  const PING_INTERVAL_MS = 30_000;
+  const pingInterval = setInterval(() => {
+    for (const [ws] of connections) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping();
+      }
+    }
+  }, PING_INTERVAL_MS);
+
+  wss.on("close", () => {
+    clearInterval(pingInterval);
+  });
+
+  logger.info("WebSocket server initialized (ping every 30s)");
   logger.info("  - Device endpoint: /ws/iot/device?device_id=XXX&api_key=YYY");
   logger.info("  - Dashboard endpoint: /ws/iot/dashboard (requires auth cookie)");
 
