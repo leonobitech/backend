@@ -320,7 +320,7 @@ async function handleDashboardMessage(ws: WebSocket, conn: DashboardConnection, 
         data: {
           deviceId: device.id,
           action: commandMsg.action,
-          params: commandMsg.params ?? undefined,
+          params: commandMsg.params ? JSON.parse(JSON.stringify(commandMsg.params)) : undefined,
           status: "SENT",
           sentBy: conn.userId,
         },
@@ -580,7 +580,10 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
         if (connectionInfo.type === "device") {
           handleDeviceMessage(ws, connectionInfo, message);
         } else {
-          handleDashboardMessage(ws, connectionInfo, message);
+          handleDashboardMessage(ws, connectionInfo, message).catch((err) => {
+            logger.error("Error handling dashboard message:", err);
+            sendError(ws, "INTERNAL_ERROR", "Failed to process message");
+          });
         }
       } catch (error) {
         logger.error("Failed to parse WebSocket message:", error);
