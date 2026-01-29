@@ -228,13 +228,21 @@ function handleDeviceMessage(ws: WebSocket, conn: DeviceConnection, data: unknow
         deviceId: conn.deviceId,
       });
 
-      // Update lastSeenAt in DB so REST API also reflects online status
-      prisma.iotDevice
-        .update({
+      // Persist telemetry to DB + update lastSeenAt
+      Promise.all([
+        prisma.iotTelemetry.create({
+          data: {
+            deviceId: conn.dbId,
+            freeHeap: message.freeHeap,
+            wifiRssi: message.wifiRssi,
+            uptimeSecs: message.uptimeSecs,
+          },
+        }),
+        prisma.iotDevice.update({
           where: { id: conn.dbId },
           data: { lastSeenAt: new Date() },
-        })
-        .catch((err) => logger.error("Failed to update lastSeenAt on telemetry:", err));
+        }),
+      ]).catch((err) => logger.error("Failed to persist telemetry:", err));
       break;
 
     case "ack":
