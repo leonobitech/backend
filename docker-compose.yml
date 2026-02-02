@@ -315,7 +315,7 @@ services:
       - "traefik.http.routers.n8n_rest.entrypoints=websecure"
       - "traefik.http.routers.n8n_rest.tls.certresolver=le"
       - "traefik.http.routers.n8n_rest.service=n8n_main@docker"
-      - "traefik.http.routers.n8n_rest.priority=20"
+      - "traefik.http.routers.n8n_rest.priority=50"
       - "traefik.http.routers.n8n_rest.middlewares=secure-relaxed@file,api-nostore-vary@file"
 
       #########################################
