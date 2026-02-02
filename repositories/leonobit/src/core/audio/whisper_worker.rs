@@ -526,7 +526,7 @@ async fn process_complete_phrase(
 pub async fn run_whisper_worker(
   mut rx_opus: Receiver<Vec<u8>>,
   stt_tx: UnboundedSender<SttMsg>,
-  ctx: Arc<WhisperContext>,
+  ctx: &WhisperContext,
 ) -> Result<()> {
   // ---------- Estado Whisper ----------
   let mut state = ctx.create_state().context("crear whisper state")?;

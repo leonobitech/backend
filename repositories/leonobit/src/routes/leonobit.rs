@@ -155,12 +155,39 @@ async fn ws_loop(state: AppState, socket: WebSocket) {
   let (opus_tx, opus_rx) = mpsc::channel::<Vec<u8>>(48);
   let (stt_tx, mut stt_rx) = mpsc::unbounded_channel::<SttMsg>();
 
-  // 6) Contexto de Whisper desde AppState
-  let whisper_ctx = state.whisper_ctx.clone();
+  // 6) Lazy-load del modelo Whisper (se carga solo en la primera conexión)
+  let whisper_cell = state.whisper_ctx.clone();
+  let whisper_path = state.whisper_model_path.clone();
 
   // 7) Spawnear el worker de Whisper (lee Opus, decodifica, resamplea y transcribe)
   tokio::spawn(async move {
-    if let Err(e) = run_whisper_worker(opus_rx, stt_tx, whisper_ctx).await {
+    // Inicializar Whisper si aún no está cargado (spawn_blocking para no bloquear tokio)
+    let ctx = match whisper_cell
+      .get_or_try_init(|| async {
+        tracing::info!("🔄 Cargando modelo Whisper (lazy, primera conexión)...");
+        let path = whisper_path.clone();
+        let ctx = tokio::task::spawn_blocking(move || {
+          use whisper_rs::{DtwMode, WhisperContextParameters};
+          let mut params = WhisperContextParameters::default();
+          params.dtw_parameters.mode = DtwMode::None;
+          whisper_rs::WhisperContext::new_with_params(&path, params)
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("spawn_blocking join: {e}"))?
+        .map_err(|e| anyhow::anyhow!("whisper init: {e:?}"))?;
+        tracing::info!("✅ Modelo Whisper cargado");
+        Ok::<_, anyhow::Error>(ctx)
+      })
+      .await
+    {
+      Ok(ctx) => ctx,
+      Err(e) => {
+        tracing::error!("no se pudo cargar Whisper: {e:#}");
+        return;
+      }
+    };
+
+    if let Err(e) = run_whisper_worker(opus_rx, stt_tx, ctx).await {
       tracing::error!("whisper worker error: {e:#}");
     }
   });

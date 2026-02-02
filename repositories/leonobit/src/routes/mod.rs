@@ -12,7 +12,8 @@ pub mod labs;
 pub mod leonobit;
 
 use reqwest::Client as HttpClient;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, OnceCell};
+use whisper_rs::WhisperContext;
 
 use crate::auth::TokenProfile;
 use crate::metrics::rtt::MetricEvent;
@@ -29,10 +30,10 @@ pub struct AppState {
   pub http: HttpClient,
   /// Ruta al modelo de Whisper (para health/checks/logs)
   pub whisper_model_path: String,
-  /// Flag “rápido” de disponibilidad de Whisper (archivo existe / init ok)
+  /// Flag "rápido" de disponibilidad de Whisper (archivo existe / init ok)
   pub whisper_ready: bool,
-  /// Contexto de Whisper (para usar en los handlers)
-  pub whisper_ctx: Arc<whisper_rs::WhisperContext>,
+  /// Contexto de Whisper lazy-loaded (se carga en la primera conexión WS)
+  pub whisper_ctx: Arc<OnceCell<WhisperContext>>,
 }
 
 impl AppState {
@@ -41,7 +42,6 @@ impl AppState {
     allowed_ws_origins: Vec<String>,
     metrics_tx: mpsc::Sender<MetricEvent>,
     whisper_model_path: String,
-    whisper_ctx: std::sync::Arc<whisper_rs::WhisperContext>,
   ) -> Self {
     // Agregá aquí todos los perfiles que quieras habilitar
     let profiles = vec![
@@ -89,7 +89,7 @@ impl AppState {
       http,
       whisper_model_path,
       whisper_ready,
-      whisper_ctx,
+      whisper_ctx: Arc::new(OnceCell::new()),
     }
   }
 }
