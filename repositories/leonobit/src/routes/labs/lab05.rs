@@ -26,7 +26,9 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use webrtc::api::media_engine::MediaEngine;
+use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
+use webrtc::ice::mdns::MulticastDnsMode;
 use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
@@ -87,7 +89,15 @@ pub async fn handle_lab05(
   // MediaEngine: codecs por default (incluye Opus).
   let mut m = MediaEngine::default();
   m.register_default_codecs().map_err(internal)?;
-  let api = APIBuilder::new().with_media_engine(m).build();
+
+  // Deshabilitar mDNS: evita busy-loop de UDP multicast en Docker
+  let mut se = SettingEngine::default();
+  se.set_ice_multicast_dns_mode(MulticastDnsMode::Disabled);
+
+  let api = APIBuilder::new()
+    .with_media_engine(m)
+    .with_setting_engine(se)
+    .build();
 
   // Servidores STUN: necesarios para obtener candidatos públicos (ICE).
   let config = RTCConfiguration {

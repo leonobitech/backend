@@ -7,7 +7,9 @@ use serde::Serialize;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, Mutex};
 use webrtc::api::media_engine::MediaEngine;
+use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
+use webrtc::ice::mdns::MulticastDnsMode;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 use webrtc::ice_transport::ice_server::RTCIceServer;
@@ -52,7 +54,15 @@ impl WebRtcSession {
     // 1) Codecs por defecto
     let mut me = MediaEngine::default();
     me.register_default_codecs()?;
-    let api = APIBuilder::new().with_media_engine(me).build();
+
+    // Deshabilitar mDNS: evita busy-loop de UDP multicast en Docker
+    let mut se = SettingEngine::default();
+    se.set_ice_multicast_dns_mode(MulticastDnsMode::Disabled);
+
+    let api = APIBuilder::new()
+      .with_media_engine(me)
+      .with_setting_engine(se)
+      .build();
 
     // 2) STUN-only
     let cfg = RTCConfiguration {

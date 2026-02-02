@@ -25,7 +25,9 @@ use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use webrtc::api::media_engine::MediaEngine;
+use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
+use webrtc::ice::mdns::MulticastDnsMode;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::peer_connection::configuration::RTCConfiguration;
@@ -69,7 +71,15 @@ pub async fn webrtc_offer_lab04(
   // 2) API WebRTC y PeerConnection con STUN
   let mut m = MediaEngine::default();
   m.register_default_codecs().map_err(internal)?;
-  let api = APIBuilder::new().with_media_engine(m).build();
+
+  // Deshabilitar mDNS: evita busy-loop de UDP multicast en Docker
+  let mut se = SettingEngine::default();
+  se.set_ice_multicast_dns_mode(MulticastDnsMode::Disabled);
+
+  let api = APIBuilder::new()
+    .with_media_engine(m)
+    .with_setting_engine(se)
+    .build();
 
   let config = RTCConfiguration {
     ice_servers: vec![

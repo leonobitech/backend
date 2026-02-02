@@ -8,7 +8,9 @@ use serde::Serialize;
 use tokio::time::interval;
 use tracing::{error, info, warn};
 use webrtc::api::media_engine::MediaEngine;
+use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
+use webrtc::ice::mdns::MulticastDnsMode;
 use webrtc::data_channel::data_channel_state::RTCDataChannelState;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
@@ -56,7 +58,15 @@ pub async fn webrtc_offer(
   // (2) API WebRTC (MediaEngine + APIBuilder)
   let mut m = MediaEngine::default();
   m.register_default_codecs().map_err(internal)?;
-  let api = APIBuilder::new().with_media_engine(m).build();
+
+  // Deshabilitar mDNS: evita busy-loop de UDP multicast en Docker
+  let mut se = SettingEngine::default();
+  se.set_ice_multicast_dns_mode(MulticastDnsMode::Disabled);
+
+  let api = APIBuilder::new()
+    .with_media_engine(m)
+    .with_setting_engine(se)
+    .build();
 
   // (3) Configuración del PeerConnection: STUN para descubrimiento de ruta
   let config = RTCConfiguration {
