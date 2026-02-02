@@ -214,7 +214,7 @@ All commits MUST follow [Conventional Commits](https://www.conventionalcommits.o
 **Rules:**
 1. Title: lowercase type/scope, imperative mood, max 72 chars
 2. Body: bullet items with relevant emojis explaining changes
-3. Always include `Co-Authored-By` footer when Claude assists
+3. NEVER include `Co-Authored-By` footer in commits
 
 **Examples:**
 
