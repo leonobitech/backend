@@ -833,6 +833,16 @@ services:
       - "traefik.http.services.baserow-ws.loadbalancer.serverstransport=ws-transport@file"
 
       #########################################
+      # 🔓 MCP: bypass auth para /mcp/*
+      #########################################
+      - "traefik.http.routers.baserow-mcp.rule=Host(`br.leonobitech.com`) && PathPrefix(`/mcp`)"
+      - "traefik.http.routers.baserow-mcp.entrypoints=websecure"
+      - "traefik.http.routers.baserow-mcp.tls.certresolver=le"
+      - "traefik.http.routers.baserow-mcp.service=baserow-api"
+      - "traefik.http.routers.baserow-mcp.priority=20"
+      - "traefik.http.routers.baserow-mcp.middlewares=secure-basic@file"
+
+      #########################################
       # 🖼️ Archivos /media (opcional, descomentable)
       #########################################
       # - "traefik.http.routers.baserow-media.rule=Host(`br.leonobitech.com`) && PathPrefix(`/media`)"
