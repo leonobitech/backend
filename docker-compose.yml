@@ -948,7 +948,7 @@ services:
       - no-new-privileges:true
 
     stop_grace_period: 60s
-    mem_limit: 384m
+    mem_limit: 448m
     cpus: 0.5
     logging:
       driver: "json-file"
