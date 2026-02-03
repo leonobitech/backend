@@ -1,6 +1,6 @@
 // src/metrics.rs
 use hdrhistogram::Histogram;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 use tracing::{info, warn};
 
@@ -10,27 +10,19 @@ pub enum MetricEvent {
   RttMicros(u64),
 }
 
-/// Versión simple (compat con tu código): 2s de ventana, máx 5s de RTT.
+/// Arranca el agregador de métricas RTT: ventana de 2s, máx 5s de RTT.
+/// El task se detiene automáticamente cuando todos los `Sender` se dropean.
 pub fn start_metrics_aggregator() -> mpsc::Sender<MetricEvent> {
-  start_metrics_aggregator_with(Duration::from_secs(2), 5_000 /* ms */).0
-}
-
-/// Versión configurable: retorna (tx, shutdown_tx) por si querés cerrar ordenado.
-pub fn start_metrics_aggregator_with(
-  window: Duration,
-  max_rtt_ms: u64,
-) -> (mpsc::Sender<MetricEvent>, watch::Sender<bool>) {
   let (tx, mut rx) = mpsc::channel::<MetricEvent>(1024);
-  let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
 
-  // trackeamos hasta max_rtt_ms en μs
+  let max_rtt_ms: u64 = 5_000;
   let max_us = max_rtt_ms.saturating_mul(1_000);
 
   tokio::spawn(async move {
     let mut hist = Histogram::<u64>::new_with_max(max_us, 3).expect("histogram with max");
-    let mut tick = interval(window);
+    let mut tick = interval(Duration::from_secs(2));
     let mut count: u64 = 0;
-    let mut sum_us: u128 = 0; // para media
+    let mut sum_us: u128 = 0;
 
     loop {
       tokio::select! {
@@ -51,7 +43,6 @@ pub fn start_metrics_aggregator_with(
                       hist.len()
                   );
 
-                  // reset de ventana
                   hist.reset();
                   count = 0;
                   sum_us = 0;
@@ -63,21 +54,15 @@ pub fn start_metrics_aggregator_with(
                       warn!("RTT fuera de rango ({} μs) > max {} μs; clamp", us, max_us);
                       us = max_us;
                   }
-                  // si falla por algún motivo, lo ignoramos
                   let _ = hist.record(us);
                   count += 1;
                   sum_us = sum_us.saturating_add(us as u128);
               }
-              None => break, // canal cerrado
+              None => break, // todos los senders dropeados
           },
-          changed = shutdown_rx.changed() => {
-              if changed.is_ok() && *shutdown_rx.borrow() {
-                  break;
-              }
-          }
       }
     }
   });
 
-  (tx, shutdown_tx)
+  tx
 }
