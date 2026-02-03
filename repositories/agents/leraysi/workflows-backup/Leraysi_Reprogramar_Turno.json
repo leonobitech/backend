@@ -1,0 +1,84 @@
+{
+  "id": "yti2vAntCLo46aTg",
+  "name": "Leraysi - Reprogramar Turno",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://odoo_mcp:8100/internal/mcp/call-tool",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        640,
+        16
+      ],
+      "id": "18ae7109-503c-459a-87ff-c7f3e4238087",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "O6mz2TMAB8RUn2lr",
+          "name": "odoo-mcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"lead_id\": 123,\n  \"nueva_fecha_hora\": \"2025-01-30 14:00\",\n  \"motivo\": \"Cambio de horario solicitado por la clienta\"\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        16
+      ],
+      "id": "619f4852-5e51-4e47-88d0-7b311056b1ff",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// TRANSFORM FOR MCP - leraysi_reprogramar_turno\n// ============================================================================\n// INPUT: { query: \"{...}\" } donde query es JSON string con los parámetros\n// OUTPUT: { tool, arguments } para el MCP de Odoo\n// ============================================================================\n\nconst raw = $input.first().json;\n\n// Los parámetros vienen en el campo \"query\" como JSON string\nconst params = typeof raw.query === 'string'\n  ? JSON.parse(raw.query)\n  : raw.query || raw;\n\n// Validar campos requeridos\nconst required = ['lead_id', 'nueva_fecha_hora', 'motivo'];\nconst missing = required.filter(f => !params[f]);\n\nif (missing.length > 0) {\n  throw new Error(`[leraysi_reprogramar_turno] Faltantes: ${missing.join(', ')}`);\n}\n\n// Construir arguments\nconst args = {\n  lead_id: Number(params.lead_id),\n  nueva_fecha_hora: params.nueva_fecha_hora,\n  motivo: params.motivo\n};\n\n// Output para MCP\nreturn [{\n  json: {\n    tool: \"leraysi_reprogramar_turno\",\n    arguments: args\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        16
+      ],
+      "id": "d24fafb1-6176-4a27-9d17-f285a087a3bd",
+      "name": "TransformForMCP-reprogramar-turno.js"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "TransformForMCP-reprogramar-turno.js",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TransformForMCP-reprogramar-turno.js": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
