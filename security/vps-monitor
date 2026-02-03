@@ -1,0 +1,341 @@
+#!/bin/bash
+
+LOG_FILE="/var/log/vps-monitor.log"
+DATE_NOW=$(date '+%Y-%m-%d %H:%M:%S')
+MAX_NODE_PROCESSES=10
+CPU_ALERT_THRESHOLD=50     # % CPU por container
+MEM_ALERT_THRESHOLD=85     # % memoria del límite por container
+SYSTEM_RAM_ALERT=85        # % RAM total del sistema
+SYSTEM_LOAD_CORES=$(nproc) # Cores disponibles
+
+# ============================================================
+# RECOLECTAR DATOS PRIMERO (para el resumen)
+# ============================================================
+
+# --- Fail2Ban ---
+FAIL2BAN_STATUS=$(systemctl is-active fail2ban)
+FAIL2BAN_ENABLED=$(systemctl is-enabled fail2ban 2>/dev/null || echo "unknown")
+JAILS=$(fail2ban-client status 2>/dev/null | grep 'Jail list:' | awk -F: '{print $2}' | xargs)
+HAS_SSHD=$(echo "$JAILS" | grep -qw sshd && echo "yes" || echo "no")
+
+# --- Sistema ---
+LOAD_1=$(awk '{print $1}' /proc/loadavg)
+LOAD_5=$(awk '{print $2}' /proc/loadavg)
+LOAD_15=$(awk '{print $3}' /proc/loadavg)
+RAM_TOTAL_MB=$(free -m | awk '/^Mem:/{print $2}')
+RAM_USED_MB=$(free -m | awk '/^Mem:/{print $3}')
+RAM_PCT=$((RAM_USED_MB * 100 / RAM_TOTAL_MB))
+RAM_TOTAL_GB=$(awk "BEGIN{printf \"%.1f\", $RAM_TOTAL_MB/1024}")
+RAM_USED_GB=$(awk "BEGIN{printf \"%.1f\", $RAM_USED_MB/1024}")
+SWAP_TOTAL_MB=$(free -m | awk '/^Swap:/{print $2}')
+SWAP_USED_MB=$(free -m | awk '/^Swap:/{print $3}')
+SWAP_PCT=0
+if [ "$SWAP_TOTAL_MB" -gt 0 ]; then
+  SWAP_PCT=$((SWAP_USED_MB * 100 / SWAP_TOTAL_MB))
+fi
+SWAP_TOTAL_GB=$(awk "BEGIN{printf \"%.1f\", $SWAP_TOTAL_MB/1024}")
+SWAP_USED_GB=$(awk "BEGIN{printf \"%.1f\", $SWAP_USED_MB/1024}")
+DISK_PCT=$(df / | awk 'NR==2{gsub(/%/,"",$5); print $5}')
+
+# --- Docker stats ---
+DOCKER_STATS=$(docker stats --no-stream --format "{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}" 2>/dev/null | sort -t'|' -k2 -rn)
+DOCKER_STATUS=$(docker ps -a --format "{{.Names}}|{{.Status}}" 2>/dev/null)
+
+# Containers con CPU alta
+DOCKER_CPU_ALERTS=""
+DOCKER_CPU_ALERT_COUNT=0
+while IFS='|' read -r name cpu mem mempct; do
+  cpu_num=$(echo "$cpu" | tr -d '% ')
+  cpu_int=${cpu_num%.*}
+  if [ "$cpu_int" -ge "$CPU_ALERT_THRESHOLD" ] 2>/dev/null; then
+    DOCKER_CPU_ALERTS="${DOCKER_CPU_ALERTS}  ${name} -> CPU ${cpu} (ALERTA: > ${CPU_ALERT_THRESHOLD}%)\n"
+    ((DOCKER_CPU_ALERT_COUNT++))
+  fi
+done <<< "$DOCKER_STATS"
+
+# Containers con memoria alta
+DOCKER_MEM_ALERTS=""
+DOCKER_MEM_ALERT_COUNT=0
+while IFS='|' read -r name cpu mem mempct; do
+  mem_num=$(echo "$mempct" | tr -d '% ')
+  mem_int=${mem_num%.*}
+  if [ "$mem_int" -ge "$MEM_ALERT_THRESHOLD" ] 2>/dev/null; then
+    DOCKER_MEM_ALERTS="${DOCKER_MEM_ALERTS}  ${name} -> MEM ${mempct} del limite (ALERTA: > ${MEM_ALERT_THRESHOLD}%)\n"
+    ((DOCKER_MEM_ALERT_COUNT++))
+  fi
+done <<< "$DOCKER_STATS"
+
+# Containers unhealthy, exited, o reiniciados
+DOCKER_HEALTH_ALERTS=""
+DOCKER_HEALTH_ALERT_COUNT=0
+while IFS='|' read -r name status; do
+  if echo "$status" | grep -qi "unhealthy\|exited\|dead"; then
+    DOCKER_HEALTH_ALERTS="${DOCKER_HEALTH_ALERTS}  ${name} -> ${status}\n"
+    ((DOCKER_HEALTH_ALERT_COUNT++))
+  fi
+done <<< "$DOCKER_STATUS"
+
+# Containers reiniciados en las ultimas 24h
+DOCKER_RESTART_ALERTS=""
+DOCKER_RESTART_COUNT=0
+SINCE_24H=$(date -d '24 hours ago' '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || date -d '-1 day' '+%Y-%m-%dT%H:%M:%S')
+RESTART_EVENTS=$(docker events --since "$SINCE_24H" --until "$(date '+%Y-%m-%dT%H:%M:%S')" --filter event=restart --format "{{.Actor.Attributes.name}}" 2>/dev/null)
+if [ -n "$RESTART_EVENTS" ]; then
+  DOCKER_RESTART_ALERTS=$(echo "$RESTART_EVENTS" | sort | uniq -c | sort -rn | awk '{printf "  %s -> %d restart(s)\n", $2, $1}')
+  DOCKER_RESTART_COUNT=$(echo "$RESTART_EVENTS" | wc -l)
+fi
+
+# --- Node sospechosos ---
+NODE_PROCESSES=$(ps -eo pid,ppid,cmd --sort=-%mem | grep -w "node" | grep -v grep)
+NODE_COUNT=$(echo "$NODE_PROCESSES" | grep -c . 2>/dev/null || echo 0)
+
+WHITELIST=(
+  "/usr/local/bin/n8n"
+  "/node_modules/@n8n/task-runner/dist/start.js"
+  "/usr/local/bin/n8n worker"
+  "/usr/local/bin/n8n webhook"
+  "/baserow/web-frontend/node_modules/.bin/nuxt"
+  "dist/index.mjs"
+)
+
+NODE_SUSPECTS=0
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  MATCHED=false
+  for pattern in "${WHITELIST[@]}"; do
+    if echo "$line" | grep -q "$pattern"; then
+      MATCHED=true
+      break
+    fi
+  done
+  if [ "$MATCHED" = false ]; then
+    ((NODE_SUSPECTS++))
+  fi
+done <<< "$NODE_PROCESSES"
+
+# ============================================================
+# CALCULAR SEMAFORO
+# ============================================================
+
+# Seguridad
+if [[ "$FAIL2BAN_STATUS" == "active" && "$HAS_SSHD" == "yes" && "$NODE_SUSPECTS" -eq 0 ]]; then
+  SEC_ICON="🟢"; SEC_MSG="Fail2Ban activo, 0 sospechosos"
+elif [[ "$FAIL2BAN_STATUS" != "active" ]]; then
+  SEC_ICON="🔴"; SEC_MSG="Fail2Ban INACTIVO"
+else
+  SEC_ICON="🟡"; SEC_MSG="${NODE_SUSPECTS} proceso(s) node sospechoso(s)"
+fi
+
+# Docker
+DOCKER_TOTAL_ALERTS=$((DOCKER_CPU_ALERT_COUNT + DOCKER_HEALTH_ALERT_COUNT + DOCKER_RESTART_COUNT))
+if [ "$DOCKER_TOTAL_ALERTS" -eq 0 ] && [ "$DOCKER_MEM_ALERT_COUNT" -eq 0 ]; then
+  DOCK_ICON="🟢"; DOCK_MSG="Todos los containers OK"
+elif [ "$DOCKER_CPU_ALERT_COUNT" -gt 0 ] || [ "$DOCKER_HEALTH_ALERT_COUNT" -gt 0 ]; then
+  DOCK_ICON="🔴"; DOCK_MSG="${DOCKER_CPU_ALERT_COUNT} CPU alta, ${DOCKER_HEALTH_ALERT_COUNT} unhealthy/caidos"
+else
+  DOCK_ICON="🟡"; DOCK_MSG="${DOCKER_MEM_ALERT_COUNT} container(s) con memoria alta"
+fi
+
+# Memoria containers
+if [ "$DOCKER_MEM_ALERT_COUNT" -eq 0 ]; then
+  CMEM_ICON="🟢"; CMEM_MSG="Todos bajo ${MEM_ALERT_THRESHOLD}% del limite"
+elif [ "$DOCKER_MEM_ALERT_COUNT" -le 2 ]; then
+  CMEM_ICON="🟡"; CMEM_MSG="${DOCKER_MEM_ALERT_COUNT} container(s) > ${MEM_ALERT_THRESHOLD}% limite"
+else
+  CMEM_ICON="🔴"; CMEM_MSG="${DOCKER_MEM_ALERT_COUNT} containers > ${MEM_ALERT_THRESHOLD}% limite"
+fi
+
+# Disco
+if [ "$DISK_PCT" -lt 70 ]; then
+  DISK_ICON="🟢"; DISK_MSG="${DISK_PCT}% usado"
+elif [ "$DISK_PCT" -lt 85 ]; then
+  DISK_ICON="🟡"; DISK_MSG="${DISK_PCT}% usado"
+else
+  DISK_ICON="🔴"; DISK_MSG="${DISK_PCT}% usado - ESPACIO CRITICO"
+fi
+
+# Sistema
+LOAD_INT=${LOAD_1%.*}
+if [ "$LOAD_INT" -lt "$SYSTEM_LOAD_CORES" ]; then
+  SYS_ICON="🟢"; SYS_MSG="Load ${LOAD_1} (${SYSTEM_LOAD_CORES} cores)"
+elif [ "$LOAD_INT" -lt $((SYSTEM_LOAD_CORES * 2)) ]; then
+  SYS_ICON="🟡"; SYS_MSG="Load ${LOAD_1} (${SYSTEM_LOAD_CORES} cores) - CARGA ELEVADA"
+else
+  SYS_ICON="🔴"; SYS_MSG="Load ${LOAD_1} (${SYSTEM_LOAD_CORES} cores) - SOBRECARGADO"
+fi
+
+# RAM
+if [ "$RAM_PCT" -lt "$SYSTEM_RAM_ALERT" ]; then
+  RAM_ICON="🟢"; RAM_MSG="RAM ${RAM_USED_GB}/${RAM_TOTAL_GB} GB (${RAM_PCT}%)"
+else
+  RAM_ICON="🔴"; RAM_MSG="RAM ${RAM_USED_GB}/${RAM_TOTAL_GB} GB (${RAM_PCT}%) - CRITICO"
+fi
+
+# ============================================================
+# GENERAR REPORTE
+# ============================================================
+
+{
+echo "🔒 VPS Security & Health Report – $DATE_NOW"
+echo "============================================="
+echo ""
+echo "📊 RESUMEN RAPIDO:"
+echo "  $SEC_ICON Seguridad    — $SEC_MSG"
+echo "  $DOCK_ICON Docker       — $DOCK_MSG"
+echo "  $CMEM_ICON Mem Contrs.  — $CMEM_MSG"
+echo "  $SYS_ICON Sistema      — $SYS_MSG"
+echo "  $RAM_ICON RAM          — $RAM_MSG"
+echo "  $DISK_ICON Disco        — $DISK_MSG"
+echo ""
+echo "============================================="
+
+# === Docker Containers — CPU & Memoria ===
+echo ""
+echo "🐳 Docker Containers — CPU & Memoria:"
+printf "  %-32s %8s  %22s  %6s\n" "CONTAINER" "CPU %" "MEM USAGE / LIMIT" "MEM %"
+echo "  -----------------------------------------------------------------------"
+while IFS='|' read -r name cpu mem mempct; do
+  [ -z "$name" ] && continue
+  printf "  %-32s %8s  %22s  %6s\n" "$name" "$cpu" "$mem" "$mempct"
+done <<< "$DOCKER_STATS"
+
+# === Alertas Docker ===
+if [ "$DOCKER_CPU_ALERT_COUNT" -gt 0 ] || [ "$DOCKER_MEM_ALERT_COUNT" -gt 0 ] || [ "$DOCKER_HEALTH_ALERT_COUNT" -gt 0 ] || [ "$DOCKER_RESTART_COUNT" -gt 0 ]; then
+  echo ""
+  echo "🚨 Alertas Docker:"
+  [ -n "$DOCKER_CPU_ALERTS" ] && echo -e "$DOCKER_CPU_ALERTS"
+  [ -n "$DOCKER_MEM_ALERTS" ] && echo -e "$DOCKER_MEM_ALERTS"
+  [ -n "$DOCKER_HEALTH_ALERTS" ] && echo -e "$DOCKER_HEALTH_ALERTS"
+  [ -n "$DOCKER_RESTART_ALERTS" ] && echo "$DOCKER_RESTART_ALERTS"
+else
+  echo ""
+  echo "✅ Sin alertas Docker."
+fi
+
+# === Containers caidos (no running) ===
+STOPPED=$(docker ps -a --filter "status=exited" --filter "status=dead" --format "  {{.Names}} -> {{.Status}}" 2>/dev/null)
+if [ -n "$STOPPED" ]; then
+  echo ""
+  echo "⚠️  Containers detenidos:"
+  echo "$STOPPED"
+fi
+
+# === Sistema ===
+echo ""
+echo "📊 Sistema:"
+echo "  Load Average: ${LOAD_1} / ${LOAD_5} / ${LOAD_15} (${SYSTEM_LOAD_CORES} cores)"
+echo "  RAM: ${RAM_USED_GB} / ${RAM_TOTAL_GB} GB (${RAM_PCT}%)"
+echo "  Swap: ${SWAP_USED_GB} / ${SWAP_TOTAL_GB} GB (${SWAP_PCT}%)"
+
+if [ "$RAM_PCT" -ge "$SYSTEM_RAM_ALERT" ]; then
+  echo "  🔴 RAM por encima del ${SYSTEM_RAM_ALERT}%"
+fi
+if [ "$SWAP_PCT" -ge 50 ]; then
+  echo "  🟡 Swap por encima del 50%"
+fi
+
+echo ""
+echo "-------------------------------------"
+
+# === Fail2Ban ===
+echo ""
+echo "📋 Verificacion critica: Fail2Ban"
+
+if [[ "$FAIL2BAN_STATUS" == "active" && "$HAS_SSHD" == "yes" ]]; then
+  echo "🟢 Fail2Ban esta activo y protegiendo el sistema (jail: sshd)"
+else
+  echo "🔴 ALERTA! Fail2Ban esta inactivo o sin el jail sshd"
+fi
+
+echo "⚙️  Arranque Automatico: $FAIL2BAN_ENABLED"
+
+echo ""
+echo "🛡️  Fail2Ban:"
+/usr/bin/fail2ban-client status sshd 2>&1
+
+# === Intentos fallidos SSH ===
+echo ""
+echo "🔎 Ultimos intentos fallidos mas frecuentes:"
+FAILED_LOGINS=$(grep "sshd" /var/log/auth.log 2>/dev/null | grep "Failed password" | \
+awk '{print $1, $2, $3, $(NF-3)}' | \
+awk '{ip[$4]++; last[$4]=$1" "$2" "$3} END {for (i in ip) printf("%4d %s (ultimo intento: %s)\n", ip[i], i, last[i])}' | \
+sort -nr | head -n 10)
+
+if [ -n "$FAILED_LOGINS" ]; then
+  echo "$FAILED_LOGINS"
+else
+  echo "✅ No hay intentos fallidos recientes."
+fi
+
+# === IPs baneadas ===
+echo ""
+echo "🔥 IPs baneadas (ultimos 7 dias):"
+zgrep -h 'Ban' /var/log/fail2ban.log* 2>/dev/null | \
+grep "$(date --date='7 days ago' '+%Y-%m')" | \
+awk '/Ban/ && $NF ~ /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/ {print $NF}' | \
+sort | uniq -c | sort -nr | head -n 10 | \
+awk '{printf "  %-3s %s\n", $1, $2}'
+
+# === Ultimos logins ===
+echo ""
+echo "💻 Ultimos inicios de sesion exitosos:"
+/usr/bin/last -a | head -n 5
+
+# === UFW ===
+echo ""
+echo "🛡️  Firewall UFW:"
+
+UFW_STATUS=$(ufw status | head -n 1)
+if echo "$UFW_STATUS" | grep -q "Status: active"; then
+  echo "🟢 Activo"
+else
+  echo "🚨 ALERTA! UFW esta inactivo."
+fi
+
+echo ""
+echo "📋 Reglas del Firewall UFW:"
+ufw status numbered | sed 's/^/    /'
+
+# === Top procesos ===
+echo ""
+echo "🩺 Procesos que mas memoria consumen:"
+/bin/ps -eo user,pid,pmem,pcpu,comm --sort=-%mem | head -n 10
+
+# === Anomalias procesos ===
+echo ""
+echo "📋 Verificacion de anomalias en procesos:"
+
+# Procesos node sospechosos
+if [ "$NODE_SUSPECTS" -gt 0 ] || [ "$NODE_COUNT" -gt "$MAX_NODE_PROCESSES" ]; then
+  echo "⚠️  Hay $NODE_COUNT procesos 'node' en ejecucion. Sospechosos: $NODE_SUSPECTS."
+  echo "$NODE_PROCESSES"
+else
+  echo "✅ Procesos node OK ($NODE_COUNT activos, 0 sospechosos)."
+fi
+
+# Procesos con >10% RAM
+HIGH_MEM=$(ps -eo user,pid,pmem,comm --sort=-%mem | awk '$3 > 10.0 {print $0}')
+if [ -n "$HIGH_MEM" ]; then
+  echo -e "🚨 Procesos con >10% de memoria RAM:\n$HIGH_MEM"
+else
+  echo "✅ No hay procesos consumiendo mas de 10% de RAM."
+fi
+
+# Procesos desde rutas sospechosas
+SUSPICIOUS=$(ps ax -o pid,cmd | grep -E "/tmp/|/dev/shm/|/var/tmp/" | grep -v grep)
+if [ -n "$SUSPICIOUS" ]; then
+  echo -e "🚨 Procesos desde rutas sospechosas:\n$SUSPICIOUS"
+else
+  echo "✅ No se detectaron procesos desde rutas sospechosas."
+fi
+
+# === Disco ===
+echo ""
+echo "💽 Espacio en disco (/):"
+/bin/df -h /
+
+echo ""
+echo "✅ Revision finalizada: $DATE_NOW"
+echo "-------------------------------------"
+
+} | tee -a "$LOG_FILE"
