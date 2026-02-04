@@ -35,7 +35,7 @@ const state = typeof data.state === 'string' ? JSON.parse(data.state) : (data.st
 
 const input = {
   // === Del LLM_OUTPUT (lo que el LLM extrajo del mensaje) ===
-  nombre_clienta: llmOutput.nombre_clienta || state.full_name || state.nick_name,
+  nombre_clienta: llmOutput.full_name || llmOutput.nombre_clienta || state.full_name || state.nick_name,
   servicio: llmOutput.servicio || (state.servicio_interes ? [state.servicio_interes] : []),
   fecha_deseada: llmOutput.fecha_deseada || llmOutput.fecha,
   // Extraer hora de fecha_deseada si viene en formato ISO (ej: "2026-02-11T14:00:00")
@@ -60,9 +60,14 @@ const input = {
   conversation_id: state.conversation_id,
   image_analysis: state.image_analysis || null,
 
-  // Estado de turno existente (para reprogramación)
+  // Estado de turno existente (para reprogramación o agregar servicio)
   turno_agendado: state.turno_agendado || false,
   turno_fecha: state.turno_fecha || null,
+
+  // Para agregar servicio a turno existente
+  agregar_a_turno_existente: state.agregar_a_turno_existente || llmOutput.agregar_a_turno_existente || false,
+  turno_id_existente: state.odoo_turno_id || state.turno_id_existente || llmOutput.turno_id_existente || null,
+  turno_precio_existente: state.turno_precio_existente || llmOutput.turno_precio_existente || 0,
 
   // Complejidad y largo del cabello (del image_analysis)
   complejidad: state.image_analysis?.complexity || 'media',
@@ -219,6 +224,11 @@ return [{
     // Estado de turno (para reprogramación)
     turno_agendado: input.turno_agendado,
     turno_fecha: input.turno_fecha,
+
+    // Para agregar servicio a turno existente
+    agregar_a_turno_existente: input.agregar_a_turno_existente,
+    turno_id_existente: input.turno_id_existente,
+    turno_precio_existente: input.turno_precio_existente,
 
     // Metadata
     received_at: new Date().toISOString()

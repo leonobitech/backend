@@ -110,6 +110,45 @@ Reprograma un turno existente a una nueva fecha/hora.
 
 ---
 
+### `leraysi_agregar_servicio_turno`
+
+Agrega un servicio adicional a un turno existente (mismo día).
+
+**Uso:** Cuando la clienta ya tiene turno y quiere agregar otro servicio para la misma cita.
+
+**Parámetros:**
+
+| Parámetro | Tipo | Requerido | Descripción |
+|-----------|------|-----------|-------------|
+| turno_id | number | ✅ | ID del turno existente en Odoo |
+| nuevo_servicio | string | ✅ | Código del servicio a agregar |
+| nuevo_servicio_detalle | string | ✅ | Descripción del nuevo servicio |
+| nuevo_precio | number | ✅ | Precio del nuevo servicio en ARS |
+| nueva_duracion | number | ✅ | Duración del nuevo servicio en horas |
+
+**Respuesta de la tool:**
+
+```json
+{
+  "turnoId": 123,
+  "clienta": "María García",
+  "fecha_hora": "2025-01-29 10:00:00",
+  "servicios": ["manicura_semipermanente", "pedicura"],
+  "servicio_detalle": "Manicura semipermanente + Pedicura",
+  "precio_total": 14000,
+  "duracion_total": 2,
+  "sena": 1800,
+  "link_pago": "https://www.mercadopago.com.ar/checkout/v1/...",
+  "mp_preference_id": "123456789-...",
+  "estado": "pendiente_pago",
+  "message": "Servicio agregado al turno. Nuevo total: $14.000. Link de pago actualizado."
+}
+```
+
+*Nota: La seña es diferencial (solo cobra la diferencia si ya había pagado).*
+
+---
+
 ## Instrucciones de Ejecución
 
 ### Si la TAREA dice "FECHA DISPONIBLE":
@@ -127,6 +166,12 @@ Reprograma un turno existente a una nueva fecha/hora.
 ### Si la TAREA dice "REPROGRAMAR TURNO":
 
 1. **Llamar** a `leraysi_reprogramar_turno` con los parámetros EXACTOS indicados
+2. **Esperar** la respuesta de la tool
+3. **Responder** con el JSON indicado, reemplazando los valores entre `{llaves}` con datos de la respuesta
+
+### Si la TAREA dice "AGREGAR SERVICIO AL TURNO EXISTENTE":
+
+1. **Llamar** a `leraysi_agregar_servicio_turno` con los parámetros EXACTOS indicados
 2. **Esperar** la respuesta de la tool
 3. **Responder** con el JSON indicado, reemplazando los valores entre `{llaves}` con datos de la respuesta
 
@@ -148,7 +193,7 @@ Siempre responder **únicamente** con un JSON válido:
 
 ```json
 {
-  "estado": "turno_creado" | "fecha_no_disponible" | "turno_reprogramado",
+  "estado": "turno_creado" | "fecha_no_disponible" | "turno_reprogramado" | "servicio_agregado",
   ...resto de campos según TAREA
 }
 ```

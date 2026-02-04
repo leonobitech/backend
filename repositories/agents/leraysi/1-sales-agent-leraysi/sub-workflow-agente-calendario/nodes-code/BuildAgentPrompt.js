@@ -59,10 +59,11 @@ const servicioDisplay = data.servicio_detalle || data.servicio || 'servicio';
 
 const turnoExistente = data.turno_agendado === true;
 
-// Normalizar servicio solicitado (puede venir como array o string)
-const servicioSolicitado = Array.isArray(data.servicio)
-  ? (data.servicio[0] || '').toLowerCase().trim()
-  : (data.servicio || '').toLowerCase().trim();
+// Normalizar servicios solicitados (puede venir como array o string)
+const serviciosSolicitados = Array.isArray(data.servicio)
+  ? data.servicio.map(s => s.toLowerCase().trim())
+  : [(data.servicio || '').toLowerCase().trim()];
+const servicioSolicitado = serviciosSolicitados[0] || '';
 
 // Servicio del turno existente (pasado desde GetTurnosSemana o el state)
 // Puede venir como string directo o como objeto {value: "..."}
@@ -73,8 +74,9 @@ if (data.turno_servicio_existente) {
     : data.turno_servicio_existente.toLowerCase().trim();
 }
 
-// Determinar si es reprogramación (mismo servicio Y misma fecha) o turno adicional
+// Determinar si es reprogramación, agregar servicio, o turno adicional
 let esReprogramacion = false;
+let esAgregarServicio = false;
 let esTurnoAdicional = false;
 
 // Extraer fecha del turno existente para comparar
@@ -82,21 +84,37 @@ const turnoFechaExistente = data.turno_fecha
   ? (data.turno_fecha.includes('T') ? data.turno_fecha.split('T')[0] : data.turno_fecha.split(' ')[0])
   : null;
 
+// ID del turno existente (para agregar servicio)
+const turnoIdExistente = data.turno_id_existente || data.odoo_turno_id || null;
+
 if (turnoExistente) {
   if (servicioTurnoExistente) {
-    // Comparar servicios
-    const serviciosCoinciden = servicioSolicitado.includes(servicioTurnoExistente) ||
-                               servicioTurnoExistente.includes(servicioSolicitado);
+    // Comparar servicios - detectar si hay servicios NUEVOS que no están en el existente
+    const servicioExistenteNorm = servicioTurnoExistente.toLowerCase().trim();
+
+    // Verificar si algún servicio solicitado es diferente al existente
+    const tieneServicioNuevo = serviciosSolicitados.some(s =>
+      !s.includes(servicioExistenteNorm) && !servicioExistenteNorm.includes(s)
+    );
+
+    // Si TODOS los servicios coinciden con el existente, es el mismo servicio
+    const serviciosCoinciden = !tieneServicioNuevo;
 
     // Comparar fechas - si son diferentes, es turno adicional aunque el servicio sea igual
     const fechasCoinciden = turnoFechaExistente && fechaSoloParte &&
                             turnoFechaExistente === fechaSoloParte;
 
-    // Solo reprogramar si: mismo servicio Y misma fecha (cambio de hora)
-    // Si la fecha es diferente, crear turno adicional (cliente quiere otro turno del mismo servicio)
+    // Caso 1: Mismo servicio Y misma fecha → REPROGRAMAR (solo cambio de hora)
     if (serviciosCoinciden && fechasCoinciden) {
       esReprogramacion = true;
-    } else {
+    }
+    // Caso 2: Diferente servicio Y misma fecha → AGREGAR SERVICIO
+    // (si tenemos turno_id_existente, agregamos al turno en vez de crear uno nuevo)
+    else if (!serviciosCoinciden && fechasCoinciden && turnoIdExistente) {
+      esAgregarServicio = true;
+    }
+    // Caso 3: Todo lo demás → TURNO ADICIONAL (nuevo turno)
+    else {
       esTurnoAdicional = true;
     }
   } else {
@@ -155,6 +173,61 @@ Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
 - Si \`turno_id_nuevo\` es null (caso confirmado): usar \`turno_id_anterior\`
 
 **NOTA:** Si la respuesta incluye \`link_pago\`, actualizar el mensaje para incluir: "Necesitás pagar la nueva seña en: {link_pago}"`;
+
+// ============================================================================
+// CASO 0.5: AGREGAR SERVICIO AL TURNO EXISTENTE
+// ============================================================================
+// Cuando la clienta tiene un turno el mismo día y quiere agregar otro servicio
+} else if (esAgregarServicio && data.fecha_disponible) {
+  // Calcular totales combinados
+  const precioExistente = data.turno_precio_existente || 0;
+  const precioNuevo = data.precio || 0;
+  const precioTotal = precioExistente + precioNuevo;
+  const senaTotalCalculada = Math.round(precioTotal * 0.3);
+
+  const servicioExistenteDisplay = data.turno_servicio_existente || 'servicio existente';
+  const servicioNuevoDisplay = servicioDisplay;
+  const serviciosCombinados = `${servicioExistenteDisplay} + ${servicioNuevoDisplay}`;
+
+  const mensajeClientaAgregado = `¡Listo ${data.nombre_clienta || 'reina'}! Actualicé tu turno del ${fechaHumana}. Ahora tenés: ${serviciosCombinados}. Total: $${precioTotal.toLocaleString('es-AR')}. Seña actualizada: $${senaTotalCalculada.toLocaleString('es-AR')}. {LINK_PAGO_MSG}`;
+
+  instruccionTarea = `## ➕ AGREGAR SERVICIO AL TURNO EXISTENTE
+
+### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`
+
+Usar EXACTAMENTE estos parámetros:
+
+\`\`\`json
+{
+  "turno_id": ${turnoIdExistente},
+  "nuevo_servicio": "${data.servicio || 'otro'}",
+  "nuevo_servicio_detalle": "${servicioNuevoDisplay}",
+  "nuevo_precio": ${precioNuevo},
+  "nueva_duracion": ${duracionHoras}
+}
+\`\`\`
+
+### PASO 2: Después de llamar la tool, responder con este JSON
+
+Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
+
+\`\`\`json
+{
+  "estado": "servicio_agregado",
+  "turno_id": ${turnoIdExistente},
+  "lead_id": ${data.lead_id || 'null'},
+  "fecha_hora": "${fechaHoraCompleta}",
+  "servicios_combinados": "{servicio_detalle de la respuesta}",
+  "precio_total": {precio_total de la respuesta},
+  "sena": {sena de la respuesta},
+  "link_pago": "{link_pago de la respuesta}",
+  "mensaje_para_clienta": "${mensajeClientaAgregado}"
+}
+\`\`\`
+
+**IMPORTANTE:** En "mensaje_para_clienta":
+- Si hay link_pago, reemplazar {LINK_PAGO_MSG} con: "Te actualicé el link de pago: {link_pago}"
+- Si no hay link_pago, reemplazar {LINK_PAGO_MSG} con: ""`;
 
 // ============================================================================
 // CASO 1: FECHA DISPONIBLE - Crear turno nuevo
