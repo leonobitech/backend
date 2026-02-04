@@ -1,5 +1,5 @@
 // ============================================================================
-// INPUT MAIN v3 - Simplificado (sin duplicación profile/state)
+// INPUT MAIN v3.1 - Con contexto temporal explícito
 // ============================================================================
 
 const inputData = $input.first().json;
@@ -25,11 +25,17 @@ const PROTECTED_FIELDS = [
 ];
 
 // ============================================================================
-// 3. BUILD META
+// 3. BUILD META + CONTEXTO TEMPORAL
 // ============================================================================
 
+const now = new Date();
+const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const fechaHumana = `${diasSemana[now.getDay()]} ${now.getDate()} de ${meses[now.getMonth()]} de ${now.getFullYear()}`;
+
 const meta = {
-  now_ts: new Date().toISOString(),
+  now_ts: now.toISOString(),
+  now_human: fechaHumana,
   history_len: history.length,
   channel: state.channel || "whatsapp",
   country: state.country || "Argentina",
@@ -37,7 +43,7 @@ const meta = {
 };
 
 // ============================================================================
-// 4. BUILD USER PROMPT (SIMPLIFICADO - sin JSON completo)
+// 4. BUILD USER PROMPT
 // ============================================================================
 
 const lastUserMessage = history.filter((m) => m.role === "user").slice(-1)[0];
@@ -68,6 +74,9 @@ const userPrompt = `## Historial de Conversación
 ${historyFormatted}
 
 ---
+
+## 📅 Contexto Temporal
+**Hoy es: ${fechaHumana}**
 
 ## Estado Actual del Lead
 - Stage: ${state.stage}

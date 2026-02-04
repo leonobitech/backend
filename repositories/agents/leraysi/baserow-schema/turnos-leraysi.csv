@@ -1,0 +1,1 @@
+﻿id,fecha,hora,clienta_id,nombre_clienta,telefono,email,servicio,tipo_servicio,duracion_min,precio,sena_monto,sena_pagada,estado,mp_payment_id,mp_link,mp_preference_id,odoo_event_id,conversation_id,odoo_turno_id,created_at,expira_at,confirmado_at,updated_at,notas
