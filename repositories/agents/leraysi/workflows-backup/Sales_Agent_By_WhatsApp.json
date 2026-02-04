@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-01-25T06:27:38.035Z",
+  "updatedAt": "2026-02-03T21:57:24.411Z",
   "createdAt": "2025-06-20T05:13:25.070Z",
   "id": "7WjUcj8Jms1Rmm1o",
   "name": "Sales_Agent_By_WhatsApp",
@@ -42,10 +42,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "version": 2,
             "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
@@ -76,10 +76,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "version": 2,
             "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
@@ -110,10 +110,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "version": 2,
             "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
@@ -391,7 +391,7 @@
         336
       ],
       "id": "ac42feeb-72fe-4432-a9ba-ffad20243d0a",
-      "name": "Embeddings OpenAI",
+      "name": "OpenAI Embeddings - Services",
       "credentials": {
         "openAiApi": {
           "id": "xez5pcf77ZJRSNdl",
@@ -438,38 +438,7 @@
         1408
       ],
       "id": "7f9fde48-b147-4868-aecd-a2371f5ae5a0",
-      "name": "Embeddings OpenAI1",
-      "credentials": {
-        "openAiApi": {
-          "id": "xez5pcf77ZJRSNdl",
-          "name": "OpenAi account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "model": {
-          "__rl": true,
-          "value": "gpt-4o",
-          "mode": "list",
-          "cachedResultName": "gpt-4o"
-        },
-        "options": {
-          "frequencyPenalty": 0.2,
-          "maxTokens": 4000,
-          "presencePenalty": 0,
-          "temperature": 0.2,
-          "topP": 0.9
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-      "typeVersion": 1.2,
-      "position": [
-        3040,
-        192
-      ],
-      "id": "5b565088-e836-4877-b49e-c1c42585f275",
-      "name": "OpenAI Chat Model1",
+      "name": "OpenAI Embeddings - Welcome",
       "credentials": {
         "openAiApi": {
           "id": "xez5pcf77ZJRSNdl",
@@ -691,7 +660,8 @@
         352
       ],
       "id": "d96b669c-1cd2-46fd-ab28-43b48d5ace66",
-      "name": "Chat History Filter"
+      "name": "transform_ChatHistory_TextFlow",
+      "notes": "SYNC: Código duplicado en 'Chat History Filter1' (flujo imagen). Si modificás este código, actualizá el otro también."
     },
     {
       "parameters": {
@@ -1062,10 +1032,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "version": 2,
             "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
+            "caseSensitive": true,
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -1132,10 +1102,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "version": 2,
             "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
@@ -1168,7 +1138,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -960,
+        -944,
         -336
       ],
       "id": "a27034bd-c8a5-41f6-8187-6240d7927882",
@@ -1511,36 +1481,6 @@
     },
     {
       "parameters": {
-        "model": {
-          "__rl": true,
-          "mode": "list",
-          "value": "gpt-4.1-mini"
-        },
-        "options": {
-          "frequencyPenalty": 0.2,
-          "maxTokens": 150,
-          "presencePenalty": 0,
-          "temperature": 0.4,
-          "topP": 0.9
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-      "typeVersion": 1.2,
-      "position": [
-        -816,
-        1232
-      ],
-      "id": "894315b6-9e81-4db0-8d5e-0f6a010a1cdc",
-      "name": "OpenAI Chat Model2",
-      "credentials": {
-        "openAiApi": {
-          "id": "xez5pcf77ZJRSNdl",
-          "name": "OpenAi account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "jsCode": "// ============================================================================\n// INPUT MAIN v3 - Simplificado (sin duplicación profile/state)\n// ============================================================================\n\nconst inputData = $input.first().json;\nconst { history, lead_id, profile } = inputData;\n\n// Usamos profile como state (estructura única)\nconst state = profile;\n\nif (!history || !state) {\n  throw new Error(\"[InputMain] Missing required fields: history or state\");\n}\n\n// ============================================================================\n// 2. CAMPOS PROTEGIDOS (no modificables por LLM)\n// ============================================================================\n\nconst PROTECTED_FIELDS = [\n  \"row_id\",\n  \"lead_id\",\n  \"chatwoot_id\",\n  \"chatwoot_inbox_id\",\n  \"conversation_id\",\n];\n\n// ============================================================================\n// 3. BUILD META\n// ============================================================================\n\nconst meta = {\n  now_ts: new Date().toISOString(),\n  history_len: history.length,\n  channel: state.channel || \"whatsapp\",\n  country: state.country || \"Argentina\",\n  tz: state.tz || \"-03:00\",\n};\n\n// ============================================================================\n// 4. BUILD USER PROMPT (SIMPLIFICADO - sin JSON completo)\n// ============================================================================\n\nconst lastUserMessage = history.filter((m) => m.role === \"user\").slice(-1)[0];\nconst userMessageText = lastUserMessage?.text || \"[Foto enviada]\";\nconst displayName = state.full_name || state.nick_name || \"clienta\";\n\n// Sección de análisis de imagen (solo si existe)\nlet imageSection = \"\";\nif (state.image_analysis) {\n  const ia = state.image_analysis;\n  imageSection = `\n## Foto Recibida\nLargo: ${ia.length} | Textura: ${ia.texture} | Complejidad: ${ia.complexity}\nCondición: ${ia.condition} | Color: ${ia.current_color}\n${ia.is_dyed ? \"Ya teñido\" : \"Sin teñir\"} | ${ia.has_roots ? \"Con raíces\" : \"Sin raíces\"}\n\n⚠️ DAR PRESUPUESTO PERSONALIZADO según complejidad \"${ia.complexity}\"\n`;\n}\n\n// Formatear historial completo (últimos 10 mensajes)\nconst recentHistory = history.slice(-10);\nconst historyFormatted = recentHistory\n  .map((m) => `[${m.role.toUpperCase()}]: ${m.text}`)\n  .join(\"\\n\\n\");\n\nconst userPrompt = `## Historial de Conversación\n${historyFormatted}\n\n---\n\n## Estado Actual del Lead\n- Stage: ${state.stage}\n- Servicio de interés: ${state.servicio_interes || \"ninguno\"}\n- Foto recibida: ${state.foto_recibida ? \"SÍ\" : \"no\"}\n- Presupuesto dado: ${state.presupuesto_dado ? \"SÍ\" : \"no\"}\n- Esperando foto: ${state.waiting_image ? \"SÍ\" : \"no\"}\n- Contadores: services_seen=${state.services_seen}, prices_asked=${state.prices_asked}, deep_interest=${state.deep_interest}\n- Datos cliente: full_name=${state.full_name || \"pendiente\"}, email=${state.email || \"pendiente\"}\n${imageSection}\n---\n\n## Último Mensaje a Responder\n\"${userMessageText}\"\n\nResponde a este mensaje actualizando el state según corresponda.\n`;\n\n// ============================================================================\n// 5. OUTPUT\n// ============================================================================\n\nreturn [\n  {\n    json: {\n      userPrompt,\n      lead_id,\n      state,\n      meta,\n      _protected: PROTECTED_FIELDS,\n    },\n  },\n];\n"
       },
       "type": "n8n-nodes-base.code",
@@ -1567,35 +1507,6 @@
       "typeVersion": 1,
       "id": "0511f831-2d25-4eff-bb93-47d26816e806",
       "name": "Sticky Note"
-    },
-    {
-      "parameters": {
-        "description": "Schedule a meeting/demo in Odoo calendar linked to a sales opportunity. Required fields: opportunityId (lead ID), title (meeting name), startDatetime (YYYY-MM-DD HH:MM:SS). Optional: durationHours (default 1), location, description.",
-        "workflowId": {
-          "__rl": true,
-          "value": "FWODp3yOtUCrR9yY",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/FWODp3yOtUCrR9yY",
-          "cachedResultName": "Odoo_Schedule_Meeting"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {},
-          "matchingColumns": [],
-          "schema": [],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
-      "typeVersion": 2.2,
-      "position": [
-        576,
-        1360
-      ],
-      "id": "7dd7c3ae-e922-41a3-8d5b-017eefe286f5",
-      "name": "odoo_schedule_meeting",
-      "disabled": true
     },
     {
       "parameters": {
@@ -1774,10 +1685,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "version": 3,
             "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
@@ -1915,10 +1826,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "version": 3,
             "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
@@ -2082,10 +1993,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "version": 3,
             "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
@@ -2239,7 +2150,8 @@
         -896
       ],
       "id": "edcc9750-d32f-4a79-9115-32ba90252bcf",
-      "name": "Chat History Filter1"
+      "name": "transform_ChatHistory_ImageFlow",
+      "notes": "SYNC: Código duplicado en 'Chat History Filter' (flujo texto). Si modificás este código, actualizá el otro también."
     },
     {
       "parameters": {
@@ -2284,35 +2196,6 @@
       "typeVersion": 1,
       "id": "1b241528-eca8-48ac-89d2-6f70be482eab",
       "name": "Sticky Note2"
-    },
-    {
-      "parameters": {
-        "description": "Send commercial proposal email to customer via Odoo. Required fields: emailTo (customer email), opportunityId (lead ID), templateType (e.g. \"proposal\"), templateData (object with customerName, productName, price).",
-        "workflowId": {
-          "__rl": true,
-          "value": "ryqtfR430xQb55yv",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/ryqtfR430xQb55yv",
-          "cachedResultName": "Odoo_Send_Email"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {},
-          "matchingColumns": [],
-          "schema": [],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
-      "typeVersion": 2.2,
-      "position": [
-        800,
-        1360
-      ],
-      "id": "300b33fd-4672-4b3e-aed1-52abd7e5c5a9",
-      "name": "odoo_send_email",
-      "disabled": true
     },
     {
       "parameters": {
@@ -2382,19 +2265,53 @@
     },
     {
       "parameters": {
-        "content": "## Backup Tools Leonobitech\n",
-        "height": 384,
-        "width": 656,
-        "color": 5
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-5-20250929",
+          "cachedResultName": "Claude Sonnet 4.5"
+        },
+        "options": {}
       },
-      "type": "n8n-nodes-base.stickyNote",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
       "position": [
-        416,
-        1200
+        3024,
+        176
       ],
-      "typeVersion": 1,
-      "id": "4cb9aee2-0f30-492a-8523-cb3b7fbd7536",
-      "name": "Sticky Note5"
+      "id": "5f7ea1c2-f48a-46d3-99ae-7640168fb8df",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "SUw0YD5b2MOCmI7u",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-3-5-haiku-20241022",
+          "mode": "list",
+          "cachedResultName": "Claude Haiku 3.5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        -816,
+        1216
+      ],
+      "id": "c133b9dd-94c5-4685-907c-47d1167b6cb0",
+      "name": "Anthropic Chat Model1",
+      "credentials": {
+        "anthropicApi": {
+          "id": "SUw0YD5b2MOCmI7u",
+          "name": "Anthropic account"
+        }
+      }
     }
   ],
   "connections": {
@@ -2515,7 +2432,7 @@
         ]
       ]
     },
-    "Embeddings OpenAI": {
+    "OpenAI Embeddings - Services": {
       "ai_embedding": [
         [
           {
@@ -2537,23 +2454,12 @@
         ]
       ]
     },
-    "Embeddings OpenAI1": {
+    "OpenAI Embeddings - Welcome": {
       "ai_embedding": [
         [
           {
             "node": "Qdrant Vector Store1",
             "type": "ai_embedding",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "OpenAI Chat Model1": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Master AI Agent-Main",
-            "type": "ai_languageModel",
             "index": 0
           }
         ]
@@ -2596,7 +2502,7 @@
       "main": [
         [
           {
-            "node": "Chat History Filter",
+            "node": "transform_ChatHistory_TextFlow",
             "type": "main",
             "index": 0
           }
@@ -2614,7 +2520,7 @@
         ]
       ]
     },
-    "Chat History Filter": {
+    "transform_ChatHistory_TextFlow": {
       "main": [
         [
           {
@@ -2811,17 +2717,6 @@
         ]
       ]
     },
-    "PushBufferEvent": {
-      "main": [
-        [
-          {
-            "node": "Buf_FetchAll",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "If_Estado_!=_OFF": {
       "main": [
         [
@@ -2968,17 +2863,6 @@
         ]
       ]
     },
-    "OpenAI Chat Model2": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "AI Agent Welcome",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Input Main": {
       "main": [
         [
@@ -2988,11 +2872,6 @@
             "index": 0
           }
         ]
-      ]
-    },
-    "odoo_schedule_meeting": {
-      "ai_tool": [
-        []
       ]
     },
     "MessageType": {
@@ -3069,11 +2948,6 @@
             "index": 0
           }
         ]
-      ]
-    },
-    "ResponseChatwootText": {
-      "main": [
-        []
       ]
     },
     "GenerateAudio": {
@@ -3202,14 +3076,14 @@
       "main": [
         [
           {
-            "node": "Chat History Filter1",
+            "node": "transform_ChatHistory_ImageFlow",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Chat History Filter1": {
+    "transform_ChatHistory_ImageFlow": {
       "main": [
         [
           {
@@ -3252,19 +3126,55 @@
           }
         ]
       ]
+    },
+    "PushBufferEvent": {
+      "main": [
+        [
+          {
+            "node": "Buf_FetchAll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Master AI Agent-Main",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent Welcome",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "errorWorkflow": "sNNc2VUXCSt9nDER",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
   "staticData": null,
   "meta": {
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "c5547f35-f3c3-4955-80d5-e1a7a134cfa6",
-  "activeVersionId": "c5547f35-f3c3-4955-80d5-e1a7a134cfa6",
-  "versionCounter": 840,
+  "versionId": "4a358dd5-201a-49ac-8af4-e5f9f3b79ec0",
+  "activeVersionId": "4a358dd5-201a-49ac-8af4-e5f9f3b79ec0",
+  "versionCounter": 943,
   "triggerCount": 1,
   "shared": [
     {
@@ -3336,9 +3246,9 @@
     }
   ],
   "activeVersion": {
-    "updatedAt": "2026-01-25T06:27:43.177Z",
-    "createdAt": "2026-01-25T06:27:38.049Z",
-    "versionId": "c5547f35-f3c3-4955-80d5-e1a7a134cfa6",
+    "updatedAt": "2026-02-03T21:57:26.505Z",
+    "createdAt": "2026-02-03T21:57:24.416Z",
+    "versionId": "4a358dd5-201a-49ac-8af4-e5f9f3b79ec0",
     "workflowId": "7WjUcj8Jms1Rmm1o",
     "nodes": [
       {
@@ -3376,10 +3286,10 @@
         "parameters": {
           "conditions": {
             "options": {
-              "caseSensitive": true,
+              "version": 2,
               "leftValue": "",
-              "typeValidation": "strict",
-              "version": 2
+              "caseSensitive": true,
+              "typeValidation": "strict"
             },
             "conditions": [
               {
@@ -3410,10 +3320,10 @@
         "parameters": {
           "conditions": {
             "options": {
-              "caseSensitive": true,
+              "version": 2,
               "leftValue": "",
-              "typeValidation": "strict",
-              "version": 2
+              "caseSensitive": true,
+              "typeValidation": "strict"
             },
             "conditions": [
               {
@@ -3444,10 +3354,10 @@
         "parameters": {
           "conditions": {
             "options": {
-              "caseSensitive": true,
+              "version": 2,
               "leftValue": "",
-              "typeValidation": "strict",
-              "version": 2
+              "caseSensitive": true,
+              "typeValidation": "strict"
             },
             "conditions": [
               {
@@ -3725,7 +3635,7 @@
           336
         ],
         "id": "ac42feeb-72fe-4432-a9ba-ffad20243d0a",
-        "name": "Embeddings OpenAI",
+        "name": "OpenAI Embeddings - Services",
         "credentials": {
           "openAiApi": {
             "id": "xez5pcf77ZJRSNdl",
@@ -3772,38 +3682,7 @@
           1408
         ],
         "id": "7f9fde48-b147-4868-aecd-a2371f5ae5a0",
-        "name": "Embeddings OpenAI1",
-        "credentials": {
-          "openAiApi": {
-            "id": "xez5pcf77ZJRSNdl",
-            "name": "OpenAi account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "model": {
-            "__rl": true,
-            "value": "gpt-4o",
-            "mode": "list",
-            "cachedResultName": "gpt-4o"
-          },
-          "options": {
-            "frequencyPenalty": 0.2,
-            "maxTokens": 4000,
-            "presencePenalty": 0,
-            "temperature": 0.2,
-            "topP": 0.9
-          }
-        },
-        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-        "typeVersion": 1.2,
-        "position": [
-          3040,
-          192
-        ],
-        "id": "5b565088-e836-4877-b49e-c1c42585f275",
-        "name": "OpenAI Chat Model1",
+        "name": "OpenAI Embeddings - Welcome",
         "credentials": {
           "openAiApi": {
             "id": "xez5pcf77ZJRSNdl",
@@ -4025,7 +3904,8 @@
           352
         ],
         "id": "d96b669c-1cd2-46fd-ab28-43b48d5ace66",
-        "name": "Chat History Filter"
+        "name": "transform_ChatHistory_TextFlow",
+        "notes": "SYNC: Código duplicado en 'Chat History Filter1' (flujo imagen). Si modificás este código, actualizá el otro también."
       },
       {
         "parameters": {
@@ -4396,10 +4276,10 @@
         "parameters": {
           "conditions": {
             "options": {
-              "caseSensitive": true,
+              "version": 2,
               "leftValue": "",
-              "typeValidation": "loose",
-              "version": 2
+              "caseSensitive": true,
+              "typeValidation": "loose"
             },
             "conditions": [
               {
@@ -4466,10 +4346,10 @@
         "parameters": {
           "conditions": {
             "options": {
-              "caseSensitive": true,
+              "version": 2,
               "leftValue": "",
-              "typeValidation": "strict",
-              "version": 2
+              "caseSensitive": true,
+              "typeValidation": "strict"
             },
             "conditions": [
               {
@@ -4502,7 +4382,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          -960,
+          -944,
           -336
         ],
         "id": "a27034bd-c8a5-41f6-8187-6240d7927882",
@@ -4845,36 +4725,6 @@
       },
       {
         "parameters": {
-          "model": {
-            "__rl": true,
-            "mode": "list",
-            "value": "gpt-4.1-mini"
-          },
-          "options": {
-            "frequencyPenalty": 0.2,
-            "maxTokens": 150,
-            "presencePenalty": 0,
-            "temperature": 0.4,
-            "topP": 0.9
-          }
-        },
-        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-        "typeVersion": 1.2,
-        "position": [
-          -816,
-          1232
-        ],
-        "id": "894315b6-9e81-4db0-8d5e-0f6a010a1cdc",
-        "name": "OpenAI Chat Model2",
-        "credentials": {
-          "openAiApi": {
-            "id": "xez5pcf77ZJRSNdl",
-            "name": "OpenAi account"
-          }
-        }
-      },
-      {
-        "parameters": {
           "jsCode": "// ============================================================================\n// INPUT MAIN v3 - Simplificado (sin duplicación profile/state)\n// ============================================================================\n\nconst inputData = $input.first().json;\nconst { history, lead_id, profile } = inputData;\n\n// Usamos profile como state (estructura única)\nconst state = profile;\n\nif (!history || !state) {\n  throw new Error(\"[InputMain] Missing required fields: history or state\");\n}\n\n// ============================================================================\n// 2. CAMPOS PROTEGIDOS (no modificables por LLM)\n// ============================================================================\n\nconst PROTECTED_FIELDS = [\n  \"row_id\",\n  \"lead_id\",\n  \"chatwoot_id\",\n  \"chatwoot_inbox_id\",\n  \"conversation_id\",\n];\n\n// ============================================================================\n// 3. BUILD META\n// ============================================================================\n\nconst meta = {\n  now_ts: new Date().toISOString(),\n  history_len: history.length,\n  channel: state.channel || \"whatsapp\",\n  country: state.country || \"Argentina\",\n  tz: state.tz || \"-03:00\",\n};\n\n// ============================================================================\n// 4. BUILD USER PROMPT (SIMPLIFICADO - sin JSON completo)\n// ============================================================================\n\nconst lastUserMessage = history.filter((m) => m.role === \"user\").slice(-1)[0];\nconst userMessageText = lastUserMessage?.text || \"[Foto enviada]\";\nconst displayName = state.full_name || state.nick_name || \"clienta\";\n\n// Sección de análisis de imagen (solo si existe)\nlet imageSection = \"\";\nif (state.image_analysis) {\n  const ia = state.image_analysis;\n  imageSection = `\n## Foto Recibida\nLargo: ${ia.length} | Textura: ${ia.texture} | Complejidad: ${ia.complexity}\nCondición: ${ia.condition} | Color: ${ia.current_color}\n${ia.is_dyed ? \"Ya teñido\" : \"Sin teñir\"} | ${ia.has_roots ? \"Con raíces\" : \"Sin raíces\"}\n\n⚠️ DAR PRESUPUESTO PERSONALIZADO según complejidad \"${ia.complexity}\"\n`;\n}\n\n// Formatear historial completo (últimos 10 mensajes)\nconst recentHistory = history.slice(-10);\nconst historyFormatted = recentHistory\n  .map((m) => `[${m.role.toUpperCase()}]: ${m.text}`)\n  .join(\"\\n\\n\");\n\nconst userPrompt = `## Historial de Conversación\n${historyFormatted}\n\n---\n\n## Estado Actual del Lead\n- Stage: ${state.stage}\n- Servicio de interés: ${state.servicio_interes || \"ninguno\"}\n- Foto recibida: ${state.foto_recibida ? \"SÍ\" : \"no\"}\n- Presupuesto dado: ${state.presupuesto_dado ? \"SÍ\" : \"no\"}\n- Esperando foto: ${state.waiting_image ? \"SÍ\" : \"no\"}\n- Contadores: services_seen=${state.services_seen}, prices_asked=${state.prices_asked}, deep_interest=${state.deep_interest}\n- Datos cliente: full_name=${state.full_name || \"pendiente\"}, email=${state.email || \"pendiente\"}\n${imageSection}\n---\n\n## Último Mensaje a Responder\n\"${userMessageText}\"\n\nResponde a este mensaje actualizando el state según corresponda.\n`;\n\n// ============================================================================\n// 5. OUTPUT\n// ============================================================================\n\nreturn [\n  {\n    json: {\n      userPrompt,\n      lead_id,\n      state,\n      meta,\n      _protected: PROTECTED_FIELDS,\n    },\n  },\n];\n"
         },
         "type": "n8n-nodes-base.code",
@@ -4901,35 +4751,6 @@
         "typeVersion": 1,
         "id": "0511f831-2d25-4eff-bb93-47d26816e806",
         "name": "Sticky Note"
-      },
-      {
-        "parameters": {
-          "description": "Schedule a meeting/demo in Odoo calendar linked to a sales opportunity. Required fields: opportunityId (lead ID), title (meeting name), startDatetime (YYYY-MM-DD HH:MM:SS). Optional: durationHours (default 1), location, description.",
-          "workflowId": {
-            "__rl": true,
-            "value": "FWODp3yOtUCrR9yY",
-            "mode": "list",
-            "cachedResultUrl": "/workflow/FWODp3yOtUCrR9yY",
-            "cachedResultName": "Odoo_Schedule_Meeting"
-          },
-          "workflowInputs": {
-            "mappingMode": "defineBelow",
-            "value": {},
-            "matchingColumns": [],
-            "schema": [],
-            "attemptToConvertTypes": false,
-            "convertFieldsToString": false
-          }
-        },
-        "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
-        "typeVersion": 2.2,
-        "position": [
-          576,
-          1360
-        ],
-        "id": "7dd7c3ae-e922-41a3-8d5b-017eefe286f5",
-        "name": "odoo_schedule_meeting",
-        "disabled": true
       },
       {
         "parameters": {
@@ -5108,10 +4929,10 @@
         "parameters": {
           "conditions": {
             "options": {
-              "caseSensitive": true,
+              "version": 3,
               "leftValue": "",
-              "typeValidation": "strict",
-              "version": 3
+              "caseSensitive": true,
+              "typeValidation": "strict"
             },
             "conditions": [
               {
@@ -5249,10 +5070,10 @@
         "parameters": {
           "conditions": {
             "options": {
-              "caseSensitive": true,
+              "version": 3,
               "leftValue": "",
-              "typeValidation": "strict",
-              "version": 3
+              "caseSensitive": true,
+              "typeValidation": "strict"
             },
             "conditions": [
               {
@@ -5416,10 +5237,10 @@
         "parameters": {
           "conditions": {
             "options": {
-              "caseSensitive": true,
+              "version": 3,
               "leftValue": "",
-              "typeValidation": "strict",
-              "version": 3
+              "caseSensitive": true,
+              "typeValidation": "strict"
             },
             "conditions": [
               {
@@ -5573,7 +5394,8 @@
           -896
         ],
         "id": "edcc9750-d32f-4a79-9115-32ba90252bcf",
-        "name": "Chat History Filter1"
+        "name": "transform_ChatHistory_ImageFlow",
+        "notes": "SYNC: Código duplicado en 'Chat History Filter' (flujo texto). Si modificás este código, actualizá el otro también."
       },
       {
         "parameters": {
@@ -5618,35 +5440,6 @@
         "typeVersion": 1,
         "id": "1b241528-eca8-48ac-89d2-6f70be482eab",
         "name": "Sticky Note2"
-      },
-      {
-        "parameters": {
-          "description": "Send commercial proposal email to customer via Odoo. Required fields: emailTo (customer email), opportunityId (lead ID), templateType (e.g. \"proposal\"), templateData (object with customerName, productName, price).",
-          "workflowId": {
-            "__rl": true,
-            "value": "ryqtfR430xQb55yv",
-            "mode": "list",
-            "cachedResultUrl": "/workflow/ryqtfR430xQb55yv",
-            "cachedResultName": "Odoo_Send_Email"
-          },
-          "workflowInputs": {
-            "mappingMode": "defineBelow",
-            "value": {},
-            "matchingColumns": [],
-            "schema": [],
-            "attemptToConvertTypes": false,
-            "convertFieldsToString": false
-          }
-        },
-        "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
-        "typeVersion": 2.2,
-        "position": [
-          800,
-          1360
-        ],
-        "id": "300b33fd-4672-4b3e-aed1-52abd7e5c5a9",
-        "name": "odoo_send_email",
-        "disabled": true
       },
       {
         "parameters": {
@@ -5716,19 +5509,53 @@
       },
       {
         "parameters": {
-          "content": "## Backup Tools Leonobitech\n",
-          "height": 384,
-          "width": 656,
-          "color": 5
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "claude-sonnet-4-5-20250929",
+            "cachedResultName": "Claude Sonnet 4.5"
+          },
+          "options": {}
         },
-        "type": "n8n-nodes-base.stickyNote",
+        "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+        "typeVersion": 1.3,
         "position": [
-          416,
-          1200
+          3024,
+          176
         ],
-        "typeVersion": 1,
-        "id": "4cb9aee2-0f30-492a-8523-cb3b7fbd7536",
-        "name": "Sticky Note5"
+        "id": "5f7ea1c2-f48a-46d3-99ae-7640168fb8df",
+        "name": "Anthropic Chat Model",
+        "credentials": {
+          "anthropicApi": {
+            "id": "SUw0YD5b2MOCmI7u",
+            "name": "Anthropic account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "value": "claude-3-5-haiku-20241022",
+            "mode": "list",
+            "cachedResultName": "Claude Haiku 3.5"
+          },
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+        "typeVersion": 1.3,
+        "position": [
+          -816,
+          1216
+        ],
+        "id": "c133b9dd-94c5-4685-907c-47d1167b6cb0",
+        "name": "Anthropic Chat Model1",
+        "credentials": {
+          "anthropicApi": {
+            "id": "SUw0YD5b2MOCmI7u",
+            "name": "Anthropic account"
+          }
+        }
       }
     ],
     "connections": {
@@ -5849,7 +5676,7 @@
           ]
         ]
       },
-      "Embeddings OpenAI": {
+      "OpenAI Embeddings - Services": {
         "ai_embedding": [
           [
             {
@@ -5871,23 +5698,12 @@
           ]
         ]
       },
-      "Embeddings OpenAI1": {
+      "OpenAI Embeddings - Welcome": {
         "ai_embedding": [
           [
             {
               "node": "Qdrant Vector Store1",
               "type": "ai_embedding",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "OpenAI Chat Model1": {
-        "ai_languageModel": [
-          [
-            {
-              "node": "Master AI Agent-Main",
-              "type": "ai_languageModel",
               "index": 0
             }
           ]
@@ -5930,7 +5746,7 @@
         "main": [
           [
             {
-              "node": "Chat History Filter",
+              "node": "transform_ChatHistory_TextFlow",
               "type": "main",
               "index": 0
             }
@@ -5948,7 +5764,7 @@
           ]
         ]
       },
-      "Chat History Filter": {
+      "transform_ChatHistory_TextFlow": {
         "main": [
           [
             {
@@ -6145,17 +5961,6 @@
           ]
         ]
       },
-      "PushBufferEvent": {
-        "main": [
-          [
-            {
-              "node": "Buf_FetchAll",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
       "If_Estado_!=_OFF": {
         "main": [
           [
@@ -6302,17 +6107,6 @@
           ]
         ]
       },
-      "OpenAI Chat Model2": {
-        "ai_languageModel": [
-          [
-            {
-              "node": "AI Agent Welcome",
-              "type": "ai_languageModel",
-              "index": 0
-            }
-          ]
-        ]
-      },
       "Input Main": {
         "main": [
           [
@@ -6322,11 +6116,6 @@
               "index": 0
             }
           ]
-        ]
-      },
-      "odoo_schedule_meeting": {
-        "ai_tool": [
-          []
         ]
       },
       "MessageType": {
@@ -6403,11 +6192,6 @@
               "index": 0
             }
           ]
-        ]
-      },
-      "ResponseChatwootText": {
-        "main": [
-          []
         ]
       },
       "GenerateAudio": {
@@ -6536,14 +6320,14 @@
         "main": [
           [
             {
-              "node": "Chat History Filter1",
+              "node": "transform_ChatHistory_ImageFlow",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Chat History Filter1": {
+      "transform_ChatHistory_ImageFlow": {
         "main": [
           [
             {
@@ -6586,18 +6370,51 @@
             }
           ]
         ]
+      },
+      "PushBufferEvent": {
+        "main": [
+          [
+            {
+              "node": "Buf_FetchAll",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Anthropic Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Master AI Agent-Main",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Anthropic Chat Model1": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent Welcome",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Felix Figueroa",
-    "name": "Version c5547f35",
+    "name": "Version 4a358dd5",
     "description": "",
     "autosaved": true,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-01-25T06:27:43.173Z",
-        "id": 273,
+        "createdAt": "2026-02-03T21:57:26.496Z",
+        "id": 302,
         "workflowId": "7WjUcj8Jms1Rmm1o",
-        "versionId": "c5547f35-f3c3-4955-80d5-e1a7a134cfa6",
+        "versionId": "4a358dd5-201a-49ac-8af4-e5f9f3b79ec0",
         "event": "activated",
         "userId": "80c87022-9b0e-41c9-ad5f-5c1d952da6da"
       }
