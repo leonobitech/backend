@@ -7,13 +7,65 @@ import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 import { logger } from "@/lib/logger";
 
+// Mapeo de nombres user-friendly a códigos Odoo
+const SERVICIO_MAP: Record<string, string> = {
+  // Cortes
+  "corte mujer": "corte_mujer",
+  "corte de mujer": "corte_mujer",
+  "corte": "corte_mujer",
+  // Alisados
+  "alisado brasileño": "alisado_brasileno",
+  "alisado brasileno": "alisado_brasileno",
+  "alisado con keratina": "alisado_keratina",
+  "alisado keratina": "alisado_keratina",
+  "keratina": "alisado_keratina",
+  // Mechas y color
+  "mechas completas": "mechas_completas",
+  "mechas": "mechas_completas",
+  "tintura raíz": "tintura_raiz",
+  "tintura raiz": "tintura_raiz",
+  "tintura completa": "tintura_completa",
+  "tintura": "tintura_completa",
+  "balayage": "balayage",
+  // Manicura/Pedicura
+  "manicura simple": "manicura_simple",
+  "manicure simple": "manicura_simple",
+  "manicura": "manicura_simple",
+  "manicura semipermanente": "manicura_semipermanente",
+  "manicure semipermanente": "manicura_semipermanente",
+  "semipermanente": "manicura_semipermanente",
+  "pedicura": "pedicura",
+  "pedicure": "pedicura",
+  // Depilación cera
+  "depilación cera piernas": "depilacion_cera_piernas",
+  "depilacion cera piernas": "depilacion_cera_piernas",
+  "cera piernas": "depilacion_cera_piernas",
+  "depilación cera axilas": "depilacion_cera_axilas",
+  "depilacion cera axilas": "depilacion_cera_axilas",
+  "cera axilas": "depilacion_cera_axilas",
+  "depilación cera bikini": "depilacion_cera_bikini",
+  "depilacion cera bikini": "depilacion_cera_bikini",
+  "cera bikini": "depilacion_cera_bikini",
+  // Depilación láser
+  "depilación láser piernas": "depilacion_laser_piernas",
+  "depilacion laser piernas": "depilacion_laser_piernas",
+  "láser piernas": "depilacion_laser_piernas",
+  "laser piernas": "depilacion_laser_piernas",
+  "depilación láser axilas": "depilacion_laser_axilas",
+  "depilacion laser axilas": "depilacion_laser_axilas",
+  "láser axilas": "depilacion_laser_axilas",
+  "laser axilas": "depilacion_laser_axilas",
+};
+
 export class CrearTurnoLeraysiTool
   implements ITool<CrearTurnoInput, CrearTurnoResponse>
 {
   constructor(private readonly odooClient: OdooClient) {}
 
   async execute(input: unknown): Promise<CrearTurnoResponse> {
-    const params = crearTurnoSchema.parse(input);
+    // Normalizar servicio antes de validar
+    const normalizedInput = this.normalizeServicio(input);
+    const params = crearTurnoSchema.parse(normalizedInput);
 
     logger.info(
       { clienta: params.clienta, servicio: params.servicio },
@@ -121,6 +173,27 @@ export class CrearTurnoLeraysiTool
     const s = String(date.getUTCSeconds()).padStart(2, "0");
 
     return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+
+  /**
+   * Normaliza el campo servicio de user-friendly a código Odoo.
+   * Ej: "Manicura simple" → "manicura_simple"
+   */
+  private normalizeServicio(input: unknown): unknown {
+    if (!input || typeof input !== "object") return input;
+
+    const obj = input as Record<string, unknown>;
+    if (typeof obj.servicio !== "string") return input;
+
+    const servicioLower = obj.servicio.toLowerCase().trim();
+    const servicioMapped = SERVICIO_MAP[servicioLower];
+
+    if (servicioMapped) {
+      return { ...obj, servicio: servicioMapped };
+    }
+
+    // Si ya es un código válido (ej: "manicura_simple"), dejarlo como está
+    return input;
   }
 
   definition(): ToolDefinition {
