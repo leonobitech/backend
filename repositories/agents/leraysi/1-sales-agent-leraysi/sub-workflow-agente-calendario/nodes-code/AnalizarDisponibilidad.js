@@ -49,11 +49,11 @@ turnos.forEach(turno => {
   else if (tipo === 'muy_pesado') turnosPorDia[fecha].count_muy_pesado++;
 });
 
-// Generar próximos 7 días con disponibilidad
+// Generar próximos 30 días con disponibilidad (cobertura de 1 mes)
 const dias = [];
 const hoy = new Date();
 
-for (let i = 0; i < 7; i++) {
+for (let i = 0; i < 30; i++) {
   const fecha = new Date(hoy);
   fecha.setDate(hoy.getDate() + i);
   const fechaStr = fecha.toISOString().split('T')[0];
@@ -122,7 +122,7 @@ let motivoNoDisponible = null;
 if (!fechaDisponible) {
   // Determinar el motivo
   if (!diaSolicitado) {
-    motivoNoDisponible = 'Fecha fuera de rango (solo se pueden agendar turnos en los próximos 7 días)';
+    motivoNoDisponible = 'Fecha fuera de rango (solo se pueden agendar turnos en los próximos 30 días)';
   } else if (!diaSolicitado.abierto) {
     motivoNoDisponible = 'Cerrado (Domingo)';
   } else if (!diaSolicitado.disponible) {

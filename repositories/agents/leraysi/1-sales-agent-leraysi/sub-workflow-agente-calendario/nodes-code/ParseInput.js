@@ -38,7 +38,17 @@ const input = {
   nombre_clienta: llmOutput.nombre_clienta || state.full_name || state.nick_name,
   servicio: llmOutput.servicio || (state.servicio_interes ? [state.servicio_interes] : []),
   fecha_deseada: llmOutput.fecha_deseada || llmOutput.fecha,
-  hora_deseada: llmOutput.hora_deseada || llmOutput.hora || null,
+  // Extraer hora de fecha_deseada si viene en formato ISO (ej: "2026-02-11T14:00:00")
+  hora_deseada: llmOutput.hora_deseada || llmOutput.hora || (() => {
+    const fecha = llmOutput.fecha_deseada || llmOutput.fecha;
+    if (fecha && fecha.includes('T')) {
+      const timePart = fecha.split('T')[1];
+      if (timePart) {
+        return timePart.substring(0, 5); // "14:00:00" -> "14:00"
+      }
+    }
+    return null;
+  })(),
   precio: llmOutput.precio || 0,
   email: llmOutput.email || state.email || null,
 

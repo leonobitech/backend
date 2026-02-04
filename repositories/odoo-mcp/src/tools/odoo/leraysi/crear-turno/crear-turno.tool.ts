@@ -81,8 +81,9 @@ export class CrearTurnoLeraysiTool
       fechaHora += ":00";
     }
 
-    // Pasar hora local directamente a Odoo (sin conversión UTC)
-    // Odoo maneja la timezone según configuración del usuario
+    // Convertir hora local Argentina a UTC para Odoo
+    // Odoo almacena internamente en UTC, el addon espera recibir UTC
+    fechaHora = this.argentinaToUTC(fechaHora);
 
     // Crear el turno en salon.turno
     const values: Record<string, any> = {
@@ -149,6 +150,24 @@ export class CrearTurnoLeraysiTool
         ? `Turno creado para ${params.clienta}. Link de pago generado.`
         : `Turno creado para ${params.clienta}. No se pudo generar link de pago (configurar Mercado Pago).`,
     };
+  }
+
+  /**
+   * Convierte datetime local Argentina a UTC para Odoo.
+   * Argentina es UTC-3, así que sumamos 3 horas.
+   * Ej: "2026-02-11 14:00:00" (Argentina) → "2026-02-11 17:00:00" (UTC)
+   */
+  private argentinaToUTC(localDatetime: string): string {
+    const [datePart, timePart] = localDatetime.split(" ");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = (timePart || "00:00:00").split(":").map(Number);
+
+    // Crear fecha en UTC sumando 3 horas (Argentina UTC-3 → UTC)
+    const utcDate = new Date(Date.UTC(year, month - 1, day, hour + 3, minute, second || 0));
+
+    // Formatear como YYYY-MM-DD HH:MM:SS
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return `${utcDate.getUTCFullYear()}-${pad(utcDate.getUTCMonth() + 1)}-${pad(utcDate.getUTCDate())} ${pad(utcDate.getUTCHours())}:${pad(utcDate.getUTCMinutes())}:${pad(utcDate.getUTCSeconds())}`;
   }
 
   /**
