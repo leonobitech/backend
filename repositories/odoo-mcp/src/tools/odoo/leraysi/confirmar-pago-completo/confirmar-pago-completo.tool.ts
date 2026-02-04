@@ -315,16 +315,19 @@ export class ConfirmarPagoCompletoTool
     // =========================================================================
     if (emailToUse) {
       try {
-        const fechaHora = new Date(turno.fecha_hora);
-        const fechaFormateada = fechaHora.toLocaleDateString("es-AR", {
+        // turno.fecha_hora está en UTC, convertir a Argentina para mostrar
+        const fechaHoraArgentina = this.utcToArgentinaDate(turno.fecha_hora);
+        const fechaFormateada = fechaHoraArgentina.toLocaleDateString("es-AR", {
           weekday: "long",
           year: "numeric",
           month: "long",
           day: "numeric",
+          timeZone: "UTC", // Usar UTC porque ya convertimos manualmente
         });
-        const horaFormateada = fechaHora.toLocaleTimeString("es-AR", {
+        const horaFormateada = fechaHoraArgentina.toLocaleTimeString("es-AR", {
           hour: "2-digit",
           minute: "2-digit",
+          timeZone: "UTC", // Usar UTC porque ya convertimos manualmente
         });
 
         const emailHtml = getTurnoConfirmadoEmailTemplate({
@@ -390,16 +393,19 @@ export class ConfirmarPagoCompletoTool
           const vendorName = users[0].name || "Usuario";
           const vendorEmail = users[0].email;
 
-          const fechaHoraNotif = new Date(turno.fecha_hora);
+          // turno.fecha_hora está en UTC, convertir a Argentina para mostrar
+          const fechaHoraNotif = this.utcToArgentinaDate(turno.fecha_hora);
           const fechaFormateadaNotif = fechaHoraNotif.toLocaleDateString("es-AR", {
             weekday: "long",
             day: "numeric",
             month: "long",
             year: "numeric",
+            timeZone: "UTC",
           });
           const horaFormateadaNotif = fechaHoraNotif.toLocaleTimeString("es-AR", {
             hour: "2-digit",
             minute: "2-digit",
+            timeZone: "UTC",
           });
 
           const notificationBody = `
@@ -452,15 +458,18 @@ export class ConfirmarPagoCompletoTool
     // =========================================================================
     // PASO 9: Construir mensaje para WhatsApp
     // =========================================================================
-    const fechaHora = new Date(turno.fecha_hora);
-    const fechaFormateada = fechaHora.toLocaleDateString("es-AR", {
+    // turno.fecha_hora está en UTC, convertir a Argentina para mostrar
+    const fechaHoraWA = this.utcToArgentinaDate(turno.fecha_hora);
+    const fechaFormateada = fechaHoraWA.toLocaleDateString("es-AR", {
       weekday: "long",
       day: "numeric",
       month: "long",
+      timeZone: "UTC",
     });
-    const horaFormateada = fechaHora.toLocaleTimeString("es-AR", {
+    const horaFormateada = fechaHoraWA.toLocaleTimeString("es-AR", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "UTC",
     });
 
     const mensajeWhatsapp = this.buildWhatsAppMessage({
@@ -504,6 +513,19 @@ export class ConfirmarPagoCompletoTool
       mensaje_whatsapp: mensajeWhatsapp,
       message: `Pago confirmado exitosamente para ${turno.clienta}. Turno para ${turno.servicio} el ${fechaFormateada} a las ${horaFormateada}.${invoiceName ? ` Factura: ${invoiceName}` : ""}`,
     };
+  }
+
+  /**
+   * Convierte datetime UTC (almacenado en Odoo) a Date en hora Argentina (UTC-3).
+   * Para usar cuando se formatea hora para mostrar a humanos (emails, WhatsApp).
+   */
+  private utcToArgentinaDate(odooDatetimeUTC: string): Date {
+    const [datePart, timePart] = odooDatetimeUTC.split(" ");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = (timePart || "00:00:00").split(":").map(Number);
+
+    // Restar 3 horas (UTC-3 = Argentina)
+    return new Date(Date.UTC(year, month - 1, day, hour - 3, minute, second || 0));
   }
 
   /**
