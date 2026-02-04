@@ -29,6 +29,9 @@ export class CrearTurnoLeraysiTool
       fechaHora += ":00";
     }
 
+    // Convertir hora local Argentina (UTC-3) a UTC para Odoo
+    const fechaHoraUTC = this.argentinaToUTC(fechaHora);
+
     // Crear el turno en salon.turno
     const values: Record<string, any> = {
       clienta: params.clienta,
@@ -36,7 +39,7 @@ export class CrearTurnoLeraysiTool
       email: params.email,
       servicio: params.servicio,
       servicio_detalle: params.servicio_detalle,
-      fecha_hora: fechaHora,
+      fecha_hora: fechaHoraUTC,
       precio: params.precio,
       duracion: params.duracion,
       lead_id: params.lead_id,
@@ -94,6 +97,30 @@ export class CrearTurnoLeraysiTool
         ? `Turno creado para ${params.clienta}. Link de pago generado.`
         : `Turno creado para ${params.clienta}. No se pudo generar link de pago (configurar Mercado Pago).`,
     };
+  }
+
+  /**
+   * Convierte hora local Argentina (UTC-3) a UTC.
+   * Suma 3 horas para obtener UTC.
+   */
+  private argentinaToUTC(fechaHora: string): string {
+    // Parse: "2026-01-23 14:00:00" -> Date
+    const [datePart, timePart] = fechaHora.split(" ");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = (timePart || "00:00:00").split(":").map(Number);
+
+    // Crear fecha asumiendo Argentina (UTC-3), convertir a UTC sumando 3 horas
+    const date = new Date(Date.UTC(year, month - 1, day, hour + 3, minute, second || 0));
+
+    // Formatear a formato Odoo
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    const h = String(date.getUTCHours()).padStart(2, "0");
+    const min = String(date.getUTCMinutes()).padStart(2, "0");
+    const s = String(date.getUTCSeconds()).padStart(2, "0");
+
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
   }
 
   definition(): ToolDefinition {

@@ -155,9 +155,9 @@ export class ConfirmarPagoCompletoTool
     let activityId: number | null = null;
 
     try {
-      // turno.fecha_hora está en hora local Argentina (UTC-3): "YYYY-MM-DD HH:MM:SS"
-      // Odoo Calendar espera UTC, así que convertimos agregando 3 horas
-      const startUTC = this.argentinaToUTC(turno.fecha_hora);
+      // turno.fecha_hora ya está en UTC (convertido al crear el turno)
+      // Odoo Calendar espera UTC, usamos directamente
+      const startUTC = turno.fecha_hora;
       const stopUTC = this.addHoursToOdooDatetime(startUTC, turno.duracion || 1);
 
       // Obtener partner_id y user_id del Lead (igual que scheduleMeeting)
@@ -529,14 +529,6 @@ export class ConfirmarPagoCompletoTool
     const s = String(date.getUTCSeconds()).padStart(2, "0");
 
     return `${y}-${m}-${d} ${h}:${min}:${s}`;
-  }
-
-  /**
-   * Convertir hora local Argentina (UTC-3) a UTC
-   * Agrega 3 horas para obtener UTC
-   */
-  private argentinaToUTC(argentinaDatetime: string): string {
-    return this.addHoursToOdooDatetime(argentinaDatetime, 3);
   }
 
   /**

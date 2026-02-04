@@ -82,6 +82,9 @@ export class ReprogramarTurnoTool
       nuevaFechaHora += ":00";
     }
 
+    // Convertir hora local Argentina (UTC-3) a UTC para Odoo
+    const nuevaFechaHoraUTC = this.argentinaToUTC(nuevaFechaHora);
+
     const acciones: string[] = [];
     let nuevoTurnoId: number | null = null;
     let linkPago: string | undefined;
@@ -103,14 +106,14 @@ export class ReprogramarTurnoTool
       });
       acciones.push("Turno anterior cancelado");
 
-      // 2. Crear nuevo turno
+      // 2. Crear nuevo turno (con fecha en UTC)
       const nuevoTurnoValues: Record<string, any> = {
         clienta: turno.clienta,
         telefono: turno.telefono,
         email: turno.email,
         servicio: turno.servicio,
         servicio_detalle: turno.servicio_detalle,
-        fecha_hora: nuevaFechaHora,
+        fecha_hora: nuevaFechaHoraUTC,
         precio: turno.precio,
         duracion: turno.duracion || 1,
         lead_id: turno.lead_id && Array.isArray(turno.lead_id) ? turno.lead_id[0] : turno.lead_id,
@@ -153,9 +156,9 @@ export class ReprogramarTurnoTool
         ? turno.lead_id[0]
         : turno.lead_id;
 
-      // 1. Actualizar fecha en turno
+      // 1. Actualizar fecha en turno (con fecha en UTC)
       await this.odooClient.write("salon.turno", [turnoId], {
-        fecha_hora: nuevaFechaHora,
+        fecha_hora: nuevaFechaHoraUTC,
       });
       acciones.push("Fecha actualizada en turno");
 
@@ -440,6 +443,30 @@ export class ReprogramarTurnoTool
       throw new Error(`Model ${modelName} not found`);
     }
     return models[0].id;
+  }
+
+  /**
+   * Convierte hora local Argentina (UTC-3) a UTC.
+   * Suma 3 horas para obtener UTC.
+   */
+  private argentinaToUTC(fechaHora: string): string {
+    // Parse: "2026-01-23 14:00:00" -> Date
+    const [datePart, timePart] = fechaHora.split(" ");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = (timePart || "00:00:00").split(":").map(Number);
+
+    // Crear fecha asumiendo Argentina (UTC-3), convertir a UTC sumando 3 horas
+    const date = new Date(Date.UTC(year, month - 1, day, hour + 3, minute, second || 0));
+
+    // Formatear a formato Odoo
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    const h = String(date.getUTCHours()).padStart(2, "0");
+    const min = String(date.getUTCMinutes()).padStart(2, "0");
+    const s = String(date.getUTCSeconds()).padStart(2, "0");
+
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
   }
 
   definition(): ToolDefinition {
