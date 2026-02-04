@@ -290,7 +290,7 @@ class SalonTurno(models.Model):
             if field not in data:
                 raise UserError(f'Campo requerido faltante: {field}')
 
-        # Crear turno
+        # Crear turno (fecha_hora ya viene en UTC desde odoo-mcp)
         turno_vals = {
             'clienta': data['clienta'],
             'telefono': data['telefono'],
