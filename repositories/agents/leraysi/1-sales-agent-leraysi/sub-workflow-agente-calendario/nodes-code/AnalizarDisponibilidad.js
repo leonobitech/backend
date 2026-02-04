@@ -167,6 +167,8 @@ const resumen = dias
 //
 // Debemos comparar contra lead_row_id (el row_id de Baserow), NO contra lead_id (Odoo ID)
 let turnoServicioExistente = null;
+let turnoIdExistente = null;
+let turnoPrecioExistente = null;
 
 if (input.turno_agendado && input.lead_row_id) {
   // Buscar turno de esta usuaria por lead_row_id (ID de fila en Baserow)
@@ -198,6 +200,12 @@ if (input.turno_agendado && input.lead_row_id) {
       servicioValue = turnoUsuaria.servicio;
     }
     turnoServicioExistente = servicioValue || null;
+
+    // Extraer odoo_turno_id (ID del turno en Odoo)
+    turnoIdExistente = turnoUsuaria.odoo_turno_id || null;
+
+    // Extraer precio del turno existente (para calcular seña diferencial)
+    turnoPrecioExistente = turnoUsuaria.precio ? Number(turnoUsuaria.precio) : null;
   }
 }
 
@@ -215,6 +223,10 @@ return [{
     motivo_no_disponible: motivoNoDisponible,
     alternativas: alternativas,
     // Servicio del turno existente (para comparar con servicio solicitado)
-    turno_servicio_existente: turnoServicioExistente
+    turno_servicio_existente: turnoServicioExistente,
+    // ID del turno en Odoo (para agregar servicio al turno existente)
+    turno_id_existente: turnoIdExistente,
+    // Precio del turno existente (para calcular seña diferencial)
+    turno_precio_existente: turnoPrecioExistente
   }
 }];
