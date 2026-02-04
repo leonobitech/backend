@@ -161,10 +161,9 @@ const resumen = dias
 // Si la usuaria tiene turno_agendado=true, buscamos su turno en los turnos de la semana
 // para extraer el servicio y poder compararlo con el servicio solicitado
 //
-// IMPORTANTE: En Baserow, lead_id es un linked field que puede venir como:
-// - Array de objetos: [{id: 116, value: "Andrea"}] donde id es el ROW_ID
-// - Objeto: {id: 116, value: "Andrea"}
-// - String/Number: el valor directo
+// IMPORTANTE: En Baserow tabla TurnosLeraysi, el linked field es "clienta_id"
+// que apunta a la tabla LeadsLeraysi. El formato es:
+// - Array de objetos: [{id: 116, value: "428"}] donde id es el ROW_ID del lead
 //
 // Debemos comparar contra lead_row_id (el row_id de Baserow), NO contra lead_id (Odoo ID)
 let turnoServicioExistente = null;
@@ -172,25 +171,33 @@ let turnoServicioExistente = null;
 if (input.turno_agendado && input.lead_row_id) {
   // Buscar turno de esta usuaria por lead_row_id (ID de fila en Baserow)
   const turnoUsuaria = turnos.find(t => {
-    // Extraer el ID del linked field (puede venir en varios formatos)
-    let turnoLeadRowId = null;
-    if (Array.isArray(t.lead_id) && t.lead_id.length > 0) {
-      // Formato: [{id: 116, value: "..."}]
-      turnoLeadRowId = t.lead_id[0]?.id;
-    } else if (t.lead_id && typeof t.lead_id === 'object') {
-      // Formato: {id: 116, value: "..."} o {value: 116}
-      turnoLeadRowId = t.lead_id.id || t.lead_id.value;
+    // El campo en Baserow se llama "clienta_id" (linked field a LeadsLeraysi)
+    let turnoClientaRowId = null;
+    if (Array.isArray(t.clienta_id) && t.clienta_id.length > 0) {
+      // Formato: [{id: 116, value: "428"}] - id es el row_id del lead
+      turnoClientaRowId = t.clienta_id[0]?.id;
+    } else if (t.clienta_id && typeof t.clienta_id === 'object') {
+      // Formato objeto directo
+      turnoClientaRowId = t.clienta_id.id || t.clienta_id.value;
     } else {
       // Formato: valor directo
-      turnoLeadRowId = t.lead_id;
+      turnoClientaRowId = t.clienta_id;
     }
 
-    return turnoLeadRowId && String(turnoLeadRowId) === String(input.lead_row_id);
+    return turnoClientaRowId && String(turnoClientaRowId) === String(input.lead_row_id);
   });
 
   if (turnoUsuaria) {
-    // Extraer el servicio (puede venir como objeto {value: "..."} o como string)
-    turnoServicioExistente = turnoUsuaria.servicio?.value || turnoUsuaria.servicio || null;
+    // Extraer el servicio - en Baserow viene como [{id: X, value: "Corte mujer", color: "..."}]
+    let servicioValue = null;
+    if (Array.isArray(turnoUsuaria.servicio) && turnoUsuaria.servicio.length > 0) {
+      servicioValue = turnoUsuaria.servicio[0]?.value;
+    } else if (turnoUsuaria.servicio?.value) {
+      servicioValue = turnoUsuaria.servicio.value;
+    } else {
+      servicioValue = turnoUsuaria.servicio;
+    }
+    turnoServicioExistente = servicioValue || null;
   }
 }
 
