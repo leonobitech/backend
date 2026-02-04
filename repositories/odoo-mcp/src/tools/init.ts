@@ -25,6 +25,7 @@ import { ConfirmarTurnoTool } from "./odoo/leraysi/confirmar-turno/confirmar-tur
 import { CancelarTurnoTool } from "./odoo/leraysi/cancelar-turno/cancelar-turno.tool";
 import { ReprogramarTurnoTool } from "./odoo/leraysi/reprogramar-turno/reprogramar-turno.tool";
 import { ConfirmarPagoCompletoTool } from "./odoo/leraysi/confirmar-pago-completo/confirmar-pago-completo.tool";
+import { AgregarServicioTurnoLeraysiTool } from "./odoo/leraysi/agregar-servicio-turno/agregar-servicio-turno.tool";
 import { createOdooClient, type OdooCredentials } from "@/lib/odoo";
 import { logger } from "@/lib/logger";
 
@@ -186,6 +187,13 @@ export async function initializeTools(): Promise<ToolRegistry> {
     version: "1.0.0",
     requiredScopes: ["odoo:write", "odoo:calendar", "odoo:email"],
     estimatedTime: 5000,
+  });
+
+  registry.register(new AgregarServicioTurnoLeraysiTool(odooClient), {
+    category: "odoo/leraysi",
+    version: "1.0.0",
+    requiredScopes: ["odoo:write"],
+    estimatedTime: 2000,
   });
 
   const stats = registry.getStats();
