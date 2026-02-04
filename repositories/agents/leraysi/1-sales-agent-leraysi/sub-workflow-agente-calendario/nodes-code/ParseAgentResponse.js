@@ -47,6 +47,7 @@ const ESTADO_A_ACCION = {
   'turno_creado': 'turno_creado',
   'fecha_no_disponible': 'sin_disponibilidad',
   'turno_reprogramado': 'turno_reprogramado',
+  'servicio_agregado': 'servicio_agregado',
   'error': 'error'
 };
 
@@ -144,6 +145,41 @@ if (llmResponse.estado === 'turno_reprogramado') {
     // Flags
     calendario_actualizado: true, // Si llegamos aquí, el MCP ya actualizó calendario
     motivo_reprogramacion: llmResponse.motivo || 'Solicitud de la clienta'
+  };
+}
+
+// ============================================================================
+// CASO: SERVICIO AGREGADO A TURNO EXISTENTE
+// ============================================================================
+if (llmResponse.estado === 'servicio_agregado') {
+  // Extraer fecha y hora (formato "YYYY-MM-DD HH:MM")
+  const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || '').split(' ');
+
+  // Extraer mp_preference_id del link_pago
+  const mpPreferenceId = llmResponse.link_pago
+    ? (llmResponse.link_pago.match(/pref_id=([^&\s]+)/)?.[1] || '')
+    : '';
+
+  resultado = {
+    ...resultado,
+    // ID del turno en Odoo (el mismo que se actualizó)
+    odoo_turno_id: llmResponse.turno_id,
+
+    // Datos del turno actualizado
+    fecha_turno: fechaTurno,
+    hora_sugerida: horaTurno || '09:00',
+
+    // Servicios combinados
+    servicios_combinados: llmResponse.servicios_combinados,
+    precio_total: llmResponse.precio_total,
+
+    // MercadoPago (nuevo link para seña diferencial)
+    mp_preference_id: mpPreferenceId,
+    link_pago: llmResponse.link_pago || '',
+    sena_diferencial: llmResponse.sena || 0,
+
+    // Estado
+    estado_turno: 'pendiente_pago'
   };
 }
 
