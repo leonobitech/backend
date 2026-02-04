@@ -73,21 +73,36 @@ if (data.turno_servicio_existente) {
     : data.turno_servicio_existente.toLowerCase().trim();
 }
 
-// Determinar si es reprogramación (mismo servicio) o turno adicional (servicio diferente)
+// Determinar si es reprogramación (mismo servicio Y misma fecha) o turno adicional
 let esReprogramacion = false;
 let esTurnoAdicional = false;
 
+// Extraer fecha del turno existente para comparar
+const turnoFechaExistente = data.turno_fecha
+  ? (data.turno_fecha.includes('T') ? data.turno_fecha.split('T')[0] : data.turno_fecha.split(' ')[0])
+  : null;
+
 if (turnoExistente) {
   if (servicioTurnoExistente) {
-    // Comparar servicios - si son iguales es reprogramación
+    // Comparar servicios
     const serviciosCoinciden = servicioSolicitado.includes(servicioTurnoExistente) ||
                                servicioTurnoExistente.includes(servicioSolicitado);
-    esReprogramacion = serviciosCoinciden;
-    esTurnoAdicional = !serviciosCoinciden;
+
+    // Comparar fechas - si son diferentes, es turno adicional aunque el servicio sea igual
+    const fechasCoinciden = turnoFechaExistente && fechaSoloParte &&
+                            turnoFechaExistente === fechaSoloParte;
+
+    // Solo reprogramar si: mismo servicio Y misma fecha (cambio de hora)
+    // Si la fecha es diferente, crear turno adicional (cliente quiere otro turno del mismo servicio)
+    if (serviciosCoinciden && fechasCoinciden) {
+      esReprogramacion = true;
+    } else {
+      esTurnoAdicional = true;
+    }
   } else {
-    // No tenemos info del servicio existente - asumir reprogramación (comportamiento legacy)
-    // TODO: Asegurar que turno_servicio_existente se pase desde el flujo
-    esReprogramacion = true;
+    // No tenemos info del servicio existente - por defecto crear turno adicional
+    esReprogramacion = false;
+    esTurnoAdicional = true;
   }
 }
 
