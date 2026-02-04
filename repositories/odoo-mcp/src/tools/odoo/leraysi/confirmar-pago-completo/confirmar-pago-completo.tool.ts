@@ -315,19 +315,19 @@ export class ConfirmarPagoCompletoTool
     // =========================================================================
     if (emailToUse) {
       try {
-        // turno.fecha_hora está en UTC, convertir a Argentina para mostrar
+        // turno.fecha_hora viene en UTC desde Odoo API, convertir a Argentina para mostrar
         const fechaHoraArgentina = this.utcToArgentinaDate(turno.fecha_hora);
         const fechaFormateada = fechaHoraArgentina.toLocaleDateString("es-AR", {
           weekday: "long",
           year: "numeric",
           month: "long",
           day: "numeric",
-          timeZone: "UTC", // Usar UTC porque ya convertimos manualmente
+          timeZone: "UTC",
         });
         const horaFormateada = fechaHoraArgentina.toLocaleTimeString("es-AR", {
           hour: "2-digit",
           minute: "2-digit",
-          timeZone: "UTC", // Usar UTC porque ya convertimos manualmente
+          timeZone: "UTC",
         });
 
         const emailHtml = getTurnoConfirmadoEmailTemplate({
@@ -393,7 +393,7 @@ export class ConfirmarPagoCompletoTool
           const vendorName = users[0].name || "Usuario";
           const vendorEmail = users[0].email;
 
-          // turno.fecha_hora está en UTC, convertir a Argentina para mostrar
+          // turno.fecha_hora viene en UTC desde Odoo API, convertir a Argentina para mostrar
           const fechaHoraNotif = this.utcToArgentinaDate(turno.fecha_hora);
           const fechaFormateadaNotif = fechaHoraNotif.toLocaleDateString("es-AR", {
             weekday: "long",
