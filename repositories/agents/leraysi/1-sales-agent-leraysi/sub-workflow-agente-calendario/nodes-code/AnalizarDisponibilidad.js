@@ -155,6 +155,45 @@ const resumen = dias
   })
   .join('\n');
 
+// ============================================================================
+// EXTRAER SERVICIO DEL TURNO EXISTENTE (para detectar reprogramación vs turno adicional)
+// ============================================================================
+// Si la usuaria tiene turno_agendado=true, buscamos su turno en los turnos de la semana
+// para extraer el servicio y poder compararlo con el servicio solicitado
+//
+// IMPORTANTE: En Baserow, lead_id es un linked field que puede venir como:
+// - Array de objetos: [{id: 116, value: "Andrea"}] donde id es el ROW_ID
+// - Objeto: {id: 116, value: "Andrea"}
+// - String/Number: el valor directo
+//
+// Debemos comparar contra lead_row_id (el row_id de Baserow), NO contra lead_id (Odoo ID)
+let turnoServicioExistente = null;
+
+if (input.turno_agendado && input.lead_row_id) {
+  // Buscar turno de esta usuaria por lead_row_id (ID de fila en Baserow)
+  const turnoUsuaria = turnos.find(t => {
+    // Extraer el ID del linked field (puede venir en varios formatos)
+    let turnoLeadRowId = null;
+    if (Array.isArray(t.lead_id) && t.lead_id.length > 0) {
+      // Formato: [{id: 116, value: "..."}]
+      turnoLeadRowId = t.lead_id[0]?.id;
+    } else if (t.lead_id && typeof t.lead_id === 'object') {
+      // Formato: {id: 116, value: "..."} o {value: 116}
+      turnoLeadRowId = t.lead_id.id || t.lead_id.value;
+    } else {
+      // Formato: valor directo
+      turnoLeadRowId = t.lead_id;
+    }
+
+    return turnoLeadRowId && String(turnoLeadRowId) === String(input.lead_row_id);
+  });
+
+  if (turnoUsuaria) {
+    // Extraer el servicio (puede venir como objeto {value: "..."} o como string)
+    turnoServicioExistente = turnoUsuaria.servicio?.value || turnoUsuaria.servicio || null;
+  }
+}
+
 return [{
   json: {
     ...input,
@@ -167,6 +206,8 @@ return [{
     fecha_solicitada: fechaSolicitadaRaw,
     fecha_disponible: fechaDisponible,
     motivo_no_disponible: motivoNoDisponible,
-    alternativas: alternativas
+    alternativas: alternativas,
+    // Servicio del turno existente (para comparar con servicio solicitado)
+    turno_servicio_existente: turnoServicioExistente
   }
 }];

@@ -47,16 +47,58 @@ const fechaHumana = formatearFechaHumana(data.fecha_solicitada);
 const servicioDisplay = data.servicio_detalle || data.servicio || 'servicio';
 
 // ============================================================================
-// DETECTAR SI ES REPROGRAMACIÓN
+// DETECTAR SI ES REPROGRAMACIÓN O TURNO NUEVO ADICIONAL
 // ============================================================================
-const esReprogramacion = data.turno_agendado === true;
+// Lógica:
+// - Si NO hay turno agendado → CREAR NUEVO
+// - Si hay turno agendado y el servicio es IGUAL → REPROGRAMAR
+// - Si hay turno agendado y el servicio es DIFERENTE → CREAR NUEVO (adicional)
+//
+// El campo turno_servicio_existente debe venir de GetTurnosSemana
+// ============================================================================
+
+const turnoExistente = data.turno_agendado === true;
+
+// Normalizar servicio solicitado (puede venir como array o string)
+const servicioSolicitado = Array.isArray(data.servicio)
+  ? (data.servicio[0] || '').toLowerCase().trim()
+  : (data.servicio || '').toLowerCase().trim();
+
+// Servicio del turno existente (pasado desde GetTurnosSemana o el state)
+// Puede venir como string directo o como objeto {value: "..."}
+let servicioTurnoExistente = null;
+if (data.turno_servicio_existente) {
+  servicioTurnoExistente = typeof data.turno_servicio_existente === 'object'
+    ? (data.turno_servicio_existente.value || '').toLowerCase().trim()
+    : data.turno_servicio_existente.toLowerCase().trim();
+}
+
+// Determinar si es reprogramación (mismo servicio) o turno adicional (servicio diferente)
+let esReprogramacion = false;
+let esTurnoAdicional = false;
+
+if (turnoExistente) {
+  if (servicioTurnoExistente) {
+    // Comparar servicios - si son iguales es reprogramación
+    const serviciosCoinciden = servicioSolicitado.includes(servicioTurnoExistente) ||
+                               servicioTurnoExistente.includes(servicioSolicitado);
+    esReprogramacion = serviciosCoinciden;
+    esTurnoAdicional = !serviciosCoinciden;
+  } else {
+    // No tenemos info del servicio existente - asumir reprogramación (comportamiento legacy)
+    // TODO: Asegurar que turno_servicio_existente se pase desde el flujo
+    esReprogramacion = true;
+  }
+}
 
 // ============================================================================
-// CASO 0: REPROGRAMAR TURNO EXISTENTE
+// CASO 0: REPROGRAMAR TURNO EXISTENTE (mismo servicio)
 // ============================================================================
 let instruccionTarea = '';
 let jsonRespuestaEsperada = '';
 
+// Solo reprogramamos si es el MISMO servicio
+// Si es servicio DIFERENTE, cae al CASO 1 (crear turno nuevo/adicional)
 if (esReprogramacion && data.fecha_disponible) {
   const mensajeClientaReprogramado = `¡Listo ${data.nombre_clienta || 'reina'}! Tu turno fue reprogramado para el ${fechaHumana} a las ${horaDeseada}. Te enviamos un email de confirmación.`;
 
