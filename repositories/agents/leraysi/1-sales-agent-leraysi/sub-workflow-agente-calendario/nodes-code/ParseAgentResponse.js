@@ -151,6 +151,8 @@ if (llmResponse.estado === 'turno_reprogramado') {
 // ============================================================================
 // CASO: SERVICIO AGREGADO A TURNO EXISTENTE
 // ============================================================================
+// Estructura IGUAL a turno_creado para simplificar mapeo Baserow
+// ============================================================================
 if (llmResponse.estado === 'servicio_agregado') {
   // Extraer fecha y hora (formato "YYYY-MM-DD HH:MM")
   const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || '').split(' ');
@@ -160,23 +162,55 @@ if (llmResponse.estado === 'servicio_agregado') {
     ? (llmResponse.link_pago.match(/pref_id=([^&\s]+)/)?.[1] || '')
     : '';
 
+  // Construir array de servicios para campo multi-select de Baserow
+  // El servicio existente viene de input.turno_servicio_existente
+  // El nuevo servicio viene de input.servicio (capitalizado)
+  const servicioExistente = input.turno_servicio_existente || '';
+  const servicioNuevoRaw = input.servicio || '';
+  const servicioNuevo = servicioNuevoRaw
+    ? servicioNuevoRaw.charAt(0).toUpperCase() + servicioNuevoRaw.slice(1).replace(/_/g, ' ')
+    : '';
+
+  // Crear array con servicios (sin duplicados)
+  const serviciosArray = [];
+  if (servicioExistente) serviciosArray.push(servicioExistente);
+  if (servicioNuevo && servicioNuevo.toLowerCase() !== servicioExistente.toLowerCase()) {
+    serviciosArray.push(servicioNuevo);
+  }
+
+  // servicio_detalle como concatenación para display
+  const servicioDetalleCombinado = serviciosArray.join(' + ');
+
+  // Usar fecha del turno existente si no viene en la respuesta
+  const fechaTurnoFinal = fechaTurno
+    || (input.turno_fecha?.includes('T') ? input.turno_fecha.split('T')[0] : input.turno_fecha?.split(' ')[0])
+    || '';
+  const horaTurnoFinal = horaTurno
+    || (input.turno_fecha?.includes('T') ? input.turno_fecha.split('T')[1]?.slice(0, 5) : input.turno_fecha?.split(' ')[1])
+    || '09:00';
+
   resultado = {
     ...resultado,
     // ID del turno en Odoo (el mismo que se actualizó)
     odoo_turno_id: llmResponse.turno_id,
 
     // Datos del turno actualizado
-    fecha_turno: fechaTurno,
-    hora_sugerida: horaTurno || '09:00',
+    fecha_turno: fechaTurnoFinal,
+    hora_sugerida: horaTurnoFinal,
 
-    // Servicios combinados
-    servicios_combinados: llmResponse.servicios_combinados,
-    precio_total: llmResponse.precio_total,
+    // ===== ESTRUCTURA IGUAL A turno_creado =====
+    // Servicios como array (para campo multi-select de Baserow)
+    servicio: serviciosArray,
+    // Detalle para display (concatenación)
+    servicio_detalle: servicioDetalleCombinado,
+    // Precio total (mismo nombre que turno_creado)
+    precio: llmResponse.precio_total,
+    // Seña total (mismo nombre que turno_creado)
+    sena_monto: llmResponse.sena || Math.round((llmResponse.precio_total || 0) * 0.30),
 
-    // MercadoPago (nuevo link para seña diferencial)
+    // MercadoPago (nuevo link)
     mp_preference_id: mpPreferenceId,
     link_pago: llmResponse.link_pago || '',
-    sena_diferencial: llmResponse.sena || 0,
 
     // Estado
     estado_turno: 'pendiente_pago'

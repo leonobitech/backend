@@ -1,18 +1,17 @@
 // ============================================================================
-// PREPARAR SERVICIO AGREGADO BASEROW - Agente Calendario Leraysi
+// PREPARAR SERVICIO AGREGADO BASEROW - Agente Calendario Leraysi v2
 // ============================================================================
 // Transforma datos para UPDATE en Baserow cuando se agrega un servicio
-// INPUT: BuscarTurnoBaserow (resultado de búsqueda con row_id)
-// OUTPUT: Campos listos para Baserow Update Row
+// ESTRUCTURA IGUAL A turno_creado para simplificar mapeo
 // ============================================================================
-// NODO: PrepararServicioAgregadoBaserow (Code)
-// FLUJO: Switch → BuscarTurnoBaserow → PrepararServicioAgregadoBaserow → Update
+// INPUT: BuscarTurnoBaserow (resultado de búsqueda con row_id)
+// OUTPUT: Campos listos para Baserow Update Row (misma estructura que turno_creado)
 // ============================================================================
 
 // Datos del turno encontrado en Baserow (viene de BuscarTurnoBaserow / Get many rows)
 const turnoEncontrado = $input.first().json;
 
-// Datos de ParseAgentResponse
+// Datos de ParseAgentResponse (ahora con estructura igual a turno_creado)
 const data = $('ParseAgentResponse').first().json;
 
 // ============================================================================
@@ -43,30 +42,39 @@ function formatBaserowDatetime(date) {
 const ahora = new Date();
 
 // ============================================================================
-// CAMPOS A ACTUALIZAR EN BASEROW
+// CAMPOS A ACTUALIZAR EN BASEROW (misma estructura que turno_creado)
 // ============================================================================
 const updateFields = {
-  // Servicios combinados (ej: "Manicura semipermanente + Pedicura")
-  servicio_detalle: data.servicios_combinados,
+  // Servicios como array (campo multi-select de Baserow)
+  servicio: data.servicio, // Array: ["Manicura semipermanente", "Pedicura"]
+
+  // Detalle para display (concatenación)
+  servicio_detalle: data.servicio_detalle, // "Manicura semipermanente + Pedicura"
 
   // Precio total actualizado
-  precio: data.precio_total,
+  precio: data.precio,
 
-  // Nuevo link de pago (para seña diferencial)
-  mp_link: data.link_pago || '',
+  // Seña total (30% del precio total)
+  sena_monto: data.sena_monto,
+
+  // Estado de pago (false porque hay nueva seña pendiente)
+  sena_pagada: false,
+
+  // Estado del turno
+  estado: 'pendiente_pago',
+
+  // MercadoPago (nuevo link)
   mp_preference_id: data.mp_preference_id || '',
+  mp_link: data.link_pago || '',
 
   // Timestamp de actualización
   updated_at: formatBaserowDatetime(ahora),
 
-  // Estado vuelve a pendiente_pago (porque hay nueva seña)
-  estado: 'pendiente_pago',
-
   // Notas con historial
   notas: `Servicio agregado el ${ahora.toLocaleDateString('es-AR')}. ` +
-         `Servicios: ${data.servicios_combinados}. ` +
-         `Nuevo total: $${data.precio_total?.toLocaleString('es-AR') || 0}. ` +
-         `Seña diferencial: $${data.sena_diferencial?.toLocaleString('es-AR') || 0}`
+         `Servicios: ${data.servicio_detalle}. ` +
+         `Total: $${data.precio?.toLocaleString('es-AR') || 0}. ` +
+         `Seña: $${data.sena_monto?.toLocaleString('es-AR') || 0}`
 };
 
 // ============================================================================
@@ -77,7 +85,7 @@ return [{
     // Row ID para el Update
     row_id: turnoRowId,
 
-    // Campos para Baserow Update
+    // Campos para Baserow Update (estructura igual a turno_creado)
     ...updateFields,
 
     // Metadata para FormatearRespuestaServicioAgregado
@@ -85,11 +93,7 @@ return [{
       accion: data.accion,
       mensaje_para_clienta: data.mensaje_para_clienta,
       lead_row_id: data.lead_row_id,
-      odoo_turno_id: data.odoo_turno_id,
-      servicios_combinados: data.servicios_combinados,
-      precio_total: data.precio_total,
-      sena_diferencial: data.sena_diferencial,
-      link_pago: data.link_pago
+      odoo_turno_id: data.odoo_turno_id
     }
   }
 }];
