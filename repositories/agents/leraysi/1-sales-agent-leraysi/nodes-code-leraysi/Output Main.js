@@ -1,11 +1,11 @@
 // ============================================================================
-// OUTPUT MAIN LERAYSI v3.1 - Con soporte para servicio_agregado y pagos
+// OUTPUT MAIN LERAYSI v3.2 - Simplificado (pagos van a TurnosLeraysi, no aquí)
 // ============================================================================
 // Recibe: LLM output (content_whatsapp + state_patch) + state original
 // Output: Mensaje para Chatwoot + Update para Baserow
 // ============================================================================
 
-console.log("[OutputMain v3.1] Starting...");
+console.log("[OutputMain v3.2] Starting...");
 
 // ============================================================================
 // 1. OBTENER STATE ORIGINAL (desde Input Main, pasado por el workflow)
@@ -25,7 +25,7 @@ if (!originalState) {
   throw new Error("[OutputMain] Missing original state from Input Main");
 }
 
-console.log("[OutputMain v3.1] Original state loaded, row_id:", originalState.row_id);
+console.log("[OutputMain v3.2] Original state loaded, row_id:", originalState.row_id);
 
 // ============================================================================
 // 2. PARSING DEL OUTPUT DEL LLM (ROBUSTO)
@@ -63,7 +63,7 @@ function extractJson(text) {
   try {
     return JSON.parse(text);
   } catch (e) {
-    console.log("[OutputMain v3.1] Parse intento 1 falló");
+    console.log("[OutputMain v3.2] Parse intento 1 falló");
   }
 
   // Intento 2: Limpiar y parsear
@@ -71,7 +71,7 @@ function extractJson(text) {
   try {
     return JSON.parse(cleaned);
   } catch (e) {
-    console.log("[OutputMain v3.1] Parse intento 2 falló");
+    console.log("[OutputMain v3.2] Parse intento 2 falló");
   }
 
   // Intento 3: Buscar objeto JSON principal
@@ -81,7 +81,7 @@ function extractJson(text) {
     try {
       return JSON.parse(matched);
     } catch (e) {
-      console.log("[OutputMain v3.1] Parse intento 3 falló");
+      console.log("[OutputMain v3.2] Parse intento 3 falló");
     }
   }
 
@@ -90,7 +90,7 @@ function extractJson(text) {
 
 if (llmData.output) {
   llmOutput = extractJson(llmData.output);
-  console.log("[OutputMain v3.1] ✅ LLM JSON parsed");
+  console.log("[OutputMain v3.2] ✅ LLM JSON parsed");
 } else {
   llmOutput = llmData;
 }
@@ -106,7 +106,7 @@ if (!contentWhatsapp) {
   throw new Error("[OutputMain] Missing content_whatsapp from LLM");
 }
 
-console.log("[OutputMain v3.1] state_patch keys:", Object.keys(statePatch));
+console.log("[OutputMain v3.2] state_patch keys:", Object.keys(statePatch));
 
 // ============================================================================
 // 4. APLICAR PATCH AL STATE (protegiendo campos)
@@ -117,7 +117,7 @@ const mergedState = { ...originalState };
 for (const [key, value] of Object.entries(statePatch)) {
   // Saltar campos protegidos
   if (protectedFields.includes(key)) {
-    console.log(`[OutputMain v3.1] ⚠️ Ignorando campo protegido: ${key}`);
+    console.log(`[OutputMain v3.2] ⚠️ Ignorando campo protegido: ${key}`);
     continue;
   }
 
@@ -128,7 +128,7 @@ for (const [key, value] of Object.entries(statePatch)) {
     // Si el patch es mayor, usar el patch (asume que LLM incrementó)
     // Si no, mantener el original
     mergedState[key] = Math.max(currentVal, patchVal);
-    console.log(`[OutputMain v3.1] Contador ${key}: ${currentVal} → ${mergedState[key]}`);
+    console.log(`[OutputMain v3.2] Contador ${key}: ${currentVal} → ${mergedState[key]}`);
     continue;
   }
 
@@ -137,7 +137,7 @@ for (const [key, value] of Object.entries(statePatch)) {
     const currentArr = Array.isArray(mergedState.interests) ? mergedState.interests : [];
     const merged = [...new Set([...currentArr, ...value])];
     mergedState.interests = merged;
-    console.log(`[OutputMain v3.1] Interests merged:`, merged);
+    console.log(`[OutputMain v3.2] Interests merged:`, merged);
     continue;
   }
 
@@ -156,7 +156,7 @@ for (const [key, value] of Object.entries(statePatch)) {
     const seconds = String(argentinaTime.getUTCSeconds()).padStart(2, '0');
     const timestamp = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offset}`;
     mergedState[key] = timestamp;
-    console.log(`[OutputMain v3.1] ${key} convertido a timestamp:`, timestamp);
+    console.log(`[OutputMain v3.2] ${key} convertido a timestamp:`, timestamp);
     continue;
   }
 
@@ -164,16 +164,10 @@ for (const [key, value] of Object.entries(statePatch)) {
   mergedState[key] = value;
 }
 
-console.log("[OutputMain v3.1] Merged state:");
+console.log("[OutputMain v3.2] Merged state:");
 console.log("  - stage:", mergedState.stage);
 console.log("  - servicio_interes:", mergedState.servicio_interes);
 console.log("  - waiting_image:", mergedState.waiting_image);
-if (mergedState.link_pago) {
-  console.log("  - link_pago:", mergedState.link_pago.substring(0, 50) + "...");
-}
-if (mergedState.servicios_combinados) {
-  console.log("  - servicios_combinados:", mergedState.servicios_combinados);
-}
 
 // ============================================================================
 // 5. GENERAR NOTES DINÁMICO
@@ -270,14 +264,8 @@ const baserowUpdate = {
   sena_pagada: Boolean(mergedState.sena_pagada),
   waiting_image: Boolean(mergedState.waiting_image),
 
-  // Campos de pago (MercadoPago)
-  link_pago: mergedState.link_pago || null,
-  mp_link: mergedState.mp_link || mergedState.link_pago || null,
-  mp_preference_id: mergedState.mp_preference_id || null,
-  precio_total: mergedState.precio_total || null,
-  sena_diferencial: mergedState.sena_diferencial || null,
-  odoo_turno_id: mergedState.odoo_turno_id || null,
-  servicios_combinados: mergedState.servicios_combinados || null,
+  // NOTA: Campos de pago (link_pago, mp_preference_id, precio, etc.)
+  // NO van aquí - se guardan en TurnosLeraysi via sub-workflow
 
   // Contadores
   services_seen: mergedState.services_seen ?? 0,
@@ -297,7 +285,7 @@ const baserowUpdate = {
     : null,
 };
 
-console.log("[OutputMain v3.1] Notes generado:", baserowUpdate.notes);
+console.log("[OutputMain v3.2] Notes generado:", baserowUpdate.notes);
 
 // ============================================================================
 // 9. OUTPUT FINAL
@@ -321,6 +309,6 @@ const output = {
   },
 };
 
-console.log("[OutputMain v3.1] ✅ Done");
+console.log("[OutputMain v3.2] ✅ Done");
 
 return [{ json: output }];
