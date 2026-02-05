@@ -63,16 +63,36 @@
                             <field name="monto_restante"/>
                         </group>
                     </group>
-                    <group string="Mercado Pago" invisible="not link_pago">
-                        <group>
-                            <field name="link_pago" widget="url"/>
-                            <field name="mp_preference_id"/>
-                            <field name="mp_payment_id"/>
-                        </group>
-                    </group>
-                    <group string="Notas">
-                        <field name="notas" nolabel="1" colspan="2"/>
-                    </group>
+                    <notebook>
+                        <page string="Mercado Pago" invisible="not link_pago">
+                            <group>
+                                <group>
+                                    <field name="link_pago" widget="url"/>
+                                    <field name="mp_preference_id"/>
+                                    <field name="mp_payment_id"/>
+                                </group>
+                                <group>
+                                    <field name="total_pagado"/>
+                                    <field name="cantidad_pagos"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Historial de Pagos" invisible="cantidad_pagos == 0">
+                            <field name="pago_ids" readonly="1">
+                                <list>
+                                    <field name="fecha"/>
+                                    <field name="tipo"/>
+                                    <field name="monto"/>
+                                    <field name="estado" widget="badge" decoration-success="estado == 'approved'" decoration-warning="estado == 'pending'" decoration-danger="estado in ['rejected', 'cancelled']"/>
+                                    <field name="mp_payment_id"/>
+                                    <field name="descripcion"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Notas">
+                            <field name="notas" nolabel="1"/>
+                        </page>
+                    </notebook>
                 </sheet>
                 <chatter/>
             </form>

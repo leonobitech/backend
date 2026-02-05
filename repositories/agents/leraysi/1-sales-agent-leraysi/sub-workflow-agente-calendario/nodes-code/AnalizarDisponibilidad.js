@@ -11,11 +11,14 @@ const turnos = turnosRaw.length > 0 ? turnosRaw.map(item => item.json) : [];
 
 const input = $('ParseInput').first().json;
 
-// Configuración de capacidad máxima por día
+// Configuración de capacidad máxima por día según complejidad
+// Horario: 9am-7pm (10 horas disponibles)
 const CAPACIDAD = {
-  max_pesados: 2,
-  max_muy_pesados: 1,
-  max_turnos_dia: 6
+  max_muy_compleja: 2,  // Servicios muy complejos (Alisados, Balayage, Mechas, Tintura completa)
+  max_compleja: 3,      // Servicios complejos (Tintura raíz, Manicura semipermanente)
+  max_media: 4,         // Servicios medios (Corte, Manicura simple, Pedicura, Depilación cera/láser piernas)
+  max_simple: 5,        // Servicios simples (Depilación axilas, bikini)
+  max_turnos_dia: 8     // Máximo absoluto de turnos por día
 };
 
 // Agrupar turnos por fecha
@@ -30,10 +33,10 @@ turnos.forEach(turno => {
       fecha,
       turnos: [],
       count_total: 0,
-      count_liviano: 0,
-      count_medio: 0,
-      count_pesado: 0,
-      count_muy_pesado: 0,
+      count_simple: 0,
+      count_media: 0,
+      count_compleja: 0,
+      count_muy_compleja: 0,
       duracion_total: 0
     };
   }
@@ -42,11 +45,12 @@ turnos.forEach(turno => {
   turnosPorDia[fecha].count_total++;
   turnosPorDia[fecha].duracion_total += turno.duracion_min || 0;
 
-  const tipo = turno.tipo_servicio?.value || turno.tipo_servicio || 'medio';
-  if (tipo === 'liviano') turnosPorDia[fecha].count_liviano++;
-  else if (tipo === 'medio') turnosPorDia[fecha].count_medio++;
-  else if (tipo === 'pesado') turnosPorDia[fecha].count_pesado++;
-  else if (tipo === 'muy_pesado') turnosPorDia[fecha].count_muy_pesado++;
+  // Usar complejidad_maxima del turno (campo unificado con ParseInput)
+  const complejidad = turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';
+  if (complejidad === 'simple') turnosPorDia[fecha].count_simple++;
+  else if (complejidad === 'media') turnosPorDia[fecha].count_media++;
+  else if (complejidad === 'compleja') turnosPorDia[fecha].count_compleja++;
+  else if (complejidad === 'muy_compleja') turnosPorDia[fecha].count_muy_compleja++;
 });
 
 // Generar próximos 30 días con disponibilidad (cobertura de 1 mes)
@@ -75,28 +79,40 @@ for (let i = 0; i < 30; i++) {
 
   const datosDia = turnosPorDia[fechaStr] || {
     count_total: 0,
-    count_pesado: 0,
-    count_muy_pesado: 0,
+    count_simple: 0,
+    count_media: 0,
+    count_compleja: 0,
+    count_muy_compleja: 0,
     duracion_total: 0
   };
 
-  const pesadosOcupados = datosDia.count_pesado + datosDia.count_muy_pesado;
-  const puedeRecibirPesado = pesadosOcupados < CAPACIDAD.max_pesados;
-  const puedeRecibirMuyPesado = datosDia.count_muy_pesado < CAPACIDAD.max_muy_pesados;
+  // Verificar capacidad por nivel de complejidad
+  const puedeRecibirMuyCompleja = datosDia.count_muy_compleja < CAPACIDAD.max_muy_compleja;
+  const puedeRecibirCompleja = datosDia.count_compleja < CAPACIDAD.max_compleja;
+  const puedeRecibirMedia = datosDia.count_media < CAPACIDAD.max_media;
+  const puedeRecibirSimple = datosDia.count_simple < CAPACIDAD.max_simple;
   const puedeRecibirMas = datosDia.count_total < CAPACIDAD.max_turnos_dia;
 
-  const cargaPorcentaje = Math.round((datosDia.duracion_total / 480) * 100);
+  // 600 minutos = 10 horas (9am-7pm)
+  const cargaPorcentaje = Math.round((datosDia.duracion_total / 600) * 100);
 
   dias.push({
     fecha: fechaStr,
     nombre_dia: nombreDia,
     abierto: true,
     turnos_agendados: datosDia.count_total,
-    pesados_agendados: pesadosOcupados,
+    // Conteo por complejidad
+    muy_complejos_agendados: datosDia.count_muy_compleja,
+    complejos_agendados: datosDia.count_compleja,
+    medios_agendados: datosDia.count_media,
+    simples_agendados: datosDia.count_simple,
     duracion_total_min: datosDia.duracion_total,
     carga_porcentaje: cargaPorcentaje,
-    puede_recibir_pesado: puedeRecibirPesado,
-    puede_recibir_muy_pesado: puedeRecibirMuyPesado,
+    // Capacidad disponible por complejidad
+    puede_recibir_muy_compleja: puedeRecibirMuyCompleja,
+    puede_recibir_compleja: puedeRecibirCompleja,
+    puede_recibir_media: puedeRecibirMedia,
+    puede_recibir_simple: puedeRecibirSimple,
     puede_recibir_turno: puedeRecibirMas,
     disponible: puedeRecibirMas
   });

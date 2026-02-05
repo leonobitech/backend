@@ -55,7 +55,7 @@ const turnoBaserow = {
   // === Servicio ===
   servicio: Array.isArray(data.servicio) ? data.servicio : [data.servicio],
   servicio_detalle: data.servicio_detalle || '',
-  tipo_servicio: data.tipo_servicio || 'medio',
+  complejidad_maxima: data.complejidad_maxima || 'media',
   // duracion_min se agrega condicionalmente abajo
 
   // === Precio y Seña ===

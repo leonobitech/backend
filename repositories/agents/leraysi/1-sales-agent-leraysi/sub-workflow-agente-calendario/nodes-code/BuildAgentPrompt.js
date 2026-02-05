@@ -186,11 +186,16 @@ Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
   const senaTotalCalculada = Math.round(precioTotal * 0.3);
 
   const servicioExistenteDisplay = data.turno_servicio_existente || 'servicio existente';
-  // FIX: Para el nuevo servicio, usar data.servicio (código) capitalizado, NO data.servicio_detalle
-  // porque servicio_detalle contiene el detalle del turno EXISTENTE, no del nuevo servicio
-  const servicioNuevoDisplay = data.servicio
-    ? data.servicio.charAt(0).toUpperCase() + data.servicio.slice(1).replace(/_/g, ' ')
-    : servicioDisplay;
+
+  // FIX: data.servicio puede ser array o string
+  // Encontrar el servicio NUEVO (el que no está en el turno existente)
+  const serviciosArray = Array.isArray(data.servicio) ? data.servicio : [data.servicio];
+  const servicioExistenteNorm = (data.turno_servicio_existente || '').toLowerCase().trim();
+  const servicioNuevo = serviciosArray.find(s =>
+    s && s.toLowerCase().trim() !== servicioExistenteNorm
+  ) || serviciosArray[serviciosArray.length - 1] || 'otro';
+  const servicioNuevoDisplay = servicioNuevo;
+
   const serviciosCombinados = `${servicioExistenteDisplay} + ${servicioNuevoDisplay}`;
 
   const mensajeClientaAgregado = `¡Listo ${data.nombre_clienta || 'reina'}! Actualicé tu turno del ${fechaHumana}. Ahora tenés: ${serviciosCombinados}. Total: $${precioTotal.toLocaleString('es-AR')}. Seña actualizada: $${senaTotalCalculada.toLocaleString('es-AR')}. {LINK_PAGO_MSG}`;
@@ -204,7 +209,7 @@ Usar EXACTAMENTE estos parámetros:
 \`\`\`json
 {
   "turno_id": ${turnoIdExistente},
-  "nuevo_servicio": "${data.servicio || 'otro'}",
+  "nuevo_servicio": "${servicioNuevo}",
   "nuevo_servicio_detalle": "${servicioNuevoDisplay}",
   "nuevo_precio": ${precioNuevo},
   "nueva_duracion": ${duracionHoras}
@@ -322,7 +327,7 @@ const userMessage = `# SOLICITUD DE TURNO - Estilos Leraysi
 | **Email** | ${data.email || 'No proporcionado'} |
 | **Lead ID** | ${data.lead_id || 'N/A'} |
 | **Servicio** | ${servicioDisplay} |
-| **Categoría** | ${data.categoria_servicio || 'No clasificado'} |
+| **Complejidad** | ${data.complejidad_maxima || 'media'} |
 | **Duración** | ${data.duracion_estimada || 60} min (${duracionHoras}h) |
 | **Precio** | $${(data.precio || 0).toLocaleString('es-AR')} |
 | **Seña (30%)** | $${senaCalculada.toLocaleString('es-AR')} |

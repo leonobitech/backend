@@ -1,6 +1,6 @@
 {
     'name': 'Salón de Turnos - Estilos Leraysi',
-    'version': '19.0.1.0.0',
+    'version': '19.0.2.0.0',
     'category': 'Services',
     'summary': 'Gestión de turnos para salón de belleza con integración Mercado Pago',
     'description': """
@@ -11,6 +11,12 @@
         - Integración con Mercado Pago para cobro de señas (30%)
         - API REST para integración con agente AI
         - Webhook para confirmación automática de pagos
+        - Historial de pagos (v2.0): múltiples pagos por turno
+
+        Changelog v2.0:
+        - Nuevo modelo salon.turno.pago para historial de pagos
+        - Soporte para seña inicial + señas adicionales por servicios agregados
+        - Vista de historial de pagos en formulario de turno
     """,
     'author': 'Leonobitech',
     'website': 'https://leonobitech.com',

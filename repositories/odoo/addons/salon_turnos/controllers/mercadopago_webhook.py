@@ -256,23 +256,34 @@ class MercadoPagoWebhook(http.Controller):
                 _logger.warning(f'Turno {external_reference} no encontrado')
                 return {'status': 'error', 'message': 'Turno not found'}
 
-            # Deduplicación: verificar si ya procesamos este pago
-            if turno.mp_payment_id == str(payment_id):
-                _logger.info(f'Pago {payment_id} ya procesado para turno {turno.id}, ignorando duplicado')
+            # Deduplicación: verificar si ya procesamos este pago en historial
+            PagoModel = request.env['salon.turno.pago'].with_user(1).sudo()
+            pago_existente = PagoModel.search([('mp_payment_id', '=', str(payment_id))], limit=1)
+            if pago_existente:
+                _logger.info(f'Pago {payment_id} ya registrado en historial, ignorando duplicado')
                 return {'status': 'ok', 'message': 'Already processed'}
 
             # Actualizar según estado del pago
             if status == 'approved':
+                # Determinar tipo de pago (seña inicial o adicional)
+                tipo_pago = 'sena' if turno.cantidad_pagos == 0 else 'sena_adicional'
+
+                # Registrar pago en historial
+                PagoModel.registrar_pago(turno, payment_id, payment_data, tipo=tipo_pago)
+
+                # Actualizar turno (mp_payment_id mantiene el último para compatibilidad)
                 turno.write({
                     'sena_pagada': True,
                     'estado': 'confirmado',
                     'mp_payment_id': str(payment_id),
                 })
+
+                monto = payment_data.get('transaction_amount', 0)
                 turno.message_post(
                     body=f'Pago de seña confirmado via Mercado Pago. '
-                         f'Payment ID: {payment_id}'
+                         f'Payment ID: {payment_id} - Monto: ${monto:,.0f} ({tipo_pago})'
                 )
-                _logger.info(f'Turno {turno.id} confirmado por pago MP {payment_id}')
+                _logger.info(f'Turno {turno.id} confirmado por pago MP {payment_id} - ${monto} ({tipo_pago})')
 
                 # Llamar al MCP para ejecutar el proceso completo de confirmación
                 # (contacto, factura, calendario, email con PDF)

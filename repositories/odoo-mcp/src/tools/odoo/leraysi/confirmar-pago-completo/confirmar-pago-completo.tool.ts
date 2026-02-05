@@ -222,11 +222,13 @@ export class ConfirmarPagoCompletoTool
     }
 
     // =========================================================================
-    // PASO 6: Crear factura en account.move (módulo contabilidad Odoo)
+    // PASO 6: Crear o actualizar factura en account.move (módulo contabilidad Odoo)
+    // Si existe una factura borrador para este turno, agregar línea en vez de crear nueva
     // =========================================================================
     let invoiceId: number | null = null;
     let invoiceName: string | null = null;
     let invoicePdfBase64: string | null = null;
+    let invoiceAction: "created" | "updated" | null = null;
 
     try {
       // Obtener cuenta de ingresos por defecto
@@ -250,64 +252,116 @@ export class ConfirmarPagoCompletoTool
       if (!journalId) {
         logger.warn("[ConfirmarPagoCompleto] No sales journal found, skipping invoice creation");
       } else {
-        // Crear factura de cliente (out_invoice)
         const invoiceDate = new Date().toISOString().split("T")[0];
         const servicioLabel = this.getServicioLabel(turno.servicio);
 
-        const invoiceLineValues: any = {
-          name: `Seña - ${servicioLabel} - Turno #${params.turno_id}`,
-          quantity: 1,
-          price_unit: turno.sena,
-        };
+        // Buscar factura borrador existente para este turno
+        const existingInvoices = await this.odooClient.search(
+          "account.move",
+          [
+            ["move_type", "=", "out_invoice"],
+            ["partner_id", "=", partnerId],
+            ["state", "=", "draft"],
+            ["invoice_origin", "ilike", `Turno #${params.turno_id}`],
+          ],
+          { fields: ["id", "name", "narration"], limit: 1 }
+        );
 
-        // Solo agregar account_id si existe
-        if (accountId) {
-          invoiceLineValues.account_id = accountId;
+        if (existingInvoices.length > 0) {
+          // ===== AGREGAR LÍNEA A FACTURA EXISTENTE =====
+          invoiceId = existingInvoices[0].id;
+          invoiceAction = "updated";
+
+          logger.info(
+            { invoiceId, turnoId: params.turno_id },
+            "[ConfirmarPagoCompleto] Found existing draft invoice, adding line"
+          );
+
+          const invoiceLineValues: any = {
+            move_id: invoiceId,
+            name: `Seña adicional - ${servicioLabel} - Turno #${params.turno_id}`,
+            quantity: 1,
+            price_unit: turno.sena,
+          };
+
+          if (accountId) {
+            invoiceLineValues.account_id = accountId;
+          }
+
+          // Crear línea de factura
+          await this.odooClient.create("account.move.line", invoiceLineValues);
+
+          // Actualizar narration con info del nuevo pago
+          const existingNarration = existingInvoices[0].narration || "";
+          const newNarration = `${existingNarration}\n---\nSeña adicional por servicio agregado: ${servicioLabel}\nPago MercadoPago ID: ${params.mp_payment_id}`;
+
+          await this.odooClient.write("account.move", [invoiceId!], {
+            narration: newNarration,
+            invoice_origin: `Turno #${params.turno_id} - MP: ${params.mp_payment_id}`,
+          });
+
+        } else {
+          // ===== CREAR NUEVA FACTURA =====
+          invoiceAction = "created";
+
+          const invoiceLineValues: any = {
+            name: `Seña - ${servicioLabel} - Turno #${params.turno_id}`,
+            quantity: 1,
+            price_unit: turno.sena,
+          };
+
+          if (accountId) {
+            invoiceLineValues.account_id = accountId;
+          }
+
+          const invoiceValues: Record<string, any> = {
+            move_type: "out_invoice",
+            partner_id: partnerId,
+            journal_id: journalId,
+            invoice_date: invoiceDate,
+            invoice_origin: `Turno #${params.turno_id} - MP: ${params.mp_payment_id}`,
+            narration: `Seña por servicio de ${servicioLabel} para ${turno.clienta}\nFecha del turno: ${turno.fecha_hora}\nPago MercadoPago ID: ${params.mp_payment_id}`,
+            invoice_line_ids: [[0, 0, invoiceLineValues]],
+          };
+
+          invoiceId = await this.odooClient.create("account.move", invoiceValues);
         }
 
-        const invoiceValues: Record<string, any> = {
-          move_type: "out_invoice",
-          partner_id: partnerId,
-          journal_id: journalId,
-          invoice_date: invoiceDate,
-          invoice_origin: `Turno #${params.turno_id} - MP: ${params.mp_payment_id}`,
-          narration: `Seña por servicio de ${servicioLabel} para ${turno.clienta}\nFecha del turno: ${turno.fecha_hora}\nPago MercadoPago ID: ${params.mp_payment_id}`,
-          invoice_line_ids: [[0, 0, invoiceLineValues]],
-        };
-
-        invoiceId = await this.odooClient.create("account.move", invoiceValues);
-
-        // Confirmar/publicar la factura (action_post)
-        try {
-          await this.odooClient.execute("account.move", "action_post", [[invoiceId]], {});
-        } catch (postError) {
-          logger.warn({ postError }, "[ConfirmarPagoCompleto] Could not post invoice");
-        }
+        // NO publicar automáticamente - dejar como borrador para permitir agregar más líneas
+        // La publicación se hará manualmente o cuando el turno se complete
+        logger.info(
+          { invoiceId, action: invoiceAction },
+          "[ConfirmarPagoCompleto] Invoice left as draft for potential additions"
+        );
 
         // Obtener nombre/número de factura
-        const invoices = await this.odooClient.read("account.move", [invoiceId], ["name"]);
-        if (invoices.length > 0) {
-          invoiceName = invoices[0].name;
+        if (invoiceId) {
+          const invoices = await this.odooClient.read("account.move", [invoiceId], ["name"]);
+          if (invoices.length > 0) {
+            invoiceName = invoices[0].name;
+          }
         }
 
         // Generar PDF usando reporte nativo de factura de Odoo
-        try {
-          const reportResult = await this.odooClient.execute(
-            "ir.actions.report",
-            "_render_qweb_pdf",
-            ["account.account_invoices", [invoiceId]],
-            {}
-          );
+        if (invoiceId) {
+          try {
+            const reportResult = await this.odooClient.execute(
+              "ir.actions.report",
+              "_render_qweb_pdf",
+              ["account.account_invoices", [invoiceId]],
+              {}
+            );
 
-          if (reportResult && reportResult[0]) {
-            invoicePdfBase64 = Buffer.from(reportResult[0], "binary").toString("base64");
+            if (reportResult && reportResult[0]) {
+              invoicePdfBase64 = Buffer.from(reportResult[0], "binary").toString("base64");
+            }
+          } catch (pdfError) {
+            logger.warn({ pdfError }, "[ConfirmarPagoCompleto] Could not generate invoice PDF");
           }
-        } catch (pdfError) {
-          logger.warn({ pdfError }, "[ConfirmarPagoCompleto] Could not generate invoice PDF");
         }
       }
     } catch (error) {
-      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not create invoice in account.move");
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not create/update invoice in account.move");
     }
 
     // =========================================================================

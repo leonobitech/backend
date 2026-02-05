@@ -67,6 +67,7 @@ let resultado = {
   precio: input.precio,
   servicio: input.servicio,
   servicio_detalle: input.servicio_detalle || '',
+  complejidad_maxima: input.complejidad_maxima || 'media',
 
   // === Decisión del agente (mapeada) ===
   accion: accion,
@@ -164,9 +165,18 @@ if (llmResponse.estado === 'servicio_agregado') {
 
   // Construir array de servicios para campo multi-select de Baserow
   // El servicio existente viene de input.turno_servicio_existente
-  // El nuevo servicio viene de input.servicio (capitalizado)
+  // El nuevo servicio viene de input.servicio (puede ser array o string)
   const servicioExistente = input.turno_servicio_existente || '';
-  const servicioNuevoRaw = input.servicio || '';
+
+  // FIX: input.servicio puede ser array o string
+  // Encontrar el servicio NUEVO (el que no está en el turno existente)
+  const serviciosInputArray = Array.isArray(input.servicio) ? input.servicio : [input.servicio];
+  const servicioExistenteNorm = servicioExistente.toLowerCase().trim();
+  const servicioNuevoRaw = serviciosInputArray.find(s =>
+    s && s.toLowerCase().trim() !== servicioExistenteNorm
+  ) || serviciosInputArray[serviciosInputArray.length - 1] || '';
+
+  // Capitalizar si es necesario
   const servicioNuevo = servicioNuevoRaw
     ? servicioNuevoRaw.charAt(0).toUpperCase() + servicioNuevoRaw.slice(1).replace(/_/g, ' ')
     : '';

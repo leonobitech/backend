@@ -28,7 +28,7 @@ Base de datos de turnos del salón Estilos Leraysi.
 | 7 | `email` | Email | ❌ | Email para confirmaciones |
 | 8 | `servicio` | Multiple Select | ✅ | Servicios solicitados (puede ser más de uno) |
 | 9 | `servicio_detalle` | Text | ❌ | Descripción adicional del servicio |
-| 10 | `tipo_servicio` | Single Select | ✅ | Categoría de peso del servicio |
+| 10 | `complejidad_maxima` | Single Select | ✅ | Nivel de complejidad del servicio |
 | 11 | `duracion_min` | Number | ✅ | Duración total en minutos |
 | 12 | `precio` | Number | ✅ | Precio total en ARS |
 | 13 | `sena_monto` | Number | ✅ | Monto de la seña (30% del precio) |
@@ -63,14 +63,14 @@ Base de datos de turnos del salón Estilos Leraysi.
 | `maquillaje` | Maquillaje |
 | `otro` | Otro servicio |
 
-### `tipo_servicio` (Single Select)
+### `complejidad_maxima` (Single Select)
 
-| Valor | Duración Típica | Descripción |
-|-------|-----------------|-------------|
-| `liviano` | 60 min | Servicios rápidos (corte, brushing) |
-| `medio` | 90 min | Servicios estándar |
-| `pesado` | 120 min | Servicios complejos (mechas, tintura) |
-| `muy_pesado` | 180 min | Servicios extensos (alisado completo) |
+| Valor | Capacidad/día | Descripción |
+|-------|---------------|-------------|
+| `simple` | máx 5 | Servicios rápidos (depilación axilas/bikini) |
+| `media` | máx 4 | Servicios estándar (corte, manicura simple, pedicura) |
+| `compleja` | máx 3 | Servicios complejos (tintura raíz, manicura semipermanente) |
+| `muy_compleja` | máx 2 | Servicios extensos (alisados, balayage, mechas) |
 
 ### `estado` (Single Select)
 
@@ -155,9 +155,9 @@ TurnosLeraysi.mp_payment_id ──────► Mercado Pago Payment ID
   nombre_clienta: "Andrea Figueroa",
   telefono: "+5491133851987",
   email: "andrea@gmail.com",
-  servicio: ["tratamiento"],
-  servicio_detalle: "Alisado brasileño",
-  tipo_servicio: "pesado",
+  servicio: ["Alisado brasileño"],
+  servicio_detalle: "Alisado brasileño - cabello largo",
+  complejidad_maxima: "muy_compleja",
   duracion_min: 120,
   precio: 60000,
   sena_monto: 18000,

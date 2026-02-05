@@ -39,11 +39,11 @@ El sistema usa una tabla de configuración en Baserow que permite ajustar parám
 │  CONFIGURACIÓN DE SERVICIOS                                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  SERVICIO_DURACION_BAJA        │ 60           │ Minutos para baja complej.  │
-│  SERVICIO_DURACION_MEDIA       │ 90           │ Minutos para media complej. │
-│  SERVICIO_DURACION_ALTA        │ 120          │ Minutos para alta complej.  │
-│  SERVICIO_DURACION_MUY_ALTA    │ 180          │ Minutos para muy alta       │
-│  SERVICIO_MAX_PESADOS_DIA      │ 2            │ Máx servicios pesados/día   │
+│  CAPACIDAD_MUY_COMPLEJA        │ 2            │ Máx turnos muy_compleja/día │
+│  CAPACIDAD_COMPLEJA            │ 3            │ Máx turnos compleja/día     │
+│  CAPACIDAD_MEDIA               │ 4            │ Máx turnos media/día        │
+│  CAPACIDAD_SIMPLE              │ 5            │ Máx turnos simple/día       │
+│  MAX_TURNOS_DIA                │ 8            │ Máx absoluto turnos/día     │
 │                                                                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  CONFIGURACIÓN DE NOTIFICACIONES                                            │
@@ -153,14 +153,15 @@ const defaults = {
   RESERVA_EXPIRACION_MINUTOS: 120,
   RESERVA_SEÑA_PORCENTAJE: 30,
   RESERVA_RECORDATORIO_MINUTOS: 30,
-  RESERVA_MAX_POR_DIA: 6,
   RESERVA_HORARIO_APERTURA: '09:00',
   RESERVA_HORARIO_CIERRE: '19:00',
   RESERVA_DIAS_CERRADOS: [0], // Domingo
-  SERVICIO_DURACION_BAJA: 60,
-  SERVICIO_DURACION_MEDIA: 90,
-  SERVICIO_DURACION_ALTA: 120,
-  SERVICIO_DURACION_MUY_ALTA: 180,
+  // Capacidad por complejidad
+  CAPACIDAD_MUY_COMPLEJA: 2,
+  CAPACIDAD_COMPLEJA: 3,
+  CAPACIDAD_MEDIA: 4,
+  CAPACIDAD_SIMPLE: 5,
+  MAX_TURNOS_DIA: 8,
 };
 
 // Merge con defaults
@@ -184,10 +185,13 @@ return [{
 // Obtener config
 const config = $('LoadConfig').first().json.config;
 
-// Usar valores dinámicos
+// Usar valores dinámicos basados en complejidad
 const CAPACIDAD = {
-  max_turnos_dia: config.RESERVA_MAX_POR_DIA,
-  max_pesados: config.SERVICIO_MAX_PESADOS_DIA || 2,
+  max_muy_compleja: config.CAPACIDAD_MUY_COMPLEJA || 2,
+  max_compleja: config.CAPACIDAD_COMPLEJA || 3,
+  max_media: config.CAPACIDAD_MEDIA || 4,
+  max_simple: config.CAPACIDAD_SIMPLE || 5,
+  max_turnos_dia: config.MAX_TURNOS_DIA || 8,
 };
 
 const HORARIO = {

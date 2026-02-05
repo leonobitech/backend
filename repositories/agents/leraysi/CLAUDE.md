@@ -31,6 +31,24 @@ Chatbot que atiende clientas por WhatsApp: consulta de servicios, presupuestos (
 ```
 agents/leraysi/
 ├── CLAUDE.md                    # Este archivo
+├── 1-sales-agent-leraysi/
+│   └── sub-workflow-agente-calendario/
+│       ├── DEBUG-PATHS.md       # Rutas de debugging para el sub-workflow
+│       ├── nodes-code/          # Código JS de los nodos Code
+│       │   ├── ParseInput.js
+│       │   ├── AnalizarDisponibilidad.js
+│       │   ├── BuildAgentPrompt.js
+│       │   ├── ParseAgentResponse.js
+│       │   ├── PrepararTurnoBaserow.js
+│       │   ├── PrepararReprogramadoBaserow.js
+│       │   ├── PrepararServicioAgregadoBaserow.js
+│       │   ├── FormatearRespuestaExito.js
+│       │   ├── FormatearRespuestaReprogramado.js
+│       │   ├── FormatearRespuestaServicioAgregado.js
+│       │   ├── FormatearRespuestaSinDisponibilidad.js
+│       │   └── FormatearRespuestaError.js
+│       └── system-prompt/       # Prompts del agente
+│           └── Agente Calendario.md
 └── workflows-backup/            # JSON exports de n8n (2026-02-03)
     ├── Sales_Agent_By_WhatsApp.json       (287K)
     ├── Leraysi_Agente_Calendario.json     (150K)
@@ -40,6 +58,11 @@ agents/leraysi/
     ├── Leraysi_Cancelar_Turno.json
     └── Load_Services.json
 ```
+
+### Documentación de debugging
+
+Para debugging del sub-workflow Agente Calendario, ver:
+- **[DEBUG-PATHS.md](1-sales-agent-leraysi/sub-workflow-agente-calendario/DEBUG-PATHS.md)** — Rutas de ejecución por acción (turno_creado, servicio_agregado, etc.)
 
 ---
 

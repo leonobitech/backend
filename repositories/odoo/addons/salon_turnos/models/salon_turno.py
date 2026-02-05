@@ -114,8 +114,26 @@ class SalonTurno(models.Model):
         readonly=True,
     )
     mp_payment_id = fields.Char(
-        string='MP Payment ID',
+        string='MP Payment ID (último)',
         readonly=True,
+        help='Último payment ID registrado (para compatibilidad). Ver pago_ids para historial completo.',
+    )
+
+    # Historial de pagos
+    pago_ids = fields.One2many(
+        'salon.turno.pago',
+        'turno_id',
+        string='Historial de Pagos',
+    )
+    total_pagado = fields.Float(
+        string='Total Pagado',
+        compute='_compute_total_pagado',
+        store=True,
+    )
+    cantidad_pagos = fields.Integer(
+        string='Cantidad de Pagos',
+        compute='_compute_total_pagado',
+        store=True,
     )
 
     # Estado
@@ -160,6 +178,13 @@ class SalonTurno(models.Model):
                 record.monto_restante = record.precio - record.sena
             else:
                 record.monto_restante = record.precio
+
+    @api.depends('pago_ids', 'pago_ids.monto', 'pago_ids.estado')
+    def _compute_total_pagado(self):
+        for record in self:
+            pagos_aprobados = record.pago_ids.filtered(lambda p: p.estado == 'approved')
+            record.total_pagado = sum(pagos_aprobados.mapped('monto'))
+            record.cantidad_pagos = len(pagos_aprobados)
 
     def action_generar_link_pago(self):
         """Genera link de pago en Mercado Pago para la seña"""
@@ -391,6 +416,17 @@ class SalonTurno(models.Model):
             'link_pago': self.link_pago,
             'mp_preference_id': self.mp_preference_id,
             'mp_payment_id': self.mp_payment_id,
+            'total_pagado': self.total_pagado,
+            'cantidad_pagos': self.cantidad_pagos,
+            'pagos': [{
+                'id': p.id,
+                'mp_payment_id': p.mp_payment_id,
+                'monto': p.monto,
+                'tipo': p.tipo,
+                'estado': p.estado,
+                'fecha': p.fecha.isoformat() if p.fecha else None,
+                'descripcion': p.descripcion,
+            } for p in self.pago_ids],
             'estado': self.estado,
             'notas': self.notas,
             'create_date': self.create_date.isoformat() if self.create_date else None,

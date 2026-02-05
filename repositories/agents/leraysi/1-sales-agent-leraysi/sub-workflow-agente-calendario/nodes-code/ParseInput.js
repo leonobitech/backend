@@ -69,33 +69,51 @@ const input = {
   turno_id_existente: state.odoo_turno_id || state.turno_id_existente || llmOutput.turno_id_existente || null,
   turno_precio_existente: state.turno_precio_existente || llmOutput.turno_precio_existente || 0,
 
-  // Complejidad y largo del cabello (del image_analysis)
+  // Complejidad del trabajo (aplica a TODOS los servicios)
   complejidad: state.image_analysis?.complexity || 'media',
-  largo_cabello: state.image_analysis?.length || 'medio'
+  // Largo del cabello (solo para servicios de cabello, null para manicure/pedicure/etc)
+  largo_cabello_raw: state.image_analysis?.length || 'medio'
 };
 
 // ============================================================================
 // CONFIGURACIÓN DE SERVICIOS Y DURACIONES
 // ============================================================================
+// Los 15 servicios oficiales de Baserow (tabla 850 - ServiciosLeraysi)
+//
+// complejidad: FIJA por servicio (determina capacidad diaria del salón)
+//   - muy_compleja: máx 2/día
+//   - compleja: máx 3/día
+//   - media: máx 4/día
+//   - simple: máx 5/día
+//
+// requiere_largo: true = servicio de cabello (largo afecta duración)
+//                 false = servicio sin cabello (uñas, depilación)
+//
 const SERVICIOS_CONFIG = {
-  // Servicios livianos (45-60 min base)
-  'Peinados': { base_min: 45, categoria: 'liviano' },
-  'Manicure': { base_min: 30, categoria: 'liviano' },
-  'Pedicure': { base_min: 45, categoria: 'liviano' },
-  'Maquillaje': { base_min: 45, categoria: 'liviano' },
-  'Corte de cabello': { base_min: 45, categoria: 'liviano' },
+  // === CORTE (1 servicio) ===
+  'Corte mujer': { base_min: 45, complejidad: 'media', requiere_largo: true },
 
-  // Servicios pesados (90-120 min base)
-  'Alisado': { base_min: 120, categoria: 'pesado' },
-  'Keratina': { base_min: 120, categoria: 'pesado' },
-  'Botox capilar': { base_min: 90, categoria: 'pesado' },
-  'Alisado con keratina': { base_min: 150, categoria: 'muy_pesado' },
+  // === ALISADO (2 servicios) ===
+  'Alisado brasileño': { base_min: 150, complejidad: 'muy_compleja', requiere_largo: true },
+  'Alisado keratina': { base_min: 150, complejidad: 'muy_compleja', requiere_largo: true },
 
-  // Servicios de color (60-90 min base)
-  'Tinte': { base_min: 90, categoria: 'pesado' },
-  'Mechas': { base_min: 120, categoria: 'pesado' },
-  'Balayage': { base_min: 150, categoria: 'muy_pesado' },
-  'Decoloración': { base_min: 120, categoria: 'pesado' }
+  // === COLOR (4 servicios) ===
+  'Mechas completas': { base_min: 120, complejidad: 'muy_compleja', requiere_largo: true },
+  'Tintura raíz': { base_min: 60, complejidad: 'compleja', requiere_largo: true },
+  'Tintura completa': { base_min: 90, complejidad: 'muy_compleja', requiere_largo: true },
+  'Balayage': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true },
+
+  // === UÑAS (3 servicios) ===
+  'Manicura simple': { base_min: 30, complejidad: 'media', requiere_largo: false },
+  'Manicura semipermanente': { base_min: 45, complejidad: 'compleja', requiere_largo: false },
+  'Pedicura': { base_min: 45, complejidad: 'media', requiere_largo: false },
+
+  // === DEPILACIÓN (5 servicios) ===
+  'Depilación cera piernas': { base_min: 45, complejidad: 'media', requiere_largo: false },
+  'Depilación cera axilas': { base_min: 15, complejidad: 'simple', requiere_largo: false },
+  'Depilación cera bikini': { base_min: 20, complejidad: 'simple', requiere_largo: false },
+  'Depilación láser piernas': { base_min: 60, complejidad: 'media', requiere_largo: false },
+  'Depilación láser axilas': { base_min: 30, complejidad: 'simple', requiere_largo: false }
 };
 
 // Multiplicadores según largo del cabello
@@ -113,6 +131,17 @@ const MULTIPLICADOR_COMPLEJIDAD = {
   'compleja': 1.2,
   'muy_compleja': 1.4
 };
+
+// ============================================================================
+// HELPER: Verificar si algún servicio requiere largo de cabello
+// ============================================================================
+function algunServicioRequiereLargo(servicios) {
+  return servicios.some(srv => {
+    const config = SERVICIOS_CONFIG[srv];
+    // Si el servicio no está en config, asumimos que requiere largo (por defecto)
+    return config ? config.requiere_largo !== false : true;
+  });
+}
 
 // ============================================================================
 // VALIDACIÓN DE CAMPOS REQUERIDOS
@@ -146,8 +175,15 @@ const conversation_id = input.conversation_id || null;
 
 // Análisis de imagen (si existe)
 const image_analysis = input.image_analysis || null;
-const largo_cabello = image_analysis?.length || input.largo_cabello || 'medio';
 const complejidad = image_analysis?.complexity || input.complejidad || 'media';
+
+// Largo de cabello: solo aplica si algún servicio lo requiere
+// Para Manicure, Pedicure, Maquillaje → largo_cabello = null
+const serviciosArray = Array.isArray(input.servicio) ? input.servicio : [input.servicio];
+const requiereLargo = algunServicioRequiereLargo(serviciosArray);
+const largo_cabello = requiereLargo
+  ? (image_analysis?.length || input.largo_cabello_raw || 'medio')
+  : null;
 
 // ============================================================================
 // CÁLCULO DE DURACIÓN ESTIMADA
@@ -166,7 +202,8 @@ function calcularDuracion(servicios, largo, complejidad) {
   }
 
   // Aplicar multiplicadores
-  const multLargo = MULTIPLICADOR_LARGO[largo] || 1.0;
+  // largo puede ser null para servicios sin cabello (manicure, pedicure, etc.)
+  const multLargo = largo ? (MULTIPLICADOR_LARGO[largo] || 1.0) : 1.0;
   const multComplejidad = MULTIPLICADOR_COMPLEJIDAD[complejidad] || 1.0;
 
   duracionTotal = Math.round(duracionTotal * multLargo * multComplejidad);
@@ -175,20 +212,22 @@ function calcularDuracion(servicios, largo, complejidad) {
   return Math.ceil(duracionTotal / 15) * 15;
 }
 
-// Determinar categoría más pesada del servicio
-function obtenerCategoriaPesada(servicios) {
-  const categorias = servicios.map(srv => {
+// Determinar la complejidad más alta entre los servicios solicitados
+// Orden de prioridad: muy_compleja > compleja > media > simple
+function obtenerComplejidadMaxima(servicios) {
+  const complejidades = servicios.map(srv => {
     const config = SERVICIOS_CONFIG[srv];
-    return config?.categoria || 'liviano';
+    return config?.complejidad || 'media';
   });
 
-  if (categorias.includes('muy_pesado')) return 'muy_pesado';
-  if (categorias.includes('pesado')) return 'pesado';
-  return 'liviano';
+  if (complejidades.includes('muy_compleja')) return 'muy_compleja';
+  if (complejidades.includes('compleja')) return 'compleja';
+  if (complejidades.includes('media')) return 'media';
+  return 'simple';
 }
 
 const duracion_estimada = calcularDuracion(servicio, largo_cabello, complejidad);
-const categoria_servicio = obtenerCategoriaPesada(servicio);
+const complejidad_maxima = obtenerComplejidadMaxima(servicio);
 const servicio_detalle = servicio.join(' + ');
 
 // ============================================================================
@@ -209,7 +248,7 @@ return [{
     hora_deseada,
     precio,
     duracion_estimada,
-    categoria_servicio,
+    complejidad_maxima,
 
     // Análisis de imagen
     image_analysis,
