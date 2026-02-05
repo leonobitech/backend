@@ -186,7 +186,11 @@ Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
   const senaTotalCalculada = Math.round(precioTotal * 0.3);
 
   const servicioExistenteDisplay = data.turno_servicio_existente || 'servicio existente';
-  const servicioNuevoDisplay = servicioDisplay;
+  // FIX: Para el nuevo servicio, usar data.servicio (código) capitalizado, NO data.servicio_detalle
+  // porque servicio_detalle contiene el detalle del turno EXISTENTE, no del nuevo servicio
+  const servicioNuevoDisplay = data.servicio
+    ? data.servicio.charAt(0).toUpperCase() + data.servicio.slice(1).replace(/_/g, ' ')
+    : servicioDisplay;
   const serviciosCombinados = `${servicioExistenteDisplay} + ${servicioNuevoDisplay}`;
 
   const mensajeClientaAgregado = `¡Listo ${data.nombre_clienta || 'reina'}! Actualicé tu turno del ${fechaHumana}. Ahora tenés: ${serviciosCombinados}. Total: $${precioTotal.toLocaleString('es-AR')}. Seña actualizada: $${senaTotalCalculada.toLocaleString('es-AR')}. {LINK_PAGO_MSG}`;
