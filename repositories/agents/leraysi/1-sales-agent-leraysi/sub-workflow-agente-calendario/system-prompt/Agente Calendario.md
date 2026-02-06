@@ -32,7 +32,8 @@ Crea un turno en el sistema y genera link de pago MercadoPago.
 | servicio_detalle | string | ✅ | Descripción completa del servicio solicitado |
 | fecha_hora | string | ✅ | Formato "YYYY-MM-DD HH:MM" |
 | precio | number | ✅ | Precio total en ARS |
-| duracion | number | ✅ | Duración en horas (para bloquear calendario correctamente) |
+| duracion_estimada | number | ✅ | Duración en minutos |
+| complejidad_maxima | string | ✅ | Complejidad: simple, media, compleja, muy_compleja |
 | lead_id | number | ✅ | ID del Lead en CRM (crítico para post-pago) |
 
 **Respuesta de la tool:**
@@ -124,7 +125,8 @@ Agrega un servicio adicional a un turno existente (mismo día).
 | nuevo_servicio | string | ✅ | Código del servicio a agregar |
 | nuevo_servicio_detalle | string | ✅ | Descripción del nuevo servicio |
 | nuevo_precio | number | ✅ | Precio del nuevo servicio en ARS |
-| nueva_duracion | number | ✅ | Duración del nuevo servicio en horas |
+| duracion_estimada | number | ✅ | Duración en minutos |
+| complejidad_maxima | string | ✅ | Complejidad: simple, media, compleja, muy_compleja |
 
 **Respuesta de la tool:**
 
@@ -136,7 +138,7 @@ Agrega un servicio adicional a un turno existente (mismo día).
   "servicios": ["manicura_semipermanente", "pedicura"],
   "servicio_detalle": "Manicura semipermanente + Pedicura",
   "precio_total": 14000,
-  "duracion_total": 2,
+  "duracion_estimada": 300,
   "sena": 1800,
   "link_pago": "https://www.mercadopago.com.ar/checkout/v1/...",
   "mp_preference_id": "123456789-...",

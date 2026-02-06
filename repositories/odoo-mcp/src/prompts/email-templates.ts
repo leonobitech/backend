@@ -431,7 +431,7 @@ export const turnoConfirmadoTemplate = (data: TurnoConfirmadoData) => {
       <table width="100%" style="border-collapse: collapse;">
         <tr>
           <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">💇‍♀️ Servicio:</td>
-          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2); text-transform: capitalize;">${data.servicio}${data.servicio_detalle ? ` - ${data.servicio_detalle}` : ''}</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.servicio_detalle || data.servicio}</td>
         </tr>
         <tr>
           <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">📆 Fecha:</td>

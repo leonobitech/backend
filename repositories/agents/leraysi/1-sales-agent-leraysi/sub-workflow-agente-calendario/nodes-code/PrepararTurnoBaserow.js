@@ -82,7 +82,7 @@ const turnoBaserow = {
 };
 
 // Agregar campos numéricos solo si tienen valor (Baserow no acepta null)
-turnoBaserow.duracion_min = data.duracion_estimada || 90; // default 90 minutos
+turnoBaserow.duracion_min = data.duracion_estimada || 60;
 if (data.precio != null) {
   turnoBaserow.precio = data.precio;
 }

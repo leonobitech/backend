@@ -51,6 +51,9 @@ const updateFields = {
   // Detalle para display (concatenación)
   servicio_detalle: data.servicio_detalle, // "Manicura semipermanente + Pedicura"
 
+  // Duración total actualizada (en minutos)
+  duracion_min: data.duracion_estimada || 60,
+
   // Complejidad máxima (puede cambiar al agregar servicio más complejo)
   complejidad_maxima: data.complejidad_maxima || 'media',
 

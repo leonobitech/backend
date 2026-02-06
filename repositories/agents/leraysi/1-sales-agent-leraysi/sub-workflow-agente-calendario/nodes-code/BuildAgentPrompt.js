@@ -23,7 +23,6 @@ const horaSolicitadaParte = fechaSolicitadaRaw.includes('T')
 
 // Usar hora de la fecha solicitada, o la hora_deseada del input, o default 09:00
 const horaDeseada = horaSolicitadaParte || data.hora_deseada || '09:00';
-const duracionHoras = Math.ceil((data.duracion_estimada || 60) / 60);
 const senaCalculada = Math.round((data.precio || 0) * 0.3);
 // Formato correcto: "2026-01-26 16:00" (fecha espacio hora)
 const fechaHoraCompleta = `${fechaSoloParte} ${horaDeseada}`;
@@ -212,7 +211,8 @@ Usar EXACTAMENTE estos parámetros:
   "nuevo_servicio": "${servicioNuevo}",
   "nuevo_servicio_detalle": "${servicioNuevoDisplay}",
   "nuevo_precio": ${precioNuevo},
-  "nueva_duracion": ${duracionHoras}
+  "duracion_estimada": ${data.duracion_estimada || 60},
+  "complejidad_maxima": "${data.complejidad_maxima || 'media'}"
 }
 \`\`\`
 
@@ -228,6 +228,8 @@ Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
   "fecha_hora": "${fechaHoraCompleta}",
   "servicios_combinados": "{servicio_detalle de la respuesta}",
   "precio_total": {precio_total de la respuesta},
+  "duracion_estimada": ${data.duracion_estimada || 60},
+  "complejidad_maxima": "${data.complejidad_maxima || 'media'}",
   "sena": {sena de la respuesta},
   "link_pago": "{link_pago de la respuesta}",
   "mensaje_para_clienta": "${mensajeClientaAgregado}"
@@ -258,7 +260,8 @@ Usar EXACTAMENTE estos parámetros:
   "servicio": "${data.servicio || 'otro'}",
   "fecha_hora": "${fechaHoraCompleta}",
   "precio": ${data.precio || 0},
-  "duracion": ${duracionHoras},
+  "duracion_estimada": ${data.duracion_estimada || 60},
+  "complejidad_maxima": "${data.complejidad_maxima || 'media'}",
   "lead_id": ${data.lead_id || 'null'}${data.email ? `,\n  "email": "${data.email}"` : ''}${data.servicio_detalle ? `,\n  "servicio_detalle": "${data.servicio_detalle}"` : ''}
 }
 \`\`\`
@@ -276,6 +279,8 @@ Reemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:
   "servicio": "${data.servicio || 'otro'}",
   "servicio_detalle": "${servicioDisplay}",
   "precio": ${data.precio || 0},
+  "duracion_estimada": ${data.duracion_estimada || 60},
+  "complejidad_maxima": "${data.complejidad_maxima || 'media'}",
   "sena": {sena de la respuesta},
   "link_pago": "{link_pago de la respuesta}",
   "mensaje_para_clienta": "${mensajeClientaTemplate}"
@@ -328,7 +333,7 @@ const userMessage = `# SOLICITUD DE TURNO - Estilos Leraysi
 | **Lead ID** | ${data.lead_id || 'N/A'} |
 | **Servicio** | ${servicioDisplay} |
 | **Complejidad** | ${data.complejidad_maxima || 'media'} |
-| **Duración** | ${data.duracion_estimada || 60} min (${duracionHoras}h) |
+| **Duración** | ${data.duracion_estimada || 60} min |
 | **Precio** | $${(data.precio || 0).toLocaleString('es-AR')} |
 | **Seña (30%)** | $${senaCalculada.toLocaleString('es-AR')} |
 | **Fecha solicitada** | ${data.fecha_solicitada} (${fechaHumana}) |
@@ -353,7 +358,8 @@ return [{
     // Datos pre-calculados para uso posterior
     _precalculado: {
       hora: horaDeseada,
-      duracion_horas: duracionHoras,
+      duracion_estimada: data.duracion_estimada || 60,
+      complejidad_maxima: data.complejidad_maxima || 'media',
       sena: senaCalculada,
       fecha_hora_completa: fechaHoraCompleta,
       fecha_humana: fechaHumana,

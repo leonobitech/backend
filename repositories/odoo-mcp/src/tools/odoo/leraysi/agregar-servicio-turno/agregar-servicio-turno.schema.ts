@@ -22,7 +22,8 @@ export const agregarServicioTurnoSchema = z.object({
   ]),
   nuevo_servicio_detalle: z.string().min(1, "Detalle del nuevo servicio es requerido"),
   nuevo_precio: z.number().positive("El precio del nuevo servicio debe ser mayor a 0"),
-  nueva_duracion: z.number().positive("La duración del nuevo servicio debe ser mayor a 0"),
+  duracion_estimada: z.number().positive("La duración estimada del nuevo servicio debe ser mayor a 0"),
+  complejidad_maxima: z.enum(["simple", "media", "compleja", "muy_compleja"]),
 });
 
 export type AgregarServicioTurnoInput = z.infer<typeof agregarServicioTurnoSchema>;
@@ -37,6 +38,8 @@ export interface AgregarServicioTurnoResponse {
   // Totales actualizados
   precio_total: number;
   duracion_total: number;
+  duracion_estimada: number;
+  complejidad_maxima: string;
   sena: number;
   // Nuevo link de pago
   link_pago: string;

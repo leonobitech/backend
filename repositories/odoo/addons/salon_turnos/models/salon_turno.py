@@ -150,6 +150,19 @@ class SalonTurno(models.Model):
         tracking=True,
     )
 
+    # Complejidad
+    complejidad_maxima = fields.Selection(
+        selection=[
+            ('simple', 'Simple'),
+            ('media', 'Media'),
+            ('compleja', 'Compleja'),
+            ('muy_compleja', 'Muy Compleja'),
+        ],
+        string='Complejidad Máxima',
+        tracking=True,
+        help='Nivel de complejidad del turno (determina capacidad del salón)',
+    )
+
     # Notas
     notas = fields.Text(
         string='Notas',
@@ -332,6 +345,10 @@ class SalonTurno(models.Model):
         if data.get('lead_id'):
             turno_vals['lead_id'] = int(data['lead_id'])
 
+        # Agregar complejidad_maxima si se proporciona
+        if data.get('complejidad_maxima'):
+            turno_vals['complejidad_maxima'] = data['complejidad_maxima']
+
         turno = self.create(turno_vals)
 
         # Generar link de pago si se solicita
@@ -427,6 +444,7 @@ class SalonTurno(models.Model):
                 'fecha': p.fecha.isoformat() if p.fecha else None,
                 'descripcion': p.descripcion,
             } for p in self.pago_ids],
+            'complejidad_maxima': self.complejidad_maxima,
             'estado': self.estado,
             'notas': self.notas,
             'create_date': self.create_date.isoformat() if self.create_date else None,

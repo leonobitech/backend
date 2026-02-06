@@ -94,7 +94,8 @@ export class CrearTurnoLeraysiTool
       servicio_detalle: params.servicio_detalle,
       fecha_hora: fechaHora,
       precio: params.precio,
-      duracion: params.duracion,
+      duracion: params.duracion_estimada / 60, // Convertir minutos → horas para Odoo
+      complejidad_maxima: params.complejidad_maxima,
       lead_id: params.lead_id,
       estado: "pendiente_pago",
     };
@@ -142,6 +143,8 @@ export class CrearTurnoLeraysiTool
       fecha_hora: fechaHora,
       servicio: params.servicio,
       precio: params.precio,
+      duracion_estimada: params.duracion_estimada,
+      complejidad_maxima: params.complejidad_maxima,
       sena,
       link_pago: linkPago,
       mp_preference_id: mpPreferenceId,
@@ -246,9 +249,14 @@ export class CrearTurnoLeraysiTool
             type: "number",
             description: "Precio total del servicio en ARS",
           },
-          duracion: {
+          duracion_estimada: {
             type: "number",
-            description: "Duración en horas (para bloquear calendario correctamente)",
+            description: "Duración estimada en minutos (se convierte a horas internamente para Odoo)",
+          },
+          complejidad_maxima: {
+            type: "string",
+            enum: ["simple", "media", "compleja", "muy_compleja"],
+            description: "Nivel de complejidad máxima del turno (determina capacidad del salón)",
           },
           lead_id: {
             type: "number",
@@ -267,7 +275,8 @@ export class CrearTurnoLeraysiTool
           "servicio_detalle",
           "fecha_hora",
           "precio",
-          "duracion",
+          "duracion_estimada",
+          "complejidad_maxima",
           "lead_id",
         ],
       },

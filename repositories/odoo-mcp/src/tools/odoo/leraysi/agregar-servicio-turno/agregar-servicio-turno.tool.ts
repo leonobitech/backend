@@ -135,7 +135,7 @@ export class AgregarServicioTurnoLeraysiTool
     const precioExistente = (turnoExistente.precio as number) || 0;
     const duracionExistente = (turnoExistente.duracion as number) || 1;
     const precioTotal = precioExistente + params.nuevo_precio;
-    const duracionTotal = duracionExistente + params.nueva_duracion;
+    const duracionTotal = duracionExistente + (params.duracion_estimada / 60); // Convertir minutos → horas
 
     // 4. Calcular seña: si ya pagó, solo cobrar la diferencia
     const senaTotalNueva = precioTotal * 0.3;
@@ -164,6 +164,7 @@ export class AgregarServicioTurnoLeraysiTool
       servicio_detalle: servicioDetalleCombinado,
       precio: precioTotal,
       duracion: duracionTotal,
+      complejidad_maxima: params.complejidad_maxima,
       sena: senaAPagar, // Solo el monto pendiente de pago
       estado: "pendiente_pago",
     });
@@ -211,6 +212,8 @@ export class AgregarServicioTurnoLeraysiTool
       servicio_detalle: servicioDetalleCombinado,
       precio_total: precioTotal,
       duracion_total: duracionTotal,
+      duracion_estimada: params.duracion_estimada,
+      complejidad_maxima: params.complejidad_maxima,
       sena,
       link_pago: linkPago,
       mp_preference_id: mpPreferenceId,
@@ -286,9 +289,14 @@ export class AgregarServicioTurnoLeraysiTool
             type: "number",
             description: "Precio del nuevo servicio en ARS",
           },
-          nueva_duracion: {
+          duracion_estimada: {
             type: "number",
-            description: "Duración del nuevo servicio en horas",
+            description: "Duración estimada del nuevo servicio en minutos (se convierte a horas internamente para Odoo)",
+          },
+          complejidad_maxima: {
+            type: "string",
+            enum: ["simple", "media", "compleja", "muy_compleja"],
+            description: "Nivel de complejidad máxima del turno combinado (determina capacidad del salón)",
           },
         },
         required: [
@@ -296,7 +304,8 @@ export class AgregarServicioTurnoLeraysiTool
           "nuevo_servicio",
           "nuevo_servicio_detalle",
           "nuevo_precio",
-          "nueva_duracion",
+          "duracion_estimada",
+          "complejidad_maxima",
         ],
       },
     };

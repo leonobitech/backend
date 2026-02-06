@@ -28,7 +28,8 @@ export const crearTurnoSchema = z.object({
     "Formato de fecha inválido. Use: YYYY-MM-DD HH:MM o YYYY-MM-DDTHH:MM:SS"
   ),
   precio: z.number().positive("El precio debe ser mayor a 0"),
-  duracion: z.number().positive("La duración debe ser mayor a 0"),
+  duracion_estimada: z.number().positive("La duración estimada debe ser mayor a 0"),
+  complejidad_maxima: z.enum(["simple", "media", "compleja", "muy_compleja"]),
   lead_id: z.number().positive("ID del Lead es requerido para vincular el turno"),
 
   // === Campos opcionales ===
@@ -43,6 +44,8 @@ export interface CrearTurnoResponse {
   fecha_hora: string;
   servicio: string;
   precio: number;
+  duracion_estimada: number;
+  complejidad_maxima: string;
   sena: number;
   link_pago: string;
   mp_preference_id: string;

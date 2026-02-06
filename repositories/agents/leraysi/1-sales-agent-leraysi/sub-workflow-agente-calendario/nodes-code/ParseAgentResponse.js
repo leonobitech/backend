@@ -67,6 +67,7 @@ let resultado = {
   precio: input.precio,
   servicio: input.servicio,
   servicio_detalle: input.servicio_detalle || '',
+  duracion_estimada: input.duracion_estimada || 60,
   complejidad_maxima: input.complejidad_maxima || 'media',
 
   // === Decisión del agente (mapeada) ===
@@ -215,6 +216,9 @@ if (llmResponse.estado === 'servicio_agregado') {
     servicio_detalle: servicioDetalleCombinado,
     // Precio total (mismo nombre que turno_creado)
     precio: llmResponse.precio_total,
+    // Duración y complejidad combinadas (de la tool si disponible, sino fallback a input)
+    duracion_estimada: llmResponse.duracion_estimada || input.duracion_estimada || 60,
+    complejidad_maxima: llmResponse.complejidad_maxima || input.complejidad_maxima || 'media',
     // Seña total (mismo nombre que turno_creado)
     sena_monto: llmResponse.sena || Math.round((llmResponse.precio_total || 0) * 0.30),
 

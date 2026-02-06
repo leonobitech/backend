@@ -50,6 +50,7 @@ export class ConfirmarPagoCompletoTool
       "sena",
       "estado",
       "sena_pagada",
+      "complejidad_maxima",
     ]);
 
     if (turnos.length === 0) {
@@ -57,6 +58,10 @@ export class ConfirmarPagoCompletoTool
     }
 
     const turno = turnos[0];
+
+    // Nombre legible del servicio para emails, WhatsApp, calendario, chatter
+    // Prioridad: servicio_detalle > getServicioLabel(servicio) > código crudo
+    const servicioDisplay = turno.servicio_detalle || this.getServicioLabel(turno.servicio) || turno.servicio;
 
     // Verificar que el turno no esté ya completado o cancelado
     if (turno.estado === "completado") {
@@ -117,8 +122,14 @@ export class ConfirmarPagoCompletoTool
     // =========================================================================
     // PASO 3: Vincular contacto al Lead
     // =========================================================================
+    // Resolver tags CRM: categoría de servicio + complejidad
+    const tagIds = await this.resolveLeadTags(turno.servicio, turno.complejidad_maxima);
+
     await this.odooClient.write("crm.lead", [params.lead_id], {
       partner_id: partnerId,
+      expected_revenue: turno.precio,
+      // [[4, id]] = link existing record (append, no duplicates)
+      tag_ids: tagIds.map((id: number) => [4, id]),
     });
 
     // Registrar en el chatter del Lead
@@ -129,7 +140,7 @@ export class ConfirmarPagoCompletoTool
         <p><strong>Pago de seña confirmado</strong></p>
         <ul>
           <li><strong>Clienta:</strong> ${turno.clienta}</li>
-          <li><strong>Servicio:</strong> ${turno.servicio}</li>
+          <li><strong>Servicio:</strong> ${servicioDisplay}</li>
           <li><strong>Monto seña:</strong> $${turno.sena.toLocaleString()}</li>
           <li><strong>MP Payment ID:</strong> ${params.mp_payment_id}</li>
         </ul>
@@ -193,11 +204,11 @@ export class ConfirmarPagoCompletoTool
       }
 
       const eventValues: Record<string, any> = {
-        name: `Turno: ${turno.servicio} - ${turno.clienta}`,
+        name: `Turno: ${servicioDisplay} - ${turno.clienta}`,
         start: startUTC,
         stop: stopUTC,
         duration: turno.duracion || 1,
-        description: `Servicio: ${turno.servicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${turno.sena}`,
+        description: `Servicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${turno.sena}`,
         partner_ids: [[6, 0, eventPartnerIds]],
         opportunity_id: params.lead_id,
         user_id: effectiveUserId,
@@ -209,7 +220,7 @@ export class ConfirmarPagoCompletoTool
       const deadlineDate = turno.fecha_hora.split(" ")[0];
       activityId = await this.odooClient.createActivity({
         activityType: "meeting",
-        summary: `Turno: ${turno.servicio} - ${turno.clienta}`,
+        summary: `Turno: ${servicioDisplay} - ${turno.clienta}`,
         resModel: "crm.lead",
         resId: params.lead_id,
         dateDeadline: deadlineDate,
@@ -253,7 +264,7 @@ export class ConfirmarPagoCompletoTool
         logger.warn("[ConfirmarPagoCompleto] No sales journal found, skipping invoice creation");
       } else {
         const invoiceDate = new Date().toISOString().split("T")[0];
-        const servicioLabel = this.getServicioLabel(turno.servicio);
+        const servicioLabel = servicioDisplay;
 
         // Buscar factura borrador existente para este turno
         const existingInvoices = await this.odooClient.search(
@@ -386,7 +397,7 @@ export class ConfirmarPagoCompletoTool
 
         const emailHtml = getTurnoConfirmadoEmailTemplate({
           clienta: turno.clienta,
-          servicio: turno.servicio,
+          servicio: servicioDisplay,
           servicio_detalle: turno.servicio_detalle,
           fecha: fechaFormateada,
           hora: horaFormateada,
@@ -471,7 +482,7 @@ export class ConfirmarPagoCompletoTool
               <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #22c55e;">
                 <h3 style="margin: 0 0 15px 0; color: #166534;">Turno Confirmado</h3>
                 <p style="margin: 5px 0;"><strong>👤 Clienta:</strong> ${turno.clienta}</p>
-                <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${turno.servicio}${turno.servicio_detalle ? ` - ${turno.servicio_detalle}` : ''}</p>
+                <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${servicioDisplay}</p>
                 <p style="margin: 5px 0;"><strong>📅 Fecha:</strong> ${fechaFormateadaNotif}</p>
                 <p style="margin: 5px 0;"><strong>⏰ Hora:</strong> ${horaFormateadaNotif}</p>
                 <p style="margin: 5px 0;"><strong>📱 Teléfono:</strong> ${turno.telefono}</p>
@@ -491,7 +502,7 @@ export class ConfirmarPagoCompletoTool
           `;
 
           await this.odooClient.create("mail.mail", {
-            subject: `💰 Pago Confirmado: ${turno.servicio} - ${turno.clienta}`,
+            subject: `💰 Pago Confirmado: ${servicioDisplay} - ${turno.clienta}`,
             body_html: notificationBody,
             email_to: vendorEmail,
             auto_delete: false,
@@ -528,7 +539,7 @@ export class ConfirmarPagoCompletoTool
 
     const mensajeWhatsapp = this.buildWhatsAppMessage({
       clienta: turno.clienta,
-      servicio: turno.servicio,
+      servicio: servicioDisplay,
       fecha: fechaFormateada,
       hora: horaFormateada,
       sena: turno.sena,
@@ -565,7 +576,7 @@ export class ConfirmarPagoCompletoTool
       invoice_name: invoiceName,
       invoice_pdf_base64: invoicePdfBase64,
       mensaje_whatsapp: mensajeWhatsapp,
-      message: `Pago confirmado exitosamente para ${turno.clienta}. Turno para ${turno.servicio} el ${fechaFormateada} a las ${horaFormateada}.${invoiceName ? ` Factura: ${invoiceName}` : ""}`,
+      message: `Pago confirmado exitosamente para ${turno.clienta}. Turno para ${servicioDisplay} el ${fechaFormateada} a las ${horaFormateada}.${invoiceName ? ` Factura: ${invoiceName}` : ""}`,
     };
   }
 
@@ -612,19 +623,99 @@ export class ConfirmarPagoCompletoTool
    */
   private getServicioLabel(servicio: string): string {
     const servicioLabels: Record<string, string> = {
-      corte: "Corte",
-      tintura: "Tintura",
-      mechas: "Mechas",
-      brushing: "Brushing",
-      peinado: "Peinado",
-      tratamiento: "Tratamiento Capilar",
-      manicura: "Manicura",
+      corte_mujer: "Corte mujer",
+      alisado_brasileno: "Alisado brasileño",
+      alisado_keratina: "Alisado con keratina",
+      mechas_completas: "Mechas completas",
+      tintura_raiz: "Tintura raíz",
+      tintura_completa: "Tintura completa",
+      balayage: "Balayage",
+      manicura_simple: "Manicura simple",
+      manicura_semipermanente: "Manicura semipermanente",
       pedicura: "Pedicura",
-      depilacion: "Depilación",
-      maquillaje: "Maquillaje",
-      otro: "Otro",
+      depilacion_cera_piernas: "Depilación cera piernas",
+      depilacion_cera_axilas: "Depilación cera axilas",
+      depilacion_cera_bikini: "Depilación cera bikini",
+      depilacion_laser_piernas: "Depilación láser piernas",
+      depilacion_laser_axilas: "Depilación láser axilas",
     };
     return servicioLabels[servicio] || servicio;
+  }
+
+  /**
+   * Mapea código de servicio Odoo a categoría de tag CRM
+   */
+  private getServicioCategory(servicio: string): string {
+    const categoryMap: Record<string, string> = {
+      corte_mujer: "Corte",
+      alisado_brasileno: "Alisado",
+      alisado_keratina: "Alisado",
+      mechas_completas: "Color",
+      tintura_raiz: "Color",
+      tintura_completa: "Color",
+      balayage: "Color",
+      manicura_simple: "Uñas",
+      manicura_semipermanente: "Uñas",
+      pedicura: "Uñas",
+      depilacion_cera_piernas: "Depilación",
+      depilacion_cera_axilas: "Depilación",
+      depilacion_cera_bikini: "Depilación",
+      depilacion_laser_piernas: "Depilación",
+      depilacion_laser_axilas: "Depilación",
+    };
+    return categoryMap[servicio] || "";
+  }
+
+  /**
+   * Mapea código de complejidad a nombre legible para tag CRM
+   */
+  private getComplejidadLabel(complejidad: string): string {
+    const labels: Record<string, string> = {
+      simple: "Simple",
+      media: "Media",
+      compleja: "Compleja",
+      muy_compleja: "Muy Compleja",
+    };
+    return labels[complejidad] || "";
+  }
+
+  /**
+   * Busca o crea tags en crm.tag y devuelve sus IDs.
+   * Tags: categoría de servicio + complejidad máxima.
+   */
+  private async resolveLeadTags(servicio: string, complejidad: string | null): Promise<number[]> {
+    const tagNames: string[] = [];
+
+    const category = this.getServicioCategory(servicio);
+    if (category) tagNames.push(category);
+
+    if (complejidad) {
+      const complejidadLabel = this.getComplejidadLabel(complejidad);
+      if (complejidadLabel) tagNames.push(complejidadLabel);
+    }
+
+    if (tagNames.length === 0) return [];
+
+    const tagIds: number[] = [];
+    for (const name of tagNames) {
+      // Buscar tag existente
+      const existing = await this.odooClient.search(
+        "crm.tag",
+        [["name", "=", name]],
+        { fields: ["id"], limit: 1 }
+      );
+
+      if (existing.length > 0) {
+        tagIds.push(existing[0].id);
+      } else {
+        // Crear tag si no existe
+        const newId = await this.odooClient.create("crm.tag", { name });
+        tagIds.push(newId);
+        logger.info({ tagName: name, tagId: newId }, "[ConfirmarPagoCompleto] Created new CRM tag");
+      }
+    }
+
+    return tagIds;
   }
 
   /**

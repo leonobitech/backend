@@ -89,29 +89,31 @@ const input = {
 //
 const SERVICIOS_CONFIG = {
   // === CORTE (1 servicio) ===
-  'Corte mujer': { base_min: 45, complejidad: 'media', requiere_largo: true },
+  'Corte mujer': { base_min: 60, complejidad: 'media', requiere_largo: true },
 
   // === ALISADO (2 servicios) ===
-  'Alisado brasileño': { base_min: 150, complejidad: 'muy_compleja', requiere_largo: true },
-  'Alisado keratina': { base_min: 150, complejidad: 'muy_compleja', requiere_largo: true },
+  'Alisado brasileño': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true },
+  'Alisado keratina': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true },
 
   // === COLOR (4 servicios) ===
-  'Mechas completas': { base_min: 120, complejidad: 'muy_compleja', requiere_largo: true },
+  'Mechas completas': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true },
   'Tintura raíz': { base_min: 60, complejidad: 'compleja', requiere_largo: true },
-  'Tintura completa': { base_min: 90, complejidad: 'muy_compleja', requiere_largo: true },
-  'Balayage': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true },
+  'Tintura completa': { base_min: 120, complejidad: 'muy_compleja', requiere_largo: true },
+  'Balayage': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true },
 
   // === UÑAS (3 servicios) ===
-  'Manicura simple': { base_min: 30, complejidad: 'media', requiere_largo: false },
-  'Manicura semipermanente': { base_min: 45, complejidad: 'compleja', requiere_largo: false },
-  'Pedicura': { base_min: 45, complejidad: 'media', requiere_largo: false },
+  // Duración por complejidad: simple=60, media=120, compleja=180
+  'Manicura simple': { base_min: 120, complejidad: 'media', requiere_largo: false },
+  'Manicura semipermanente': { base_min: 180, complejidad: 'compleja', requiere_largo: false },
+  'Pedicura': { base_min: 120, complejidad: 'media', requiere_largo: false },
 
   // === DEPILACIÓN (5 servicios) ===
-  'Depilación cera piernas': { base_min: 45, complejidad: 'media', requiere_largo: false },
-  'Depilación cera axilas': { base_min: 15, complejidad: 'simple', requiere_largo: false },
-  'Depilación cera bikini': { base_min: 20, complejidad: 'simple', requiere_largo: false },
-  'Depilación láser piernas': { base_min: 60, complejidad: 'media', requiere_largo: false },
-  'Depilación láser axilas': { base_min: 30, complejidad: 'simple', requiere_largo: false }
+  // Duración por complejidad: simple=60, media=120, compleja=180
+  'Depilación cera piernas': { base_min: 120, complejidad: 'media', requiere_largo: false },
+  'Depilación cera axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false },
+  'Depilación cera bikini': { base_min: 60, complejidad: 'simple', requiere_largo: false },
+  'Depilación láser piernas': { base_min: 120, complejidad: 'media', requiere_largo: false },
+  'Depilación láser axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false }
 };
 
 // Duración extra (aditiva) según largo del cabello
