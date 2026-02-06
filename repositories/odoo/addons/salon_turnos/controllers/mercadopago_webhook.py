@@ -204,10 +204,13 @@ class MercadoPagoWebhook(http.Controller):
 
         except Exception as e:
             _logger.error(f'[MP Webhook] ERROR CRITICO: {e}', exc_info=True)
+            # ALWAYS return 200 to prevent MercadoPago retry loop.
+            # MP retries on non-200, which causes infinite loops when
+            # concurrent requests hit SerializationFailure errors.
             return Response(
                 json.dumps({'status': 'error', 'message': str(e)}),
                 content_type='application/json',
-                status=500
+                status=200
             )
 
     def _process_payment_notification(self, data):
@@ -255,6 +258,18 @@ class MercadoPagoWebhook(http.Controller):
             if not turno.exists():
                 _logger.warning(f'Turno {external_reference} no encontrado')
                 return {'status': 'error', 'message': 'Turno not found'}
+
+            # =========================================================
+            # ROW LOCKING: Serializar accesos concurrentes al turno
+            # =========================================================
+            # MercadoPago puede enviar notificaciones duplicadas en paralelo.
+            # FOR UPDATE bloquea hasta que otra transacción en esta fila
+            # haga commit, asegurando que el check de deduplicación vea
+            # los registros ya confirmados.
+            request.env.cr.execute(
+                "SELECT id FROM salon_turno WHERE id = %s FOR UPDATE",
+                [turno.id]
+            )
 
             # Deduplicación: verificar si ya procesamos este pago en historial
             PagoModel = request.env['salon.turno.pago'].with_user(1).sudo()
