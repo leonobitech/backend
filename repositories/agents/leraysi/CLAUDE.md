@@ -268,9 +268,9 @@ Filter Process, Register Leads, Buffer Messages, Profile and State Zone, Master 
 
 ```
 When Executed by Another Workflow
-  -> ParseInput (valida, calcula duracion por servicio/complejidad)
+  -> ParseInput (valida, calcula duracion aditiva por servicio+largo_cabello)
   -> GetTurnosSemana (Baserow 852, proximos 7 dias)
-  -> AnalizarDisponibilidad (capacidad: max 6/dia, max 2 pesados, max 1 muy_pesado)
+  -> AnalizarDisponibilidad (capacidad por complejidad: muy_compleja:2, compleja:3, media:4, simple:5)
   -> BuildAgentPrompt (instrucciones deterministicas pre-calculadas)
   -> Agente Calendario (GPT-4.1-mini, temp=0.2 — EJECUTOR, no toma decisiones)
   -> ParseAgentResponse (extrae JSON, mapea estado -> accion)
@@ -281,29 +281,56 @@ When Executed by Another Workflow
       [error]               -> FormatearRespuestaError.js
 ```
 
-### Configuracion de duraciones (ParseInput)
+### 15 Servicios oficiales (ParseInput - SERVICIOS_CONFIG)
 
-| Servicio | Base (min) |
-|----------|-----------|
-| Peinados | 45 |
-| Corte | 60 |
-| Color | 90 |
-| Mechas | 120 |
-| Tintura | 75 |
-| Alisado | 120 |
-| Balayage | 150 |
-| Manicura | 45 |
-| Pedicura | 60 |
-| Depilacion | 30 |
-| Tratamiento | 90 |
+| Servicio | base_min | Complejidad | Req. Largo |
+|----------|----------|-------------|------------|
+| Corte mujer | 45 | media | si |
+| Alisado brasileño | 150 | muy_compleja | si |
+| Alisado keratina | 150 | muy_compleja | si |
+| Mechas completas | 120 | muy_compleja | si |
+| Tintura raíz | 60 | compleja | si |
+| Tintura completa | 90 | muy_compleja | si |
+| Balayage | 180 | muy_compleja | si |
+| Manicura simple | 30 | media | no |
+| Manicura semipermanente | 45 | compleja | no |
+| Pedicura | 45 | media | no |
+| Depilación cera piernas | 45 | media | no |
+| Depilación cera axilas | 15 | simple | no |
+| Depilación cera bikini | 20 | simple | no |
+| Depilación láser piernas | 60 | media | no |
+| Depilación láser axilas | 30 | simple | no |
 
-Multiplicadores: largo cabello (0.8-1.5x), complejidad (0.9-1.4x). Redondeado a 15 min.
+### Sistema de duración (aditivo por largo_cabello)
 
-### Capacidad diaria
-- Max 6 turnos/dia
-- Max 2 pesados/dia (>90 min)
-- Max 1 muy_pesado/dia (>150 min)
-- Jornada: 480 min (8h)
+Para servicios de cabello (`requiere_largo: true`):
+- `corto`: base_min + 0 min
+- `medio`: base_min + 60 min
+- `largo`: base_min + 120 min
+- Sin imagen: base_min (fallback a SERVICIOS_CONFIG)
+
+Para servicios sin cabello: siempre base_min fijo.
+
+Redondeo a múltiplos de 15 min.
+
+### Sistema de complejidad (determinado por largo_cabello)
+
+Para servicios de cabello con análisis de imagen:
+- `corto` → media | `medio` → compleja | `largo` → muy_compleja
+
+Para servicios sin cabello o sin imagen: complejidad fija de SERVICIOS_CONFIG.
+
+### Sistema de precios (determinístico en Input Main)
+
+Para servicios de cabello con análisis de imagen:
+- `corto`: precio base | `medio`: +10% | `largo`: +20%
+
+### Capacidad diaria (AnalizarDisponibilidad)
+- muy_compleja: max 2/dia
+- compleja: max 3/dia
+- media: max 4/dia
+- simple: max 5/dia
+- Jornada: 9am-7pm (10h = 600 min)
 - Domingo: cerrado
 
 ### Config turnos
@@ -478,7 +505,7 @@ Mapea datos normalizados a estructura Baserow: `row_on_create` (defaults), `row_
 `inferRole()` detecta user/assistant/system por patrones HTML/emojis/message_type. Deduplica por ID o hash (role+text+minuto). Cap 200 mensajes.
 
 ### Input Main
-Construye userPrompt con: ultimos 10 mensajes, state actual (stage, service, flags, counters), seccion image_analysis si hay foto, ultimo mensaje a responder.
+Construye userPrompt con: ultimos 10 mensajes, state actual (stage, service, flags, counters), seccion image_analysis si hay foto (con reglas de precio determinísticas: corto=base, medio=+10%, largo=+20%), ultimo mensaje a responder.
 
 ### Output Main (v3.0)
 3 intentos de JSON parsing. Protected fields (row_id, lead_id, chatwoot_id). Contadores monotonicos (`Math.max`). Merge interests (set union). Timestamps automaticos. Notas dinamicas por stage. Sanitiza max 3500 chars.

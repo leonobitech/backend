@@ -113,14 +113,14 @@ State después de Etapa 1:
 │  ┌─────────────────┐                                                       │
 │  │   Input Main    │  userPrompt incluye:                                  │
 │  │    (Image)      │  - Sección "Foto Recibida"                            │
-│  │                 │  - ⚠️ DAR PRESUPUESTO según complejidad               │
+│  │                 │  - ⚠️ AJUSTE PRECIO según largo (corto/medio/largo)               │
 │  └────────┬────────┘                                                       │
 │           │                                                                 │
 │           ▼                                                                 │
 │  ┌─────────────────┐                                                       │
 │  │ Master AI Agent │  LLM calcula:                                         │
-│  │                 │  - Precio base + % por complejidad                    │
-│  │                 │  - Ej: $45,000 + 33% = $60,000                        │
+│  │                 │  - Precio base + % por largo cabello                  │
+│  │                 │  - corto: base, medio: +10%, largo: +20%              │
 │  │                 │  - Pregunta si quiere turno                           │
 │  └────────┬────────┘                                                       │
 │           │                                                                 │
@@ -140,7 +140,7 @@ State después de Etapa 2:
   "presupuesto_dado": true,
   "foto_recibida": true,
   "waiting_image": false,
-  "image_analysis": { "length": "largo", "complexity": "alta", ... }
+  "image_analysis": { "length": "largo", "texture": "rizado", ... }
 }
 ```
 
@@ -216,7 +216,7 @@ State después de Etapa 3:
 │  ├─────────────────────────────────────────────────────────────────────┤   │
 │  │                                                                     │   │
 │  │  ┌─────────────┐                                                    │   │
-│  │  │ ParseInput  │ Valida + mapea servicio + calcula duración         │   │
+│  │  │ ParseInput  │ Valida + calcula duración aditiva + complejidad    │   │
 │  │  └──────┬──────┘                                                    │   │
 │  │         │                                                           │   │
 │  │         ▼                                                           │   │
@@ -502,8 +502,7 @@ explore → consulta → presupuesto → turno_pendiente → pago_pendiente → 
   "fecha_deseada": "2026-01-24",
   "hora_deseada": "15:00",
   "precio": 60000,
-  "complejidad": "alta",
-  "lead_id": 210,
+    "lead_id": 210,
   "row_id": 73,
   "conversation_id": 390
 }

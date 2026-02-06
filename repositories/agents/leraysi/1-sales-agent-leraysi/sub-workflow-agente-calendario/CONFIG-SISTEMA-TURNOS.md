@@ -45,6 +45,10 @@ El sistema usa una tabla de configuración en Baserow que permite ajustar parám
 │  CAPACIDAD_SIMPLE              │ 5            │ Máx turnos simple/día       │
 │  MAX_TURNOS_DIA                │ 8            │ Máx absoluto turnos/día     │
 │                                                                             │
+│  Nota: complejidad se determina por largo_cabello (imagen):                │
+│  corto→media, medio→compleja, largo→muy_compleja                          │
+│  Sin imagen: usa complejidad fija del servicio (SERVICIOS_CONFIG)          │
+│                                                                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  CONFIGURACIÓN DE NOTIFICACIONES                                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -88,7 +92,7 @@ El sistema usa una tabla de configuración en Baserow que permite ajustar parám
 │           │                                                                 │
 │           ▼                                                                 │
 │  3. Calcular duración del servicio                                          │
-│     - Usar config.SERVICIO_DURACION_* según complejidad                    │
+│     - base_min + DURACION_EXTRA_LARGO[largo_cabello] (aditivo)             │
 │           │                                                                 │
 │           ▼                                                                 │
 │  4. Calcular seña                                                           │
@@ -275,6 +279,7 @@ const mensaje = `Tu turno está reservado tentativamente. ` +
 | `email` | Email | Email |
 | `servicio` | Single Select | Código del servicio |
 | `servicio_detalle` | Text | Descripción completa |
+| `complejidad_maxima` | Single Select | muy_compleja/compleja/media/simple |
 | `fecha` | Date | Fecha del turno |
 | `hora` | Text | Hora (HH:MM) |
 | `duracion_min` | Number | Duración en minutos |
