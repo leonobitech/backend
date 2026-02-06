@@ -300,6 +300,20 @@ class MercadoPagoWebhook(http.Controller):
                 )
                 _logger.info(f'Turno {turno.id} confirmado por pago MP {payment_id} - ${monto} ({tipo_pago})')
 
+                # =========================================================
+                # COMMIT: Liberar el row lock ANTES de llamadas externas
+                # =========================================================
+                # El FOR UPDATE mantiene el lock hasta que la transacción
+                # haga commit. Si llamamos al MCP sin hacer commit primero,
+                # el MCP intenta salon.turno.write via xmlrpc (otra conexión)
+                # y queda bloqueado por nuestro lock → timeout/deadlock.
+                #
+                # Commit aquí es seguro porque:
+                # 1. Pago ya registrado → dedup lo protege de duplicados
+                # 2. Turno ya actualizado a 'confirmado'
+                # 3. MCP y n8n son "fire and forget" (no necesitan rollback)
+                request.env.cr.commit()
+
                 # Llamar al MCP para ejecutar el proceso completo de confirmación
                 # (contacto, factura, calendario, email con PDF)
                 mcp_result = self._call_mcp_confirmar_pago(turno, payment_id)
