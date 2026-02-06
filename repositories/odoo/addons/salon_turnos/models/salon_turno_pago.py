@@ -85,10 +85,10 @@ class SalonTurnoPago(models.Model):
         help='Descripción del pago (ej: Seña por Manicura semipermanente)',
     )
 
-    _sql_constraints = [
-        ('mp_payment_id_unique', 'UNIQUE(mp_payment_id)',
-         'El Payment ID de MercadoPago debe ser único'),
-    ]
+    _mp_payment_id_unique = models.Constraint(
+        'UNIQUE(mp_payment_id)',
+        'El Payment ID de MercadoPago debe ser único',
+    )
 
     @api.model
     def registrar_pago(self, turno, payment_id, payment_data, tipo='sena'):
