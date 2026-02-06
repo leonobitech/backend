@@ -58,8 +58,7 @@ if (state.image_analysis) {
   const ajustePrecio = {
     'corto': 'precio base del servicio (sin recargo)',
     'medio': 'precio base + 10%',
-    'largo': 'precio base + 20%',
-    'muy_largo': 'precio base + 20%'
+    'largo': 'precio base + 20%'
   };
   const ajuste = ajustePrecio[ia.length] || 'precio base (largo no detectado)';
 
@@ -72,7 +71,7 @@ ${ia.is_dyed ? "Ya teñido" : "Sin teñir"} | ${ia.has_roots ? "Con raíces" : "
 ⚠️ AJUSTE DE PRECIO SEGÚN LARGO DEL CABELLO:
 - Cabello corto: precio base del servicio
 - Cabello medio: precio base + 10%
-- Cabello largo/muy largo: precio base + 20%
+- Cabello largo: precio base + 20%
 
 Largo detectado: "${ia.length}" → Aplicar: ${ajuste}
 `;

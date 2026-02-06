@@ -119,8 +119,7 @@ const SERVICIOS_CONFIG = {
 const DURACION_EXTRA_LARGO = {
   'corto': 0,
   'medio': 60,
-  'largo': 120,
-  'muy_largo': 120  // Mismo tratamiento que 'largo'
+  'largo': 120
 };
 
 // Mapeo largo_cabello → complejidad para servicios de cabello
@@ -128,8 +127,7 @@ const DURACION_EXTRA_LARGO = {
 const COMPLEJIDAD_POR_LARGO = {
   'corto': 'media',
   'medio': 'compleja',
-  'largo': 'muy_compleja',
-  'muy_largo': 'muy_compleja'
+  'largo': 'muy_compleja'
 };
 
 // ============================================================================
