@@ -54,13 +54,27 @@ const displayName = state.full_name || state.nick_name || "clienta";
 let imageSection = "";
 if (state.image_analysis) {
   const ia = state.image_analysis;
+  // Calcular ajuste de precio según largo del cabello
+  const ajustePrecio = {
+    'corto': 'precio base del servicio (sin recargo)',
+    'medio': 'precio base + 10%',
+    'largo': 'precio base + 20%',
+    'muy_largo': 'precio base + 20%'
+  };
+  const ajuste = ajustePrecio[ia.length] || 'precio base (largo no detectado)';
+
   imageSection = `
 ## Foto Recibida
-Largo: ${ia.length} | Textura: ${ia.texture} | Complejidad: ${ia.complexity}
+Largo: ${ia.length} | Textura: ${ia.texture}
 Condición: ${ia.condition} | Color: ${ia.current_color}
 ${ia.is_dyed ? "Ya teñido" : "Sin teñir"} | ${ia.has_roots ? "Con raíces" : "Sin raíces"}
 
-⚠️ DAR PRESUPUESTO PERSONALIZADO según complejidad "${ia.complexity}"
+⚠️ AJUSTE DE PRECIO SEGÚN LARGO DEL CABELLO:
+- Cabello corto: precio base del servicio
+- Cabello medio: precio base + 10%
+- Cabello largo/muy largo: precio base + 20%
+
+Largo detectado: "${ia.length}" → Aplicar: ${ajuste}
 `;
 }
 

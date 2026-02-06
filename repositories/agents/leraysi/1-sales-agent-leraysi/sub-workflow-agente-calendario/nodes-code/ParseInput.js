@@ -3,7 +3,7 @@
 // ============================================================================
 // Procesa y valida el input del Master AI Agent
 // COMBINA: llm_output (del LLM) + state (de Input Main)
-// Calcula duración basada en servicio + complejidad del cabello
+// Calcula duración basada en servicio + largo del cabello (sistema aditivo)
 // ============================================================================
 
 const raw = $input.first().json;
@@ -69,10 +69,8 @@ const input = {
   turno_id_existente: state.odoo_turno_id || state.turno_id_existente || llmOutput.turno_id_existente || null,
   turno_precio_existente: state.turno_precio_existente || llmOutput.turno_precio_existente || 0,
 
-  // Complejidad del trabajo (aplica a TODOS los servicios)
-  complejidad: state.image_analysis?.complexity || 'media',
   // Largo del cabello (solo para servicios de cabello, null para manicure/pedicure/etc)
-  largo_cabello_raw: state.image_analysis?.length || 'medio'
+  largo_cabello_raw: state.image_analysis?.length || null
 };
 
 // ============================================================================
@@ -116,20 +114,22 @@ const SERVICIOS_CONFIG = {
   'Depilación láser axilas': { base_min: 30, complejidad: 'simple', requiere_largo: false }
 };
 
-// Multiplicadores según largo del cabello
-const MULTIPLICADOR_LARGO = {
-  'corto': 0.8,
-  'medio': 1.0,
-  'largo': 1.3,
-  'muy_largo': 1.5
+// Duración extra (aditiva) según largo del cabello
+// Solo aplica a servicios con requiere_largo: true
+const DURACION_EXTRA_LARGO = {
+  'corto': 0,
+  'medio': 60,
+  'largo': 120,
+  'muy_largo': 120  // Mismo tratamiento que 'largo'
 };
 
-// Multiplicadores según complejidad del trabajo
-const MULTIPLICADOR_COMPLEJIDAD = {
-  'simple': 0.9,
-  'media': 1.0,
-  'compleja': 1.2,
-  'muy_compleja': 1.4
+// Mapeo largo_cabello → complejidad para servicios de cabello
+// Reemplaza la complejidad fija de SERVICIOS_CONFIG cuando hay análisis de imagen
+const COMPLEJIDAD_POR_LARGO = {
+  'corto': 'media',
+  'medio': 'compleja',
+  'largo': 'muy_compleja',
+  'muy_largo': 'muy_compleja'
 };
 
 // ============================================================================
@@ -175,49 +175,55 @@ const conversation_id = input.conversation_id || null;
 
 // Análisis de imagen (si existe)
 const image_analysis = input.image_analysis || null;
-const complejidad = image_analysis?.complexity || input.complejidad || 'media';
 
 // Largo de cabello: solo aplica si algún servicio lo requiere
 // Para Manicure, Pedicure, Maquillaje → largo_cabello = null
+// Sin imagen → null (fallback a SERVICIOS_CONFIG defaults)
 const serviciosArray = Array.isArray(input.servicio) ? input.servicio : [input.servicio];
 const requiereLargo = algunServicioRequiereLargo(serviciosArray);
 const largo_cabello = requiereLargo
-  ? (image_analysis?.length || input.largo_cabello_raw || 'medio')
+  ? (image_analysis?.length || input.largo_cabello_raw || null)
   : null;
 
 // ============================================================================
 // CÁLCULO DE DURACIÓN ESTIMADA
 // ============================================================================
-function calcularDuracion(servicios, largo, complejidad) {
+function calcularDuracion(servicios, largo) {
   let duracionTotal = 0;
 
   for (const srv of servicios) {
     const config = SERVICIOS_CONFIG[srv];
     if (config) {
-      duracionTotal += config.base_min;
+      let duracionServicio = config.base_min;
+      // Solo agregar tiempo extra si el servicio requiere largo Y hay dato de largo
+      if (config.requiere_largo && largo) {
+        duracionServicio += (DURACION_EXTRA_LARGO[largo] || 0);
+      }
+      duracionTotal += duracionServicio;
     } else {
       // Servicio no mapeado, usar 60 min por defecto
       duracionTotal += 60;
     }
   }
 
-  // Aplicar multiplicadores
-  // largo puede ser null para servicios sin cabello (manicure, pedicure, etc.)
-  const multLargo = largo ? (MULTIPLICADOR_LARGO[largo] || 1.0) : 1.0;
-  const multComplejidad = MULTIPLICADOR_COMPLEJIDAD[complejidad] || 1.0;
-
-  duracionTotal = Math.round(duracionTotal * multLargo * multComplejidad);
-
   // Redondear a múltiplos de 15 minutos
   return Math.ceil(duracionTotal / 15) * 15;
 }
 
 // Determinar la complejidad más alta entre los servicios solicitados
+// Para servicios de cabello: largo_cabello determina complejidad (via COMPLEJIDAD_POR_LARGO)
+// Para servicios sin cabello: usa complejidad fija de SERVICIOS_CONFIG
 // Orden de prioridad: muy_compleja > compleja > media > simple
-function obtenerComplejidadMaxima(servicios) {
+function obtenerComplejidadMaxima(servicios, largo) {
   const complejidades = servicios.map(srv => {
     const config = SERVICIOS_CONFIG[srv];
-    return config?.complejidad || 'media';
+    if (!config) return 'media';
+    // Si requiere largo Y hay dato de largo → usar COMPLEJIDAD_POR_LARGO
+    if (config.requiere_largo && largo) {
+      return COMPLEJIDAD_POR_LARGO[largo] || config.complejidad;
+    }
+    // Sin largo o servicio sin cabello → usar complejidad fija
+    return config.complejidad;
   });
 
   if (complejidades.includes('muy_compleja')) return 'muy_compleja';
@@ -226,8 +232,8 @@ function obtenerComplejidadMaxima(servicios) {
   return 'simple';
 }
 
-const duracion_estimada = calcularDuracion(servicio, largo_cabello, complejidad);
-const complejidad_maxima = obtenerComplejidadMaxima(servicio);
+const duracion_estimada = calcularDuracion(servicio, largo_cabello);
+const complejidad_maxima = obtenerComplejidadMaxima(servicio, largo_cabello);
 const servicio_detalle = servicio.join(' + ');
 
 // ============================================================================
@@ -253,7 +259,6 @@ return [{
     // Análisis de imagen
     image_analysis,
     largo_cabello,
-    complejidad,
 
     // IDs de contexto
     lead_id: input.lead_id,
