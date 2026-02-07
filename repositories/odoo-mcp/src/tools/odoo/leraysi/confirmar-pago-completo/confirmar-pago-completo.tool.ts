@@ -48,9 +48,11 @@ export class ConfirmarPagoCompletoTool
       "duracion",
       "precio",
       "sena",
+      "monto_pago_pendiente",
       "estado",
       "sena_pagada",
       "complejidad_maxima",
+      "odoo_event_id",
     ]);
 
     if (turnos.length === 0) {
@@ -62,6 +64,10 @@ export class ConfirmarPagoCompletoTool
     // Nombre legible del servicio para emails, WhatsApp, calendario, chatter
     // Prioridad: servicio_detalle > getServicioLabel(servicio) > código crudo
     const servicioDisplay = turno.servicio_detalle || this.getServicioLabel(turno.servicio) || turno.servicio;
+
+    // Monto real pagado: usar monto_pago_pendiente (seteado por crear-turno o agregar-servicio)
+    // Fallback a sena (computed = precio*0.30) si monto_pago_pendiente no está seteado
+    const montoPagado = (turno.monto_pago_pendiente > 0) ? turno.monto_pago_pendiente : turno.sena;
 
     // Verificar que el turno no esté ya completado o cancelado
     if (turno.estado === "completado") {
@@ -122,14 +128,38 @@ export class ConfirmarPagoCompletoTool
     // =========================================================================
     // PASO 3: Vincular contacto al Lead
     // =========================================================================
-    // Resolver tags CRM: categoría de servicio + complejidad
-    const tagIds = await this.resolveLeadTags(turno.servicio, turno.complejidad_maxima);
+    // Resolver tags CRM: categorías de TODOS los servicios + complejidad
+    const tagIds = await this.resolveLeadTags(
+      turno.servicio,
+      turno.complejidad_maxima,
+      turno.servicio_detalle
+    );
+
+    // Leer tags actuales del lead para reemplazar complejidad (en vez de acumular)
+    const complexityNames = ["Simple", "Media", "Compleja", "Muy Compleja"];
+    let tagCommands: any[] = tagIds.map((id: number) => [4, id]); // link new tags
+
+    try {
+      const leadData = await this.odooClient.read("crm.lead", [params.lead_id], ["tag_ids"]);
+      if (leadData.length > 0 && leadData[0].tag_ids?.length > 0) {
+        // Buscar tags de complejidad existentes para removerlos
+        const existingComplexityTags = await this.odooClient.search(
+          "crm.tag",
+          [["id", "in", leadData[0].tag_ids], ["name", "in", complexityNames]],
+          { fields: ["id"] }
+        );
+        // Unlink old complexity tags antes de agregar el nuevo
+        const unlinkCommands = existingComplexityTags.map((t: any) => [3, t.id]);
+        tagCommands = [...unlinkCommands, ...tagCommands];
+      }
+    } catch (error) {
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not read existing lead tags");
+    }
 
     await this.odooClient.write("crm.lead", [params.lead_id], {
       partner_id: partnerId,
       expected_revenue: turno.precio,
-      // [[4, id]] = link existing record (append, no duplicates)
-      tag_ids: tagIds.map((id: number) => [4, id]),
+      tag_ids: tagCommands,
     });
 
     // Registrar en el chatter del Lead
@@ -141,7 +171,7 @@ export class ConfirmarPagoCompletoTool
         <ul>
           <li><strong>Clienta:</strong> ${turno.clienta}</li>
           <li><strong>Servicio:</strong> ${servicioDisplay}</li>
-          <li><strong>Monto seña:</strong> $${turno.sena.toLocaleString()}</li>
+          <li><strong>Monto pagado:</strong> $${montoPagado.toLocaleString()}</li>
           <li><strong>MP Payment ID:</strong> ${params.mp_payment_id}</li>
         </ul>
         <p>Contacto vinculado automáticamente.</p>
@@ -208,26 +238,54 @@ export class ConfirmarPagoCompletoTool
         start: startUTC,
         stop: stopUTC,
         duration: turno.duracion || 1,
-        description: `Servicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${turno.sena}`,
+        description: `Servicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${montoPagado}`,
         partner_ids: [[6, 0, eventPartnerIds]],
         opportunity_id: params.lead_id,
         user_id: effectiveUserId,
       };
 
-      eventId = await this.odooClient.create("calendar.event", eventValues);
+      // Verificar si ya existe un evento de calendario para este turno
+      const existingEventId = turno.odoo_event_id as number;
 
-      // Crear actividad vinculada (extraer fecha de la hora local Argentina)
-      const deadlineDate = turno.fecha_hora.split(" ")[0];
-      activityId = await this.odooClient.createActivity({
-        activityType: "meeting",
-        summary: `Turno: ${servicioDisplay} - ${turno.clienta}`,
-        resModel: "crm.lead",
-        resId: params.lead_id,
-        dateDeadline: deadlineDate,
-        userId: effectiveUserId,
-        note: `Turno confirmado para ${turno.clienta}`,
-        calendarEventId: eventId,
-      });
+      if (existingEventId) {
+        // ACTUALIZAR evento existente (evita duplicados y emails de calendario extra)
+        try {
+          await this.odooClient.write("calendar.event", [existingEventId], eventValues);
+          eventId = existingEventId;
+          logger.info(
+            { eventId, turnoId: params.turno_id },
+            "[ConfirmarPagoCompleto] Updated existing calendar event"
+          );
+        } catch (updateError) {
+          // Si falla la actualización (evento borrado?), crear uno nuevo
+          logger.warn({ updateError, existingEventId }, "[ConfirmarPagoCompleto] Could not update event, creating new");
+          eventId = await this.odooClient.create("calendar.event", eventValues);
+          await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: eventId });
+        }
+      } else {
+        // CREAR nuevo evento y guardar el ID en el turno
+        eventId = await this.odooClient.create("calendar.event", eventValues);
+        await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: eventId });
+        logger.info(
+          { eventId, turnoId: params.turno_id },
+          "[ConfirmarPagoCompleto] Created new calendar event and stored ID"
+        );
+      }
+
+      // Crear actividad vinculada (solo si es evento nuevo, no en actualización)
+      if (!existingEventId) {
+        const deadlineDate = turno.fecha_hora.split(" ")[0];
+        activityId = await this.odooClient.createActivity({
+          activityType: "meeting",
+          summary: `Turno: ${servicioDisplay} - ${turno.clienta}`,
+          resModel: "crm.lead",
+          resId: params.lead_id,
+          dateDeadline: deadlineDate,
+          userId: effectiveUserId,
+          note: `Turno confirmado para ${turno.clienta}`,
+          calendarEventId: eventId,
+        });
+      }
     } catch (error) {
       logger.warn({ error }, "[ConfirmarPagoCompleto] Could not create calendar event/activity");
     }
@@ -292,7 +350,7 @@ export class ConfirmarPagoCompletoTool
             move_id: invoiceId,
             name: `Seña adicional - ${servicioLabel} - Turno #${params.turno_id}`,
             quantity: 1,
-            price_unit: turno.sena,
+            price_unit: montoPagado,
           };
 
           if (accountId) {
@@ -318,7 +376,7 @@ export class ConfirmarPagoCompletoTool
           const invoiceLineValues: any = {
             name: `Seña - ${servicioLabel} - Turno #${params.turno_id}`,
             quantity: 1,
-            price_unit: turno.sena,
+            price_unit: montoPagado,
           };
 
           if (accountId) {
@@ -353,18 +411,18 @@ export class ConfirmarPagoCompletoTool
           }
         }
 
-        // Generar PDF usando reporte nativo de factura de Odoo
+        // Generar PDF usando método público wrapper (XML-RPC no puede llamar _render_qweb_pdf)
         if (invoiceId) {
           try {
             const reportResult = await this.odooClient.execute(
-              "ir.actions.report",
-              "_render_qweb_pdf",
+              "salon.turno",
+              "render_invoice_pdf",
               ["account.account_invoices", [invoiceId]],
               {}
             );
 
             if (reportResult && reportResult[0]) {
-              invoicePdfBase64 = Buffer.from(reportResult[0], "binary").toString("base64");
+              invoicePdfBase64 = reportResult[0]; // Ya viene en base64 desde el método Odoo
             }
           } catch (pdfError) {
             logger.warn({ pdfError }, "[ConfirmarPagoCompleto] Could not generate invoice PDF");
@@ -402,8 +460,8 @@ export class ConfirmarPagoCompletoTool
           fecha: fechaFormateada,
           hora: horaFormateada,
           precio: turno.precio,
-          sena: turno.sena,
-          monto_restante: turno.precio - turno.sena,
+          sena: montoPagado,
+          monto_restante: turno.precio - turno.sena, // Restante = precio total - seña teórica (30%)
           mp_payment_id: params.mp_payment_id,
           direccion: "Buenos Aires, Argentina", // TODO: Hacer configurable
         });
@@ -431,13 +489,7 @@ export class ConfirmarPagoCompletoTool
         }
 
         await this.odooClient.create("mail.mail", mailValues);
-
-        // Procesar cola de emails
-        try {
-          await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
-        } catch {
-          // Email quedará en cola, será enviado por el cron de Odoo
-        }
+        // Email queda en estado "outgoing", el cron de Odoo lo envía automáticamente
       } catch (error) {
         logger.warn({ error }, "[ConfirmarPagoCompleto] Could not send confirmation email");
       }
@@ -491,7 +543,7 @@ export class ConfirmarPagoCompletoTool
               <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <h4 style="margin: 0 0 10px 0; color: #166534;">💳 Detalle del Pago</h4>
                 <p style="margin: 5px 0;"><strong>Precio total:</strong> $${turno.precio.toLocaleString('es-AR')}</p>
-                <p style="margin: 5px 0;"><strong>Seña pagada:</strong> $${turno.sena.toLocaleString('es-AR')}</p>
+                <p style="margin: 5px 0;"><strong>Monto pagado:</strong> $${montoPagado.toLocaleString('es-AR')}</p>
                 <p style="margin: 5px 0;"><strong>Restante:</strong> $${(turno.precio - turno.sena).toLocaleString('es-AR')}</p>
                 <p style="margin: 5px 0; color: #666; font-size: 12px;"><strong>MP ID:</strong> ${params.mp_payment_id}</p>
               </div>
@@ -502,18 +554,13 @@ export class ConfirmarPagoCompletoTool
           `;
 
           await this.odooClient.create("mail.mail", {
-            subject: `💰 Pago Confirmado: ${servicioDisplay} - ${turno.clienta}`,
+            subject: `Pago Confirmado: ${servicioDisplay} - ${turno.clienta}`,
             body_html: notificationBody,
             email_to: vendorEmail,
             auto_delete: false,
             state: "outgoing"
           });
-
-          try {
-            await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
-          } catch {
-            // Email quedará en cola, será enviado por el cron de Odoo
-          }
+          // Email queda en estado "outgoing", el cron de Odoo lo envía automáticamente
         }
       }
     } catch (error) {
@@ -542,7 +589,7 @@ export class ConfirmarPagoCompletoTool
       servicio: servicioDisplay,
       fecha: fechaFormateada,
       hora: horaFormateada,
-      sena: turno.sena,
+      sena: montoPagado,
       mp_payment_id: params.mp_payment_id,
       email: emailToUse,
     });
@@ -566,7 +613,7 @@ export class ConfirmarPagoCompletoTool
         servicio_detalle: turno.servicio_detalle || null,
         fecha_hora: turno.fecha_hora,
         precio: turno.precio,
-        sena: turno.sena,
+        sena: montoPagado,
         estado: "confirmado",
       },
       partner_id: partnerId,
@@ -643,6 +690,37 @@ export class ConfirmarPagoCompletoTool
   }
 
   /**
+   * Reverse lookup: nombre display → código Odoo.
+   * Ej: "Alisado con keratina" → "alisado_keratina"
+   */
+  private findServicioCode(displayName: string): string | null {
+    const normalized = displayName.toLowerCase().trim();
+    const servicioLabels: Record<string, string> = {
+      corte_mujer: "corte mujer",
+      alisado_brasileno: "alisado brasileño",
+      alisado_keratina: "alisado con keratina",
+      mechas_completas: "mechas completas",
+      tintura_raiz: "tintura raíz",
+      tintura_completa: "tintura completa",
+      balayage: "balayage",
+      manicura_simple: "manicura simple",
+      manicura_semipermanente: "manicura semipermanente",
+      pedicura: "pedicura",
+      depilacion_cera_piernas: "depilación cera piernas",
+      depilacion_cera_axilas: "depilación cera axilas",
+      depilacion_cera_bikini: "depilación cera bikini",
+      depilacion_laser_piernas: "depilación láser piernas",
+      depilacion_laser_axilas: "depilación láser axilas",
+    };
+    for (const [code, label] of Object.entries(servicioLabels)) {
+      if (normalized === label || normalized.includes(label) || label.includes(normalized)) {
+        return code;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Mapea código de servicio Odoo a categoría de tag CRM
    */
   private getServicioCategory(servicio: string): string {
@@ -683,11 +761,31 @@ export class ConfirmarPagoCompletoTool
    * Busca o crea tags en crm.tag y devuelve sus IDs.
    * Tags: categoría de servicio + complejidad máxima.
    */
-  private async resolveLeadTags(servicio: string, complejidad: string | null): Promise<number[]> {
+  private async resolveLeadTags(
+    servicio: string,
+    complejidad: string | null,
+    servicioDetalle?: string
+  ): Promise<number[]> {
     const tagNames: string[] = [];
 
-    const category = this.getServicioCategory(servicio);
-    if (category) tagNames.push(category);
+    // Si hay servicio_detalle con múltiples servicios (formato "Servicio A + Servicio B"),
+    // extraer categoría de cada uno
+    if (servicioDetalle && servicioDetalle.includes("+")) {
+      const servicios = servicioDetalle.split("+").map((s) => s.trim());
+      const categories = new Set<string>();
+      for (const srv of servicios) {
+        const code = this.findServicioCode(srv);
+        if (code) {
+          const cat = this.getServicioCategory(code);
+          if (cat) categories.add(cat);
+        }
+      }
+      categories.forEach((c) => tagNames.push(c));
+    } else {
+      // Servicio único - comportamiento original
+      const category = this.getServicioCategory(servicio);
+      if (category) tagNames.push(category);
+    }
 
     if (complejidad) {
       const complejidadLabel = this.getComplejidadLabel(complejidad);

@@ -91,7 +91,7 @@ export class AgregarServicioTurnoLeraysiTool
       "[AgregarServicioTurno] Adding service to existing appointment"
     );
 
-    // 1. Leer el turno existente (incluyendo sena para calcular diferencia)
+    // 1. Leer el turno existente (incluyendo total_pagado para calcular diferencia de seña)
     const turnos = await this.odooClient.read("salon.turno", [params.turno_id], [
       "clienta",
       "telefono",
@@ -103,6 +103,7 @@ export class AgregarServicioTurnoLeraysiTool
       "duracion",
       "estado",
       "sena",
+      "total_pagado",
       "lead_id",
       "mp_preference_id",
     ]);
@@ -113,10 +114,12 @@ export class AgregarServicioTurnoLeraysiTool
 
     const turnoExistente = turnos[0];
     const estadoAnterior = turnoExistente.estado as string;
-    const senaPagada = (turnoExistente.sena as number) || 0;
+    // Usar total_pagado (computed desde pago_ids) en vez de sena (computed = precio*0.30)
+    const totalPagado = (turnoExistente.total_pagado as number) || 0;
+    const mpPreferenceAnterior = (turnoExistente.mp_preference_id as string) || "";
 
     logger.info(
-      { turnoExistente, estadoAnterior, senaPagada },
+      { turnoExistente, estadoAnterior, totalPagado, mpPreferenceAnterior },
       "[AgregarServicioTurno] Found existing appointment"
     );
 
@@ -131,53 +134,61 @@ export class AgregarServicioTurnoLeraysiTool
       SERVICIO_DISPLAY[params.nuevo_servicio] || params.nuevo_servicio;
     const servicioDetalleCombinado = `${detalleExistente} + ${nuevoDetalle}`;
 
-    // 3. Sumar precios y duraciones
+    // 3. Sumar precios. Duración viene ya como total de ParseInput (todos los servicios sumados)
     const precioExistente = (turnoExistente.precio as number) || 0;
-    const duracionExistente = (turnoExistente.duracion as number) || 1;
     const precioTotal = precioExistente + params.nuevo_precio;
-    const duracionTotal = duracionExistente + (params.duracion_estimada / 60); // Convertir minutos → horas
+    // ParseInput.js calcularDuracion() ya suma TODOS los servicios (existente + nuevo)
+    // No sumar la duración existente del turno para evitar double-counting
+    const duracionTotal = params.duracion_estimada / 60; // Convertir minutos → horas (ya es el total)
 
-    // 4. Calcular seña: si ya pagó, solo cobrar la diferencia
-    const senaTotalNueva = precioTotal * 0.3;
-    let senaAPagar: number;
+    // 4. Calcular monto a pagar: seña del nuevo total menos lo ya pagado
+    const senaTotalNueva = Math.round(precioTotal * 0.3);
+    let montoAPagar: number;
 
-    if (estadoAnterior === "confirmado") {
-      // Ya pagó la seña anterior, solo cobrar la diferencia
-      senaAPagar = Math.max(0, senaTotalNueva - senaPagada);
+    if (totalPagado > 0) {
+      // Ya pagó algo, solo cobrar la diferencia
+      montoAPagar = Math.max(0, senaTotalNueva - totalPagado);
       logger.info(
-        { senaPagada, senaTotalNueva, senaAPagar },
+        { totalPagado, senaTotalNueva, montoAPagar },
         "[AgregarServicioTurno] Calculating difference (already paid)"
       );
     } else {
       // No ha pagado, cobrar la seña total nueva
-      senaAPagar = senaTotalNueva;
+      montoAPagar = senaTotalNueva;
       logger.info(
-        { senaAPagar },
+        { montoAPagar },
         "[AgregarServicioTurno] Full new deposit (not paid yet)"
       );
     }
 
     // 5. Actualizar el turno en Odoo
-    // IMPORTANTE: Actualizamos `sena` con el monto a pagar (diferencia o total)
-    // para que action_generar_link_pago genere el link correcto
+    // NOTA: `sena` es computed (precio*0.30), no se puede escribir.
+    // Usamos `monto_pago_pendiente` para que action_generar_link_pago genere el link correcto.
     await this.odooClient.write("salon.turno", [params.turno_id], {
       servicio_detalle: servicioDetalleCombinado,
       precio: precioTotal,
       duracion: duracionTotal,
       complejidad_maxima: params.complejidad_maxima,
-      sena: senaAPagar, // Solo el monto pendiente de pago
+      monto_pago_pendiente: montoAPagar, // Monto real a cobrar (diferencia o total)
       estado: "pendiente_pago",
     });
 
     logger.info(
-      { turnoId: params.turno_id, precioTotal, duracionTotal, senaAPagar },
+      { turnoId: params.turno_id, precioTotal, duracionTotal, montoAPagar },
       "[AgregarServicioTurno] Appointment updated"
     );
 
-    // 6. Regenerar link de pago (usará el campo `sena` que actualizamos)
+    // 6. Regenerar link de pago (usará monto_pago_pendiente que acabamos de setear)
     let linkPago = "";
     let mpPreferenceId = "";
     try {
+      if (mpPreferenceAnterior) {
+        logger.info(
+          { mpPreferenceAnterior, turnoId: params.turno_id },
+          "[AgregarServicioTurno] Previous MP preference will be replaced"
+        );
+      }
+
       await this.odooClient.execute(
         "salon.turno",
         "action_generar_link_pago",
@@ -201,9 +212,6 @@ export class AgregarServicioTurnoLeraysiTool
       );
     }
 
-    // 7. La seña que retornamos es lo que tiene que pagar ahora
-    const sena = senaAPagar;
-
     return {
       turnoId: params.turno_id,
       clienta: turnoExistente.clienta as string,
@@ -214,7 +222,7 @@ export class AgregarServicioTurnoLeraysiTool
       duracion_total: duracionTotal,
       duracion_estimada: params.duracion_estimada,
       complejidad_maxima: params.complejidad_maxima,
-      sena,
+      sena: montoAPagar, // Lo que tiene que pagar ahora
       link_pago: linkPago,
       mp_preference_id: mpPreferenceId,
       estado: "pendiente_pago",

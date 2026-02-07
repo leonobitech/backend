@@ -86,6 +86,7 @@ export class CrearTurnoLeraysiTool
     fechaHora = this.argentinaToUTC(fechaHora);
 
     // Crear el turno en salon.turno
+    const senaInicial = Math.round(params.precio * 0.3);
     const values: Record<string, any> = {
       clienta: params.clienta,
       telefono: params.telefono,
@@ -96,6 +97,7 @@ export class CrearTurnoLeraysiTool
       precio: params.precio,
       duracion: params.duracion_estimada / 60, // Convertir minutos → horas para Odoo
       complejidad_maxima: params.complejidad_maxima,
+      monto_pago_pendiente: senaInicial, // Monto real a cobrar (usado por action_generar_link_pago)
       lead_id: params.lead_id,
       estado: "pendiente_pago",
     };
