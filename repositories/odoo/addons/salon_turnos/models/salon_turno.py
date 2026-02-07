@@ -1,5 +1,6 @@
 import logging
 import requests
+import base64
 from odoo import models, fields, api
 from odoo.exceptions import UserError
 
@@ -98,6 +99,14 @@ class SalonTurno(models.Model):
         default=False,
         tracking=True,
     )
+    monto_pago_pendiente = fields.Float(
+        string='Monto Pago Pendiente',
+        default=0,
+        tracking=True,
+        help='Monto real a cobrar en el próximo pago. '
+             'Para turno nuevo: igual a seña (30%). '
+             'Para agregar servicio: diferencia entre seña nueva y pagada.',
+    )
     monto_restante = fields.Float(
         string='Monto Restante',
         compute='_compute_monto_restante',
@@ -134,6 +143,14 @@ class SalonTurno(models.Model):
         string='Cantidad de Pagos',
         compute='_compute_total_pagado',
         store=True,
+    )
+
+    # Calendario
+    odoo_event_id = fields.Integer(
+        string='Calendar Event ID',
+        readonly=True,
+        help='ID del evento de calendario asociado. '
+             'Se usa para actualizar el evento existente en vez de crear duplicados.',
     )
 
     # Estado
@@ -214,6 +231,9 @@ class SalonTurno(models.Model):
                 'Configure en Ajustes > Parámetros del Sistema > salon_turnos.mp_access_token'
             )
 
+        # Determinar monto a cobrar: monto_pago_pendiente si está seteado, sino seña estándar
+        monto_a_cobrar = self.monto_pago_pendiente if self.monto_pago_pendiente > 0 else self.sena
+
         # Crear preferencia de pago
         # NOTA: notification_url se configura desde el panel de MercadoPago,
         # no desde el código, para evitar problemas con webhooks IPN legacy.
@@ -225,7 +245,7 @@ class SalonTurno(models.Model):
                 'description': f'Turno para {self.clienta} el {self.fecha_hora}',
                 'quantity': 1,
                 'currency_id': 'ARS',
-                'unit_price': self.sena,
+                'unit_price': monto_a_cobrar,
             }],
             'payer': {
                 'name': self.clienta,
@@ -260,7 +280,8 @@ class SalonTurno(models.Model):
             })
 
             _logger.info(
-                f'Link de pago generado para turno {self.id}: {self.link_pago}'
+                f'Link de pago generado para turno {self.id}: {self.link_pago} '
+                f'(monto: {monto_a_cobrar})'
             )
 
             return {
@@ -302,6 +323,28 @@ class SalonTurno(models.Model):
         else:
             self.write({'estado': 'pendiente_pago'})
         self.message_post(body='Turno reabierto')
+
+    def render_invoice_pdf(self, report_name, record_ids):
+        """
+        Wrapper público para generar PDF de factura via XML-RPC.
+        _render_qweb_pdf es privado y no se puede llamar por XML-RPC.
+
+        Args:
+            report_name: str - nombre del reporte (ej: 'account.account_invoices')
+            record_ids: list[int] - IDs de los registros a renderizar
+
+        Returns:
+            list[str, str] - [pdf_base64, report_type]
+        """
+        report = self.env['ir.actions.report']._get_report_from_name(report_name)
+        if not report:
+            raise UserError(f'Reporte no encontrado: {report_name}')
+
+        pdf_content, report_type = report._render_qweb_pdf(
+            report_name, record_ids
+        )
+        pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
+        return [pdf_base64, report_type]
 
     @api.model
     def api_crear_turno(self, data):
@@ -429,6 +472,7 @@ class SalonTurno(models.Model):
             'precio': self.precio,
             'sena': self.sena,
             'sena_pagada': self.sena_pagada,
+            'monto_pago_pendiente': self.monto_pago_pendiente,
             'monto_restante': self.monto_restante,
             'link_pago': self.link_pago,
             'mp_preference_id': self.mp_preference_id,
@@ -444,6 +488,7 @@ class SalonTurno(models.Model):
                 'fecha': p.fecha.isoformat() if p.fecha else None,
                 'descripcion': p.descripcion,
             } for p in self.pago_ids],
+            'odoo_event_id': self.odoo_event_id,
             'complejidad_maxima': self.complejidad_maxima,
             'estado': self.estado,
             'notas': self.notas,
