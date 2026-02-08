@@ -225,6 +225,145 @@ if (input.turno_agendado && input.lead_row_id) {
   }
 }
 
+// ============================================================================
+// CÁLCULO DE SLOTS POR HORA (solo para modo consultar_disponibilidad)
+// ============================================================================
+const modo = input.modo || null;
+let slotsRecomendados = [];
+
+if (modo === 'consultar_disponibilidad') {
+  const APERTURA = 9 * 60;   // 09:00 = 540 min
+  const CIERRE = 19 * 60;    // 19:00 = 1140 min
+  const STEP = 30;            // granularidad 30 min
+  const duracionServicio = input.duracion_estimada || 60;
+  const horaPreferida = input.hora_deseada ? (() => {
+    const parts = input.hora_deseada.split(':');
+    return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');
+  })() : null;
+  const preferencia = input.preferencia_horario || null;
+
+  const ahora = new Date();
+  // Usar hora Argentina (UTC-3)
+  const ahoraArgentina = new Date(ahora.getTime() - 3 * 60 * 60 * 1000);
+  const ahoraMin = ahoraArgentina.getUTCHours() * 60 + ahoraArgentina.getUTCMinutes();
+  const hoyStr = ahoraArgentina.toISOString().split('T')[0];
+
+  function horaToMinutos(horaStr) {
+    if (!horaStr) return 9 * 60;
+    const parts = horaStr.split(':');
+    return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');
+  }
+
+  function minutosToHora(min) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  // Filtrar dias disponibles y priorizarlos
+  // REGLA DE NEGOCIO: No se aceptan turnos para el mismo día. Mínimo = mañana.
+  let diasBusqueda = dias.filter(d => d.abierto && d.disponible && d.fecha !== hoyStr);
+
+  // Si se pidió una fecha específica, priorizarla
+  if (fechaSolicitada) {
+    const diaReq = diasBusqueda.find(d => d.fecha === fechaSolicitada);
+    const diasOtros = diasBusqueda.filter(d => d.fecha !== fechaSolicitada);
+    diasBusqueda = diaReq ? [diaReq, ...diasOtros] : diasOtros;
+  }
+
+  // Solo buscar en los próximos 14 días para consulta
+  diasBusqueda = diasBusqueda.slice(0, 14);
+
+  const candidatos = [];
+
+  for (const dia of diasBusqueda) {
+    if (candidatos.length >= 9) break; // suficientes candidatos
+
+    // Obtener turnos del día con sus bloques de tiempo
+    const turnosDelDia = (turnosPorDia[dia.fecha]?.turnos || []).map(t => {
+      const horaStr = t.hora || '09:00';
+      const startMin = horaToMinutos(horaStr);
+      const dur = t.duracion_min || 60;
+      return { start: startMin, end: startMin + dur };
+    });
+
+    // Generar slots disponibles
+    for (let start = APERTURA; start + duracionServicio <= CIERRE; start += STEP) {
+      const end = start + duracionServicio;
+
+      // Hoy ya está excluido en diasBusqueda (regla de negocio: mínimo mañana)
+
+      // Verificar que no solape con ningún turno existente
+      const solapa = turnosDelDia.some(o => start < o.end && end > o.start);
+      if (solapa) continue;
+
+      // Puntuar el slot
+      let score = 0;
+      let motivo = 'Horario disponible';
+
+      // +10 si coincide con hora_deseada exacta
+      if (horaPreferida !== null && start === horaPreferida) {
+        score += 10;
+        motivo = 'Horario solicitado disponible';
+      }
+
+      // +8 si es el día solicitado
+      if (dia.fecha === fechaSolicitada) {
+        score += 8;
+      }
+
+      // +5 si encaja en preferencia de horario
+      if (preferencia === 'manana' && start >= APERTURA && start < 12 * 60) {
+        score += 5;
+        if (motivo === 'Horario disponible') motivo = 'Disponible por la mañana';
+      } else if (preferencia === 'tarde' && start >= 13 * 60 && start < CIERRE) {
+        score += 5;
+        if (motivo === 'Horario disponible') motivo = 'Disponible por la tarde';
+      }
+
+      // +3 si está adyacente a otro turno (pack calendar)
+      if (turnosDelDia.length > 0) {
+        const minGap = Math.min(...turnosDelDia.map(o =>
+          Math.min(Math.abs(start - o.end), Math.abs(o.start - end))
+        ));
+        if (minGap <= 30) score += 3;
+      }
+
+      // +2 si el día tiene baja carga
+      const loadPct = dia.carga_porcentaje || 0;
+      if (loadPct < 30) score += 2;
+
+      candidatos.push({
+        fecha: dia.fecha,
+        hora: minutosToHora(start),
+        hora_fin: minutosToHora(end),
+        nombre_dia: dia.nombre_dia,
+        score,
+        motivo,
+        carga_dia: loadPct
+      });
+    }
+  }
+
+  // Ordenar por score descendente y tomar top 3
+  candidatos.sort((a, b) => b.score - a.score);
+
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  slotsRecomendados = candidatos.slice(0, 3).map((s, i) => {
+    const fechaObj = new Date(s.fecha + 'T12:00:00');
+    return {
+      opcion: i + 1,
+      fecha: s.fecha,
+      hora: s.hora,
+      hora_fin: s.hora_fin,
+      nombre_dia: s.nombre_dia,
+      fecha_humana: `${s.nombre_dia.toLowerCase()} ${fechaObj.getDate()} de ${meses[fechaObj.getMonth()]}`,
+      motivo: s.motivo
+    };
+  });
+}
+
 return [{
   json: {
     ...input,
@@ -243,6 +382,8 @@ return [{
     // ID del turno en Odoo (para agregar servicio al turno existente)
     turno_id_existente: turnoIdExistente,
     // Precio del turno existente (para calcular seña diferencial)
-    turno_precio_existente: turnoPrecioExistente
+    turno_precio_existente: turnoPrecioExistente,
+    // Slots recomendados (solo en modo consultar_disponibilidad)
+    slots_recomendados: slotsRecomendados
   }
 }];

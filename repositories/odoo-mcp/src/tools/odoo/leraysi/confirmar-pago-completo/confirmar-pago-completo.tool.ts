@@ -417,7 +417,7 @@ export class ConfirmarPagoCompletoTool
             const reportResult = await this.odooClient.execute(
               "salon.turno",
               "render_invoice_pdf",
-              ["account.account_invoices", [invoiceId]],
+              [[params.turno_id], "account.account_invoices", [invoiceId]],
               {}
             );
 

@@ -34,6 +34,12 @@ const state = typeof data.state === 'string' ? JSON.parse(data.state) : (data.st
 // State llena los campos que el LLM no puede extraer
 
 const input = {
+  // === MODO DE OPERACIÓN ===
+  // "consultar_disponibilidad" = solo buscar slots disponibles (sin crear turno)
+  // null/undefined = flujo normal (crear/reprogramar/agregar)
+  modo: llmOutput.modo || null,
+  preferencia_horario: llmOutput.preferencia_horario || null, // "manana", "tarde", null
+
   // === Del LLM_OUTPUT (lo que el LLM extrajo del mensaje) ===
   nombre_clienta: llmOutput.full_name || llmOutput.nombre_clienta || state.full_name || state.nick_name,
   servicio: llmOutput.servicio || (state.servicio_interes ? [state.servicio_interes] : []),
@@ -146,7 +152,11 @@ function algunServicioRequiereLargo(servicios) {
 // ============================================================================
 // VALIDACIÓN DE CAMPOS REQUERIDOS
 // ============================================================================
-const camposRequeridos = ['clienta_id', 'nombre_clienta', 'telefono', 'servicio', 'fecha_deseada', 'precio'];
+// En modo consulta solo necesitamos servicio y fecha (aún no hay datos de clienta/precio)
+const modoConsulta = input.modo === 'consultar_disponibilidad';
+const camposRequeridos = modoConsulta
+  ? ['servicio', 'fecha_deseada']
+  : ['clienta_id', 'nombre_clienta', 'telefono', 'servicio', 'fecha_deseada', 'precio'];
 const camposFaltantes = camposRequeridos.filter(campo => !input[campo]);
 
 if (camposFaltantes.length > 0) {
@@ -273,6 +283,10 @@ return [{
     agregar_a_turno_existente: input.agregar_a_turno_existente,
     turno_id_existente: input.turno_id_existente,
     turno_precio_existente: input.turno_precio_existente,
+
+    // Modo de operación
+    modo: input.modo,
+    preferencia_horario: input.preferencia_horario,
 
     // Metadata
     received_at: new Date().toISOString()
