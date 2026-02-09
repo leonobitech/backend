@@ -116,30 +116,39 @@ if (llmResponse.estado === "servicio_agregado") {
     llmResponse.mp_preference_id ||
     llmResponse.link_pago?.match(/preference-id=([^&\s]+)/)?.[1] ||
     "";
-  const servicioExistente = input.turno_servicio_existente || "";
-  const serviciosInputArray = Array.isArray(input.servicio)
-    ? input.servicio
-    : [input.servicio];
-  const servicioExistenteNorm = servicioExistente.toLowerCase().trim();
-  const servicioNuevoRaw =
-    serviciosInputArray.find(
-      (s) => s && s.toLowerCase().trim() !== servicioExistenteNorm,
-    ) ||
-    serviciosInputArray[serviciosInputArray.length - 1] ||
-    "";
-  const servicioNuevo = servicioNuevoRaw
-    ? servicioNuevoRaw.charAt(0).toUpperCase() +
-      servicioNuevoRaw.slice(1).replace(/_/g, " ")
-    : "";
-  const serviciosArray = [];
-  if (servicioExistente) serviciosArray.push(servicioExistente);
-  if (
-    servicioNuevo &&
-    servicioNuevo.toLowerCase() !== servicioExistente.toLowerCase()
-  ) {
-    serviciosArray.push(servicioNuevo);
+  // Usar servicios_combinados del MCP tool (fuente más confiable, lee de Odoo)
+  // Fallback: reconstruir desde turno_servicio_existente + servicio nuevo
+  let servicioDetalleCombinado = "";
+  let serviciosArray = [];
+  if (llmResponse.servicios_combinados) {
+    servicioDetalleCombinado = llmResponse.servicios_combinados;
+    serviciosArray = servicioDetalleCombinado.split(" + ").map(s => s.trim()).filter(Boolean);
+  } else {
+    const servicioExistente = input.turno_servicio_existente || "";
+    const serviciosInputArray = Array.isArray(input.servicio)
+      ? input.servicio
+      : [input.servicio];
+    const servicioExistenteNorm = servicioExistente.toLowerCase().trim();
+    const servicioNuevoRaw =
+      serviciosInputArray.find(
+        (s) => s && s.toLowerCase().trim() !== servicioExistenteNorm,
+      ) ||
+      serviciosInputArray[serviciosInputArray.length - 1] ||
+      "";
+    const servicioNuevo = servicioNuevoRaw
+      ? servicioNuevoRaw.charAt(0).toUpperCase() +
+        servicioNuevoRaw.slice(1).replace(/_/g, " ")
+      : "";
+    serviciosArray = [];
+    if (servicioExistente) serviciosArray.push(servicioExistente);
+    if (
+      servicioNuevo &&
+      servicioNuevo.toLowerCase() !== servicioExistente.toLowerCase()
+    ) {
+      serviciosArray.push(servicioNuevo);
+    }
+    servicioDetalleCombinado = serviciosArray.join(" + ");
   }
-  const servicioDetalleCombinado = serviciosArray.join(" + ");
   const fechaTurnoFinal =
     fechaTurno ||
     (input.turno_fecha?.includes("T")

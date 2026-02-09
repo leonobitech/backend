@@ -106,6 +106,7 @@ const extractValues = (field) => {
 
 const baserow_update = {
   row_id: lead.id,
+  stage: 'turno_confirmado',
   turno_agendado: true,
   turno_fecha: turnoFechaISO,
   sena_pagada: true,
@@ -126,7 +127,7 @@ const state = {
   channel: extractValue(lead.channel) || 'whatsapp',
   country: extractValue(lead.country) || 'Argentina',
   tz: lead.tz || '-03:00',
-  stage: extractValue(lead.stage) || 'turno_confirmado',
+  stage: 'turno_confirmado',
   priority: extractValue(lead.priority) || 'normal',
   servicio_interes: lead.servicio_interes || serviciosLista[0] || '',
   interests: extractValues(lead.interests),

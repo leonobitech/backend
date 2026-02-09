@@ -209,10 +209,17 @@ if (input.turno_agendado && input.lead_row_id) {
   });
 
   if (turnoUsuaria) {
-    // Extraer el servicio - en Baserow viene como [{id: X, value: "Corte mujer", color: "..."}]
+    // Extraer el servicio existente completo
+    // PRIORIDAD: servicio_detalle (string concatenado "Manicura simple + Pedicura")
+    // porque el multi-select 'servicio' solo da valores individuales y antes
+    // solo tomábamos el primero, perdiendo servicios intermedios con 3+ servicios
     let servicioValue = null;
-    if (Array.isArray(turnoUsuaria.servicio) && turnoUsuaria.servicio.length > 0) {
-      servicioValue = turnoUsuaria.servicio[0]?.value;
+    if (turnoUsuaria.servicio_detalle) {
+      // Mejor fuente: string concatenado con todos los servicios
+      servicioValue = turnoUsuaria.servicio_detalle;
+    } else if (Array.isArray(turnoUsuaria.servicio) && turnoUsuaria.servicio.length > 0) {
+      // Fallback: unir todos los valores del multi-select
+      servicioValue = turnoUsuaria.servicio.map(s => s?.value || s).join(' + ');
     } else if (turnoUsuaria.servicio?.value) {
       servicioValue = turnoUsuaria.servicio.value;
     } else {
