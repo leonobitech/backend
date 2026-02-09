@@ -134,12 +134,14 @@ export class AgregarServicioTurnoLeraysiTool
       SERVICIO_DISPLAY[params.nuevo_servicio] || params.nuevo_servicio;
     const servicioDetalleCombinado = `${detalleExistente} + ${nuevoDetalle}`;
 
-    // 3. Sumar precios. Duración viene ya como total de ParseInput (todos los servicios sumados)
+    // 3. Sumar precios y duraciones
     const precioExistente = (turnoExistente.precio as number) || 0;
     const precioTotal = precioExistente + params.nuevo_precio;
-    // ParseInput.js calcularDuracion() ya suma TODOS los servicios (existente + nuevo)
-    // No sumar la duración existente del turno para evitar double-counting
-    const duracionTotal = params.duracion_estimada / 60; // Convertir minutos → horas (ya es el total)
+    // Leer duración existente de Odoo y sumar la del nuevo servicio.
+    // El LLM puede enviar solo la duración del nuevo servicio en vez del total combinado.
+    const duracionExistente = (turnoExistente.duracion as number) || 0;
+    const duracionNueva = params.duracion_estimada / 60;
+    const duracionTotal = duracionExistente + duracionNueva;
 
     // 4. Calcular monto a pagar: seña del nuevo total menos lo ya pagado
     const senaTotalNueva = Math.round(precioTotal * 0.3);
@@ -220,7 +222,7 @@ export class AgregarServicioTurnoLeraysiTool
       servicio_detalle: servicioDetalleCombinado,
       precio_total: precioTotal,
       duracion_total: duracionTotal,
-      duracion_estimada: params.duracion_estimada,
+      duracion_estimada: Math.round(duracionTotal * 60),
       complejidad_maxima: params.complejidad_maxima,
       sena: montoAPagar, // Lo que tiene que pagar ahora
       link_pago: linkPago,
