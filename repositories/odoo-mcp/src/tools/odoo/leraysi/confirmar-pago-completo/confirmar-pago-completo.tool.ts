@@ -248,15 +248,13 @@ export class ConfirmarPagoCompletoTool
       const existingEventId = turno.odoo_event_id as number;
 
       if (existingEventId) {
-        // ACTUALIZAR evento existente con context para suprimir notificaciones de calendario
-        // Sin esto, Odoo envía emails de actualización a cada attendee (duplicados)
+        // ACTUALIZAR evento existente - NO re-enviar partner_ids para evitar duplicados
+        // Los attendees ya están seteados de la creación original.
+        // Re-setearlos hace que Odoo envíe nuevas invitaciones de calendario (duplicados).
+        // Solo actualizamos: nombre, horarios, duración, descripción.
         try {
-          await this.odooClient.execute(
-            "calendar.event",
-            "write",
-            [[existingEventId], eventValues],
-            { context: { no_mail_to_attendees: true } }
-          );
+          const { partner_ids, ...updateValues } = eventValues;
+          await this.odooClient.write("calendar.event", [existingEventId], updateValues);
           eventId = existingEventId;
           logger.info(
             { eventId, turnoId: params.turno_id },
