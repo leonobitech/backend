@@ -185,6 +185,9 @@ const resumen = dias
 let turnoServicioExistente = null;
 let turnoIdExistente = null;
 let turnoPrecioExistente = null;
+let turnoDuracionExistente = null;
+let turnoComplejidadExistente = null;
+let turnoSenaPagada = null;
 
 if (input.turno_agendado && input.lead_row_id) {
   // Buscar turno de esta usuaria por lead_row_id (ID de fila en Baserow)
@@ -222,6 +225,15 @@ if (input.turno_agendado && input.lead_row_id) {
 
     // Extraer precio del turno existente (para calcular seña diferencial)
     turnoPrecioExistente = turnoUsuaria.precio ? Number(turnoUsuaria.precio) : null;
+
+    // Extraer duración del turno existente (para sumar al agregar servicio)
+    turnoDuracionExistente = turnoUsuaria.duracion_min ? Number(turnoUsuaria.duracion_min) : null;
+
+    // Extraer complejidad del turno existente (para MAX al agregar servicio)
+    turnoComplejidadExistente = turnoUsuaria.complejidad_maxima?.value || turnoUsuaria.complejidad_maxima || null;
+
+    // Extraer seña pagada del turno existente (para calcular diferencial)
+    turnoSenaPagada = turnoUsuaria.sena_monto ? Number(turnoUsuaria.sena_monto) : null;
   }
 }
 
@@ -383,6 +395,12 @@ return [{
     turno_id_existente: turnoIdExistente,
     // Precio del turno existente (para calcular seña diferencial)
     turno_precio_existente: turnoPrecioExistente,
+    // Duración del turno existente en minutos (para sumar al agregar servicio)
+    turno_duracion_existente: turnoDuracionExistente,
+    // Complejidad del turno existente (para MAX al agregar servicio)
+    turno_complejidad_existente: turnoComplejidadExistente,
+    // Seña ya pagada del turno existente (para calcular diferencial)
+    turno_sena_pagada: turnoSenaPagada,
     // Slots recomendados (solo en modo consultar_disponibilidad)
     slots_recomendados: slotsRecomendados
   }

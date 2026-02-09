@@ -108,6 +108,18 @@ if (esReprogramacion && data.fecha_disponible) {
   const precioNuevo = data.precio || 0;
   const precioTotal = precioExistente + precioNuevo;
   const senaTotalCalculada = Math.round(precioTotal * 0.3);
+  const senaPagadaExistente = data.turno_sena_pagada || Math.round(precioExistente * 0.3);
+  const senaDiferencial = senaTotalCalculada - senaPagadaExistente;
+  // Duración combinada: existente + nuevo servicio
+  const duracionExistente = data.turno_duracion_existente || 0;
+  const duracionNueva = data.duracion_estimada || 60;
+  const duracionCombinada = duracionExistente + duracionNueva;
+  // Complejidad: MAX entre existente y nuevo
+  const COMPLEJIDAD_ORDER = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
+  const complejidadExistente = data.turno_complejidad_existente || "media";
+  const complejidadNueva = data.complejidad_maxima || "media";
+  const complejidadCombinada = (COMPLEJIDAD_ORDER[complejidadExistente] || 2) >= (COMPLEJIDAD_ORDER[complejidadNueva] || 2)
+    ? complejidadExistente : complejidadNueva;
   const servicioExistenteDisplay =
     data.turno_servicio_existente || "servicio existente";
   const serviciosArray = Array.isArray(data.servicio)
@@ -123,8 +135,8 @@ if (esReprogramacion && data.fecha_disponible) {
     serviciosArray[serviciosArray.length - 1] ||
     "otro";
   const serviciosCombinados = `${servicioExistenteDisplay} + ${servicioNuevo}`;
-  const mensajeClientaAgregado = `Listo ${data.nombre_clienta || "reina"}! Actualice tu turno del ${fechaHumana}. Ahora tenes: ${serviciosCombinados}. Total: $${precioTotal.toLocaleString("es-AR")}. Sena actualizada: $${senaTotalCalculada.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
-  instruccionTarea = `## AGREGAR SERVICIO AL TURNO EXISTENTE\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${turnoIdExistente},\n  "nuevo_servicio": "${servicioNuevo}",\n  "nuevo_servicio_detalle": "${servicioNuevo}",\n  "nuevo_precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "servicio_agregado",\n  "turno_id": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicios_combinados": "{servicio_detalle de la respuesta}",\n  "precio_total": {precio_total de la respuesta},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaAgregado}"\n}\n\`\`\``;
+  const mensajeClientaAgregado = `Listo ${data.nombre_clienta || "reina"}! Actualice tu turno del ${fechaHumana}. Ahora tenes: ${serviciosCombinados}. Total: $${precioTotal.toLocaleString("es-AR")}. Sena adicional a pagar: $${senaDiferencial.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
+  instruccionTarea = `## AGREGAR SERVICIO AL TURNO EXISTENTE\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${turnoIdExistente},\n  "nuevo_servicio": "${servicioNuevo}",\n  "nuevo_servicio_detalle": "${servicioNuevo}",\n  "nuevo_precio": ${precioNuevo},\n  "duracion_estimada": ${duracionCombinada},\n  "complejidad_maxima": "${complejidadCombinada}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "servicio_agregado",\n  "turno_id": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicios_combinados": "{servicio_detalle de la respuesta}",\n  "precio_total": {precio_total de la respuesta},\n  "duracion_estimada": ${duracionCombinada},\n  "complejidad_maxima": "${complejidadCombinada}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaAgregado}"\n}\n\`\`\``;
 } else if (data.fecha_disponible) {
   const mensajeClientaTemplate = `Listo ${data.nombre_clienta || "reina"}! Tu turno de ${servicioDisplay.toLowerCase()} esta reservado para el ${fechaHumana} a las ${horaDeseada}. Para confirmarlo, paga la sena de $${senaCalculada.toLocaleString("es-AR")} en este link: {LINK_PAGO}`;
   instruccionTarea = `## FECHA DISPONIBLE - CREAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.nombre_clienta || ""}",\n  "telefono": "${data.telefono || ""}",\n  "servicio": "${data.servicio || "otro"}",\n  "fecha_hora": "${fechaHoraCompleta}",\n  "precio": ${data.precio || 0},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "lead_id": ${data.lead_id || "null"}${data.email ? `,\n  "email": "${data.email}"` : ""}${data.servicio_detalle ? `,\n  "servicio_detalle": "${data.servicio_detalle}"` : ""}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_creado",\n  "turno_id": {turnoId de la respuesta},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicio": "${data.servicio || "otro"}",\n  "servicio_detalle": "${servicioDisplay}",\n  "precio": ${data.precio || 0},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaTemplate}"\n}\n\`\`\`\n\n**IMPORTANTE:** En mensaje_para_clienta, reemplazar {LINK_PAGO} con el link_pago real de la respuesta.`;
@@ -148,9 +160,20 @@ return [
       userMessage,
       _precalculado: {
         hora: horaDeseada,
-        duracion_estimada: data.duracion_estimada || 60,
-        complejidad_maxima: data.complejidad_maxima || "media",
-        sena: senaCalculada,
+        duracion_estimada: esAgregarServicio
+          ? (data.turno_duracion_existente || 0) + (data.duracion_estimada || 60)
+          : (data.duracion_estimada || 60),
+        complejidad_maxima: esAgregarServicio
+          ? (() => {
+              const ORD = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
+              const ex = data.turno_complejidad_existente || "media";
+              const nw = data.complejidad_maxima || "media";
+              return (ORD[ex] || 2) >= (ORD[nw] || 2) ? ex : nw;
+            })()
+          : (data.complejidad_maxima || "media"),
+        sena: esAgregarServicio
+          ? Math.round((data.precio || 0) * 0.3)
+          : senaCalculada,
         fecha_hora_completa: fechaHoraCompleta,
         fecha_humana: fechaHumana,
         servicio_display: servicioDisplay,

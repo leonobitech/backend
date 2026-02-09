@@ -248,9 +248,15 @@ export class ConfirmarPagoCompletoTool
       const existingEventId = turno.odoo_event_id as number;
 
       if (existingEventId) {
-        // ACTUALIZAR evento existente (evita duplicados y emails de calendario extra)
+        // ACTUALIZAR evento existente con context para suprimir notificaciones de calendario
+        // Sin esto, Odoo envía emails de actualización a cada attendee (duplicados)
         try {
-          await this.odooClient.write("calendar.event", [existingEventId], eventValues);
+          await this.odooClient.execute(
+            "calendar.event",
+            "write",
+            [[existingEventId], eventValues],
+            { context: { no_mail_to_attendees: true } }
+          );
           eventId = existingEventId;
           logger.info(
             { eventId, turnoId: params.turno_id },
@@ -560,11 +566,22 @@ export class ConfirmarPagoCompletoTool
             auto_delete: false,
             state: "outgoing"
           });
-          // Email queda en estado "outgoing", el cron de Odoo lo envía automáticamente
         }
       }
     } catch (error) {
       logger.warn({ error }, "[ConfirmarPagoCompleto] Could not send vendor notification");
+    }
+
+    // =========================================================================
+    // PASO 8b: Forzar envío inmediato de emails (PASO 7 + PASO 8)
+    // =========================================================================
+    // Sin esto, los emails quedan en estado "outgoing" esperando el cron de Odoo
+    // que puede tardar varios minutos. process_email_queue() los envía al instante.
+    try {
+      await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
+      logger.info("[ConfirmarPagoCompleto] Email queue processed - emails sent immediately");
+    } catch (queueError) {
+      logger.warn({ queueError }, "[ConfirmarPagoCompleto] Could not process email queue, will be sent by cron");
     }
 
     // =========================================================================

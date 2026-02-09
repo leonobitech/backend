@@ -141,8 +141,15 @@ for (const [key, value] of Object.entries(statePatch)) {
     continue;
   }
 
-  // Manejar timestamps de solicitud (convertir true a timestamp ISO)
-  if ((key === "email_ask_ts" || key === "fullname_ask_ts") && value === true) {
+  // Manejar timestamps de solicitud (true → timestamp ISO, false → null)
+  if ((key === "email_ask_ts" || key === "fullname_ask_ts") && typeof value === 'boolean') {
+    if (value === false) {
+      // LLM dice "ya no preguntar" → limpiar el campo (Baserow necesita null, no false)
+      mergedState[key] = null;
+      console.log(`[OutputMain v3.2] ${key} → null (LLM envió false)`);
+      continue;
+    }
+    // value === true → convertir a timestamp
     // Formato para Baserow: YYYY-MM-DDThh:mm:ss-03:00
     // Ajustar UTC a Argentina (UTC-3)
     const now = new Date();
@@ -272,9 +279,9 @@ const baserowUpdate = {
   prices_asked: mergedState.prices_asked ?? 0,
   deep_interest: mergedState.deep_interest ?? 0,
 
-  // Cooldowns
-  email_ask_ts: mergedState.email_ask_ts ?? null,
-  fullname_ask_ts: mergedState.fullname_ask_ts ?? null,
+  // Cooldowns (Baserow datetime: solo acepta string ISO o null, NUNCA boolean)
+  email_ask_ts: typeof mergedState.email_ask_ts === 'string' ? mergedState.email_ask_ts : null,
+  fullname_ask_ts: typeof mergedState.fullname_ask_ts === 'string' ? mergedState.fullname_ask_ts : null,
 
   // Nota dinámica
   notes: generateContextualNote(mergedState),
