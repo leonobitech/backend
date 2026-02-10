@@ -177,8 +177,9 @@ export class OdooClient {
   /**
    * Actualizar registros en un modelo
    */
-  async write(model: string, ids: number[], values: Record<string, any>): Promise<boolean> {
-    return this.execute_kw(model, "write", [ids, values]);
+  async write(model: string, ids: number[], values: Record<string, any>, context?: Record<string, any>): Promise<boolean> {
+    const kwargs = context ? { context } : {};
+    return this.execute_kw(model, "write", [ids, values], kwargs);
   }
 
   /**
