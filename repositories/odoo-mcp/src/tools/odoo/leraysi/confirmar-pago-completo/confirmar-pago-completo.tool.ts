@@ -254,9 +254,7 @@ export class ConfirmarPagoCompletoTool
         // Solo actualizamos: nombre, horarios, duración, descripción.
         try {
           const { partner_ids, ...updateValues } = eventValues;
-          // mail_notrack: suprime notificación de mail.thread (tracking de cambios)
-          // para evitar email duplicado. La notificación de calendar.attendee sigue activa.
-          await this.odooClient.execute("calendar.event", "write", [[existingEventId], updateValues], { context: { mail_notrack: true } });
+          await this.odooClient.write("calendar.event", [existingEventId], updateValues);
           eventId = existingEventId;
           logger.info(
             { eventId, turnoId: params.turno_id },
