@@ -114,6 +114,17 @@ console.log("[OutputMain v3.2] state_patch keys:", Object.keys(statePatch));
 
 const mergedState = { ...originalState };
 
+// ── Protección: turno confirmado + pagado → no degradar stage ──
+// Cuando el turno ya está agendado y la seña pagada, el stage no puede
+// retroceder de "turno_confirmado" a etapas anteriores.
+// Esto protege contra el LLM enviando state_patch incorrecto durante
+// consultas de disponibilidad para reprogramación.
+const turnoConfirmadoPagado = originalState.turno_agendado === true && originalState.sena_pagada === true;
+if (turnoConfirmadoPagado && statePatch.stage && statePatch.stage !== "turno_confirmado") {
+  console.log(`[OutputMain v3.2] 🛡️ Protección turno confirmado+pagado: bloqueando stage "${statePatch.stage}" → manteniendo "turno_confirmado"`);
+  delete statePatch.stage;
+}
+
 for (const [key, value] of Object.entries(statePatch)) {
   // Saltar campos protegidos
   if (protectedFields.includes(key)) {
