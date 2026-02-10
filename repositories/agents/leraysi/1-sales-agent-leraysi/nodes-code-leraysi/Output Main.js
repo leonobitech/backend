@@ -74,14 +74,30 @@ function extractJson(text) {
     console.log("[OutputMain v3.2] Parse intento 2 falló");
   }
 
-  // Intento 3: Buscar objeto JSON principal
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    const matched = cleanJsonString(jsonMatch[0]);
-    try {
-      return JSON.parse(matched);
-    } catch (e) {
-      console.log("[OutputMain v3.2] Parse intento 3 falló");
+  // Intento 3: Extraer primer JSON completo (bracket-counting)
+  const startIdx = text.indexOf('{');
+  if (startIdx !== -1) {
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let endIdx = -1;
+    for (let i = startIdx; i < text.length; i++) {
+      const ch = text[i];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\' && inString) { escape = true; continue; }
+      if (ch === '"' && !escape) { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      if (ch === '}') { depth--; if (depth === 0) { endIdx = i; break; } }
+    }
+    if (endIdx !== -1) {
+      const extracted = text.substring(startIdx, endIdx + 1);
+      const matched = cleanJsonString(extracted);
+      try {
+        return JSON.parse(matched);
+      } catch (e) {
+        console.log("[OutputMain v3.2] Parse intento 3 falló");
+      }
     }
   }
 
