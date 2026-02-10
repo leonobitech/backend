@@ -40,6 +40,11 @@ const input = {
   modo: llmOutput.modo || null,
   preferencia_horario: llmOutput.preferencia_horario || null, // "manana", "tarde", null
 
+  // === ACCIÓN EXPLÍCITA ===
+  // "reprogramar" = reprogramar turno existente (BuildAgentPrompt genera TAREA de reprogramación)
+  // null = flujo automático (crear turno nuevo o agregar servicio)
+  accion: llmOutput.accion || null,
+
   // === Del LLM_OUTPUT (lo que el LLM extrajo del mensaje) ===
   nombre_clienta: llmOutput.full_name || llmOutput.nombre_clienta || state.full_name || state.nick_name,
   servicio: llmOutput.servicio || (state.servicio_interes ? [state.servicio_interes] : []),
@@ -287,6 +292,7 @@ return [{
     // Modo de operación
     modo: input.modo,
     preferencia_horario: input.preferencia_horario,
+    accion: input.accion,
 
     // Metadata
     received_at: new Date().toISOString()

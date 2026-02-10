@@ -75,7 +75,10 @@ const turnoFechaExistente = data.turno_fecha
   : null;
 const turnoIdExistente = data.turno_id_existente || data.odoo_turno_id || null;
 
-if (turnoExistente) {
+// Detección explícita: el Master Agent envía accion: "reprogramar"
+if (data.accion === "reprogramar") {
+  esReprogramacion = true;
+} else if (turnoExistente) {
   if (servicioTurnoExistente) {
     const servicioExistenteNorm = servicioTurnoExistente.toLowerCase().trim();
     const tieneServicioNuevo = serviciosSolicitados.some(
@@ -88,7 +91,7 @@ if (turnoExistente) {
       turnoFechaExistente &&
       fechaSoloParte &&
       turnoFechaExistente === fechaSoloParte;
-    if (serviciosCoinciden && fechasCoinciden) esReprogramacion = true;
+    if (serviciosCoinciden) esReprogramacion = true;
     else if (!serviciosCoinciden && fechasCoinciden && turnoIdExistente)
       esAgregarServicio = true;
     else esTurnoAdicional = true;

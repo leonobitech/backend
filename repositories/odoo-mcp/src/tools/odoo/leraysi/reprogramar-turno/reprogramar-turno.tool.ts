@@ -66,6 +66,12 @@ export class ReprogramarTurnoTool
     const fechaHoraAnterior = turno.fecha_hora;
     const estadoActual = turno.estado as "pendiente_pago" | "confirmado";
 
+    // Nombre legible del servicio: preferir servicio_detalle (combinado),
+    // fallback a servicio formateado (snake_case → Title Case)
+    const servicioDisplay = turno.servicio_detalle
+      || (turno.servicio as string || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+      || "Servicio";
+
     if (!["pendiente_pago", "confirmado"].includes(estadoActual)) {
       throw new Error(
         `El turno #${turnoId} no puede reprogramarse (estado: ${estadoActual}). ` +
@@ -207,11 +213,11 @@ export class ReprogramarTurnoTool
             }
 
             const eventValues: Record<string, any> = {
-              name: `Turno REPROGRAMADO: ${turno.servicio} - ${turno.clienta}`,
+              name: `Turno REPROGRAMADO: ${servicioDisplay} - ${turno.clienta}`,
               start: startUTC,
               stop: stopUTC,
               duration: duracion,
-              description: `TURNO REPROGRAMADO\n\nFecha anterior: ${fechaHoraAnterior}\nMotivo: ${params.motivo}\n\nServicio: ${turno.servicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio: $${turno.precio}`,
+              description: `TURNO REPROGRAMADO\n\nFecha anterior: ${fechaHoraAnterior}\nMotivo: ${params.motivo}\n\nServicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio: $${turno.precio}`,
               partner_ids: [[6, 0, eventPartnerIds]],
               opportunity_id: leadId,
               user_id: effectiveUserId,
@@ -236,9 +242,9 @@ export class ReprogramarTurnoTool
                 res_model_id: await this.getModelId("crm.lead"),
                 res_id: leadId,
                 activity_type_id: activityTypeId,
-                summary: `Turno REPROGRAMADO: ${turno.servicio}`,
+                summary: `Turno REPROGRAMADO: ${servicioDisplay}`,
                 note: `<p>Turno reprogramado para ${turno.clienta}</p>
-                       <p><strong>Servicio:</strong> ${turno.servicio_detalle || turno.servicio}</p>
+                       <p><strong>Servicio:</strong> ${servicioDisplay}</p>
                        <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
                        <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
                        <p><strong>Motivo:</strong> ${params.motivo}</p>`,
@@ -256,7 +262,7 @@ export class ReprogramarTurnoTool
               await this.odooClient.execute("crm.lead", "message_post", [[leadId]], {
                 body: `<p><strong>🔄 Turno reprogramado</strong></p>
                        <p><strong>Clienta:</strong> ${turno.clienta}</p>
-                       <p><strong>Servicio:</strong> ${turno.servicio_detalle || turno.servicio}</p>
+                       <p><strong>Servicio:</strong> ${servicioDisplay}</p>
                        <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
                        <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
                        <p><strong>Motivo:</strong> ${params.motivo}</p>`,
@@ -306,7 +312,7 @@ export class ReprogramarTurnoTool
 
                   <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
                     <p style="margin: 5px 0;"><strong>👤 Clienta:</strong> ${turno.clienta}</p>
-                    <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${turno.servicio}${turno.servicio_detalle ? ` - ${turno.servicio_detalle}` : ''}</p>
+                    <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${servicioDisplay}</p>
                     <p style="margin: 5px 0;"><strong>📱 Teléfono:</strong> ${turno.telefono}</p>
                     <p style="margin: 5px 0;"><strong>💰 Precio:</strong> $${turno.precio.toLocaleString('es-AR')}</p>
                     <p style="margin: 5px 0; color: #666;"><strong>Motivo:</strong> ${params.motivo}</p>
@@ -318,7 +324,7 @@ export class ReprogramarTurnoTool
               `;
 
               await this.odooClient.create("mail.mail", {
-                subject: `🔄 Turno Reprogramado: ${turno.servicio} - ${turno.clienta}`,
+                subject: `🔄 Turno Reprogramado: ${servicioDisplay} - ${turno.clienta}`,
                 body_html: notificationBody,
                 email_to: vendorEmail,
                 auto_delete: false,
@@ -359,7 +365,7 @@ export class ReprogramarTurnoTool
                 </p>
               </div>
               <div style="background: #F3F4F6; padding: 15px; border-radius: 8px;">
-                <p style="margin: 5px 0;"><strong>Servicio:</strong> ${turno.servicio_detalle || turno.servicio}</p>
+                <p style="margin: 5px 0;"><strong>Servicio:</strong> ${servicioDisplay}</p>
                 <p style="margin: 5px 0;"><strong>Motivo:</strong> ${params.motivo}</p>
               </div>
               <p style="margin-top: 20px;">Tu seña ya está confirmada, no necesitás hacer nada más.</p>
@@ -368,7 +374,7 @@ export class ReprogramarTurnoTool
           `;
 
           await this.odooClient.create("mail.mail", {
-            subject: `🔄 Turno Reprogramado: ${turno.servicio} - ${fechaHumana}`,
+            subject: `🔄 Turno Reprogramado: ${servicioDisplay} - ${fechaHumana}`,
             body_html: emailBody,
             email_to: turno.email,
             auto_delete: false,
@@ -411,7 +417,7 @@ export class ReprogramarTurnoTool
       turno_id_nuevo: nuevoTurnoId,
       clienta: turno.clienta,
       telefono: turno.telefono,
-      servicio: turno.servicio,
+      servicio: servicioDisplay,
       fecha_hora_anterior: fechaHoraAnterior,
       fecha_hora_nueva: nuevaFechaHora,
       estado_anterior: estadoActual,

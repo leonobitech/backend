@@ -43,7 +43,7 @@ turnos.forEach(turno => {
 
   turnosPorDia[fecha].turnos.push(turno);
   turnosPorDia[fecha].count_total++;
-  turnosPorDia[fecha].duracion_total += turno.duracion_min || 0;
+  turnosPorDia[fecha].duracion_total += Number(turno.duracion_min) || 0;
 
   // Usar complejidad_maxima del turno (campo unificado con ParseInput)
   const complejidad = turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';
@@ -302,7 +302,7 @@ if (modo === 'consultar_disponibilidad') {
     const turnosDelDia = (turnosPorDia[dia.fecha]?.turnos || []).map(t => {
       const horaStr = t.hora || '09:00';
       const startMin = horaToMinutos(horaStr);
-      const dur = t.duracion_min || 60;
+      const dur = Number(t.duracion_min) || 60;
       return { start: startMin, end: startMin + dur };
     });
 
@@ -409,6 +409,8 @@ return [{
     // Seña ya pagada del turno existente (para calcular diferencial)
     turno_sena_pagada: turnoSenaPagada,
     // Slots recomendados (solo en modo consultar_disponibilidad)
-    slots_recomendados: slotsRecomendados
+    slots_recomendados: slotsRecomendados,
+    // Acción explícita (no depender solo de ...input spread)
+    accion: input.accion || null
   }
 }];
