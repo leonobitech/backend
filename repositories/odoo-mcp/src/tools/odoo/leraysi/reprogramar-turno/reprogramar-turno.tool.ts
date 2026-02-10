@@ -56,6 +56,9 @@ export class ReprogramarTurnoTool
       "precio",
       "sena",
       "lead_id",
+      "complejidad_maxima",
+      "monto_pago_pendiente",
+      "notas",
     ]);
 
     if (turnos.length === 0) {
@@ -125,6 +128,11 @@ export class ReprogramarTurnoTool
         lead_id: turno.lead_id && Array.isArray(turno.lead_id) ? turno.lead_id[0] : turno.lead_id,
         estado: "pendiente_pago",
       };
+
+      // Copiar campos opcionales del turno original
+      if (turno.complejidad_maxima) nuevoTurnoValues.complejidad_maxima = turno.complejidad_maxima;
+      if (turno.monto_pago_pendiente) nuevoTurnoValues.monto_pago_pendiente = turno.monto_pago_pendiente;
+      if (turno.notas) nuevoTurnoValues.notas = turno.notas;
 
       nuevoTurnoId = await this.odooClient.create("salon.turno", nuevoTurnoValues);
       acciones.push(`Nuevo turno #${nuevoTurnoId} creado`);
