@@ -67,6 +67,7 @@ export class ReprogramarTurnoTool
 
     const turno = turnos[0];
     const fechaHoraAnterior = turno.fecha_hora;
+    const fechaHoraAnteriorAR = this.utcToArgentina(fechaHoraAnterior);
     const estadoActual = turno.estado as "pendiente_pago" | "confirmado";
 
     // Nombre legible del servicio: preferir servicio_detalle (combinado),
@@ -155,7 +156,7 @@ export class ReprogramarTurnoTool
       await this.odooClient.execute("salon.turno", "message_post", [[nuevoTurnoId]], {
         body: `<p><strong>🔄 Turno creado por reprogramación</strong></p>
                <p>Turno original: #${turnoId}</p>
-               <p>Fecha anterior: ${fechaHoraAnterior}</p>
+               <p>Fecha anterior: ${fechaHoraAnteriorAR}</p>
                <p>Nueva fecha: ${nuevaFechaHora}</p>
                <p>Motivo: ${params.motivo}</p>`,
         message_type: "comment",
@@ -225,7 +226,7 @@ export class ReprogramarTurnoTool
               start: startUTC,
               stop: stopUTC,
               duration: duracion,
-              description: `TURNO REPROGRAMADO\n\nFecha anterior: ${fechaHoraAnterior}\nMotivo: ${params.motivo}\n\nServicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio: $${turno.precio}`,
+              description: `TURNO REPROGRAMADO\n\nFecha anterior: ${fechaHoraAnteriorAR}\nMotivo: ${params.motivo}\n\nServicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio: $${turno.precio}`,
               partner_ids: [[6, 0, eventPartnerIds]],
               opportunity_id: leadId,
               user_id: effectiveUserId,
@@ -253,7 +254,7 @@ export class ReprogramarTurnoTool
                 summary: `Turno REPROGRAMADO: ${servicioDisplay}`,
                 note: `<p>Turno reprogramado para ${turno.clienta}</p>
                        <p><strong>Servicio:</strong> ${servicioDisplay}</p>
-                       <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
+                       <p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p>
                        <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
                        <p><strong>Motivo:</strong> ${params.motivo}</p>`,
                 date_deadline: fechaSoloDate,
@@ -271,7 +272,7 @@ export class ReprogramarTurnoTool
                 body: `<p><strong>🔄 Turno reprogramado</strong></p>
                        <p><strong>Clienta:</strong> ${turno.clienta}</p>
                        <p><strong>Servicio:</strong> ${servicioDisplay}</p>
-                       <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
+                       <p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p>
                        <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
                        <p><strong>Motivo:</strong> ${params.motivo}</p>`,
                 message_type: "comment",
@@ -299,7 +300,7 @@ export class ReprogramarTurnoTool
               const vendorName = users[0].name || "Usuario";
               const vendorEmail = users[0].email;
 
-              const fechaHumanaAnterior = this.formatearFechaHumana(fechaHoraAnterior);
+              const fechaHumanaAnterior = this.formatearFechaHumana(fechaHoraAnteriorAR);
               const fechaHumanaNueva = this.formatearFechaHumana(nuevaFechaHora);
 
               const notificationBody = `
@@ -353,56 +354,10 @@ export class ReprogramarTurnoTool
         }
       }
 
-      // 4. Enviar email de reprogramación a la clienta
-      if (turno.email) {
-        try {
-          const fechaHumana = this.formatearFechaHumana(nuevaFechaHora);
-          const fechaAnteriorHumana = this.formatearFechaHumana(fechaHoraAnterior);
-
-          const emailBody = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #8B5CF6;">🔄 Tu turno ha sido reprogramado</h2>
-              <p>Hola ${turno.clienta},</p>
-              <p>Te informamos que tu turno ha sido reprogramado:</p>
-              <div style="background: #FEF3C7; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 5px 0; text-decoration: line-through; color: #92400E;">
-                  <strong>Fecha anterior:</strong> ${fechaAnteriorHumana}
-                </p>
-                <p style="margin: 5px 0; color: #059669; font-size: 18px;">
-                  <strong>Nueva fecha:</strong> ${fechaHumana}
-                </p>
-              </div>
-              <div style="background: #F3F4F6; padding: 15px; border-radius: 8px;">
-                <p style="margin: 5px 0;"><strong>Servicio:</strong> ${servicioDisplay}</p>
-                <p style="margin: 5px 0;"><strong>Motivo:</strong> ${params.motivo}</p>
-              </div>
-              <p style="margin-top: 20px;">Tu seña ya está confirmada, no necesitás hacer nada más.</p>
-              <p style="color: #8B5CF6; margin-top: 30px;">⋆˚🧚‍♀️ Te esperamos en Estilos Leraysi</p>
-            </div>
-          `;
-
-          await this.odooClient.create("mail.mail", {
-            subject: `🔄 Turno Reprogramado: ${servicioDisplay} - ${fechaHumana}`,
-            body_html: emailBody,
-            email_to: turno.email,
-            auto_delete: false,
-            state: "outgoing",
-          });
-
-          try {
-            await this.odooClient.execute("mail.mail", "process_email_queue", [], {});
-          } catch { /* Email quedará en cola */ }
-
-          acciones.push("Email de notificación enviado");
-        } catch (error) {
-          logger.warn({ error }, "[ReprogramarTurno] Could not send email");
-        }
-      }
-
-      // 5. Registrar en chatter del turno
+      // 4. Registrar en chatter del turno
       await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
         body: `<p><strong>🔄 Turno reprogramado</strong></p>
-               <p><strong>Fecha anterior:</strong> ${fechaHoraAnterior}</p>
+               <p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p>
                <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
                <p><strong>Motivo:</strong> ${params.motivo}</p>
                <p><strong>Acciones:</strong> ${acciones.join(", ")}</p>`,
@@ -438,12 +393,23 @@ export class ReprogramarTurnoTool
     };
   }
 
-  private formatearFechaHumana(fechaStr: string): string {
+  /**
+   * Formatea fecha a texto legible.
+   * @param fechaStr - Fecha en formato "YYYY-MM-DD HH:MM:SS"
+   * @param fromUTC - Si true, convierte de UTC a Argentina (UTC-3) antes de formatear
+   */
+  private formatearFechaHumana(fechaStr: string, fromUTC = false): string {
     const dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
     const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
                    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-    const fecha = new Date(fechaStr.replace(" ", "T"));
-    const hora = fechaStr.split(" ")[1]?.slice(0, 5) || "00:00";
+
+    let displayStr = fechaStr;
+    if (fromUTC) {
+      displayStr = this.utcToArgentina(fechaStr);
+    }
+
+    const fecha = new Date(displayStr.replace(" ", "T"));
+    const hora = displayStr.split(" ")[1]?.slice(0, 5) || "00:00";
     return `${dias[fecha.getDay()]} ${fecha.getDate()} de ${meses[fecha.getMonth()]} a las ${hora}`;
   }
 
@@ -473,6 +439,27 @@ export class ReprogramarTurnoTool
     const date = new Date(Date.UTC(year, month - 1, day, hour + 3, minute, second || 0));
 
     // Formatear a formato Odoo
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    const h = String(date.getUTCHours()).padStart(2, "0");
+    const min = String(date.getUTCMinutes()).padStart(2, "0");
+    const s = String(date.getUTCSeconds()).padStart(2, "0");
+
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+
+  /**
+   * Convierte hora UTC a Argentina (UTC-3).
+   * Resta 3 horas para obtener hora local.
+   */
+  private utcToArgentina(fechaHora: string): string {
+    const [datePart, timePart] = fechaHora.split(" ");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = (timePart || "00:00:00").split(":").map(Number);
+
+    const date = new Date(Date.UTC(year, month - 1, day, hour - 3, minute, second || 0));
+
     const y = date.getUTCFullYear();
     const m = String(date.getUTCMonth() + 1).padStart(2, "0");
     const d = String(date.getUTCDate()).padStart(2, "0");
