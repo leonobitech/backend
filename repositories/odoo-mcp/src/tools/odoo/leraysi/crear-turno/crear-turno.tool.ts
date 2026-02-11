@@ -57,6 +57,29 @@ const SERVICIO_MAP: Record<string, string> = {
   "laser axilas": "depilacion_laser_axilas",
 };
 
+// Ranking de complejidad por servicio (mayor = más complejo)
+const COMPLEJIDAD_SERVICIO: Record<string, number> = {
+  // muy_compleja = 4
+  alisado_brasileno: 4,
+  alisado_keratina: 4,
+  mechas_completas: 4,
+  tintura_completa: 4,
+  balayage: 4,
+  // compleja = 3
+  tintura_raiz: 3,
+  manicura_semipermanente: 3,
+  // media = 2
+  corte_mujer: 2,
+  manicura_simple: 2,
+  pedicura: 2,
+  depilacion_cera_piernas: 2,
+  depilacion_laser_piernas: 2,
+  // simple = 1
+  depilacion_cera_axilas: 1,
+  depilacion_cera_bikini: 1,
+  depilacion_laser_axilas: 1,
+};
+
 export class CrearTurnoLeraysiTool
   implements ITool<CrearTurnoInput, CrearTurnoResponse>
 {
@@ -177,7 +200,9 @@ export class CrearTurnoLeraysiTool
 
   /**
    * Normaliza el campo servicio de user-friendly a código Odoo.
-   * Ej: "Manicura simple" → "manicura_simple"
+   * Soporta un solo servicio ("Manicura simple" → "manicura_simple")
+   * y múltiples comma-separated ("Manicura simple,Pedicura,Alisado keratina"
+   * → "alisado_keratina", el más complejo como principal).
    */
   private normalizeServicio(input: unknown): unknown {
     if (!input || typeof input !== "object") return input;
@@ -185,6 +210,20 @@ export class CrearTurnoLeraysiTool
     const obj = input as Record<string, unknown>;
     if (typeof obj.servicio !== "string") return input;
 
+    // Múltiples servicios comma-separated
+    if (obj.servicio.includes(",")) {
+      const codigos = obj.servicio.split(",").map(s => {
+        const lower = s.toLowerCase().trim();
+        return SERVICIO_MAP[lower] || lower;
+      });
+      // Elegir el más complejo como servicio principal
+      const principal = codigos.reduce((best, cur) =>
+        (COMPLEJIDAD_SERVICIO[cur] ?? 0) > (COMPLEJIDAD_SERVICIO[best] ?? 0) ? cur : best
+      , codigos[0]);
+      return { ...obj, servicio: principal };
+    }
+
+    // Servicio único
     const servicioLower = obj.servicio.toLowerCase().trim();
     const servicioMapped = SERVICIO_MAP[servicioLower];
 
