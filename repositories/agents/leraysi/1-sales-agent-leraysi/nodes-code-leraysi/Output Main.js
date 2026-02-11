@@ -162,6 +162,20 @@ console.log("[OutputMain v3.2] state_patch keys:", Object.keys(statePatch));
 // 4. APLICAR PATCH AL STATE (protegiendo campos)
 // ============================================================================
 
+// ── Validación de stage: corregir valores inválidos del LLM ──
+// Baserow `stage` es Single Select con 5 opciones fijas.
+// El LLM a veces confunde el flag booleano `turno_agendado` con un valor de stage.
+const STAGES_VALIDOS = ['explore', 'consulta', 'presupuesto', 'turno_pendiente', 'turno_confirmado'];
+if (statePatch.stage && !STAGES_VALIDOS.includes(statePatch.stage)) {
+  const stageOriginal = statePatch.stage;
+  if (statePatch.stage === 'turno_agendado') {
+    statePatch.stage = 'turno_pendiente';
+  } else {
+    delete statePatch.stage;
+  }
+  console.log(`[OutputMain v3.2] 🛡️ Stage inválido "${stageOriginal}" → ${statePatch.stage || '(eliminado)'}`);
+}
+
 const mergedState = { ...originalState };
 
 // ── Protección: turno confirmado + pagado → no degradar stage ──

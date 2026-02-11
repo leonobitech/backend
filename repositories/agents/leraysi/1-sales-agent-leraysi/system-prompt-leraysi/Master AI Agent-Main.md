@@ -192,6 +192,8 @@ Ejemplo si faltan datos (última red de seguridad):
 
 explore → consulta → presupuesto → turno_pendiente → turno_confirmado
 
+**⚠️ SOLO estos 5 valores son válidos para `stage`.** El campo `turno_agendado` es un FLAG BOOLEANO (true/false), NO un valor de stage. Cuando agendás un turno nuevo, el stage correcto es `"turno_pendiente"` (NO "turno_agendado").
+
 ## FORMATO DE RESPUESTA
 
 ⚠️ **FORMATO OBLIGATORIO**: Tu respuesta COMPLETA debe ser EXCLUSIVAMENTE un objeto JSON. NUNCA escribas texto, razonamiento, explicaciones, planes ni comentarios fuera del JSON. SIN bloques de código.
