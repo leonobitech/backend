@@ -252,6 +252,35 @@ const complejidad_maxima = obtenerComplejidadMaxima(servicio, largo_cabello);
 const servicio_detalle = servicio.join(' + ');
 
 // ============================================================================
+// GATE DETERMINÍSTICO: datos obligatorios para turno nuevo
+// ============================================================================
+// Si es turno nuevo y falta email o full_name → bloquear flujo.
+// Se fuerza modo "consultar_disponibilidad" para que SwitchModo rutee a
+// FormatearRespuestaOpciones, que detecta gate_bloqueado y devuelve
+// "datos_faltantes" al Master Agent.
+// Esto es código determinístico — imposible de bypassear por el LLM.
+
+const esTurnoNuevo = !input.turno_agendado && !input.agregar_a_turno_existente;
+const tieneFullName = !!(llmOutput.full_name || state.full_name);
+const tieneEmail = !!email;
+
+let gate_bloqueado = false;
+const gate_datos_faltantes = [];
+
+if (esTurnoNuevo) {
+  if (!tieneFullName) gate_datos_faltantes.push('nombre completo');
+  if (!tieneEmail) gate_datos_faltantes.push('email');
+  gate_bloqueado = gate_datos_faltantes.length > 0;
+}
+
+if (gate_bloqueado) {
+  console.log(`[ParseInput] 🛡️ GATE BLOQUEADO: faltan ${gate_datos_faltantes.join(', ')}`);
+}
+
+// Si gate bloqueado, forzar modo consultar para rutear a FormatearRespuestaOpciones
+const modoOutput = gate_bloqueado ? 'consultar_disponibilidad' : input.modo;
+
+// ============================================================================
 // OUTPUT
 // ============================================================================
 return [{
@@ -289,10 +318,14 @@ return [{
     turno_id_existente: input.turno_id_existente,
     turno_precio_existente: input.turno_precio_existente,
 
-    // Modo de operación
-    modo: input.modo,
+    // Modo de operación (override a consultar si gate bloqueado)
+    modo: modoOutput,
     preferencia_horario: input.preferencia_horario,
     accion: input.accion,
+
+    // GATE determinístico
+    gate_bloqueado,
+    gate_datos_faltantes,
 
     // Metadata
     received_at: new Date().toISOString()

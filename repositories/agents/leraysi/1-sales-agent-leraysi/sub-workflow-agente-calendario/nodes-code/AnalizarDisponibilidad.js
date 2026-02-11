@@ -249,6 +249,7 @@ if (input.turno_agendado && input.lead_row_id) {
 // ============================================================================
 const modo = input.modo || null;
 let slotsRecomendados = [];
+let esJornadaCompleta = false;
 
 if (modo === 'consultar_disponibilidad') {
   const APERTURA = 9 * 60;   // 09:00 = 540 min
@@ -295,72 +296,117 @@ if (modo === 'consultar_disponibilidad') {
 
   const candidatos = [];
 
-  for (const dia of diasBusqueda) {
-    if (candidatos.length >= 9) break; // suficientes candidatos
+  // ================================================================
+  // JORNADA COMPLETA: servicios combinados que exceden el día laboral
+  // ================================================================
+  // Cuando la duración total supera las 10h (600 min), el loop normal
+  // de slots no genera resultados. En la práctica, la estilista SÍ puede
+  // hacer estos servicios en un día (paralleliza: trabaja uñas mientras
+  // la química actúa en el cabello). Ofrecemos "jornada completa" en
+  // días con baja carga.
+  const JORNADA_MIN = CIERRE - APERTURA; // 600 min
+  esJornadaCompleta = duracionServicio > JORNADA_MIN;
 
-    // Obtener turnos del día con sus bloques de tiempo
-    const turnosDelDia = (turnosPorDia[dia.fecha]?.turnos || []).map(t => {
-      const horaStr = t.hora || '09:00';
-      const startMin = horaToMinutos(horaStr);
-      const dur = Number(t.duracion_min) || 60;
-      return { start: startMin, end: startMin + dur };
-    });
+  if (esJornadaCompleta) {
+    // Buscar días con carga < 20% (máx ~120 min de turnos existentes)
+    const MAX_CARGA_JORNADA = 20;
 
-    // Generar slots disponibles
-    for (let start = APERTURA; start + duracionServicio <= CIERRE; start += STEP) {
-      const end = start + duracionServicio;
+    const diasJornada = diasBusqueda
+      .filter(d => (d.carga_porcentaje || 0) < MAX_CARGA_JORNADA)
+      .sort((a, b) => {
+        // Priorizar día solicitado
+        if (a.fecha === fechaSolicitada) return -1;
+        if (b.fecha === fechaSolicitada) return 1;
+        // Luego por menor carga
+        return (a.carga_porcentaje || 0) - (b.carga_porcentaje || 0);
+      })
+      .slice(0, 3);
 
-      // Hoy ya está excluido en diasBusqueda (regla de negocio: mínimo mañana)
-
-      // Verificar que no solape con ningún turno existente
-      const solapa = turnosDelDia.some(o => start < o.end && end > o.start);
-      if (solapa) continue;
-
-      // Puntuar el slot
-      let score = 0;
-      let motivo = 'Horario disponible';
-
-      // +10 si coincide con hora_deseada exacta
-      if (horaPreferida !== null && start === horaPreferida) {
-        score += 10;
-        motivo = 'Horario solicitado disponible';
-      }
-
-      // +8 si es el día solicitado
-      if (dia.fecha === fechaSolicitada) {
-        score += 8;
-      }
-
-      // +5 si encaja en preferencia de horario
-      if (preferencia === 'manana' && start >= APERTURA && start < 12 * 60) {
-        score += 5;
-        if (motivo === 'Horario disponible') motivo = 'Disponible por la mañana';
-      } else if (preferencia === 'tarde' && start >= 13 * 60 && start < CIERRE) {
-        score += 5;
-        if (motivo === 'Horario disponible') motivo = 'Disponible por la tarde';
-      }
-
-      // +3 si está adyacente a otro turno (pack calendar)
-      if (turnosDelDia.length > 0) {
-        const minGap = Math.min(...turnosDelDia.map(o =>
-          Math.min(Math.abs(start - o.end), Math.abs(o.start - end))
-        ));
-        if (minGap <= 30) score += 3;
-      }
-
-      // +2 si el día tiene baja carga
-      const loadPct = dia.carga_porcentaje || 0;
-      if (loadPct < 30) score += 2;
-
+    for (const dia of diasJornada) {
       candidatos.push({
         fecha: dia.fecha,
-        hora: minutosToHora(start),
-        hora_fin: minutosToHora(end),
+        hora: minutosToHora(APERTURA),
+        hora_fin: minutosToHora(CIERRE),
         nombre_dia: dia.nombre_dia,
-        score,
-        motivo,
-        carga_dia: loadPct
+        score: dia.fecha === fechaSolicitada ? 18 : 10,
+        motivo: 'Jornada completa disponible',
+        carga_dia: dia.carga_porcentaje || 0,
+        jornada_completa: true
       });
+    }
+
+    console.log(`[AnalizarDisponibilidad] 🗓️ JORNADA COMPLETA: ${duracionServicio}min > ${JORNADA_MIN}min, ${diasJornada.length} días encontrados`);
+  } else {
+    // ================================================================
+    // MODO NORMAL: generar slots por hora
+    // ================================================================
+    for (const dia of diasBusqueda) {
+      if (candidatos.length >= 9) break; // suficientes candidatos
+
+      // Obtener turnos del día con sus bloques de tiempo
+      const turnosDelDia = (turnosPorDia[dia.fecha]?.turnos || []).map(t => {
+        const horaStr = t.hora || '09:00';
+        const startMin = horaToMinutos(horaStr);
+        const dur = Number(t.duracion_min) || 60;
+        return { start: startMin, end: startMin + dur };
+      });
+
+      // Generar slots disponibles
+      for (let start = APERTURA; start + duracionServicio <= CIERRE; start += STEP) {
+        const end = start + duracionServicio;
+
+        // Hoy ya está excluido en diasBusqueda (regla de negocio: mínimo mañana)
+
+        // Verificar que no solape con ningún turno existente
+        const solapa = turnosDelDia.some(o => start < o.end && end > o.start);
+        if (solapa) continue;
+
+        // Puntuar el slot
+        let score = 0;
+        let motivo = 'Horario disponible';
+
+        // +10 si coincide con hora_deseada exacta
+        if (horaPreferida !== null && start === horaPreferida) {
+          score += 10;
+          motivo = 'Horario solicitado disponible';
+        }
+
+        // +8 si es el día solicitado
+        if (dia.fecha === fechaSolicitada) {
+          score += 8;
+        }
+
+        // +5 si encaja en preferencia de horario
+        if (preferencia === 'manana' && start >= APERTURA && start < 12 * 60) {
+          score += 5;
+          if (motivo === 'Horario disponible') motivo = 'Disponible por la mañana';
+        } else if (preferencia === 'tarde' && start >= 13 * 60 && start < CIERRE) {
+          score += 5;
+          if (motivo === 'Horario disponible') motivo = 'Disponible por la tarde';
+        }
+
+        // +3 si está adyacente a otro turno (pack calendar)
+        if (turnosDelDia.length > 0) {
+          const minGap = Math.min(...turnosDelDia.map(o =>
+            Math.min(Math.abs(start - o.end), Math.abs(o.start - end))
+          ));
+          if (minGap <= 30) score += 3;
+        }
+
+        // +2 si el día tiene baja carga
+        const loadPct = dia.carga_porcentaje || 0;
+        if (loadPct < 30) score += 2;
+
+        candidatos.push({
+          fecha: dia.fecha,
+          hora: minutosToHora(start),
+          hora_fin: minutosToHora(end),
+          nombre_dia: dia.nombre_dia,
+          score,
+          motivo,
+          carga_dia: loadPct
+        });
+      }
     }
   }
 
@@ -371,7 +417,7 @@ if (modo === 'consultar_disponibilidad') {
 
   slotsRecomendados = candidatos.slice(0, 3).map((s, i) => {
     const fechaObj = new Date(s.fecha + 'T12:00:00');
-    return {
+    const slot = {
       opcion: i + 1,
       fecha: s.fecha,
       hora: s.hora,
@@ -380,6 +426,8 @@ if (modo === 'consultar_disponibilidad') {
       fecha_humana: `${s.nombre_dia.toLowerCase()} ${fechaObj.getDate()} de ${meses[fechaObj.getMonth()]}`,
       motivo: s.motivo
     };
+    if (s.jornada_completa) slot.jornada_completa = true;
+    return slot;
   });
 }
 
@@ -410,6 +458,8 @@ return [{
     turno_sena_pagada: turnoSenaPagada,
     // Slots recomendados (solo en modo consultar_disponibilidad)
     slots_recomendados: slotsRecomendados,
+    // Jornada completa: servicios combinados exceden el día laboral
+    jornada_completa: esJornadaCompleta,
     // Acción explícita (no depender solo de ...input spread)
     accion: input.accion || null
   }

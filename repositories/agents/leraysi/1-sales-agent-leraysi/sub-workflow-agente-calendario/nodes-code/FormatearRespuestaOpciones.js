@@ -8,6 +8,29 @@
 
 const data = $input.first().json;
 
+// ============================================================================
+// GATE DETERMINÍSTICO: si ParseInput bloqueó por datos faltantes
+// ============================================================================
+if (data.gate_bloqueado) {
+  const faltantes = data.gate_datos_faltantes || ['email'];
+  const nombre = data.nombre_clienta || 'Reina';
+
+  const listaFaltantes = faltantes.map(d => `* Tu ${d}`).join('\n');
+
+  console.log(`[FormatearRespuesta] 🛡️ GATE: devolviendo datos_faltantes (${faltantes.join(', ')})`);
+
+  return [{
+    json: {
+      success: true,
+      accion: 'datos_faltantes',
+      mensaje_para_clienta: `${nombre}, para reservar tu turno necesito que me pases:\n\n${listaFaltantes}\n\n¿Me los compartís?`,
+      opciones: [],
+      datos_faltantes: faltantes,
+      lead_row_id: data.lead_row_id || null
+    }
+  }];
+}
+
 const slots = data.slots_recomendados || [];
 const servicioDisplay = data.servicio_detalle || (Array.isArray(data.servicio) ? data.servicio.join(' + ') : data.servicio) || 'servicio';
 const nombreClienta = data.nombre_clienta || 'Reina';
@@ -19,11 +42,20 @@ if (slots.length > 0) {
   // Hay opciones disponibles
   accion = 'opciones_disponibles';
 
-  const opcionesTexto = slots.map(s =>
-    `* ${s.fecha_humana} a las ${s.hora}`
-  ).join('\n');
+  const esJornadaCompleta = data.jornada_completa || slots.some(s => s.jornada_completa);
 
-  mensajeParaClienta = `${nombreClienta}, para ${servicioDisplay.toLowerCase()} tengo estos horarios:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
+  const opcionesTexto = slots.map(s => {
+    if (s.jornada_completa) {
+      return `* ${s.fecha_humana} - jornada completa (${s.hora} a ${s.hora_fin})`;
+    }
+    return `* ${s.fecha_humana} a las ${s.hora}`;
+  }).join('\n');
+
+  if (esJornadaCompleta) {
+    mensajeParaClienta = `${nombreClienta}, como ${servicioDisplay.toLowerCase()} es una combinación extensa, necesitamos una jornada completa. Tengo disponibles estos días:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
+  } else {
+    mensajeParaClienta = `${nombreClienta}, para ${servicioDisplay.toLowerCase()} tengo estos horarios:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
+  }
 } else {
   // Sin disponibilidad - ofrecer alternativas por día
   accion = 'sin_disponibilidad';

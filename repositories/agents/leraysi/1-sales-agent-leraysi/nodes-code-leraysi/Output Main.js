@@ -115,8 +115,42 @@ if (llmData.output) {
 // 3. EXTRAER content_whatsapp Y state_patch
 // ============================================================================
 
-const contentWhatsapp = llmOutput.content_whatsapp || "";
-const statePatch = llmOutput.state_patch || {};
+let contentWhatsapp = llmOutput.content_whatsapp || "";
+let statePatch = llmOutput.state_patch || {};
+
+// ── RECOVERY: LLM omitió wrapper {"content_whatsapp": "..."} ──
+// Caso típico: el LLM escribió el texto directo con state_patch pegado al final
+// Raw luce así: "texto...💕", "state_patch": {"stage": "presupuesto"}}
+if (!contentWhatsapp && llmData.output) {
+  console.log("[OutputMain v3.2] ⚠️ Recovery: content_whatsapp faltante, reconstruyendo...");
+  const raw = String(llmData.output);
+  const spMarker = '"state_patch"';
+  const spIdx = raw.lastIndexOf(spMarker);
+
+  if (spIdx > 0) {
+    // Todo antes de "state_patch" es el contenido del mensaje
+    let recovered = raw.substring(0, spIdx)
+      .replace(/[",\s]+$/, '')  // Limpiar separadores JSON residuales: ",
+      .replace(/\\n/g, '\n')    // \n literal → newline real
+      .trim();
+
+    if (recovered) {
+      contentWhatsapp = recovered;
+
+      // Si extractJson devolvió el objeto state_patch como raíz (sin wrapper),
+      // usarlo directamente como statePatch
+      if (Object.keys(statePatch).length === 0 && Object.keys(llmOutput).length > 0) {
+        statePatch = llmOutput;
+      }
+
+      console.log("[OutputMain v3.2] ✅ Recovery exitoso, content length:", recovered.length);
+    }
+  } else if (raw.trim()) {
+    // No hay state_patch en el texto → usar todo como contenido
+    contentWhatsapp = raw.replace(/\\n/g, '\n').trim();
+    console.log("[OutputMain v3.2] 🔧 Recovery: usando raw output completo como content");
+  }
+}
 
 if (!contentWhatsapp) {
   throw new Error("[OutputMain] Missing content_whatsapp from LLM");
