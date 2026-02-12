@@ -1291,9 +1291,9 @@ services:
       - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
       - "traefik.http.services.chatwoot.loadbalancer.serverstransport=ws-transport@file"
 
-  chatwoot_worker_default:
+  chatwoot_sidekiq:
     image: chatwoot/chatwoot:latest
-    container_name: chatwoot_worker_default
+    container_name: chatwoot_sidekiq
     restart: always
     security_opt:
       - no-new-privileges:true
@@ -1305,15 +1305,15 @@ services:
       - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
       - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
-      # ===== Sidekiq (default/mailers) =====
+      # ===== Sidekiq (todas las colas en 1 proceso) =====
       - RAILS_ENV=production
       - RAILS_LOG_TO_STDOUT=true
-      - SIDEKIQ_CONCURRENCY=5 # suficiente para colas light
+      - SIDEKIQ_CONCURRENCY=5
       - MALLOC_ARENA_MAX=2
       - RUBY_YJIT_ENABLE=0
-      # - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
 
-    command: ["bundle", "exec", "sidekiq", "-q", "default", "-q", "mailers"]
+    # Todas las colas por prioridad + scheduled jobs de sidekiq.yml
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml", "-q", "critical", "-q", "default", "-q", "mailers", "-q", "low"]
 
     volumes:
       - chatwoot_data:/app/storage
@@ -1330,143 +1330,8 @@ services:
       retries: 3
 
     stop_grace_period: 60s
-    cpus: 0.75
-    mem_limit: 512m
-
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  chatwoot_worker_low:
-    image: chatwoot/chatwoot:latest
-    container_name: chatwoot_worker_low
-    restart: always
-    security_opt:
-      - no-new-privileges:true
-    env_file:
-      - ./repositories/chatwoot/.env
-    environment:
-      - POSTGRES_HOST=${POSTGRES_HOST_CW}
-      - POSTGRES_PORT=${POSTGRES_PORT_CW}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
-      - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
-      # ===== Sidekiq (default/mailers) =====
-      - RAILS_ENV=production
-      - RAILS_LOG_TO_STDOUT=true
-      - SIDEKIQ_CONCURRENCY=3
-      - MALLOC_ARENA_MAX=2
-      - RUBY_YJIT_ENABLE=0
-      # - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
-    command: ["bundle", "exec", "sidekiq", "-q", "low"]
-    volumes:
-      - chatwoot_data:/app/storage
-    depends_on:
-      - redis_chatwoot
-      - postgres_chatwoot
-    networks:
-      - leonobitech-net
-    healthcheck:
-      test: ["CMD", "pgrep", "sidekiq"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-    stop_grace_period: 60s
-    cpus: 0.5
-    mem_limit: 576m
-
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  chatwoot_worker_critical:
-    image: chatwoot/chatwoot:latest
-    container_name: chatwoot_worker_critical
-    restart: always
-    security_opt:
-      - no-new-privileges:true
-    env_file:
-      - ./repositories/chatwoot/.env
-    environment:
-      - POSTGRES_HOST=${POSTGRES_HOST_CW}
-      - POSTGRES_PORT=${POSTGRES_PORT_CW}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
-      - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
-
-      - RAILS_ENV=production
-      - RAILS_LOG_TO_STDOUT=true
-      - SIDEKIQ_CONCURRENCY=3
-      - MALLOC_ARENA_MAX=2
-      - RUBY_YJIT_ENABLE=0
-      # - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
-    command: ["bundle", "exec", "sidekiq", "-q", "critical"]
-    volumes:
-      - chatwoot_data:/app/storage
-    depends_on:
-      - redis_chatwoot
-      - postgres_chatwoot
-    networks:
-      - leonobitech-net
-    healthcheck:
-      test: ["CMD", "pgrep", "sidekiq"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-    stop_grace_period: 60s
-    cpus: 0.75
-    mem_limit: 512m
-
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  chatwoot_worker_scheduler:
-    image: chatwoot/chatwoot:latest
-    container_name: chatwoot_worker_scheduler
-    restart: always
-    security_opt:
-      - no-new-privileges:true
-    env_file:
-      - ./repositories/chatwoot/.env
-    environment:
-      - POSTGRES_HOST=${POSTGRES_HOST_CW}
-      - POSTGRES_PORT=${POSTGRES_PORT_CW}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE_CW}
-      - POSTGRES_USERNAME=${POSTGRES_USERNAME_CW}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_CW}
-
-      - RAILS_ENV=production
-      - RAILS_LOG_TO_STDOUT=true
-      - SIDEKIQ_CONCURRENCY=2
-      - MALLOC_ARENA_MAX=2
-      - RUBY_YJIT_ENABLE=0
-
-    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
-    volumes:
-      - chatwoot_data:/app/storage
-    depends_on:
-      - redis_chatwoot
-      - postgres_chatwoot
-    networks:
-      - leonobitech-net
-    healthcheck:
-      test: ["CMD", "pgrep", "sidekiq"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-    stop_grace_period: 60s
-    cpus: 0.5
-    mem_limit: 576m
+    cpus: 1.0
+    mem_limit: 768m
 
     logging:
       driver: "json-file"
