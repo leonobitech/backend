@@ -113,9 +113,9 @@ C) Fuera de contexto/troll/spam → "Solo puedo ayudar con info de Leonobitech y
 
 #### Chat Model
 ```
-GPT-3.5-turbo (gpt-3.5-turbo)
+Claude Haiku 3.5 (claude-3-5-haiku-latest)
 ```
-**Nota**: Se usa GPT-3.5-turbo en lugar de GPT-4o-mini por razones de acceso/disponibilidad.
+**Nota**: Se migró a Claude Haiku 3.5 para unificar todo el stack en Anthropic.
 
 ---
 
@@ -569,13 +569,12 @@ return [{
 
 ---
 
-### **3. Cambiar a GPT-4o-mini**
-**Problema**: GPT-3.5-turbo puede tener menor adherencia a instrucciones complejas.
-
-**Solución**: Actualizar Chat Model a `gpt-4o-mini` (si el acceso se resuelve):
+### **3. ~~Cambiar a GPT-4o-mini~~ (COMPLETADO)**
+**Resuelto**: Se migró directamente a Claude Haiku 3.5, unificando todo el stack en Anthropic.
 - Mayor capacidad de reasoning
 - Mejor seguimiento de constraints
 - Menor tasa de errores en formato de salida
+- Consistencia con el resto del sistema (Master Agent, Calendario)
 
 ---
 

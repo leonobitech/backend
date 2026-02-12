@@ -26,7 +26,7 @@ Guía completa para implementar la versión mejorada del Master Agent que usa Sm
 ### ✅ **Versión Nueva (v2.0)**
 ```
 3-4 nodos:
-  Webhook → Smart Input Builder → Master Agent v2 (GPT-4o-mini) → Output & Persist
+  Webhook → Smart Input Builder → Master Agent v2 (Claude Haiku 3.5) → Output & Persist
 ```
 
 **Mejoras**:
@@ -35,7 +35,7 @@ Guía completa para implementar la versión mejorada del Master Agent que usa Sm
 - ✅ RAG usado siempre cuando relevante
 - ✅ State updates completos
 - 🎯 CTAs solo cuando tiene sentido
-- 💰 Un solo LLM (GPT-4o-mini más barato y rápido)
+- 💰 Un solo LLM (Claude Haiku 3.5 más barato y rápido)
 
 ---
 
@@ -60,12 +60,12 @@ WhatsApp → Chatwoot (Webhook)
 └──────────────────────────────────────────────────────────┘
                ↓
 ┌──────────────────────────────────────────────────────────┐
-│  NODO 2: Master Agent v2 (GPT-4o-mini)                   │
+│  NODO 2: Master Agent v2 (Claude Haiku 3.5)                   │
 │                                                           │
 │  System Prompt: 50-System-Prompt-v2-SIMPLE.md            │
 │  User Prompt: Inyecta smart_input completo               │
 │                                                           │
-│  Tools disponibles (OpenAI function calling):            │
+│  Tools disponibles (Anthropic tool use):            │
 │  ┌────────────────────────────────────────────────────┐  │
 │  │ search_services_rag(query, filters, limit)        │  │
 │  │   → Query Qdrant vector store                     │  │
@@ -82,7 +82,7 @@ WhatsApp → Chatwoot (Webhook)
                ↓
 ┌──────────────────────────────────────────────────────────┐
 │  NODO 3: Output & Persist                                │
-│  - Execute tool calls (si GPT-4o-mini llamó a RAG)       │
+│  - Execute tool calls (si Claude Haiku 3.5 llamó a RAG)       │
 │  - Update Baserow (state_update)                         │
 │  - Update Odoo (mensaje al chatter)                      │
 │  - Send message to Chatwoot                              │
@@ -243,7 +243,7 @@ return [{
 **Configuración**:
 
 ```yaml
-Model: gpt-4o-mini
+Model: claude-haiku-3.5
 Temperature: 0.3
 Max Tokens: 1500
 
@@ -365,15 +365,15 @@ function buildQdrantFilter(filters) {
 
 const masterOutput = $json; // Output del Master Agent v2
 
-// 1. Execute tool calls si GPT-4o-mini llamó a algún tool
+// 1. Execute tool calls si Claude Haiku 3.5 llamó a algún tool
 if (masterOutput.tool_calls && masterOutput.tool_calls.length > 0) {
   for (const toolCall of masterOutput.tool_calls) {
     if (toolCall.function.name === 'search_services_rag') {
       const args = JSON.parse(toolCall.function.arguments);
       const ragResults = await search_services_rag(args);
 
-      // Re-call GPT-4o-mini con los resultados del RAG
-      // (OpenAI function calling loop)
+      // Re-call Claude Haiku 3.5 con los resultados del RAG
+      // (Anthropic tool use loop)
       // ...
     }
   }

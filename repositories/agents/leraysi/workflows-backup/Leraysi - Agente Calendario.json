@@ -1,0 +1,1316 @@
+{
+  "name": "Leraysi - Agente Calendario",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"llm_output\": {\n    \"nombre_clienta\": \"Andrea Figueroa\",\n    \"email\": \"felixmanuelfigueroa@gmail.com\",\n    \"servicio\": [\"Alisado brasileño\"],\n    \"fecha_deseada\": \"2026-01-22\",\n    \"hora_deseada\": \"09:00\",\n    \"precio\": 60000\n  },\n  \"state\": {\n    \"row_id\": 73,\n    \"lead_id\": 210,\n    \"chatwoot_id\": 198,\n    \"chatwoot_inbox_id\": 2,\n    \"conversation_id\": 390,\n    \"nick_name\": \"Felix Figueroa\",\n    \"full_name\": \"Andrea Figueroa\",\n    \"phone\": \"+5491133851987\",\n    \"email\": \"felixmanuelfigueroa@gmail.com\",\n    \"channel\": \"whatsapp\",\n    \"country\": \"Argentina\",\n    \"tz\": \"-03:00\",\n    \"stage\": \"consulta\",\n    \"priority\": \"normal\",\n    \"servicio_interes\": \"Alisado brasileño\",\n    \"interests\": [],\n    \"foto_recibida\": true,\n    \"presupuesto_dado\": true,\n    \"turno_agendado\": false,\n    \"turno_fecha\": null,\n    \"sena_pagada\": false,\n    \"waiting_image\": false,\n    \"services_seen\": 2,\n    \"prices_asked\": 1,\n    \"deep_interest\": 3,\n    \"last_message\": \"Sí, quiero turno para el miércoles\",\n    \"last_message_id\": null,\n    \"last_activity_iso\": \"2026-01-19T14:30:00.000Z\",\n    \"email_ask_ts\": null,\n    \"fullname_ask_ts\": null,\n    \"image_analysis\": {\n      \"length\": \"largo\",\n      \"texture\": \"liso\",\n      \"complexity\": \"alta\",\n      \"condition\": \"buena\",\n      \"current_color\": \"negro\",\n      \"is_dyed\": false,\n      \"has_roots\": false\n    }\n  }\n}\n"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -208,
+        -176
+      ],
+      "id": "2db9689c-9a08-4172-ad0f-c47bc82ba8b8",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PARSE INPUT - Agente Calendario Leraysi\n// ============================================================================\n// Procesa y valida el input del Master AI Agent\n// COMBINA: llm_output (del LLM) + state (de Input Main)\n// Calcula duración y PRECIO basados en servicio + largo del cabello (determinístico)\n// ============================================================================\n\nconst raw = $input.first().json;\n\n// ============================================================================\n// PASO 1: EXTRAER LLM_OUTPUT Y STATE\n// ============================================================================\nconst data = raw.query || raw;\nconst llmOutput = typeof data.llm_output === 'string'\n  ? JSON.parse(data.llm_output)\n  : (data.llm_output || {});\nconst state = typeof data.state === 'string' ? JSON.parse(data.state) : (data.state || {});\n\n// ============================================================================\n// PASO 2: COMBINAR LLM_OUTPUT + STATE\n// ============================================================================\nconst input = {\n  modo: llmOutput.modo || null,\n  preferencia_horario: llmOutput.preferencia_horario || null,\n  accion: llmOutput.accion || null,\n  nombre_clienta: llmOutput.full_name || llmOutput.nombre_clienta || state.full_name || state.nick_name,\n  servicio: llmOutput.servicio || (state.servicio_interes ? [state.servicio_interes] : []),\n  fecha_deseada: llmOutput.fecha_deseada || llmOutput.fecha,\n  hora_deseada: llmOutput.hora_deseada || llmOutput.hora || (() => {\n    const fecha = llmOutput.fecha_deseada || llmOutput.fecha;\n    if (fecha && fecha.includes('T')) {\n      const timePart = fecha.split('T')[1];\n      if (timePart) return timePart.substring(0, 5);\n    }\n    return null;\n  })(),\n  precio: llmOutput.precio || 0,\n  email: llmOutput.email || state.email || null,\n  telefono: state.phone,\n  clienta_id: state.lead_id,\n  lead_id: state.lead_id,\n  lead_row_id: state.row_id,\n  conversation_id: state.conversation_id,\n  image_analysis: state.image_analysis || null,\n  turno_agendado: state.turno_agendado || false,\n  turno_fecha: state.turno_fecha || null,\n  agregar_a_turno_existente: state.agregar_a_turno_existente || llmOutput.agregar_a_turno_existente || false,\n  turno_id_existente: state.odoo_turno_id || state.turno_id_existente || llmOutput.turno_id_existente || null,\n  turno_precio_existente: state.turno_precio_existente || llmOutput.turno_precio_existente || 0,\n  largo_cabello_raw: state.image_analysis?.length || null\n};\n\n// ============================================================================\n// CONFIGURACIÓN DE SERVICIOS Y DURACIONES\n// ============================================================================\nconst SERVICIOS_CONFIG = {\n  'Corte mujer': { base_min: 60, complejidad: 'media', requiere_largo: true, precio_base: 8000 },\n  'Alisado brasileño': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 45000 },\n  'Alisado keratina': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 55000 },\n  'Mechas completas': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 35000 },\n  'Tintura raíz': { base_min: 60, complejidad: 'compleja', requiere_largo: true, precio_base: 15000 },\n  'Tintura completa': { base_min: 120, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 25000 },\n  'Balayage': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 50000 },\n  'Manicura simple': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 5000 },\n  'Manicura semipermanente': { base_min: 180, complejidad: 'compleja', requiere_largo: false, precio_base: 8000 },\n  'Pedicura': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 6000 },\n  'Depilación cera piernas': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 10000 },\n  'Depilación cera axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 4000 },\n  'Depilación cera bikini': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 6000 },\n  'Depilación láser piernas': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 25000 },\n  'Depilación láser axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 12000 }\n};\n\nconst DURACION_EXTRA_LARGO = { 'corto': 0, 'medio': 60, 'largo': 120 };\nconst COMPLEJIDAD_POR_LARGO = { 'corto': 'media', 'medio': 'compleja', 'largo': 'muy_compleja' };\nconst PRECIO_MULTIPLICADOR_LARGO = { 'corto': 1.0, 'medio': 1.1, 'largo': 1.2 };\n\nfunction algunServicioRequiereLargo(servicios) {\n  return servicios.some(srv => {\n    const config = SERVICIOS_CONFIG[srv];\n    return config ? config.requiere_largo !== false : true;\n  });\n}\n\n// ============================================================================\n// VALIDACIÓN DE CAMPOS REQUERIDOS\n// ============================================================================\nconst modoConsulta = input.modo === 'consultar_disponibilidad';\nconst camposRequeridos = modoConsulta\n  ? ['servicio', 'fecha_deseada']\n  : ['clienta_id', 'nombre_clienta', 'telefono', 'servicio', 'fecha_deseada'];\nconst camposFaltantes = camposRequeridos.filter(campo => !input[campo]);\nif (camposFaltantes.length > 0) {\n  throw new Error(`[ParseInput] Campos requeridos faltantes: ${camposFaltantes.join(', ')}`);\n}\n\n// ============================================================================\n// EXTRACCIÓN DE DATOS\n// ============================================================================\nconst clienta_id = input.clienta_id;\nconst nombre_clienta = input.nombre_clienta;\nconst telefono = input.telefono;\nconst email = input.email || null;\nconst servicio = Array.isArray(input.servicio) ? input.servicio : [input.servicio];\nconst fecha_deseada = input.fecha_deseada;\nconst hora_deseada = input.hora_deseada || null;\nconst precio = Number(input.precio) || 0;\nconst lead_row_id = input.lead_row_id || input.row_id;\nconst conversation_id = input.conversation_id || null;\nconst image_analysis = input.image_analysis || null;\n\nconst serviciosArray = Array.isArray(input.servicio) ? input.servicio : [input.servicio];\nconst requiereLargo = algunServicioRequiereLargo(serviciosArray);\nconst largo_cabello = requiereLargo\n  ? (image_analysis?.length || input.largo_cabello_raw || null)\n  : null;\n\n// ============================================================================\n// CÁLCULO DE DURACIÓN ESTIMADA\n// ============================================================================\nfunction calcularDuracion(servicios, largo) {\n  let duracionTotal = 0;\n  for (const srv of servicios) {\n    const config = SERVICIOS_CONFIG[srv];\n    if (config) {\n      let duracionServicio = config.base_min;\n      if (config.requiere_largo && largo) {\n        duracionServicio += (DURACION_EXTRA_LARGO[largo] || 0);\n      }\n      duracionTotal += duracionServicio;\n    } else {\n      duracionTotal += 60;\n    }\n  }\n  return Math.ceil(duracionTotal / 15) * 15;\n}\n\nfunction obtenerComplejidadMaxima(servicios, largo) {\n  const complejidades = servicios.map(srv => {\n    const config = SERVICIOS_CONFIG[srv];\n    if (!config) return 'media';\n    if (config.requiere_largo && largo) {\n      return COMPLEJIDAD_POR_LARGO[largo] || config.complejidad;\n    }\n    return config.complejidad;\n  });\n  if (complejidades.includes('muy_compleja')) return 'muy_compleja';\n  if (complejidades.includes('compleja')) return 'compleja';\n  if (complejidades.includes('media')) return 'media';\n  return 'simple';\n}\n\n// ============================================================================\n// CÁLCULO DE PRECIO DETERMINÍSTICO\n// ============================================================================\nfunction calcularPrecio(servicios, largo) {\n  let precioTotal = 0;\n  for (const srv of servicios) {\n    const config = SERVICIOS_CONFIG[srv];\n    if (config && config.precio_base != null) {\n      let precioServicio = config.precio_base;\n      if (config.requiere_largo && largo) {\n        precioServicio = Math.round(config.precio_base * (PRECIO_MULTIPLICADOR_LARGO[largo] || 1.0));\n      }\n      precioTotal += precioServicio;\n    } else {\n      console.log(`[ParseInput] \\u26a0\\ufe0f Servicio \\\"${srv}\\\" no encontrado en config, precio no calculable`);\n      return null;\n    }\n  }\n  return precioTotal;\n}\n\nconst duracion_estimada = calcularDuracion(servicio, largo_cabello);\nconst complejidad_maxima = obtenerComplejidadMaxima(servicio, largo_cabello);\nconst servicio_detalle = servicio.join(' + ');\n\nconst precio_calculado = calcularPrecio(servicio, largo_cabello);\nconst precioFinal = precio_calculado !== null ? precio_calculado : precio;\nif (precio_calculado !== null && precio > 0 && precio_calculado !== precio) {\n  console.log(`[ParseInput] \\ud83d\\udd27 Precio corregido: LLM=$${precio}, determin\\u00edstico=$${precio_calculado}`);\n}\n\n// ============================================================================\n// GATE DETERMINÍSTICO\n// ============================================================================\nconst esTurnoNuevo = !input.turno_agendado && !input.agregar_a_turno_existente;\nconst tieneFullName = !!(llmOutput.full_name || state.full_name);\nconst tieneEmail = !!email;\nlet gate_bloqueado = false;\nconst gate_datos_faltantes = [];\nif (esTurnoNuevo) {\n  if (!tieneFullName) gate_datos_faltantes.push('nombre completo');\n  if (!tieneEmail) gate_datos_faltantes.push('email');\n  gate_bloqueado = gate_datos_faltantes.length > 0;\n}\nif (gate_bloqueado) {\n  console.log(`[ParseInput] \\ud83d\\udee1\\ufe0f GATE BLOQUEADO: faltan ${gate_datos_faltantes.join(', ')}`);\n}\nconst modoOutput = gate_bloqueado ? 'consultar_disponibilidad' : input.modo;\n\n// ============================================================================\n// OUTPUT\n// ============================================================================\nreturn [{\n  json: {\n    clienta_id, nombre_clienta, telefono, email,\n    servicio, servicio_detalle, fecha_deseada, hora_deseada,\n    precio: precioFinal, duracion_estimada, complejidad_maxima,\n    image_analysis, largo_cabello,\n    lead_id: input.lead_id, lead_row_id, conversation_id,\n    turno_agendado: input.turno_agendado, turno_fecha: input.turno_fecha,\n    agregar_a_turno_existente: input.agregar_a_turno_existente,\n    turno_id_existente: input.turno_id_existente,\n    turno_precio_existente: input.turno_precio_existente,\n    modo: modoOutput, preferencia_horario: input.preferencia_horario,\n    accion: input.accion,\n    gate_bloqueado, gate_datos_faltantes,\n    received_at: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -176
+      ],
+      "id": "2a120cfa-c0a8-4070-8a45-289f08be6e67",
+      "name": "ParseInput"
+    },
+    {
+      "parameters": {
+        "databaseId": 4,
+        "tableId": 852,
+        "returnAll": true,
+        "additionalOptions": {
+          "filters": {
+            "fields": [
+              {
+                "field": 8378,
+                "operator": "date_after",
+                "value": "={{ $now.format('yyyy-MM-dd') }}"
+              },
+              {
+                "field": 8378,
+                "operator": "date_before",
+                "value": "={{ $now.plus({days: 30}).format('yyyy-MM-dd') }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -176
+      ],
+      "id": "580387c9-9d83-4d69-ac2b-afb7f53bc741",
+      "name": "GetTurnosSemana",
+      "alwaysOutputData": true,
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.userMessage }}",
+        "options": {
+          "systemMessage": "=# Agente Calendario - Estilos Leraysi\n\nSos un agente ejecutor de tareas para el salón de belleza Estilos Leraysi.\n\n## Tu Rol\n\n**Ejecutás instrucciones predefinidas. No tomás decisiones.**\n\n- Todos los datos ya están procesados\n- La disponibilidad ya está calculada\n- Las alternativas ya están definidas\n- El mensaje para la clienta ya está armado\n\nTu trabajo es **seguir la sección TAREA al pie de la letra**.\n\n---\n\n## Tools Disponibles\n\n### `leraysi_crear_turno`\n\nCrea un turno en el sistema y genera link de pago MercadoPago.\n\n**Parámetros:**\n\n| Parámetro | Tipo | Requerido | Descripción |\n|-----------|------|-----------|-------------|\n| clienta | string | ✅ | Nombre completo |\n| telefono | string | ✅ | Teléfono con código país |\n| email | string | ✅ | Email de la clienta (para enviar confirmación y factura) |\n| servicio | string | ✅ | Código: corte, tintura, mechas, brushing, peinado, tratamiento, manicura, pedicura, depilacion, maquillaje, otro |\n| servicio_detalle | string | ✅ | Descripción completa del servicio solicitado |\n| fecha_hora | string | ✅ | Formato \"YYYY-MM-DD HH:MM\" |\n| precio | number | ✅ | Precio total en ARS |\n| duracion_estimada | number | ✅ | Duración en minutos |\n| complejidad_maxima | string | ✅ | Complejidad: simple, media, compleja, muy_compleja |\n| lead_id | number | ✅ | ID del Lead en CRM (crítico para post-pago) |\n\n**Respuesta de la tool:**\n\n```json\n{\n  \"turnoId\": 123,\n  \"clienta\": \"María García\",\n  \"fecha_hora\": \"2025-01-29 10:00:00\",\n  \"servicio\": \"tratamiento\",\n  \"precio\": 45000,\n  \"sena\": 13500,\n  \"link_pago\": \"https://www.mercadopago.com.ar/checkout/v1/...\",\n  \"mp_preference_id\": \"123456789-...\",\n  \"estado\": \"pendiente_pago\",\n  \"message\": \"Turno creado para María García. Link de pago generado.\"\n}\n```\n\n---\n\n### `leraysi_reprogramar_turno`\n\nReprograma un turno existente a una nueva fecha/hora.\n\n**Comportamiento según estado:**\n- `pendiente_pago` → Cancela turno viejo + Crea nuevo turno con nuevo link MP\n- `confirmado` → Actualiza turno + Borra/crea evento calendario + Envía email\n\n**Parámetros:**\n\n| Parámetro | Tipo | Requerido | Descripción |\n|-----------|------|-----------|-------------|\n| lead_id | number | ✅ | ID del Lead (crm.lead) de la clienta |\n| nueva_fecha_hora | string | ✅ | Nueva fecha/hora en formato \"YYYY-MM-DD HH:MM\" |\n| motivo | string | ✅ | Motivo de la reprogramación |\n\n*Nota: La tool busca automáticamente el turno activo del lead.*\n\n**Respuesta de la tool (pendiente_pago):**\n\n```json\n{\n  \"turno_id_anterior\": 123,\n  \"turno_id_nuevo\": 456,\n  \"clienta\": \"María García\",\n  \"telefono\": \"+5491112345678\",\n  \"servicio\": \"tratamiento\",\n  \"fecha_hora_anterior\": \"2025-01-29 10:00:00\",\n  \"fecha_hora_nueva\": \"2025-01-30 14:00:00\",\n  \"estado_anterior\": \"pendiente_pago\",\n  \"acciones\": [\"Turno anterior cancelado\", \"Nuevo turno #456 creado\", \"Nuevo link de pago generado\"],\n  \"link_pago\": \"https://www.mercadopago.com.ar/checkout/v1/...\",\n  \"sena\": 13500,\n  \"message\": \"Turno reprogramado. Nuevo turno #456 para el jueves 30 de enero a las 14:00.\"\n}\n```\n\n**Respuesta de la tool (confirmado):**\n\n```json\n{\n  \"turno_id_anterior\": 123,\n  \"turno_id_nuevo\": null,\n  \"clienta\": \"María García\",\n  \"telefono\": \"+5491112345678\",\n  \"servicio\": \"tratamiento\",\n  \"fecha_hora_anterior\": \"2025-01-29 10:00:00\",\n  \"fecha_hora_nueva\": \"2025-01-30 14:00:00\",\n  \"estado_anterior\": \"confirmado\",\n  \"acciones\": [\"Fecha actualizada en turno\", \"1 evento(s) de calendario eliminado(s)\", \"Nuevo evento de calendario creado\", \"Email de notificación enviado\"],\n  \"message\": \"Turno reprogramado para el jueves 30 de enero a las 14:00.\"\n}\n```\n\n---\n\n### `leraysi_agregar_servicio_turno`\n\nAgrega un servicio adicional a un turno existente (mismo día).\n\n**Uso:** Cuando la clienta ya tiene turno y quiere agregar otro servicio para la misma cita.\n\n**Parámetros:**\n\n| Parámetro | Tipo | Requerido | Descripción |\n|-----------|------|-----------|-------------|\n| turno_id | number | ✅ | ID del turno existente en Odoo |\n| nuevo_servicio | string | ✅ | Código del servicio a agregar |\n| nuevo_servicio_detalle | string | ✅ | Descripción del nuevo servicio |\n| nuevo_precio | number | ✅ | Precio del nuevo servicio en ARS |\n| duracion_estimada | number | ✅ | Duración en minutos |\n| complejidad_maxima | string | ✅ | Complejidad: simple, media, compleja, muy_compleja |\n\n**Respuesta de la tool:**\n\n```json\n{\n  \"turnoId\": 123,\n  \"clienta\": \"María García\",\n  \"fecha_hora\": \"2025-01-29 10:00:00\",\n  \"servicios\": [\"manicura_semipermanente\", \"pedicura\"],\n  \"servicio_detalle\": \"Manicura semipermanente + Pedicura\",\n  \"precio_total\": 14000,\n  \"duracion_estimada\": 300,\n  \"sena\": 1800,\n  \"link_pago\": \"https://www.mercadopago.com.ar/checkout/v1/...\",\n  \"mp_preference_id\": \"123456789-...\",\n  \"estado\": \"pendiente_pago\",\n  \"message\": \"Servicio agregado al turno. Nuevo total: $14.000. Link de pago actualizado.\"\n}\n```\n\n*Nota: La seña es diferencial (solo cobra la diferencia si ya había pagado).*\n\n---\n\n## Instrucciones de Ejecución\n\n### Si la TAREA dice \"FECHA DISPONIBLE\":\n\n1. **Llamar** a `leraysi_crear_turno` con los parámetros EXACTOS indicados\n2. **Esperar** la respuesta de la tool\n3. **Responder** con el JSON indicado, reemplazando los valores entre `{llaves}` con datos de la respuesta\n\n### Si la TAREA dice \"FECHA NO DISPONIBLE\":\n\n1. **NO** llamar ninguna tool\n2. **Copiar** el JSON indicado exactamente como está\n3. **Responder** solo con ese JSON\n\n### Si la TAREA dice \"REPROGRAMAR TURNO\":\n\n1. **Llamar** a `leraysi_reprogramar_turno` con los parámetros EXACTOS indicados\n2. **Esperar** la respuesta de la tool\n3. **Responder** con el JSON indicado, reemplazando los valores entre `{llaves}` con datos de la respuesta\n\n### Si la TAREA dice \"AGREGAR SERVICIO AL TURNO EXISTENTE\":\n\n1. **Llamar** a `leraysi_agregar_servicio_turno` con los parámetros EXACTOS indicados\n2. **Esperar** la respuesta de la tool\n3. **Responder** con el JSON indicado, reemplazando los valores entre `{llaves}` con datos de la respuesta\n\n---\n\n## Reglas Estrictas\n\n1. **UNA sola tool call** por solicitud\n2. **Usar parámetros EXACTOS** del prompt (no inventar ni modificar)\n3. **El lead_id es obligatorio** - sin él, el flujo post-pago falla\n4. **No agregar texto** antes o después del JSON de respuesta\n5. **No explicar** lo que vas a hacer - solo ejecutar\n\n---\n\n## Formato de Respuesta\n\nSiempre responder **únicamente** con un JSON válido:\n\n```json\n{\n  \"estado\": \"turno_creado\" | \"fecha_no_disponible\" | \"turno_reprogramado\" | \"servicio_agregado\",\n  ...resto de campos según TAREA\n}\n```\n\nNo incluir markdown, explicaciones ni texto adicional. Solo el JSON.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        208,
+        144
+      ],
+      "id": "7a0bfdd1-a30a-4331-b82e-1996f78636d3",
+      "name": "Agente Calendario"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PARSE AGENT RESPONSE - Agente Calendario Leraysi\n// ============================================================================\nconst input = $(\"AnalizarDisponibilidad\").first().json;\nconst agentOutput = $input.first().json.output;\n\nfunction extractJSON(text) {\n  try { return JSON.parse(text); } catch (e) {}\n  let cleaned = text.replace(/```json\\s*/gi, \"\").replace(/```\\s*/g, \"\").trim();\n  try { return JSON.parse(cleaned); } catch (e) {}\n  const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) { try { return JSON.parse(jsonMatch[0]); } catch (e) {} }\n  return { estado: \"error\", mensaje_para_clienta: \"Error procesando la solicitud de turno\" };\n}\n\nconst llmResponse = extractJSON(agentOutput);\n\nconst ESTADO_A_ACCION = {\n  turno_creado: \"turno_creado\",\n  fecha_no_disponible: \"sin_disponibilidad\",\n  turno_reprogramado: \"turno_reprogramado\",\n  servicio_agregado: \"servicio_agregado\",\n  error: \"error\",\n};\nconst accion = ESTADO_A_ACCION[llmResponse.estado] || llmResponse.estado || \"error\";\n\nlet resultado = {\n  clienta_id: input.clienta_id,\n  nombre_clienta: input.nombre_clienta,\n  telefono: input.telefono,\n  email: input.email || \"\",\n  lead_row_id: input.lead_row_id,\n  conversation_id: input.conversation_id || null,\n  precio: input.precio,\n  servicio: input.servicio,\n  servicio_detalle: input.servicio_detalle || \"\",\n  duracion_estimada: input.duracion_estimada || 60,\n  complejidad_maxima: input.complejidad_maxima || \"media\",\n  accion: accion,\n  mensaje_para_clienta: llmResponse.mensaje_para_clienta,\n  alternativas: llmResponse.alternativas || [],\n};\n\n// CASO: TURNO CREADO\nif (llmResponse.estado === \"turno_creado\") {\n  const mpPreferenceId = llmResponse.mp_preference_id || llmResponse.link_pago?.match(/preference-id=([^&\\s]+)/)?.[1] || \"\";\n  const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || \"\").split(\" \");\n  resultado = {\n    ...resultado,\n    fecha_turno: fechaTurno || input.fecha_solicitada,\n    hora_sugerida: horaTurno || input.hora_deseada || \"09:00\",\n    odoo_turno_id: llmResponse.turno_id,\n    mp_preference_id: mpPreferenceId,\n    link_pago: llmResponse.link_pago || \"\",\n    estado_turno: \"pendiente_pago\",\n    sena_monto: llmResponse.sena || Math.round((input.precio || 0) * 0.3),\n  };\n}\n\n// CASO: FECHA NO DISPONIBLE\nif (llmResponse.estado === \"fecha_no_disponible\") {\n  resultado = {\n    ...resultado,\n    fecha_solicitada: llmResponse.fecha_solicitada || input.fecha_solicitada,\n    motivo_no_disponible: llmResponse.motivo,\n  };\n}\n\n// CASO: TURNO REPROGRAMADO\nif (llmResponse.estado === \"turno_reprogramado\") {\n  const [fechaNueva, horaNueva] = (llmResponse.fecha_hora_nueva || \"\").split(\" \");\n  const mpPreferenceId = llmResponse.mp_preference_id || llmResponse.link_pago?.match(/preference-id=([^&\\s]+)/)?.[1] || \"\";\n  resultado = {\n    ...resultado,\n    odoo_turno_id: llmResponse.odoo_turno_id,\n    turno_id_anterior: llmResponse.turno_id_anterior,\n    turno_id_nuevo: llmResponse.turno_id_nuevo,\n    fecha_turno: fechaNueva,\n    hora_sugerida: horaNueva || \"09:00\",\n    fecha_hora_anterior: llmResponse.fecha_hora_anterior,\n    fecha_hora_nueva: llmResponse.fecha_hora_nueva,\n    mp_preference_id: mpPreferenceId,\n    link_pago: llmResponse.link_pago || null,\n    calendario_actualizado: true,\n    motivo_reprogramacion: llmResponse.motivo || \"Solicitud de la clienta\",\n  };\n}\n\n// CASO: SERVICIO AGREGADO\nif (llmResponse.estado === \"servicio_agregado\") {\n  const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || \"\").split(\" \");\n  const mpPreferenceId = llmResponse.mp_preference_id || llmResponse.link_pago?.match(/preference-id=([^&\\s]+)/)?.[1] || \"\";\n  let servicioDetalleCombinado = \"\";\n  let serviciosArray = [];\n  if (llmResponse.servicios_combinados) {\n    servicioDetalleCombinado = llmResponse.servicios_combinados;\n    serviciosArray = servicioDetalleCombinado.split(\" + \").map(s => s.trim()).filter(Boolean);\n  } else {\n    const servicioExistente = input.turno_servicio_existente || \"\";\n    const serviciosInputArray = Array.isArray(input.servicio) ? input.servicio : [input.servicio];\n    const servicioExistenteNorm = servicioExistente.toLowerCase().trim();\n    const servicioNuevoRaw = serviciosInputArray.find(s => s && s.toLowerCase().trim() !== servicioExistenteNorm) || serviciosInputArray[serviciosInputArray.length - 1] || \"\";\n    const servicioNuevo = servicioNuevoRaw ? servicioNuevoRaw.charAt(0).toUpperCase() + servicioNuevoRaw.slice(1).replace(/_/g, \" \") : \"\";\n    serviciosArray = [];\n    if (servicioExistente) serviciosArray.push(servicioExistente);\n    if (servicioNuevo && servicioNuevo.toLowerCase() !== servicioExistente.toLowerCase()) serviciosArray.push(servicioNuevo);\n    servicioDetalleCombinado = serviciosArray.join(\" + \");\n  }\n  const fechaTurnoFinal = fechaTurno || (input.turno_fecha?.includes(\"T\") ? input.turno_fecha.split(\"T\")[0] : input.turno_fecha?.split(\" \")[0]) || \"\";\n  const horaTurnoFinal = horaTurno || (input.turno_fecha?.includes(\"T\") ? input.turno_fecha.split(\"T\")[1]?.slice(0, 5) : input.turno_fecha?.split(\" \")[1]) || \"09:00\";\n  // Safety net: precio determin\\u00edstico (ParseInput) sobre precio del LLM\n  const precioExDet = Number(input.turno_precio_existente) || 0;\n  const precioNuevoDet = Number(input.precio) || 0;\n  const precioTotalDet = precioExDet + precioNuevoDet;\n  const precioTotalFinal = precioTotalDet > 0 ? precioTotalDet : (llmResponse.precio_total || 0);\n  if (llmResponse.precio_total && precioTotalDet > 0 && llmResponse.precio_total !== precioTotalDet) {\n    console.log(`[ParseAgentResponse] \\ud83d\\udd27 Precio servicio_agregado corregido: LLM=$${llmResponse.precio_total}, det=$${precioTotalDet}`);\n  }\n  resultado = {\n    ...resultado,\n    odoo_turno_id: llmResponse.turno_id,\n    fecha_turno: fechaTurnoFinal,\n    hora_sugerida: horaTurnoFinal,\n    servicio: serviciosArray,\n    servicio_detalle: servicioDetalleCombinado,\n    precio: precioTotalFinal,\n    duracion_estimada: llmResponse.duracion_estimada || input.duracion_estimada || 60,\n    complejidad_maxima: llmResponse.complejidad_maxima || input.complejidad_maxima || \"media\",\n    sena_monto: llmResponse.sena || Math.round((precioTotalFinal || 0) * 0.3),\n    mp_preference_id: mpPreferenceId,\n    link_pago: llmResponse.link_pago || \"\",\n    estado_turno: \"pendiente_pago\",\n  };\n}\n\nreturn [{ json: resultado }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        144
+      ],
+      "id": "eb50ba4d-0082-4e01-9495-0e3f87e2d4bb",
+      "name": "ParseAgentResponse"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// BUILD AGENT PROMPT - Construye el User Message para Agente Calendario\n// ============================================================================\nconst data = $input.first().json;\n\nconst fechaSolicitadaRaw = data.fecha_solicitada || \"\";\nconst fechaSoloParte = fechaSolicitadaRaw.includes(\"T\")\n  ? fechaSolicitadaRaw.split(\"T\")[0]\n  : fechaSolicitadaRaw.split(\" \")[0];\nconst horaSolicitadaParte = fechaSolicitadaRaw.includes(\"T\")\n  ? fechaSolicitadaRaw.split(\"T\")[1]?.slice(0, 5)\n  : fechaSolicitadaRaw.split(\" \")[1]?.slice(0, 5);\n\nconst horaDeseada = horaSolicitadaParte || data.hora_deseada || \"09:00\";\nconst senaCalculada = Math.round((data.precio || 0) * 0.3);\nconst fechaHoraCompleta = `${fechaSoloParte} ${horaDeseada}`;\n\nconst formatearFechaHumana = (fechaStr) => {\n  if (!fechaStr) return \"fecha no especificada\";\n  const soloFecha = fechaStr.includes(\"T\")\n    ? fechaStr.split(\"T\")[0]\n    : fechaStr.split(\" \")[0];\n  const fecha = new Date(soloFecha + \"T12:00:00\");\n  if (isNaN(fecha.getTime())) return \"fecha invalida\";\n  const dias = [\n    \"domingo\",\n    \"lunes\",\n    \"martes\",\n    \"miercoles\",\n    \"jueves\",\n    \"viernes\",\n    \"sabado\",\n  ];\n  const meses = [\n    \"enero\",\n    \"febrero\",\n    \"marzo\",\n    \"abril\",\n    \"mayo\",\n    \"junio\",\n    \"julio\",\n    \"agosto\",\n    \"septiembre\",\n    \"octubre\",\n    \"noviembre\",\n    \"diciembre\",\n  ];\n  return `${dias[fecha.getDay()]} ${fecha.getDate()} de ${meses[fecha.getMonth()]}`;\n};\n\nconst fechaHumana = formatearFechaHumana(data.fecha_solicitada);\nconst servicioDisplay = data.servicio_detalle || data.servicio || \"servicio\";\n\nconst turnoExistente = data.turno_agendado === true;\nconst serviciosSolicitados = Array.isArray(data.servicio)\n  ? data.servicio.map((s) => s.toLowerCase().trim())\n  : [(data.servicio || \"\").toLowerCase().trim()];\n\nlet servicioTurnoExistente = null;\nif (data.turno_servicio_existente) {\n  servicioTurnoExistente =\n    typeof data.turno_servicio_existente === \"object\"\n      ? (data.turno_servicio_existente.value || \"\").toLowerCase().trim()\n      : data.turno_servicio_existente.toLowerCase().trim();\n}\n\nlet esReprogramacion = false;\nlet esAgregarServicio = false;\nlet esTurnoAdicional = false;\n\nconst turnoFechaExistente = data.turno_fecha\n  ? data.turno_fecha.includes(\"T\")\n    ? data.turno_fecha.split(\"T\")[0]\n    : data.turno_fecha.split(\" \")[0]\n  : null;\nconst turnoIdExistente = data.turno_id_existente || data.odoo_turno_id || null;\n\n// Detección explícita: el Master Agent envía accion: \"reprogramar\"\nif (data.accion === \"reprogramar\") {\n  esReprogramacion = true;\n} else if (turnoExistente) {\n  if (servicioTurnoExistente) {\n    const servicioExistenteNorm = servicioTurnoExistente.toLowerCase().trim();\n    const tieneServicioNuevo = serviciosSolicitados.some(\n      (s) =>\n        !s.includes(servicioExistenteNorm) &&\n        !servicioExistenteNorm.includes(s),\n    );\n    const serviciosCoinciden = !tieneServicioNuevo;\n    const fechasCoinciden =\n      turnoFechaExistente &&\n      fechaSoloParte &&\n      turnoFechaExistente === fechaSoloParte;\n    if (serviciosCoinciden) esReprogramacion = true;\n    else if (!serviciosCoinciden && fechasCoinciden && turnoIdExistente)\n      esAgregarServicio = true;\n    else esTurnoAdicional = true;\n  } else {\n    esTurnoAdicional = true;\n  }\n}\n\nlet instruccionTarea = \"\";\nlet jsonRespuestaEsperada = \"\";\n\nif (esReprogramacion && data.fecha_disponible) {\n  const mensajeClientaReprogramado = `Listo ${data.nombre_clienta || \"reina\"}! Tu turno fue reprogramado para el ${fechaHumana} a las ${horaDeseada}. Te enviamos un email de confirmacion.`;\n  instruccionTarea = `## REPROGRAMAR TURNO\\n\\n### PASO 1: Llamar a la tool \\`leraysi_reprogramar_turno\\`\\n\\nUsar EXACTAMENTE estos parametros:\\n\\n\\`\\`\\`json\\n{\\n  \"lead_id\": ${data.lead_id || \"null\"},\\n  \"nueva_fecha_hora\": \"${fechaHoraCompleta}\",\\n  \"motivo\": \"Solicitud de la clienta\"\\n}\\n\\`\\`\\`\\n\\n### PASO 2: Despues de llamar la tool, responder con este JSON\\n\\nReemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:\\n\\n\\`\\`\\`json\\n{\\n  \"estado\": \"turno_reprogramado\",\\n  \"odoo_turno_id\": {turno_id_nuevo de la respuesta si existe, sino turno_id_anterior},\\n  \"turno_id_anterior\": {turno_id_anterior de la respuesta},\\n  \"turno_id_nuevo\": {turno_id_nuevo de la respuesta o null},\\n  \"lead_id\": ${data.lead_id || \"null\"},\\n  \"fecha_hora_anterior\": \"{fecha_hora_anterior de la respuesta}\",\\n  \"fecha_hora_nueva\": \"${fechaHoraCompleta}\",\\n  \"servicio\": \"${data.servicio || \"otro\"}\",\\n  \"link_pago\": \"{link_pago de la respuesta si existe, o null}\",\\n  \"mp_preference_id\": \"{mp_preference_id de la respuesta si existe, o null}\",\\n  \"mensaje_para_clienta\": \"${mensajeClientaReprogramado}\"\\n}\\n\\`\\`\\``;\n} else if (esAgregarServicio && data.fecha_disponible) {\n  const precioExistente = data.turno_precio_existente || 0;\n  const precioNuevo = data.precio || 0;\n  const precioTotal = precioExistente + precioNuevo;\n  const senaTotalCalculada = Math.round(precioTotal * 0.3);\n  const senaPagadaExistente = data.turno_sena_pagada || Math.round(precioExistente * 0.3);\n  const senaDiferencial = senaTotalCalculada - senaPagadaExistente;\n  // Duración combinada: existente + nuevo servicio\n  const duracionExistente = data.turno_duracion_existente || 0;\n  const duracionNueva = data.duracion_estimada || 60;\n  const duracionCombinada = duracionExistente + duracionNueva;\n  // Complejidad: MAX entre existente y nuevo\n  const COMPLEJIDAD_ORDER = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };\n  const complejidadExistente = data.turno_complejidad_existente || \"media\";\n  const complejidadNueva = data.complejidad_maxima || \"media\";\n  const complejidadCombinada = (COMPLEJIDAD_ORDER[complejidadExistente] || 2) >= (COMPLEJIDAD_ORDER[complejidadNueva] || 2)\n    ? complejidadExistente : complejidadNueva;\n  const servicioExistenteDisplay =\n    data.turno_servicio_existente || \"servicio existente\";\n  const serviciosArray = Array.isArray(data.servicio)\n    ? data.servicio\n    : [data.servicio];\n  const servicioExistenteNorm = (data.turno_servicio_existente || \"\")\n    .toLowerCase()\n    .trim();\n  const servicioNuevo =\n    serviciosArray.find(\n      (s) => s && s.toLowerCase().trim() !== servicioExistenteNorm,\n    ) ||\n    serviciosArray[serviciosArray.length - 1] ||\n    \"otro\";\n  const serviciosCombinados = `${servicioExistenteDisplay} + ${servicioNuevo}`;\n  const mensajeClientaAgregado = `Listo ${data.nombre_clienta || \"reina\"}! Actualice tu turno del ${fechaHumana}. Ahora tenes: ${serviciosCombinados}. Total: $${precioTotal.toLocaleString(\"es-AR\")}. Sena adicional a pagar: $${senaDiferencial.toLocaleString(\"es-AR\")}. {LINK_PAGO_MSG}`;\n  instruccionTarea = `## AGREGAR SERVICIO AL TURNO EXISTENTE\\n\\n### PASO 1: Llamar a la tool \\`leraysi_agregar_servicio_turno\\`\\n\\nUsar EXACTAMENTE estos parametros:\\n\\n\\`\\`\\`json\\n{\\n  \"turno_id\": ${turnoIdExistente},\\n  \"nuevo_servicio\": \"${servicioNuevo}\",\\n  \"nuevo_servicio_detalle\": \"${servicioNuevo}\",\\n  \"nuevo_precio\": ${precioNuevo},\\n  \"duracion_estimada\": ${duracionCombinada},\\n  \"complejidad_maxima\": \"${complejidadCombinada}\"\\n}\\n\\`\\`\\`\\n\\n### PASO 2: Despues de llamar la tool, responder con este JSON\\n\\n\\`\\`\\`json\\n{\\n  \"estado\": \"servicio_agregado\",\\n  \"turno_id\": ${turnoIdExistente},\\n  \"lead_id\": ${data.lead_id || \"null\"},\\n  \"fecha_hora\": \"${fechaHoraCompleta}\",\\n  \"servicios_combinados\": \"{servicio_detalle de la respuesta}\",\\n  \"precio_total\": {precio_total de la respuesta},\\n  \"duracion_estimada\": ${duracionCombinada},\\n  \"complejidad_maxima\": \"${complejidadCombinada}\",\\n  \"sena\": {sena de la respuesta},\\n  \"link_pago\": \"{link_pago de la respuesta}\",\\n  \"mp_preference_id\": \"{mp_preference_id de la respuesta}\",\\n  \"mensaje_para_clienta\": \"${mensajeClientaAgregado}\"\\n}\\n\\`\\`\\``;\n} else if (data.fecha_disponible) {\n  const mensajeClientaTemplate = `Listo ${data.nombre_clienta || \"reina\"}! Tu turno de ${servicioDisplay.toLowerCase()} esta reservado para el ${fechaHumana} a las ${horaDeseada}. Para confirmarlo, paga la sena de $${senaCalculada.toLocaleString(\"es-AR\")} en este link: {LINK_PAGO}`;\n  instruccionTarea = `## FECHA DISPONIBLE - CREAR TURNO\\n\\n### PASO 1: Llamar a la tool \\`leraysi_crear_turno\\`\\n\\nUsar EXACTAMENTE estos parametros:\\n\\n\\`\\`\\`json\\n{\\n  \"clienta\": \"${data.nombre_clienta || \"\"}\",\\n  \"telefono\": \"${data.telefono || \"\"}\",\\n  \"servicio\": \"${data.servicio || \"otro\"}\",\\n  \"fecha_hora\": \"${fechaHoraCompleta}\",\\n  \"precio\": ${data.precio || 0},\\n  \"duracion_estimada\": ${data.duracion_estimada || 60},\\n  \"complejidad_maxima\": \"${data.complejidad_maxima || \"media\"}\",\\n  \"lead_id\": ${data.lead_id || \"null\"}${data.email ? `,\\n  \"email\": \"${data.email}\"` : \"\"}${data.servicio_detalle ? `,\\n  \"servicio_detalle\": \"${data.servicio_detalle}\"` : \"\"}\\n}\\n\\`\\`\\`\\n\\n### PASO 2: Despues de llamar la tool, responder con este JSON\\n\\n\\`\\`\\`json\\n{\\n  \"estado\": \"turno_creado\",\\n  \"turno_id\": {turnoId de la respuesta},\\n  \"lead_id\": ${data.lead_id || \"null\"},\\n  \"fecha_hora\": \"${fechaHoraCompleta}\",\\n  \"servicio\": \"${data.servicio || \"otro\"}\",\\n  \"servicio_detalle\": \"${servicioDisplay}\",\\n  \"precio\": ${data.precio || 0},\\n  \"duracion_estimada\": ${data.duracion_estimada || 60},\\n  \"complejidad_maxima\": \"${data.complejidad_maxima || \"media\"}\",\\n  \"sena\": {sena de la respuesta},\\n  \"link_pago\": \"{link_pago de la respuesta}\",\\n  \"mp_preference_id\": \"{mp_preference_id de la respuesta}\",\\n  \"mensaje_para_clienta\": \"${mensajeClientaTemplate}\"\\n}\\n\\`\\`\\`\\n\\n**IMPORTANTE:** En mensaje_para_clienta, reemplazar {LINK_PAGO} con el link_pago real de la respuesta.`;\n} else {\n  const alternativasTexto =\n    data.alternativas?.length > 0\n      ? data.alternativas.map((a) => `${a.nombre_dia} ${a.fecha}`).join(\", \")\n      : \"No hay disponibilidad esta semana\";\n  const alternativasArray =\n    data.alternativas?.map((a) => `\"${a.nombre_dia} ${a.fecha}\"`) || [];\n  const mensajeClientaNoDisponible = `Disculpa, el ${fechaHumana} no tenemos disponibilidad (${(data.motivo_no_disponible || \"agenda completa\").toLowerCase()}). Te puedo ofrecer: ${alternativasTexto}. Cual te queda mejor?`;\n  instruccionTarea = `## FECHA NO DISPONIBLE\\n\\n**NO llamar ninguna tool.**\\n\\nResponder UNICAMENTE con este JSON:\\n\\n\\`\\`\\`json\\n{\\n  \"estado\": \"fecha_no_disponible\",\\n  \"fecha_solicitada\": \"${data.fecha_solicitada}\",\\n  \"motivo\": \"${data.motivo_no_disponible || \"Sin disponibilidad\"}\",\\n  \"alternativas\": [${alternativasArray.join(\", \")}],\\n  \"mensaje_para_clienta\": \"${mensajeClientaNoDisponible}\"\\n}\\n\\`\\`\\``;\n}\n\nconst userMessage = `# SOLICITUD DE TURNO - Estilos Leraysi\\n\\n## Datos de la Solicitud\\n\\n| Campo | Valor |\\n|-------|-------|\\n| **Clienta** | ${data.nombre_clienta || \"No proporcionado\"} |\\n| **Telefono** | ${data.telefono || \"No proporcionado\"} |\\n| **Email** | ${data.email || \"No proporcionado\"} |\\n| **Lead ID** | ${data.lead_id || \"N/A\"} |\\n| **Servicio** | ${servicioDisplay} |\\n| **Complejidad** | ${data.complejidad_maxima || \"media\"} |\\n| **Duracion** | ${data.duracion_estimada || 60} min |\\n| **Precio** | $${(data.precio || 0).toLocaleString(\"es-AR\")} |\\n| **Sena (30%)** | $${senaCalculada.toLocaleString(\"es-AR\")} |\\n| **Fecha solicitada** | ${data.fecha_solicitada} (${fechaHumana}) |\\n| **Hora** | ${horaDeseada} |\\n| **Disponibilidad** | ${data.fecha_disponible ? \"DISPONIBLE\" : \"NO DISPONIBLE\"} |\\n\\n## Disponibilidad de la Semana\\n\\n${data.resumen_disponibilidad || \"No disponible\"}\\n\\n---\\n\\n${instruccionTarea}`;\n\nreturn [\n  {\n    json: {\n      ...data,\n      userMessage,\n      _precalculado: {\n        hora: horaDeseada,\n        duracion_estimada: esAgregarServicio\n          ? (data.turno_duracion_existente || 0) + (data.duracion_estimada || 60)\n          : (data.duracion_estimada || 60),\n        complejidad_maxima: esAgregarServicio\n          ? (() => {\n              const ORD = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };\n              const ex = data.turno_complejidad_existente || \"media\";\n              const nw = data.complejidad_maxima || \"media\";\n              return (ORD[ex] || 2) >= (ORD[nw] || 2) ? ex : nw;\n            })()\n          : (data.complejidad_maxima || \"media\"),\n        sena: esAgregarServicio\n          ? Math.round((data.precio || 0) * 0.3)\n          : senaCalculada,\n        fecha_hora_completa: fechaHoraCompleta,\n        fecha_humana: fechaHumana,\n        servicio_display: servicioDisplay,\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        144
+      ],
+      "id": "eef5c39a-add5-4bcc-83e9-24dcae6526b8",
+      "name": "BuildAgentPrompt"
+    },
+    {
+      "parameters": {
+        "description": "Crea un turno en Estilos Leraysi y genera link de pago MercadoPago (seña 30%). Requiere todos los datos de la clienta y del servicio. El turno queda en 'pendiente_pago' hasta confirmar el pago.",
+        "workflowId": {
+          "__rl": true,
+          "value": "RSjHu3HHONPnVmPe",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/RSjHu3HHONPnVmPe",
+          "cachedResultName": "Leraysi - Crear Turno"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "clienta": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('clienta', ``, 'string') }}",
+            "telefono": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('telefono', ``, 'string') }}",
+            "email": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('email', ``, 'string') }}",
+            "servicio": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('servicio', ``, 'string') }}",
+            "servicio_detalle": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('servicio_detalle', ``, 'string') }}",
+            "fecha_hora": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('fecha_hora', ``, 'string') }}",
+            "precio": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('precio', ``, 'number') }}",
+            "duracion_estimada": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('duracion_estimada', ``, 'number') }}",
+            "complejidad_maxima": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('complejidad_maxima', ``, 'string') }}",
+            "lead_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('lead_id', ``, 'number') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "clienta",
+              "displayName": "clienta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "servicio",
+              "displayName": "servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "servicio_detalle",
+              "displayName": "servicio_detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "fecha_hora",
+              "displayName": "fecha_hora",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "precio",
+              "displayName": "precio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "duracion_estimada",
+              "displayName": "duracion_estimada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "complejidad_maxima",
+              "displayName": "complejidad_maxima",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        304,
+        480
+      ],
+      "id": "8f9b5fc3-da57-491c-ad7f-2775c6cf00b5",
+      "name": "leraysi_crear_turno"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "3OEvpzjVYTzdHytk",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/3OEvpzjVYTzdHytk",
+          "cachedResultName": "Leraysi - Cancelar Turno"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        848,
+        480
+      ],
+      "id": "d853ef7b-9203-410e-961b-7a1e128c5de8",
+      "name": "leraysi_cancelar_turno"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PREPARAR TURNO BASEROW - Agente Calendario Leraysi\n// ============================================================================\n// Transforma datos de ParseAgentResponse al formato de TurnosLeraysi\n// Campos según TABLA-TURNOS-LERAYSI.md\n// ============================================================================\n// NODO: PrepararTurnoBaserow (Code)\n// INPUT: ParseAgentResponse via IF_Agendar (True Branch)\n// OUTPUT: Campos listos para Baserow Create Row\n// ============================================================================\n\nconst data = $input.first().json;\n\n// ============================================================================\n// CONFIGURACIÓN\n// ============================================================================\nconst CONFIG = {\n  expiracion_minutos: 120, // 2 horas para pagar la seña\n};\n\n// Calcular timestamps\nconst ahora = new Date();\nconst expiraAt = new Date(\n  ahora.getTime() + CONFIG.expiracion_minutos * 60 * 1000,\n);\n\n// Formatear fecha para Baserow API: ISO 8601 con timezone Argentina\nfunction formatBaserowDatetime(date) {\n  // Ajustar UTC a Argentina (UTC-3)\n  const argentinaTime = new Date(date.getTime() - 3 * 60 * 60 * 1000);\n  const offset = \"-03:00\";\n  const year = argentinaTime.getUTCFullYear();\n  const month = String(argentinaTime.getUTCMonth() + 1).padStart(2, \"0\");\n  const day = String(argentinaTime.getUTCDate()).padStart(2, \"0\");\n  const hours = String(argentinaTime.getUTCHours()).padStart(2, \"0\");\n  const minutes = String(argentinaTime.getUTCMinutes()).padStart(2, \"0\");\n  const seconds = String(argentinaTime.getUTCSeconds()).padStart(2, \"0\");\n  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offset}`;\n}\n\n// ============================================================================\n// CONSTRUIR REGISTRO PARA BASEROW (TurnosLeraysi)\n// ============================================================================\nconst turnoBaserow = {\n  // === Fecha y Hora ===\n  fecha: data.fecha_turno,\n  hora: data.hora_sugerida || \"09:00\",\n\n  // === Relación con Lead ===\n  clienta_id: data.lead_row_id ? [data.lead_row_id] : [],\n\n  // === Datos de la Clienta (desnormalizados) ===\n  nombre_clienta: data.nombre_clienta,\n  telefono: data.telefono,\n  email: data.email || \"\",\n\n  // === Servicio ===\n  servicio: Array.isArray(data.servicio) ? data.servicio : [data.servicio],\n  servicio_detalle: data.servicio_detalle || \"\",\n  complejidad_maxima: data.complejidad_maxima || \"media\",\n  // duracion_min se agrega condicionalmente abajo\n\n  // === Precio y Seña ===\n  // precio y sena_monto se agregan condicionalmente abajo\n  sena_pagada: false,\n\n  // === Estado ===\n  estado: data.estado_turno || \"pendiente_pago\",\n\n  // === Mercado Pago ===\n  mp_preference_id: data.mp_preference_id || \"\",\n  mp_link: data.link_pago || \"\",\n  mp_payment_id: \"\", // Se llena cuando se confirma el pago\n\n  // === Timestamps ===\n  created_at: formatBaserowDatetime(ahora),\n  expira_at: formatBaserowDatetime(expiraAt),\n  // confirmado_at se agrega solo cuando tiene valor (ver abajo)\n\n  // === Notas ===\n  notas: `Turno creado via chatbot. Servicio: ${data.servicio}`,\n};\n\n// Agregar campos numéricos solo si tienen valor (Baserow no acepta null)\nturnoBaserow.duracion_min = data.duracion_estimada || 60;\nif (data.precio != null) {\n  turnoBaserow.precio = data.precio;\n}\nif (data.sena_monto != null) {\n  turnoBaserow.sena_monto = data.sena_monto;\n}\nif (data.odoo_turno_id) {\n  turnoBaserow.odoo_turno_id = data.odoo_turno_id;\n}\nif (data.conversation_id) {\n  turnoBaserow.conversation_id = data.conversation_id;\n}\n\n// ============================================================================\n// OUTPUT\n// ============================================================================\nreturn [\n  {\n    json: {\n      // Campos para Baserow (directo)\n      ...turnoBaserow,\n\n      // Preservar datos para FormatearRespuestaExito\n      _meta: {\n        accion: data.accion,\n        mensaje_para_clienta: data.mensaje_para_clienta,\n        lead_row_id: data.lead_row_id,\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -80
+      ],
+      "id": "bfc8a74c-0789-4bef-8abc-38bf92e5db9b",
+      "name": "PrepararTurnoBaserow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMATEAR RESPUESTA EXITO - Agente Calendario Leraysi\n// ============================================================================\n// Construye la respuesta final exitosa para devolver al Master Agent\n// ============================================================================\n// NODO: FormatearRespuestaExito (Code)\n// INPUT: CrearTurnoBaserow (respuesta de Baserow con ID del row creado)\n// OUTPUT: Respuesta estructurada para Return\n// ============================================================================\n\nconst baserowResponse = $input.first().json;\n\n// Recuperar metadata del nodo anterior (PrepararTurnoBaserow)\nconst metaData = $('PrepararTurnoBaserow').first().json._meta;\n\n// El ID del turno creado en Baserow\nconst turnoRowId = baserowResponse.id;\n\n// ============================================================================\n// OUTPUT PARA MASTER AGENT\n// ============================================================================\nreturn [{\n  json: {\n    success: true,\n    accion: metaData.accion,\n    turno_id: turnoRowId,\n    mensaje_para_clienta: metaData.mensaje_para_clienta,\n    lead_row_id: metaData.lead_row_id\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        -80
+      ],
+      "id": "dab4813b-2baf-4844-956a-0df123b9f784",
+      "name": "FormatearRespuestaExito"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// ANALIZAR DISPONIBILIDAD - Agente Calendario Leraysi\n// ============================================================================\n// INPUT: ParseInput (datos del turno) + GetTurnosSemana (turnos existentes)\n// OUTPUT: Disponibilidad calculada + alternativas pre-calculadas si no hay cupo\n// ============================================================================\n\n// Obtener turnos (puede ser array vacío)\nconst turnosRaw = $('GetTurnosSemana').all();\nconst turnos = turnosRaw.length > 0 ? turnosRaw.map(item => item.json) : [];\n\nconst input = $('ParseInput').first().json;\n\n// Configuración de capacidad máxima por día según complejidad\n// Horario: 9am-7pm (10 horas disponibles)\nconst CAPACIDAD = {\n  max_muy_compleja: 2,  // Servicios muy complejos (Alisados, Balayage, Mechas, Tintura completa)\n  max_compleja: 3,      // Servicios complejos (Tintura raíz, Manicura semipermanente)\n  max_media: 4,         // Servicios medios (Corte, Manicura simple, Pedicura, Depilación cera/láser piernas)\n  max_simple: 5,        // Servicios simples (Depilación axilas, bikini)\n  max_turnos_dia: 8     // Máximo absoluto de turnos por día\n};\n\n// Agrupar turnos por fecha\nconst turnosPorDia = {};\n\nturnos.forEach(turno => {\n  const fecha = turno.fecha?.split('T')[0];\n  if (!fecha) return;\n\n  if (!turnosPorDia[fecha]) {\n    turnosPorDia[fecha] = {\n      fecha,\n      turnos: [],\n      count_total: 0,\n      count_simple: 0,\n      count_media: 0,\n      count_compleja: 0,\n      count_muy_compleja: 0,\n      duracion_total: 0\n    };\n  }\n\n  turnosPorDia[fecha].turnos.push(turno);\n  turnosPorDia[fecha].count_total++;\n  turnosPorDia[fecha].duracion_total += Number(turno.duracion_min) || 0;\n\n  // Usar complejidad_maxima del turno (campo unificado con ParseInput)\n  const complejidad = turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';\n  if (complejidad === 'simple') turnosPorDia[fecha].count_simple++;\n  else if (complejidad === 'media') turnosPorDia[fecha].count_media++;\n  else if (complejidad === 'compleja') turnosPorDia[fecha].count_compleja++;\n  else if (complejidad === 'muy_compleja') turnosPorDia[fecha].count_muy_compleja++;\n});\n\n// Generar próximos 30 días con disponibilidad (cobertura de 1 mes)\nconst dias = [];\nconst hoy = new Date();\n\nfor (let i = 0; i < 30; i++) {\n  const fecha = new Date(hoy);\n  fecha.setDate(hoy.getDate() + i);\n  const fechaStr = fecha.toISOString().split('T')[0];\n\n  const diaSemana = fecha.getDay();\n  const nombreDia = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][diaSemana];\n\n  // Domingo cerrado\n  if (diaSemana === 0) {\n    dias.push({\n      fecha: fechaStr,\n      nombre_dia: nombreDia,\n      abierto: false,\n      disponible: false,\n      motivo: 'Cerrado'\n    });\n    continue;\n  }\n\n  const datosDia = turnosPorDia[fechaStr] || {\n    count_total: 0,\n    count_simple: 0,\n    count_media: 0,\n    count_compleja: 0,\n    count_muy_compleja: 0,\n    duracion_total: 0\n  };\n\n  // Verificar capacidad por nivel de complejidad\n  const puedeRecibirMuyCompleja = datosDia.count_muy_compleja < CAPACIDAD.max_muy_compleja;\n  const puedeRecibirCompleja = datosDia.count_compleja < CAPACIDAD.max_compleja;\n  const puedeRecibirMedia = datosDia.count_media < CAPACIDAD.max_media;\n  const puedeRecibirSimple = datosDia.count_simple < CAPACIDAD.max_simple;\n  const puedeRecibirMas = datosDia.count_total < CAPACIDAD.max_turnos_dia;\n\n  // 600 minutos = 10 horas (9am-7pm)\n  const cargaPorcentaje = Math.round((datosDia.duracion_total / 600) * 100);\n\n  dias.push({\n    fecha: fechaStr,\n    nombre_dia: nombreDia,\n    abierto: true,\n    turnos_agendados: datosDia.count_total,\n    // Conteo por complejidad\n    muy_complejos_agendados: datosDia.count_muy_compleja,\n    complejos_agendados: datosDia.count_compleja,\n    medios_agendados: datosDia.count_media,\n    simples_agendados: datosDia.count_simple,\n    duracion_total_min: datosDia.duracion_total,\n    carga_porcentaje: cargaPorcentaje,\n    // Capacidad disponible por complejidad\n    puede_recibir_muy_compleja: puedeRecibirMuyCompleja,\n    puede_recibir_compleja: puedeRecibirCompleja,\n    puede_recibir_media: puedeRecibirMedia,\n    puede_recibir_simple: puedeRecibirSimple,\n    puede_recibir_turno: puedeRecibirMas,\n    disponible: puedeRecibirMas\n  });\n}\n\n// ============================================================================\n// VERIFICAR DISPONIBILIDAD DEL DÍA SOLICITADO Y GENERAR ALTERNATIVAS\n// ============================================================================\n// Extraer solo la fecha (sin hora) para comparación - soporta ISO con T o solo fecha\nconst fechaSolicitadaRaw = input.fecha_deseada || '';\nconst fechaSolicitada = fechaSolicitadaRaw.includes('T')\n  ? fechaSolicitadaRaw.split('T')[0]\n  : fechaSolicitadaRaw.split(' ')[0];\nconst diaSolicitado = dias.find(d => d.fecha === fechaSolicitada);\n\n// Determinar si la fecha está disponible\nconst fechaDisponible = diaSolicitado?.abierto && diaSolicitado?.disponible;\n\n// Pre-calcular alternativas si el día NO está disponible\nlet alternativas = [];\nlet motivoNoDisponible = null;\n\nif (!fechaDisponible) {\n  // Determinar el motivo\n  if (!diaSolicitado) {\n    motivoNoDisponible = 'Fecha fuera de rango (solo se pueden agendar turnos en los próximos 30 días)';\n  } else if (!diaSolicitado.abierto) {\n    motivoNoDisponible = 'Cerrado (Domingo)';\n  } else if (!diaSolicitado.disponible) {\n    motivoNoDisponible = `Agenda llena (${diaSolicitado.turnos_agendados} turnos, ${diaSolicitado.carga_porcentaje}% de capacidad)`;\n  }\n\n  // Buscar los próximos 3 días disponibles como alternativas\n  alternativas = dias\n    .filter(d => d.abierto && d.disponible)\n    .slice(0, 3)\n    .map(d => ({\n      fecha: d.fecha,\n      nombre_dia: d.nombre_dia,\n      turnos_agendados: d.turnos_agendados,\n      carga_porcentaje: d.carga_porcentaje\n    }));\n}\n\n// Resumen para el agente\nconst resumen = dias\n  .filter(d => d.abierto)\n  .map(d => {\n    let estado = '';\n    if (!d.disponible) estado = '❌ Lleno';\n    else if (d.carga_porcentaje >= 70) estado = '⚠️ Casi lleno';\n    else if (d.carga_porcentaje >= 40) estado = '📅 Moderado';\n    else estado = '✅ Disponible';\n\n    return `${d.nombre_dia} ${d.fecha}: ${estado} (${d.turnos_agendados} turnos, ${d.carga_porcentaje}% carga)`;\n  })\n  .join('\\n');\n\n// ============================================================================\n// EXTRAER SERVICIO DEL TURNO EXISTENTE (para detectar reprogramación vs turno adicional)\n// ============================================================================\n// Si la usuaria tiene turno_agendado=true, buscamos su turno en los turnos de la semana\n// para extraer el servicio y poder compararlo con el servicio solicitado\n//\n// IMPORTANTE: En Baserow tabla TurnosLeraysi, el linked field es \"clienta_id\"\n// que apunta a la tabla LeadsLeraysi. El formato es:\n// - Array de objetos: [{id: 116, value: \"428\"}] donde id es el ROW_ID del lead\n//\n// Debemos comparar contra lead_row_id (el row_id de Baserow), NO contra lead_id (Odoo ID)\nlet turnoServicioExistente = null;\nlet turnoIdExistente = null;\nlet turnoPrecioExistente = null;\nlet turnoDuracionExistente = null;\nlet turnoComplejidadExistente = null;\nlet turnoSenaPagada = null;\n\nif (input.turno_agendado && input.lead_row_id) {\n  // Buscar turno de esta usuaria por lead_row_id (ID de fila en Baserow)\n  const turnoUsuaria = turnos.find(t => {\n    // El campo en Baserow se llama \"clienta_id\" (linked field a LeadsLeraysi)\n    let turnoClientaRowId = null;\n    if (Array.isArray(t.clienta_id) && t.clienta_id.length > 0) {\n      // Formato: [{id: 116, value: \"428\"}] - id es el row_id del lead\n      turnoClientaRowId = t.clienta_id[0]?.id;\n    } else if (t.clienta_id && typeof t.clienta_id === 'object') {\n      // Formato objeto directo\n      turnoClientaRowId = t.clienta_id.id || t.clienta_id.value;\n    } else {\n      // Formato: valor directo\n      turnoClientaRowId = t.clienta_id;\n    }\n\n    return turnoClientaRowId && String(turnoClientaRowId) === String(input.lead_row_id);\n  });\n\n  if (turnoUsuaria) {\n    // Extraer el servicio existente completo\n    // PRIORIDAD: servicio_detalle (string concatenado \"Manicura simple + Pedicura\")\n    // porque el multi-select 'servicio' solo da valores individuales y antes\n    // solo tomábamos el primero, perdiendo servicios intermedios con 3+ servicios\n    let servicioValue = null;\n    if (turnoUsuaria.servicio_detalle) {\n      // Mejor fuente: string concatenado con todos los servicios\n      servicioValue = turnoUsuaria.servicio_detalle;\n    } else if (Array.isArray(turnoUsuaria.servicio) && turnoUsuaria.servicio.length > 0) {\n      // Fallback: unir todos los valores del multi-select\n      servicioValue = turnoUsuaria.servicio.map(s => s?.value || s).join(' + ');\n    } else if (turnoUsuaria.servicio?.value) {\n      servicioValue = turnoUsuaria.servicio.value;\n    } else {\n      servicioValue = turnoUsuaria.servicio;\n    }\n    turnoServicioExistente = servicioValue || null;\n\n    // Extraer odoo_turno_id (ID del turno en Odoo)\n    turnoIdExistente = turnoUsuaria.odoo_turno_id || null;\n\n    // Extraer precio del turno existente (para calcular seña diferencial)\n    turnoPrecioExistente = turnoUsuaria.precio ? Number(turnoUsuaria.precio) : null;\n\n    // Extraer duración del turno existente (para sumar al agregar servicio)\n    turnoDuracionExistente = turnoUsuaria.duracion_min ? Number(turnoUsuaria.duracion_min) : null;\n\n    // Extraer complejidad del turno existente (para MAX al agregar servicio)\n    turnoComplejidadExistente = turnoUsuaria.complejidad_maxima?.value || turnoUsuaria.complejidad_maxima || null;\n\n    // Extraer seña pagada del turno existente (para calcular diferencial)\n    turnoSenaPagada = turnoUsuaria.sena_monto ? Number(turnoUsuaria.sena_monto) : null;\n  }\n}\n\n// ============================================================================\n// CÁLCULO DE SLOTS POR HORA (solo para modo consultar_disponibilidad)\n// ============================================================================\nconst modo = input.modo || null;\nlet slotsRecomendados = [];\nlet esJornadaCompleta = false;\n\nif (modo === 'consultar_disponibilidad') {\n  const APERTURA = 9 * 60;   // 09:00 = 540 min\n  const CIERRE = 19 * 60;    // 19:00 = 1140 min\n  const STEP = 30;            // granularidad 30 min\n  const duracionServicio = input.duracion_estimada || 60;\n  const horaPreferida = input.hora_deseada ? (() => {\n    const parts = input.hora_deseada.split(':');\n    return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');\n  })() : null;\n  const preferencia = input.preferencia_horario || null;\n\n  const ahora = new Date();\n  // Usar hora Argentina (UTC-3)\n  const ahoraArgentina = new Date(ahora.getTime() - 3 * 60 * 60 * 1000);\n  const ahoraMin = ahoraArgentina.getUTCHours() * 60 + ahoraArgentina.getUTCMinutes();\n  const hoyStr = ahoraArgentina.toISOString().split('T')[0];\n\n  function horaToMinutos(horaStr) {\n    if (!horaStr) return 9 * 60;\n    const parts = horaStr.split(':');\n    return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');\n  }\n\n  function minutosToHora(min) {\n    const h = Math.floor(min / 60);\n    const m = min % 60;\n    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;\n  }\n\n  // Filtrar dias disponibles y priorizarlos\n  // REGLA DE NEGOCIO: No se aceptan turnos para el mismo día. Mínimo = mañana.\n  let diasBusqueda = dias.filter(d => d.abierto && d.disponible && d.fecha !== hoyStr);\n\n  // Si se pidió una fecha específica, priorizarla\n  if (fechaSolicitada) {\n    const diaReq = diasBusqueda.find(d => d.fecha === fechaSolicitada);\n    const diasOtros = diasBusqueda.filter(d => d.fecha !== fechaSolicitada);\n    diasBusqueda = diaReq ? [diaReq, ...diasOtros] : diasOtros;\n  }\n\n  // Solo buscar en los próximos 14 días para consulta\n  diasBusqueda = diasBusqueda.slice(0, 14);\n\n  const candidatos = [];\n\n  // ================================================================\n  // JORNADA COMPLETA: servicios combinados que exceden el día laboral\n  // ================================================================\n  // Cuando la duración total supera las 10h (600 min), el loop normal\n  // de slots no genera resultados. En la práctica, la estilista SÍ puede\n  // hacer estos servicios en un día (paralleliza: trabaja uñas mientras\n  // la química actúa en el cabello). Ofrecemos \"jornada completa\" en\n  // días con baja carga.\n  const JORNADA_MIN = CIERRE - APERTURA; // 600 min\n  esJornadaCompleta = duracionServicio > JORNADA_MIN;\n\n  if (esJornadaCompleta) {\n    // Buscar días con carga < 20% (máx ~120 min de turnos existentes)\n    const MAX_CARGA_JORNADA = 20;\n\n    const diasJornada = diasBusqueda\n      .filter(d => (d.carga_porcentaje || 0) < MAX_CARGA_JORNADA)\n      .sort((a, b) => {\n        // Priorizar día solicitado\n        if (a.fecha === fechaSolicitada) return -1;\n        if (b.fecha === fechaSolicitada) return 1;\n        // Luego por menor carga\n        return (a.carga_porcentaje || 0) - (b.carga_porcentaje || 0);\n      })\n      .slice(0, 3);\n\n    for (const dia of diasJornada) {\n      candidatos.push({\n        fecha: dia.fecha,\n        hora: minutosToHora(APERTURA),\n        hora_fin: minutosToHora(CIERRE),\n        nombre_dia: dia.nombre_dia,\n        score: dia.fecha === fechaSolicitada ? 18 : 10,\n        motivo: 'Jornada completa disponible',\n        carga_dia: dia.carga_porcentaje || 0,\n        jornada_completa: true\n      });\n    }\n\n    console.log(`[AnalizarDisponibilidad] 🗓️ JORNADA COMPLETA: ${duracionServicio}min > ${JORNADA_MIN}min, ${diasJornada.length} días encontrados`);\n  } else {\n    // ================================================================\n    // MODO NORMAL: generar slots por hora\n    // ================================================================\n    for (const dia of diasBusqueda) {\n      if (candidatos.length >= 9) break; // suficientes candidatos\n\n      // Obtener turnos del día con sus bloques de tiempo\n      const turnosDelDia = (turnosPorDia[dia.fecha]?.turnos || []).map(t => {\n        const horaStr = t.hora || '09:00';\n        const startMin = horaToMinutos(horaStr);\n        const dur = Number(t.duracion_min) || 60;\n        return { start: startMin, end: startMin + dur };\n      });\n\n      // Generar slots disponibles\n      for (let start = APERTURA; start + duracionServicio <= CIERRE; start += STEP) {\n        const end = start + duracionServicio;\n\n        // Hoy ya está excluido en diasBusqueda (regla de negocio: mínimo mañana)\n\n        // Verificar que no solape con ningún turno existente\n        const solapa = turnosDelDia.some(o => start < o.end && end > o.start);\n        if (solapa) continue;\n\n        // Puntuar el slot\n        let score = 0;\n        let motivo = 'Horario disponible';\n\n        // +10 si coincide con hora_deseada exacta\n        if (horaPreferida !== null && start === horaPreferida) {\n          score += 10;\n          motivo = 'Horario solicitado disponible';\n        }\n\n        // +8 si es el día solicitado\n        if (dia.fecha === fechaSolicitada) {\n          score += 8;\n        }\n\n        // +5 si encaja en preferencia de horario\n        if (preferencia === 'manana' && start >= APERTURA && start < 12 * 60) {\n          score += 5;\n          if (motivo === 'Horario disponible') motivo = 'Disponible por la mañana';\n        } else if (preferencia === 'tarde' && start >= 13 * 60 && start < CIERRE) {\n          score += 5;\n          if (motivo === 'Horario disponible') motivo = 'Disponible por la tarde';\n        }\n\n        // +3 si está adyacente a otro turno (pack calendar)\n        if (turnosDelDia.length > 0) {\n          const minGap = Math.min(...turnosDelDia.map(o =>\n            Math.min(Math.abs(start - o.end), Math.abs(o.start - end))\n          ));\n          if (minGap <= 30) score += 3;\n        }\n\n        // +2 si el día tiene baja carga\n        const loadPct = dia.carga_porcentaje || 0;\n        if (loadPct < 30) score += 2;\n\n        candidatos.push({\n          fecha: dia.fecha,\n          hora: minutosToHora(start),\n          hora_fin: minutosToHora(end),\n          nombre_dia: dia.nombre_dia,\n          score,\n          motivo,\n          carga_dia: loadPct\n        });\n      }\n    }\n  }\n\n  // Ordenar por score descendente y tomar top 3\n  candidatos.sort((a, b) => b.score - a.score);\n\n  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\n\n  slotsRecomendados = candidatos.slice(0, 3).map((s, i) => {\n    const fechaObj = new Date(s.fecha + 'T12:00:00');\n    const slot = {\n      opcion: i + 1,\n      fecha: s.fecha,\n      hora: s.hora,\n      hora_fin: s.hora_fin,\n      nombre_dia: s.nombre_dia,\n      fecha_humana: `${s.nombre_dia.toLowerCase()} ${fechaObj.getDate()} de ${meses[fechaObj.getMonth()]}`,\n      motivo: s.motivo\n    };\n    if (s.jornada_completa) slot.jornada_completa = true;\n    return slot;\n  });\n}\n\nreturn [{\n  json: {\n    ...input,\n    disponibilidad: dias,\n    resumen_disponibilidad: resumen,\n    capacidad_config: CAPACIDAD,\n    turnos_existentes: turnos.length,\n    // Nuevos campos para el agente\n    // Mantener fecha original completa (con hora si viene) para BuildAgentPrompt\n    fecha_solicitada: fechaSolicitadaRaw,\n    fecha_disponible: fechaDisponible,\n    motivo_no_disponible: motivoNoDisponible,\n    alternativas: alternativas,\n    // Servicio del turno existente (para comparar con servicio solicitado)\n    turno_servicio_existente: turnoServicioExistente,\n    // ID del turno en Odoo (para agregar servicio al turno existente)\n    turno_id_existente: turnoIdExistente,\n    // Precio del turno existente (para calcular seña diferencial)\n    turno_precio_existente: turnoPrecioExistente,\n    // Duración del turno existente en minutos (para sumar al agregar servicio)\n    turno_duracion_existente: turnoDuracionExistente,\n    // Complejidad del turno existente (para MAX al agregar servicio)\n    turno_complejidad_existente: turnoComplejidadExistente,\n    // Seña ya pagada del turno existente (para calcular diferencial)\n    turno_sena_pagada: turnoSenaPagada,\n    // Slots recomendados (solo en modo consultar_disponibilidad)\n    slots_recomendados: slotsRecomendados,\n    // Jornada completa: servicios combinados exceden el día laboral\n    jornada_completa: esJornadaCompleta,\n    // Acción explícita (no depender solo de ...input spread)\n    accion: input.accion || null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        -176
+      ],
+      "id": "c052e6d3-f197-4715-8430-f927f0beca35",
+      "name": "AnalizarDisponibilidad"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "databaseId": 4,
+        "tableId": 852,
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": 8378,
+              "fieldValue": "={{ $json.fecha }}"
+            },
+            {
+              "fieldId": 8396,
+              "fieldValue": "={{ $json.hora }}"
+            },
+            {
+              "fieldId": 8381,
+              "fieldValue": "={{ $json.clienta_id }}"
+            },
+            {
+              "fieldId": 8385,
+              "fieldValue": "={{ $json.servicio }}"
+            },
+            {
+              "fieldId": 8406,
+              "fieldValue": "={{ $json.servicio_detalle }}"
+            },
+            {
+              "fieldId": 8386,
+              "fieldValue": "={{ $json.complejidad_maxima }}"
+            },
+            {
+              "fieldId": 8387,
+              "fieldValue": "={{ $json.duracion_min }}"
+            },
+            {
+              "fieldId": 8388,
+              "fieldValue": "={{ $json.precio }}"
+            },
+            {
+              "fieldId": 8390,
+              "fieldValue": "={{ $json.sena_pagada }}"
+            },
+            {
+              "fieldId": 8391,
+              "fieldValue": "={{ $json.estado }}"
+            },
+            {
+              "fieldId": 8398,
+              "fieldValue": "={{ $json.mp_payment_id }}"
+            },
+            {
+              "fieldId": 8399,
+              "fieldValue": "={{ $json.mp_link }}"
+            },
+            {
+              "fieldId": 8400,
+              "fieldValue": "={{ $json.conversation_id }}"
+            },
+            {
+              "fieldId": 8401,
+              "fieldValue": "={{ $json.expira_at }}"
+            },
+            {
+              "fieldId": 8394,
+              "fieldValue": "={{ $json.notas }}"
+            },
+            {
+              "fieldId": 8404,
+              "fieldValue": "={{ $json.odoo_turno_id }}"
+            },
+            {
+              "fieldId": 8403,
+              "fieldValue": "={{ $json.mp_preference_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        -80
+      ],
+      "id": "2cf50ff3-ddea-4f53-9f92-1431e38662d7",
+      "name": "CrearTurnoBaserow",
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Reprograma un turno existente a una nueva fecha/hora. Si el turno está pendiente_pago, cancela el viejo y crea uno nuevo con nuevo link de MercadoPago. Si está confirmado, actualiza el turno, borra/crea evento en calendario y envía email de notificación.",
+        "workflowId": {
+          "__rl": true,
+          "value": "yti2vAntCLo46aTg",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/yti2vAntCLo46aTg",
+          "cachedResultName": "Leraysi - Reprogramar Turno"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('lead_id', ``, 'number') }}",
+            "nueva_fecha_hora": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('nueva_fecha_hora', ``, 'string') }}",
+            "motivo": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('motivo', ``, 'string') }}"
+          },
+          "matchingColumns": [
+            "query"
+          ],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "nueva_fecha_hora",
+              "displayName": "nueva_fecha_hora",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        480
+      ],
+      "id": "57ed60ea-f552-4797-ae83-16c4d9a2bd4c",
+      "name": "leraysi_reprogramar_turno"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "turno_creado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "999b806a-8ec7-4542-beed-56c8c4fa4a54"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "turno_creado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "775d33b4-1eff-44b3-95ea-438a54c7e414",
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "turno_reprogramado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "turno_reprogramado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f593b5d0-3291-4286-9206-eba1895ababb",
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "servicio_agregado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "servicio_agregado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "servicio-agregado-rule-001",
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "sin_disponibilidad",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sin_disponibilidad"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "error"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        784,
+        96
+      ],
+      "id": "5999cac3-9346-418f-9c6a-2dbfde6cff5a",
+      "name": "SwitchAccion"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMATEAR RESPUESTA SIN DISPONIBILIDAD - Agente Calendario Leraysi\n// ============================================================================\n// Formatea la respuesta cuando no hay disponibilidad para el turno solicitado\n// ============================================================================\n// NODO: FormatearRespuestaSinDisponibilidad (Code)\n// INPUT: ParseAgentResponse via IF_Agendar (False Branch)\n// OUTPUT: Respuesta formateada para el workflow principal\n// ============================================================================\n\nconst data = $input.first().json;\n\n// ============================================================================\n// OUTPUT\n// ============================================================================\n\nreturn [{\n  json: {\n    success: false,\n    accion: data.accion || 'sin_disponibilidad',\n    mensaje_para_clienta: data.mensaje_para_clienta,\n    lead_row_id: data.lead_row_id,\n    alternativas: data.alternativas || []\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        512
+      ],
+      "id": "4e955772-cd8b-4484-aad4-012107ad6683",
+      "name": "FormatearRespuestaSinDisponibilidad"
+    },
+    {
+      "parameters": {
+        "databaseId": 4,
+        "tableId": 852,
+        "returnAll": true,
+        "additionalOptions": {
+          "filters": {
+            "fields": [
+              {
+                "field": 8404,
+                "value": "={{ $json.turno_id_anterior }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        112
+      ],
+      "id": "7d98e9ae-2722-465f-ab78-b7fa86036cf0",
+      "name": "Get many rows",
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PREPARAR REPROGRAMADO BASEROW - Agente Calendario Leraysi\n// ============================================================================\n// Transforma datos para UPDATE en Baserow\n// INPUT: BuscarTurnoBaserow (resultado de búsqueda con row_id)\n// OUTPUT: Campos listos para Baserow Update Row\n// ============================================================================\n// NODO: PrepararReprogramadoBaserow (Code)\n// FLUJO: Switch → BuscarTurnoBaserow → PrepararReprogramadoBaserow → Update\n// ============================================================================\n\n// Datos del turno encontrado en Baserow (viene de BuscarTurnoBaserow)\nconst turnoEncontrado = $input.first().json;\n\n// Datos de ParseAgentResponse\nconst data = $('ParseAgentResponse').first().json;\n\n// ============================================================================\n// VALIDACIÓN\n// ============================================================================\nif (!turnoEncontrado || !turnoEncontrado.id) {\n  throw new Error('[PrepararReprogramadoBaserow] No se encontró el turno en Baserow. ' +\n                  `odoo_turno_id buscado: ${data.odoo_turno_id}`);\n}\n\nconst turnoRowId = turnoEncontrado.id;\n\n// ============================================================================\n// FORMATEAR FECHA\n// ============================================================================\nfunction formatBaserowDatetime(date) {\n  const argentinaTime = new Date(date.getTime() - (3 * 60 * 60 * 1000));\n  const offset = '-03:00';\n  const year = argentinaTime.getUTCFullYear();\n  const month = String(argentinaTime.getUTCMonth() + 1).padStart(2, '0');\n  const day = String(argentinaTime.getUTCDate()).padStart(2, '0');\n  const hours = String(argentinaTime.getUTCHours()).padStart(2, '0');\n  const minutes = String(argentinaTime.getUTCMinutes()).padStart(2, '0');\n  const seconds = String(argentinaTime.getUTCSeconds()).padStart(2, '0');\n  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offset}`;\n}\n\nconst ahora = new Date();\n\n// ============================================================================\n// CAMPOS A ACTUALIZAR EN BASEROW\n// ============================================================================\nconst updateFields = {\n  // Nueva fecha y hora\n  fecha: data.fecha_turno,\n  hora: data.hora_sugerida || '09:00',\n\n  // Actualizar odoo_turno_id (puede ser nuevo si era pendiente_pago)\n  odoo_turno_id: data.odoo_turno_id,\n\n  // Timestamp de actualización\n  updated_at: formatBaserowDatetime(ahora),\n\n  // Notas con historial\n  notas: `Turno reprogramado el ${ahora.toLocaleDateString('es-AR')}. ` +\n         `Fecha anterior: ${data.fecha_hora_anterior || 'N/A'}. ` +\n         `Motivo: ${data.motivo_reprogramacion || 'No especificado'}`\n};\n\n// Si hay link_pago nuevo (caso pendiente_pago → nuevo turno)\nif (data.link_pago) {\n  updateFields.mp_link = data.link_pago;\n  updateFields.mp_preference_id = data.mp_preference_id || '';\n}\n\n// ============================================================================\n// OUTPUT\n// ============================================================================\nreturn [{\n  json: {\n    // Row ID para el Update\n    row_id: turnoRowId,\n\n    // Campos para Baserow Update\n    ...updateFields,\n\n    // Metadata para FormatearRespuestaReprogramado\n    _meta: {\n      accion: data.accion,\n      mensaje_para_clienta: data.mensaje_para_clienta,\n      lead_row_id: data.lead_row_id,\n      fecha_hora_anterior: data.fecha_hora_anterior,\n      fecha_hora_nueva: data.fecha_hora_nueva,\n      calendario_actualizado: data.calendario_actualizado\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        112
+      ],
+      "id": "f43947a4-0fea-4b99-b915-d1cedad2b502",
+      "name": "PrepararReprogramadoBaserow"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "databaseId": 4,
+        "tableId": 852,
+        "rowId": "={{ $json.row_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": 8378,
+              "fieldValue": "={{ $json.fecha }}"
+            },
+            {
+              "fieldId": 8396,
+              "fieldValue": "={{ $json.hora }}"
+            },
+            {
+              "fieldId": 8404,
+              "fieldValue": "={{ $json.odoo_turno_id }}"
+            },
+            {
+              "fieldId": 8405,
+              "fieldValue": "={{ $json.updated_at }}"
+            },
+            {
+              "fieldId": 8394,
+              "fieldValue": "={{ $json.notas }}"
+            },
+            {
+              "fieldId": 8399,
+              "fieldValue": "={{ $json.mp_link }}"
+            },
+            {
+              "fieldId": 8403,
+              "fieldValue": "={{ $json.mp_preference_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        112
+      ],
+      "id": "bfa4ed23-9c83-46f3-ae62-cf0b70710dda",
+      "name": "ActualizarTurnoBaserow",
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMATEAR RESPUESTA REPROGRAMADO - Agente Calendario Leraysi\n// ============================================================================\n// Construye la respuesta final para turno reprogramado\n// ============================================================================\n// NODO: FormatearRespuestaReprogramado (Code)\n// INPUT: ActualizarTurnoBaserow (respuesta de Baserow Update)\n// OUTPUT: Respuesta estructurada para Return\n// ============================================================================\n\nconst baserowResponse = $input.first().json;\n\n// Recuperar metadata del nodo anterior (PrepararReprogramadoBaserow)\nconst metaData = $('PrepararReprogramadoBaserow').first().json._meta;\nconst prepData = $('PrepararReprogramadoBaserow').first().json;\n\n// El ID del turno actualizado en Baserow\nconst turnoRowId = baserowResponse.id;\n\n// Detectar si es pre-pago (tiene link de pago nuevo)\nconst esPrepago = !!(prepData.mp_link);\n\n// ============================================================================\n// OUTPUT PARA MASTER AGENT\n// ============================================================================\nconst response = {\n  success: true,\n  accion: metaData.accion,\n  turno_id: turnoRowId,\n  mensaje_para_clienta: metaData.mensaje_para_clienta,\n  lead_row_id: metaData.lead_row_id,\n\n  // Datos específicos de reprogramación\n  reprogramacion: {\n    fecha_hora_anterior: metaData.fecha_hora_anterior,\n    fecha_hora_nueva: metaData.fecha_hora_nueva,\n    calendario_actualizado: metaData.calendario_actualizado\n  }\n};\n\n// PATH A (pre-pago): incluir link de pago nuevo\nif (esPrepago) {\n  response.link_pago = prepData.mp_link;\n  response.mp_preference_id = prepData.mp_preference_id;\n  response.sena_monto = baserowResponse.sena_monto;\n  response.precio = baserowResponse.precio;\n}\n\nreturn [{ json: response }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        112
+      ],
+      "id": "0e314186-f74d-4cc6-9261-5feb346a5f14",
+      "name": "FormatearRespuestaReprogramado"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMATEAR RESPUESTA ERROR - Agente Calendario Leraysi\n// ============================================================================\n// Maneja errores y devuelve respuesta estructurada al Master Agent\n// ============================================================================\n// NODO: FormatearRespuestaError (Code)\n// INPUT: SwitchAccion (fallback/error branch)\n// OUTPUT: Respuesta de error estructurada para Return\n// ============================================================================\n\nconst input = $input.first().json;\n\n// ============================================================================\n// CONSTRUIR MENSAJE DE ERROR\n// ============================================================================\nlet errorMessage = 'Error desconocido en el flujo del calendario';\nlet errorDetails = {};\n\n// Error del Switch (tool no reconocida)\nif (input.error) {\n  errorMessage = input.error;\n}\n\n// Contexto adicional\nif (input.tool) {\n  errorDetails.tool_intentada = input.tool;\n}\n\nif (input.tools_validas) {\n  errorDetails.tools_validas = input.tools_validas;\n}\n\n// Datos originales para debugging\nif (input.original_input) {\n  errorDetails.original_input = input.original_input;\n}\n\n// ============================================================================\n// OUTPUT PARA MASTER AGENT\n// ============================================================================\nreturn [{\n  json: {\n    success: false,\n    accion: 'error',\n    error: errorMessage,\n    detalles: errorDetails,\n    mensaje_para_clienta: 'Lo siento, hubo un problema procesando tu solicitud de turno. Por favor, intenta de nuevo o contacta directamente al salón.'\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        720
+      ],
+      "id": "56e24da5-871c-49f8-8806-9bd379937c1d",
+      "name": "FormatearRespuestaError.js"
+    },
+    {
+      "parameters": {
+        "description": "Agrega un servicio adicional a un turno existente en Estilos Leraysi. Combina los servicios, suma precios y duraciones, y regenera el link de pago. Usar cuando la clienta quiere agregar otro servicio a su cita ya agendada.",
+        "workflowId": {
+          "__rl": true,
+          "value": "Pgfz7XoGE2D7B63M",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Pgfz7XoGE2D7B63M",
+          "cachedResultName": "Leraysi - Agregar Servicio Turno"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "turno_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('turno_id', ``, 'number') }}",
+            "nuevo_servicio": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('nuevo_servicio', ``, 'string') }}",
+            "nuevo_servicio_detalle": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('nuevo_servicio_detalle', ``, 'string') }}",
+            "nuevo_precio": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('nuevo_precio', ``, 'number') }}",
+            "nueva_duracion": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('nueva_duracion', ``, 'number') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "turno_id",
+              "displayName": "turno_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "nuevo_servicio",
+              "displayName": "nuevo_servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "nuevo_servicio_detalle",
+              "displayName": "nuevo_servicio_detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "nuevo_precio",
+              "displayName": "nuevo_precio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "nueva_duracion",
+              "displayName": "nueva_duracion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "tool-agregar-servicio-turno",
+      "name": "leraysi_agregar_servicio_turno",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        656,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-3-5-haiku-20241022",
+          "mode": "list",
+          "cachedResultName": "Claude Haiku 3.5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        128,
+        480
+      ],
+      "id": "72171225-dabd-46d8-b4e5-2c821cbd6f2c",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "SUw0YD5b2MOCmI7u",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "databaseId": 4,
+        "tableId": 852,
+        "limit": 1,
+        "additionalOptions": {
+          "filters": {
+            "fields": [
+              {
+                "field": 8404,
+                "value": "={{ $json.odoo_turno_id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "buscar-turno-servicio-agregado",
+      "name": "BuscarTurnoServicioAgregado",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        304
+      ],
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PREPARAR SERVICIO AGREGADO BASEROW - Agente Calendario Leraysi v2\n// ============================================================================\n// Transforma datos para UPDATE en Baserow cuando se agrega un servicio\n// ESTRUCTURA IGUAL A turno_creado para simplificar mapeo\n// ============================================================================\n// INPUT: BuscarTurnoBaserow (resultado de busqueda con row_id)\n// OUTPUT: Campos listos para Baserow Update Row (misma estructura que turno_creado)\n// ============================================================================\n\n// Datos del turno encontrado en Baserow (viene de BuscarTurnoBaserow / Get many rows)\nconst turnoEncontrado = $input.first().json;\n\n// Datos de ParseAgentResponse (ahora con estructura igual a turno_creado)\nconst data = $('ParseAgentResponse').first().json;\n\n// ============================================================================\n// VALIDACION\n// ============================================================================\nif (!turnoEncontrado || !turnoEncontrado.id) {\n  throw new Error('[PrepararServicioAgregadoBaserow] No se encontro el turno en Baserow. ' +\n                  `odoo_turno_id buscado: ${data.odoo_turno_id}`);\n}\n\nconst turnoRowId = turnoEncontrado.id;\n\n// ============================================================================\n// FORMATEAR FECHA\n// ============================================================================\nfunction formatBaserowDatetime(date) {\n  const argentinaTime = new Date(date.getTime() - (3 * 60 * 60 * 1000));\n  const offset = '-03:00';\n  const year = argentinaTime.getUTCFullYear();\n  const month = String(argentinaTime.getUTCMonth() + 1).padStart(2, '0');\n  const day = String(argentinaTime.getUTCDate()).padStart(2, '0');\n  const hours = String(argentinaTime.getUTCHours()).padStart(2, '0');\n  const minutes = String(argentinaTime.getUTCMinutes()).padStart(2, '0');\n  const seconds = String(argentinaTime.getUTCSeconds()).padStart(2, '0');\n  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offset}`;\n}\n\nconst ahora = new Date();\n\n// ============================================================================\n// CAMPOS A ACTUALIZAR EN BASEROW (misma estructura que turno_creado)\n// ============================================================================\nconst updateFields = {\n  // Servicios como array (campo multi-select de Baserow)\n  servicio: data.servicio,\n\n  // Detalle para display (concatenacion)\n  servicio_detalle: data.servicio_detalle,\n\n  // Duracion total actualizada (en minutos)\n  duracion_min: data.duracion_estimada || 60,\n\n  // Complejidad maxima (puede cambiar al agregar servicio mas complejo)\n  complejidad_maxima: data.complejidad_maxima || 'media',\n\n  // Precio total actualizado\n  precio: data.precio,\n\n  // Sena total (30% del precio total)\n  sena_monto: data.sena_monto,\n\n  // Estado de pago (false porque hay nueva sena pendiente)\n  sena_pagada: false,\n\n  // Estado del turno\n  estado: 'pendiente_pago',\n\n  // MercadoPago (nuevo link)\n  mp_preference_id: data.mp_preference_id || '',\n  mp_link: data.link_pago || '',\n\n  // Timestamp de actualizacion\n  updated_at: formatBaserowDatetime(ahora),\n\n  // Notas con historial\n  notas: `Servicio agregado el ${ahora.toLocaleDateString('es-AR')}. Servicios: ${data.servicio_detalle}. Total: $${data.precio || 0}. Sena: $${data.sena_monto || 0}`\n};\n\n// ============================================================================\n// OUTPUT\n// ============================================================================\nreturn [{\n  json: {\n    row_id: turnoRowId,\n    ...updateFields,\n    _meta: {\n      accion: data.accion,\n      mensaje_para_clienta: data.mensaje_para_clienta,\n      lead_row_id: data.lead_row_id,\n      odoo_turno_id: data.odoo_turno_id\n    }\n  }\n}];"
+      },
+      "id": "preparar-servicio-agregado-baserow",
+      "name": "PrepararServicioAgregadoBaserow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "databaseId": 4,
+        "tableId": 852,
+        "rowId": "={{ $json.row_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": 8385,
+              "fieldValue": "={{ $json.servicio }}"
+            },
+            {
+              "fieldId": 8406,
+              "fieldValue": "={{ $json.servicio_detalle }}"
+            },
+            {
+              "fieldId": 8386,
+              "fieldValue": "={{ $json.complejidad_maxima }}"
+            },
+            {
+              "fieldId": 8387,
+              "fieldValue": "={{ $json.duracion_min }}"
+            },
+            {
+              "fieldId": 8388,
+              "fieldValue": "={{ $json.precio }}"
+            },
+            {
+              "fieldId": 8390,
+              "fieldValue": "={{ $json.sena_pagada }}"
+            },
+            {
+              "fieldId": 8391,
+              "fieldValue": "={{ $json.estado }}"
+            },
+            {
+              "fieldId": 8394,
+              "fieldValue": "={{ $json.notas }}"
+            },
+            {
+              "fieldId": 8399,
+              "fieldValue": "={{ $json.mp_link }}"
+            },
+            {
+              "fieldId": 8403,
+              "fieldValue": "={{ $json.mp_preference_id }}"
+            },
+            {
+              "fieldId": 8405,
+              "fieldValue": "={{ $json.updated_at }}"
+            }
+          ]
+        }
+      },
+      "id": "actualizar-turno-servicio-agregado",
+      "name": "ActualizarTurnoServicioAgregado",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        304
+      ],
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMATEAR RESPUESTA SERVICIO AGREGADO - Agente Calendario Leraysi v2\n// ============================================================================\n// Construye la respuesta final cuando se agrega un servicio a turno existente\n// Compatible con estructura simplificada (igual a turno_creado)\n// ============================================================================\n// NODO: FormatearRespuestaServicioAgregado (Code)\n// INPUT: ActualizarTurnoBaserow (respuesta de Baserow Update)\n// OUTPUT: Respuesta estructurada para Return → Master Agent\n// ============================================================================\n\nconst baserowResponse = $input.first().json;\n\n// Recuperar datos del nodo PrepararServicioAgregadoBaserow\nconst prepararData = $('PrepararServicioAgregadoBaserow').first().json;\nconst metaData = prepararData._meta;\n\n// El ID del turno actualizado en Baserow\nconst turnoRowId = baserowResponse.id;\n\n// ============================================================================\n// OUTPUT PARA MASTER AGENT\n// ============================================================================\n// Mantiene nombres compatibles con lo que espera el Master Agent prompt\n// (link_pago, precio_total, sena_diferencial, servicios_combinados)\n// ============================================================================\nreturn [{\n  json: {\n    success: true,\n    accion: metaData.accion,\n    turno_id: turnoRowId,\n    mensaje_para_clienta: metaData.mensaje_para_clienta,\n    lead_row_id: metaData.lead_row_id,\n\n    // Datos específicos de servicio agregado\n    // Mapea nombres nuevos → nombres que espera el Master Agent\n    servicio_agregado: {\n      odoo_turno_id: metaData.odoo_turno_id,\n      // servicios_combinados ← servicio_detalle\n      servicios_combinados: prepararData.servicio_detalle,\n      // precio_total ← precio\n      precio_total: prepararData.precio,\n      // sena_diferencial ← sena_monto (es la seña total, no diferencial)\n      sena_diferencial: prepararData.sena_monto,\n      // link_pago ← mp_link\n      link_pago: prepararData.mp_link\n    }\n  }\n}];"
+      },
+      "id": "formatear-respuesta-servicio-agregado",
+      "name": "FormatearRespuestaServicioAgregado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.modo }}",
+              "rightValue": "consultar_disponibilidad",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "334883d2-3fc2-4dc0-85fa-d48a3f4d1d71",
+      "name": "SwitchModo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMATEAR RESPUESTA OPCIONES - Agente Calendario Leraysi\n// ============================================================================\nconst data = $input.first().json;\n\n// GATE DETERMIN\\u00cdSTICO: si ParseInput bloque\\u00f3 por datos faltantes\nif (data.gate_bloqueado) {\n  const faltantes = data.gate_datos_faltantes || ['email'];\n  const nombre = data.nombre_clienta || 'Reina';\n  const listaFaltantes = faltantes.map(d => `* Tu ${d}`).join('\\n');\n  console.log(`[FormatearRespuesta] \\ud83d\\udee1\\ufe0f GATE: devolviendo datos_faltantes (${faltantes.join(', ')})`);\n  return [{\n    json: {\n      success: true,\n      accion: 'datos_faltantes',\n      mensaje_para_clienta: `${nombre}, para reservar tu turno necesito que me pases:\\n\\n${listaFaltantes}\\n\\n\\u00bfMe los compart\\u00eds?`,\n      opciones: [],\n      datos_faltantes: faltantes,\n      lead_row_id: data.lead_row_id || null\n    }\n  }];\n}\n\nconst slots = data.slots_recomendados || [];\nconst servicioDisplay = data.servicio_detalle || (Array.isArray(data.servicio) ? data.servicio.join(' + ') : data.servicio) || 'servicio';\nconst nombreClienta = data.nombre_clienta || 'Reina';\n\nlet accion;\nlet mensajeParaClienta;\n\nif (slots.length > 0) {\n  accion = 'opciones_disponibles';\n  const esJornadaCompleta = data.jornada_completa || slots.some(s => s.jornada_completa);\n  const opcionesTexto = slots.map(s => {\n    if (s.jornada_completa) return `* ${s.fecha_humana} - jornada completa (${s.hora} a ${s.hora_fin})`;\n    return `* ${s.fecha_humana} a las ${s.hora}`;\n  }).join('\\n');\n  if (esJornadaCompleta) {\n    mensajeParaClienta = `${nombreClienta}, como ${servicioDisplay.toLowerCase()} es una combinaci\\u00f3n extensa, necesitamos una jornada completa. Tengo disponibles estos d\\u00edas:\\n\\n${opcionesTexto}\\n\\n\\u00bfCu\\u00e1l te queda mejor?`;\n  } else {\n    mensajeParaClienta = `${nombreClienta}, para ${servicioDisplay.toLowerCase()} tengo estos horarios:\\n\\n${opcionesTexto}\\n\\n\\u00bfCu\\u00e1l te queda mejor?`;\n  }\n} else {\n  accion = 'sin_disponibilidad';\n  const alternativas = data.alternativas || [];\n  if (alternativas.length > 0) {\n    const altTexto = alternativas.map(a => `* ${a.nombre_dia} ${a.fecha}`).join('\\n');\n    mensajeParaClienta = `${nombreClienta}, no encontr\\u00e9 horarios disponibles para ${servicioDisplay.toLowerCase()} en la fecha que pediste. Te puedo ofrecer estos d\\u00edas:\\n\\n${altTexto}\\n\\n\\u00bfCu\\u00e1l te queda mejor?`;\n  } else {\n    mensajeParaClienta = `${nombreClienta}, no encontr\\u00e9 horarios disponibles para ${servicioDisplay.toLowerCase()} en los pr\\u00f3ximos d\\u00edas. \\u00bfQuer\\u00e9s que busque en otra fecha?`;\n  }\n}\n\nreturn [{\n  json: {\n    success: true,\n    accion,\n    mensaje_para_clienta: mensajeParaClienta,\n    opciones: slots,\n    lead_row_id: data.lead_row_id || null,\n    precio: data.precio || 0,\n    sena: Math.round((data.precio || 0) * 0.3),\n    duracion_estimada: data.duracion_estimada || 0,\n    complejidad_maxima: data.complejidad_maxima || 'media'\n  }\n}];"
+      },
+      "id": "a680d434-a9aa-47db-af69-6a05269e5668",
+      "name": "FormatearRespuestaOpciones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        -288
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "ParseInput",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ParseInput": {
+      "main": [
+        [
+          {
+            "node": "GetTurnosSemana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GetTurnosSemana": {
+      "main": [
+        [
+          {
+            "node": "AnalizarDisponibilidad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente Calendario": {
+      "main": [
+        [
+          {
+            "node": "ParseAgentResponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ParseAgentResponse": {
+      "main": [
+        [
+          {
+            "node": "SwitchAccion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuildAgentPrompt": {
+      "main": [
+        [
+          {
+            "node": "Agente Calendario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "leraysi_crear_turno": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Calendario",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "leraysi_cancelar_turno": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Calendario",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PrepararTurnoBaserow": {
+      "main": [
+        [
+          {
+            "node": "CrearTurnoBaserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CrearTurnoBaserow": {
+      "main": [
+        [
+          {
+            "node": "FormatearRespuestaExito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "leraysi_reprogramar_turno": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Calendario",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SwitchAccion": {
+      "main": [
+        [
+          {
+            "node": "PrepararTurnoBaserow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get many rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "BuscarTurnoServicioAgregado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FormatearRespuestaSinDisponibilidad",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FormatearRespuestaError.js",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many rows": {
+      "main": [
+        [
+          {
+            "node": "PrepararReprogramadoBaserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PrepararReprogramadoBaserow": {
+      "main": [
+        [
+          {
+            "node": "ActualizarTurnoBaserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ActualizarTurnoBaserow": {
+      "main": [
+        [
+          {
+            "node": "FormatearRespuestaReprogramado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "leraysi_agregar_servicio_turno": {
+      "main": [
+        []
+      ],
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Calendario",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Calendario",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuscarTurnoServicioAgregado": {
+      "main": [
+        [
+          {
+            "node": "PrepararServicioAgregadoBaserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PrepararServicioAgregadoBaserow": {
+      "main": [
+        [
+          {
+            "node": "ActualizarTurnoServicioAgregado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ActualizarTurnoServicioAgregado": {
+      "main": [
+        [
+          {
+            "node": "FormatearRespuestaServicioAgregado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AnalizarDisponibilidad": {
+      "main": [
+        [
+          {
+            "node": "SwitchModo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SwitchModo": {
+      "main": [
+        [
+          {
+            "node": "FormatearRespuestaOpciones",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "BuildAgentPrompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "3e420668-0c20-4862-aedd-37981272826a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
+  },
+  "id": "wXyvKF0nCCvAxGFG",
+  "tags": [
+    {
+      "updatedAt": "2026-02-04T17:36:59.816Z",
+      "createdAt": "2025-11-22T14:50:50.701Z",
+      "id": "TbLp68InL21vTdmh",
+      "name": "leraysi-agent"
+    }
+  ]
+}

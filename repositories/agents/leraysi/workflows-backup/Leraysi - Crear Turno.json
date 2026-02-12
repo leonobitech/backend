@@ -1,0 +1,102 @@
+{
+  "name": "Leraysi - Crear Turno",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"clienta\": \"Fer Padrom\",\n  \"telefono\": \"+5491135179755\",\n  \"email\": \"maferparo510@gmail.com\",\n  \"servicio\": \"alisado_brasileno\",\n  \"servicio_detalle\": \"Alisado brasileño, complejidad alta, cabello largo\",\n  \"fecha_hora\": \"2026-01-29 09:00\",\n  \"precio\": 60000,\n  \"duracion_estimada\": 270,\n  \"complejidad_maxima\": \"muy_compleja\",\n  \"lead_id\": 245\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a888abd3-641c-4a51-afd9-9cd34ba57ed2",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://odoo_mcp:8100/internal/mcp/call-tool",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        480,
+        0
+      ],
+      "id": "84a80515-7507-4fa8-8f87-c7320c7962e6",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "O6mz2TMAB8RUn2lr",
+          "name": "odoo-mcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// TRANSFORM FOR MCP - leraysi_crear_turno\n// ============================================================================\n// INPUT: { query: \"{...}\" } donde query es JSON string con los parámetros\n// OUTPUT: { tool, arguments } para el MCP de Odoo\n// ============================================================================\n\nconst raw = $input.first().json;\n\n// Los parámetros vienen en el campo \"query\" como JSON string\nconst params = typeof raw.query === 'string'\n  ? JSON.parse(raw.query)\n  : raw.query || raw;\n\n// Validar campos requeridos\nconst required = ['clienta', 'telefono', 'servicio', 'fecha_hora', 'precio', 'duracion_estimada', 'complejidad_maxima'];\nconst missing = required.filter(f => !params[f]);\n\nif (missing.length > 0) {\n  throw new Error(`[leraysi_crear_turno] Faltantes: ${missing.join(', ')}`);\n}\n\n// Construir arguments (requeridos + opcionales)\nconst args = {\n  clienta: params.clienta,\n  telefono: params.telefono,\n  servicio: params.servicio,\n  fecha_hora: params.fecha_hora,\n  precio: Number(params.precio),\n  duracion_estimada: Number(params.duracion_estimada),\n  complejidad_maxima: params.complejidad_maxima\n};\n\n// Agregar opcionales si existen\nif (params.email) args.email = params.email;\nif (params.servicio_detalle) args.servicio_detalle = params.servicio_detalle;\nif (params.lead_id) args.lead_id = Number(params.lead_id);\n\n// Output para MCP\nreturn [{\n  json: {\n    tool: \"leraysi_crear_turno\",\n    arguments: args\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "27fbeee1-b2c6-4e27-a74c-14d9d7fe48f0",
+      "name": "TransformForMCP-crear-turno"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "TransformForMCP-crear-turno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TransformForMCP-crear-turno": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "0663fb53-a3d8-496d-bdba-fadd331b5eb7",
+  "meta": {
+    "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
+  },
+  "id": "RSjHu3HHONPnVmPe",
+  "tags": [
+    {
+      "updatedAt": "2026-02-04T17:36:59.816Z",
+      "createdAt": "2025-11-22T14:50:50.701Z",
+      "id": "TbLp68InL21vTdmh",
+      "name": "leraysi-agent"
+    }
+  ]
+}

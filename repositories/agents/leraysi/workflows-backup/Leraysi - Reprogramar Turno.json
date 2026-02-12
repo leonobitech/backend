@@ -1,7 +1,5 @@
 {
-  "id": "yti2vAntCLo46aTg",
   "name": "Leraysi - Reprogramar Turno",
-  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -57,6 +55,7 @@
       "name": "TransformForMCP-reprogramar-turno.js"
     }
   ],
+  "pinData": {},
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
@@ -80,5 +79,23 @@
         ]
       ]
     }
-  }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "29699124-f58b-4b35-a7da-2ffa359517a4",
+  "meta": {
+    "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
+  },
+  "id": "yti2vAntCLo46aTg",
+  "tags": [
+    {
+      "updatedAt": "2026-02-04T17:36:59.816Z",
+      "createdAt": "2025-11-22T14:50:50.701Z",
+      "id": "TbLp68InL21vTdmh",
+      "name": "leraysi-agent"
+    }
+  ]
 }

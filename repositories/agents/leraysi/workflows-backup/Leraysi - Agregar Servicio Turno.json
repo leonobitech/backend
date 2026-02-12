@@ -1,0 +1,102 @@
+{
+  "name": "Leraysi - Agregar Servicio Turno",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"turno_id\": 123,\n  \"nuevo_servicio\": \"manicura_simple\",\n  \"nuevo_servicio_detalle\": \"Manicura simple\",\n  \"nuevo_precio\": 8000,\n  \"duracion_estimada\": 30,\n  \"complejidad_maxima\": \"media\"\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "trigger-agregar-servicio",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// TRANSFORM FOR MCP - leraysi_agregar_servicio_turno\n// ============================================================================\n// INPUT: { query: \"{...}\" } donde query es JSON string con los parámetros\n// OUTPUT: { tool, arguments } para el MCP de Odoo\n// ============================================================================\n\nconst raw = $input.first().json;\n\n// Los parámetros vienen en el campo \"query\" como JSON string\nconst params = typeof raw.query === 'string'\n  ? JSON.parse(raw.query)\n  : raw.query || raw;\n\n// Validar campos requeridos\nconst required = ['turno_id', 'nuevo_servicio', 'nuevo_servicio_detalle', 'nuevo_precio', 'duracion_estimada', 'complejidad_maxima'];\nconst missing = required.filter(f => !params[f]);\n\nif (missing.length > 0) {\n  throw new Error(`[leraysi_agregar_servicio_turno] Faltantes: ${missing.join(', ')}`);\n}\n\n// Construir arguments\nconst args = {\n  turno_id: Number(params.turno_id),\n  nuevo_servicio: params.nuevo_servicio,\n  nuevo_servicio_detalle: params.nuevo_servicio_detalle,\n  nuevo_precio: Number(params.nuevo_precio),\n  duracion_estimada: Number(params.duracion_estimada),\n  complejidad_maxima: params.complejidad_maxima\n};\n\n// Output para MCP\nreturn [{\n  json: {\n    tool: \"leraysi_agregar_servicio_turno\",\n    arguments: args\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "transform-agregar-servicio",
+      "name": "TransformForMCP-agregar-servicio"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://odoo_mcp:8100/internal/mcp/call-tool",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        480,
+        0
+      ],
+      "id": "http-agregar-servicio",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "O6mz2TMAB8RUn2lr",
+          "name": "odoo-mcp"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "TransformForMCP-agregar-servicio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TransformForMCP-agregar-servicio": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "ce3b6ac8-f1e7-433c-89c0-1e1386208f1f",
+  "meta": {
+    "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
+  },
+  "id": "Pgfz7XoGE2D7B63M",
+  "tags": [
+    {
+      "updatedAt": "2026-02-04T17:36:59.816Z",
+      "createdAt": "2025-11-22T14:50:50.701Z",
+      "id": "TbLp68InL21vTdmh",
+      "name": "leraysi-agent"
+    }
+  ]
+}

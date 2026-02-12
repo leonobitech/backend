@@ -8,7 +8,7 @@ Agente de ventas por WhatsApp para **Estilos Leraysi**, salon de belleza femenin
 
 Chatbot que atiende clientas por WhatsApp: consulta de servicios, presupuestos (con foto para precios variables), agendamiento de turnos y cobro de sena via Mercado Pago.
 
-**Stack**: n8n + GPT-4o (master agent) + GPT-4.1-mini (welcome + calendario) + Claude Sonnet (vision) + Whisper (audio) + Piper TTS + Chatwoot (WhatsApp) + Baserow (CRM) + Odoo (CRM/calendario) + Qdrant (RAG servicios) + Redis (buffer) + Mercado Pago (pagos)
+**Stack**: n8n + Claude Haiku 3.5 (master agent, welcome, calendario) + Claude Sonnet (vision) + Whisper (audio) + Piper TTS + Chatwoot (WhatsApp) + Baserow (CRM) + Odoo (CRM/calendario) + Qdrant (RAG servicios) + Redis (buffer) + Mercado Pago (pagos)
 
 ---
 
@@ -16,11 +16,10 @@ Chatbot que atiende clientas por WhatsApp: consulta de servicios, presupuestos (
 
 | Workflow | ID | Nodos | Funcion |
 |----------|-------|-------|---------|
-| Sales_Agent_By_WhatsApp | `7WjUcj8Jms1Rmm1o` | 85 | Agente principal |
+| Sales_Agent_By_WhatsApp | `7WjUcj8Jms1Rmm1o` | 90 | Agente principal |
 | Leraysi - Agente Calendario | `wXyvKF0nCCvAxGFG` | 21 | Sub-workflow turnos |
 | Leraysi - Crear Turno | `RSjHu3HHONPnVmPe` | 3 | Crear turno via odoo-mcp |
 | Leraysi - Reprogramar Turno | `yti2vAntCLo46aTg` | 3 | Reprogramar turno via odoo-mcp |
-| Leraysi - Cancelar Turno | `3OEvpzjVYTzdHytk` | 2 | Cancelar turno via odoo-mcp |
 | Leraysi - Webhook Pago Confirmado | `mlVG31koSK-Tdz7Csy0Wq` | 8 | Confirmar pago MP |
 | Load Services | `xANuydj39gbbYkpU` | 11 | Baserow -> Qdrant RAG (inactivo) |
 
@@ -66,7 +65,7 @@ Para debugging del sub-workflow Agente Calendario, ver:
 
 ---
 
-## Flujo principal — Sales_Agent_By_WhatsApp (85 nodos)
+## Flujo principal — Sales_Agent_By_WhatsApp (90 nodos)
 
 ```
 WhatsApp -> Chatwoot webhook -> n8n
@@ -92,7 +91,7 @@ STAGE 4: REGISTER LEAD
     [nuevo]    -> CreatePayload -> createLeadBaserow -> CreatePayloadOdoo -> CreateLeadOdoo -> UpdateLeadWithLead_Id -> WELCOME AGENT
     [existente] -> UpdatePayload -> UpdateLeadWithRow_Id -> ComposeProfile -> PROFILE & HISTORY
 
-STAGE 5: WELCOME AGENT (leads nuevos, GPT-4.1-mini)
+STAGE 5: WELCOME AGENT (leads nuevos, Claude Haiku 3.5)
   Create an item (log Odoo) -> AI Agent Welcome -> Filter Output Initial -> Create an item1 (log Odoo) -> ResponseType
     [audio] -> GenerateAudio (Piper TTS) -> ResponseChatwootAudio
     [text]  -> ResponseChatwootText
@@ -101,17 +100,35 @@ STAGE 6: PROFILE & HISTORY (leads existentes)
   ComposeProfile -> UpdateDescription (Odoo) -> Register incoming message (Odoo) -> Get Chat History -> Chat History Filter -> HydrateForHistory
   [image path]: Get Chat History1 -> Chat History Filter1 -> HydrateForHistory_2 -> LoadProfileAndStateImage
 
-STAGE 7: MASTER AGENT (GPT-4o, temp=0.2)
+STAGE 7: MASTER AGENT (Claude Haiku 3.5, temp=0.2)
   Input Main -> Master AI Agent-Main -> Output Main -> Gate: NO_REPLY/Empty
     [valid] -> StatePatchLead (Baserow 16 campos) -> UpdateEmailLead (Odoo) -> Record Agent Response (Odoo) -> ResponseType1
       [audio] -> GenerateAudio1 (Piper TTS) -> ResponseChatwootAudio1
       [text]  -> Output to Chatwoot
     [empty] -> (dropped)
+
+  RETRY LOOP (si Master Agent o Output Main fallan):
+    Master Agent [error] ──┐
+    Output Main  [error] ──┤
+                           ↓
+                    RetryController ($execution.customData, max 3 intentos)
+                           ↓
+                       RetryGate (IF canRetry)
+                      /          \
+                    true        false
+                     ↓            ↓
+                RetryWait     FallbackMessage (mensaje amable Leraysi)
+                 (3 seg)          ↓
+                     ↓       Gate: NO_REPLY/Empty (flujo normal)
+              RetryPassthrough
+              (restaura Input Main)
+                     ↓
+              Master Agent (loop back)
 ```
 
 ---
 
-## Inventario de nodos (85)
+## Inventario de nodos (90)
 
 ### Filter (5)
 | Nodo | Tipo | Funcion |
@@ -183,7 +200,7 @@ STAGE 7: MASTER AGENT (GPT-4o, temp=0.2)
 | Nodo | Tipo | Funcion |
 |------|------|---------|
 | Create an item | odoo | Log mensaje cliente en Odoo |
-| AI Agent Welcome | agent | GPT-4.1-mini, saludo inicial |
+| AI Agent Welcome | agent | Claude Haiku 3.5, saludo inicial |
 | Filter Output Initial | code | Formatea para WhatsApp + Odoo HTML |
 | Create an item1 | odoo | Log respuesta agente en Odoo |
 | ResponseType | if | Rutea: audio o texto |
@@ -222,17 +239,26 @@ STAGE 7: MASTER AGENT (GPT-4o, temp=0.2)
 | Nodo | Tipo | Funcion |
 |------|------|---------|
 | Input Main | code | Construye userPrompt con historial, state, imagen |
-| Master AI Agent-Main | agent | GPT-4o, temp=0.2, maxTokens=4000 |
-| OpenAI Chat Model1 | lmChatOpenAi | Config modelo GPT-4o |
+| Master AI Agent-Main | agent | Claude Haiku 3.5, temp=0.2, maxTokens=4000. `onError: continueErrorOutput` |
+| Anthropic Chat Model1 | lmChatAnthropic | Config modelo Claude Haiku 3.5 |
 | Qdrant Vector Store - Services | vectorStoreQdrant | RAG servicios_leraysi (top 5) |
 | Embeddings OpenAI | embeddingsOpenAi | Embeddings para Qdrant |
 
 ### Output Processing (3)
 | Nodo | Tipo | Funcion |
 |------|------|---------|
-| Output Main | code | Parsea JSON LLM, aplica state_patch, monotonic counters |
+| Output Main | code | Parsea JSON LLM, aplica state_patch, monotonic counters. `onError: continueErrorOutput` |
 | Gate: NO_REPLY / Empty | if | Filtra respuestas vacias/NO_REPLY |
 | StatePatchLead | baserow | Update 16 campos en Baserow |
+
+### Retry Loop (5)
+| Nodo | Tipo | Funcion |
+|------|------|---------|
+| RetryController | code | Cuenta intentos via `$execution.customData`, max 3 |
+| RetryGate | if | `canRetry` true → retry, false → fallback |
+| RetryWait | wait | Espera 3 segundos entre reintentos |
+| RetryPassthrough | code | Restaura `$('Input Main').first().json` para loop back |
+| FallbackMessage | code | Genera mensaje amable Leraysi + state original sin modificar |
 
 ### Final Output (6)
 | Nodo | Tipo | Funcion |
@@ -247,7 +273,7 @@ STAGE 7: MASTER AGENT (GPT-4o, temp=0.2)
 ### AI Sub-components Welcome (4)
 | Nodo | Tipo | Funcion |
 |------|------|---------|
-| OpenAI Chat Model2 | lmChatOpenAi | GPT-4.1-mini (temp=0.4, maxTokens=150) |
+| Anthropic Chat Model2 | lmChatAnthropic | Claude Haiku 3.5 (temp=0.4, maxTokens=150) |
 | Simple Memory | memoryBufferWindow | 10 mensajes contexto |
 | Qdrant Vector Store1 | vectorStoreQdrant | RAG servicios para welcome |
 | Embeddings OpenAI1 | embeddingsOpenAi | Embeddings para welcome |
@@ -272,7 +298,7 @@ When Executed by Another Workflow
   -> GetTurnosSemana (Baserow 852, proximos 7 dias)
   -> AnalizarDisponibilidad (capacidad por complejidad: muy_compleja:2, compleja:3, media:4, simple:5)
   -> BuildAgentPrompt (instrucciones deterministicas pre-calculadas)
-  -> Agente Calendario (GPT-4.1-mini, temp=0.2 — EJECUTOR, no toma decisiones)
+  -> Agente Calendario (Claude Haiku 3.5, temp=0.2 — EJECUTOR, no toma decisiones)
   -> ParseAgentResponse (extrae JSON, mapea estado -> accion)
   -> SwitchAccion:
       [turno_creado]        -> PrepararTurnoBaserow -> CrearTurnoBaserow -> FormatearRespuestaExito
@@ -406,7 +432,8 @@ Nota: tiene nodo `FilterJsonCleanLeonobitech` DISABLED (residuo del agente origi
 | Chatwoot | `http://chatwoot:3000` (API + webhook) | Enviar/recibir mensajes WhatsApp |
 | Anthropic Claude | `https://api.anthropic.com/v1/messages` (Sonnet) | Analisis de fotos de cabello |
 | Piper TTS | `http://piper_tts:5000/tts` | Text-to-speech para respuestas audio |
-| OpenAI | LangChain nodes | GPT-4o (master), GPT-4.1-mini (welcome/calendario), Whisper (audio), Embeddings |
+| Anthropic | LangChain nodes | Claude Haiku 3.5 (master, welcome, calendario) |
+| OpenAI | LangChain nodes | Whisper (audio), Embeddings |
 | Qdrant | LangChain nodes | Vector search servicios |
 | Baserow | n8n native | CRM leads (851), turnos (852), servicios (850) |
 | Odoo | n8n native + odoo-mcp:8100 | CRM lead + mail.message + calendario |
@@ -466,7 +493,7 @@ Catalogo: servicio, categoria, precio_base, requiere_foto, tiempo_estimado, nota
 ### Welcome Agent (LERA)
 - **Identidad**: "Lera", saludo calido de primer contacto
 - **Reglas**: Max 2 oraciones, WhatsApp-friendly, sin precios, sin horarios, sin listas, no pedir nombre
-- **Modelo**: GPT-4.1-mini, temp=0.4, maxTokens=150
+- **Modelo**: Claude Haiku 3.5, temp=0.4, maxTokens=150
 
 ### Formato respuesta Master Agent
 ```json
@@ -517,9 +544,10 @@ Construye userPrompt con: ultimos 10 mensajes, state actual (stage, service, fla
 | Patron | Descripcion |
 |--------|-------------|
 | **Buffer-Window** | Redis 8s para agregar mensajes rapidos, evita explosion de procesamiento |
-| **Two-tier AI** | Welcome (GPT-4.1-mini, simple) para nuevos + Master (GPT-4o, completo) para existentes |
+| **Unified AI (Claude Haiku 3.5)** | Welcome (simple) para nuevos + Master (completo) para existentes + Calendario (ejecutor) |
 | **Deterministic Calendar** | AnalizarDisponibilidad calcula TODO antes del LLM; el agente solo ejecuta tool calls |
 | **Snapshot-Diff-Patch** | state_base -> LLM -> state_patch -> monotonic merge -> Baserow update |
 | **3-Tier Fallback** | ComposeProfile: results[0] -> direct object -> row property |
 | **Multi-modal I/O** | Audio (Whisper in, Piper out) + Image (Claude Sonnet vision) + Text |
 | **Parallel CRM** | Baserow (state rapido) + Odoo (CRM formal) sincronizados en cada paso |
+| **Retry Loop** | Master Agent + Output Main con `onError: continueErrorOutput`, 3 reintentos con backoff 3s, fallback amable si todo falla |
