@@ -254,7 +254,7 @@ export class ConfirmarPagoCompletoTool
         // Solo actualizamos: nombre, horarios, duración, descripción.
         try {
           const { partner_ids, ...updateValues } = eventValues;
-          await this.odooClient.write("calendar.event", [existingEventId], updateValues, { mail_notrack: true, no_mail_to_attendees: true });
+          await this.odooClient.write("calendar.event", [existingEventId], updateValues, { mail_notrack: true });
           eventId = existingEventId;
           logger.info(
             { eventId, turnoId: params.turno_id },
