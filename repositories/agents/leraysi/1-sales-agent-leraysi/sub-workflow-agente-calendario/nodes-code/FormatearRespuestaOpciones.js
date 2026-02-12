@@ -77,6 +77,11 @@ return [{
     accion,
     mensaje_para_clienta: mensajeParaClienta,
     opciones: slots,
-    lead_row_id: data.lead_row_id || null
+    lead_row_id: data.lead_row_id || null,
+    // Precio determinístico para que Master Agent cotice correctamente
+    precio: data.precio || 0,
+    sena: Math.round((data.precio || 0) * 0.3),
+    duracion_estimada: data.duracion_estimada || 0,
+    complejidad_maxima: data.complejidad_maxima || 'media'
   }
 }];

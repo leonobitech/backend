@@ -54,26 +54,41 @@ const displayName = state.full_name || state.nick_name || "clienta";
 let imageSection = "";
 if (state.image_analysis) {
   const ia = state.image_analysis;
-  // Calcular ajuste de precio según largo del cabello
-  const ajustePrecio = {
-    'corto': 'precio base del servicio (sin recargo)',
-    'medio': 'precio base + 10%',
-    'largo': 'precio base + 20%'
+  // Precios base de servicios de cabello (ajustados por largo detectado)
+  const PRECIOS_BASE = {
+    'Corte mujer': 8000, 'Alisado brasileño': 45000, 'Alisado keratina': 55000,
+    'Mechas completas': 35000, 'Tintura raíz': 15000, 'Tintura completa': 25000,
+    'Balayage': 50000
   };
-  const ajuste = ajustePrecio[ia.length] || 'precio base (largo no detectado)';
+  // Precios fijos (no dependen del largo del cabello)
+  const PRECIOS_FIJOS = {
+    'Manicura simple': 5000, 'Manicura semipermanente': 8000, 'Pedicura': 6000,
+    'Depilación cera piernas': 10000, 'Depilación cera axilas': 4000,
+    'Depilación cera bikini': 6000, 'Depilación láser piernas': 25000,
+    'Depilación láser axilas': 12000
+  };
+  const MULT = { 'corto': 1.0, 'medio': 1.1, 'largo': 1.2 };
+  const mult = MULT[ia.length] || 1.0;
+
+  const tablaCabello = Object.entries(PRECIOS_BASE)
+    .map(([s, base]) => `- ${s}: $${Math.round(base * mult).toLocaleString('es-AR')}`)
+    .join('\n');
+  const tablaFijos = Object.entries(PRECIOS_FIJOS)
+    .map(([s, p]) => `- ${s}: $${p.toLocaleString('es-AR')}`)
+    .join('\n');
 
   imageSection = `
 ## Foto Recibida
-Largo: ${ia.length} | Textura: ${ia.texture}
-Condición: ${ia.condition} | Color: ${ia.current_color}
-${ia.is_dyed ? "Ya teñido" : "Sin teñir"} | ${ia.has_roots ? "Con raíces" : "Sin raíces"}
+Largo: ${ia.length} | Textura: ${ia.texture} | Condición: ${ia.condition}
+Color: ${ia.current_color} | ${ia.is_dyed ? "Teñido" : "Sin teñir"} | ${ia.has_roots ? "Con raíces" : "Sin raíces"}
 
-⚠️ AJUSTE DE PRECIO SEGÚN LARGO DEL CABELLO:
-- Cabello corto: precio base del servicio
-- Cabello medio: precio base + 10%
-- Cabello largo: precio base + 20%
+## PRECIOS FINALES (ya calculados, usar EXACTAMENTE estos valores)
+### Servicios de cabello (ajustados para cabello ${ia.length}):
+${tablaCabello}
+### Servicios precio fijo:
+${tablaFijos}
 
-Largo detectado: "${ia.length}" → Aplicar: ${ajuste}
+⚠️ USAR estos precios EXACTOS al dar presupuesto y al llamar tools. NO aplicar ajustes adicionales.
 `;
 }
 

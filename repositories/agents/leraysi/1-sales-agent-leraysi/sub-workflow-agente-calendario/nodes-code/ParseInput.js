@@ -3,7 +3,7 @@
 // ============================================================================
 // Procesa y valida el input del Master AI Agent
 // COMBINA: llm_output (del LLM) + state (de Input Main)
-// Calcula duración basada en servicio + largo del cabello (sistema aditivo)
+// Calcula duración y PRECIO basados en servicio + largo del cabello (determinístico)
 // ============================================================================
 
 const raw = $input.first().json;
@@ -100,31 +100,29 @@ const input = {
 //
 const SERVICIOS_CONFIG = {
   // === CORTE (1 servicio) ===
-  'Corte mujer': { base_min: 60, complejidad: 'media', requiere_largo: true },
+  'Corte mujer': { base_min: 60, complejidad: 'media', requiere_largo: true, precio_base: 8000 },
 
   // === ALISADO (2 servicios) ===
-  'Alisado brasileño': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true },
-  'Alisado keratina': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true },
+  'Alisado brasileño': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 45000 },
+  'Alisado keratina': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 55000 },
 
   // === COLOR (4 servicios) ===
-  'Mechas completas': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true },
-  'Tintura raíz': { base_min: 60, complejidad: 'compleja', requiere_largo: true },
-  'Tintura completa': { base_min: 120, complejidad: 'muy_compleja', requiere_largo: true },
-  'Balayage': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true },
+  'Mechas completas': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 35000 },
+  'Tintura raíz': { base_min: 60, complejidad: 'compleja', requiere_largo: true, precio_base: 15000 },
+  'Tintura completa': { base_min: 120, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 25000 },
+  'Balayage': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 50000 },
 
   // === UÑAS (3 servicios) ===
-  // Duración por complejidad: simple=60, media=120, compleja=180
-  'Manicura simple': { base_min: 120, complejidad: 'media', requiere_largo: false },
-  'Manicura semipermanente': { base_min: 180, complejidad: 'compleja', requiere_largo: false },
-  'Pedicura': { base_min: 120, complejidad: 'media', requiere_largo: false },
+  'Manicura simple': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 5000 },
+  'Manicura semipermanente': { base_min: 180, complejidad: 'compleja', requiere_largo: false, precio_base: 8000 },
+  'Pedicura': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 6000 },
 
   // === DEPILACIÓN (5 servicios) ===
-  // Duración por complejidad: simple=60, media=120, compleja=180
-  'Depilación cera piernas': { base_min: 120, complejidad: 'media', requiere_largo: false },
-  'Depilación cera axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false },
-  'Depilación cera bikini': { base_min: 60, complejidad: 'simple', requiere_largo: false },
-  'Depilación láser piernas': { base_min: 120, complejidad: 'media', requiere_largo: false },
-  'Depilación láser axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false }
+  'Depilación cera piernas': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 10000 },
+  'Depilación cera axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 4000 },
+  'Depilación cera bikini': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 6000 },
+  'Depilación láser piernas': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 25000 },
+  'Depilación láser axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 12000 }
 };
 
 // Duración extra (aditiva) según largo del cabello
@@ -141,6 +139,15 @@ const COMPLEJIDAD_POR_LARGO = {
   'corto': 'media',
   'medio': 'compleja',
   'largo': 'muy_compleja'
+};
+
+// Multiplicador de precio según largo del cabello
+// Solo aplica a servicios con requiere_largo: true
+// corto = precio base, medio = +10%, largo = +20%
+const PRECIO_MULTIPLICADOR_LARGO = {
+  'corto': 1.0,
+  'medio': 1.1,
+  'largo': 1.2
 };
 
 // ============================================================================
@@ -161,7 +168,7 @@ function algunServicioRequiereLargo(servicios) {
 const modoConsulta = input.modo === 'consultar_disponibilidad';
 const camposRequeridos = modoConsulta
   ? ['servicio', 'fecha_deseada']
-  : ['clienta_id', 'nombre_clienta', 'telefono', 'servicio', 'fecha_deseada', 'precio'];
+  : ['clienta_id', 'nombre_clienta', 'telefono', 'servicio', 'fecha_deseada'];
 const camposFaltantes = camposRequeridos.filter(campo => !input[campo]);
 
 if (camposFaltantes.length > 0) {
@@ -247,9 +254,41 @@ function obtenerComplejidadMaxima(servicios, largo) {
   return 'simple';
 }
 
+// ============================================================================
+// CÁLCULO DE PRECIO DETERMINÍSTICO
+// ============================================================================
+// Mismo patrón que duración: precio_base + ajuste por largo
+// Servicios de cabello: precio_base * multiplicador_largo
+// Servicios sin cabello: precio_base fijo
+// Si algún servicio no está en config → fallback al precio del LLM
+function calcularPrecio(servicios, largo) {
+  let precioTotal = 0;
+  for (const srv of servicios) {
+    const config = SERVICIOS_CONFIG[srv];
+    if (config && config.precio_base != null) {
+      let precioServicio = config.precio_base;
+      if (config.requiere_largo && largo) {
+        precioServicio = Math.round(config.precio_base * (PRECIO_MULTIPLICADOR_LARGO[largo] || 1.0));
+      }
+      precioTotal += precioServicio;
+    } else {
+      console.log(`[ParseInput] ⚠️ Servicio "${srv}" no encontrado en config, precio no calculable`);
+      return null;
+    }
+  }
+  return precioTotal;
+}
+
 const duracion_estimada = calcularDuracion(servicio, largo_cabello);
 const complejidad_maxima = obtenerComplejidadMaxima(servicio, largo_cabello);
 const servicio_detalle = servicio.join(' + ');
+
+// Precio determinístico: override sobre el precio del LLM
+const precio_calculado = calcularPrecio(servicio, largo_cabello);
+const precioFinal = precio_calculado !== null ? precio_calculado : precio;
+if (precio_calculado !== null && precio > 0 && precio_calculado !== precio) {
+  console.log(`[ParseInput] 🔧 Precio corregido: LLM=$${precio}, determinístico=$${precio_calculado}`);
+}
 
 // ============================================================================
 // GATE DETERMINÍSTICO: datos obligatorios para turno nuevo
@@ -296,7 +335,7 @@ return [{
     servicio_detalle,
     fecha_deseada,
     hora_deseada,
-    precio,
+    precio: precioFinal,
     duracion_estimada,
     complejidad_maxima,
 

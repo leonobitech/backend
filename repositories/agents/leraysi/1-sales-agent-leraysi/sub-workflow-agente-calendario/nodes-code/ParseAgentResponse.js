@@ -161,6 +161,14 @@ if (llmResponse.estado === "servicio_agregado") {
       ? input.turno_fecha.split("T")[1]?.slice(0, 5)
       : input.turno_fecha?.split(" ")[1]) ||
     "09:00";
+  // Safety net: precio determinístico (ParseInput) sobre precio del LLM
+  const precioExDet = Number(input.turno_precio_existente) || 0;
+  const precioNuevoDet = Number(input.precio) || 0;
+  const precioTotalDet = precioExDet + precioNuevoDet;
+  const precioTotalFinal = precioTotalDet > 0 ? precioTotalDet : (llmResponse.precio_total || 0);
+  if (llmResponse.precio_total && precioTotalDet > 0 && llmResponse.precio_total !== precioTotalDet) {
+    console.log(`[ParseAgentResponse] 🔧 Precio servicio_agregado corregido: LLM=$${llmResponse.precio_total}, det=$${precioTotalDet}`);
+  }
   resultado = {
     ...resultado,
     odoo_turno_id: llmResponse.turno_id,
@@ -168,13 +176,13 @@ if (llmResponse.estado === "servicio_agregado") {
     hora_sugerida: horaTurnoFinal,
     servicio: serviciosArray,
     servicio_detalle: servicioDetalleCombinado,
-    precio: llmResponse.precio_total,
+    precio: precioTotalFinal,
     duracion_estimada:
       llmResponse.duracion_estimada || input.duracion_estimada || 60,
     complejidad_maxima:
       llmResponse.complejidad_maxima || input.complejidad_maxima || "media",
     sena_monto:
-      llmResponse.sena || Math.round((llmResponse.precio_total || 0) * 0.3),
+      llmResponse.sena || Math.round((precioTotalFinal || 0) * 0.3),
     mp_preference_id: mpPreferenceId,
     link_pago: llmResponse.link_pago || "",
     estado_turno: "pendiente_pago",

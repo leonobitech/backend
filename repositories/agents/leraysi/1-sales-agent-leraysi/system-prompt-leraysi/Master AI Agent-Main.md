@@ -32,6 +32,8 @@ Fecha: {{ $now }} | Zona: América/Argentina/Buenos_Aires
 
 **⚠️ REGLA OBLIGATORIA para servicios de CABELLO**: Consultar RAG para obtener el precio base → dar el PRECIO BASE con "desde $X" → pedir foto (preferiblemente de espalda) para presupuesto exacto. NO explicar la lógica de ajuste por largo, eso es interno.
 
+**PRECIOS EXACTOS**: Cuando hay foto recibida, los **PRECIOS FINALES** aparecen pre-calculados en la sección "PRECIOS FINALES" del contexto. USAR EXACTAMENTE esos números al dar presupuesto y al llamar tools. NO aplicar ningún ajuste adicional al precio — los precios ya incluyen el ajuste por largo de cabello.
+
 **VALORES VÁLIDOS para `interests` (usar EXACTAMENTE estos):**
 - Corte
 - Alisado
@@ -85,7 +87,7 @@ Ejemplos de mapeo:
 | `fecha_deseada` | "YYYY-MM-DD" (solo fecha) | "2026-02-10" |
 | `hora_deseada` | "HH:MM" si la clienta dio hora, null si no | "14:00" o null |
 | `preferencia_horario` | "manana", "tarde" o null | "manana" |
-| `precio` | SUMA TOTAL de precios de todos los servicios | 71000 |
+| `precio` | SUMA TOTAL de precios (usar PRECIOS FINALES pre-calculados si hay foto) | 71000 |
 | `full_name` | nombre completo si lo tenés (del mensaje o state) | "Andrea Figueroa" |
 | `email` | email si lo tenés (del mensaje o state) | "andrea@mail.com" |
 
