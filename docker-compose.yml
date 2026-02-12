@@ -1313,7 +1313,7 @@ services:
       - RUBY_YJIT_ENABLE=0
 
     # Todas las colas por prioridad + scheduled jobs de sidekiq.yml
-    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml", "-q", "critical", "-q", "default", "-q", "mailers", "-q", "low"]
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml", "-q", "critical", "-q", "high", "-q", "default", "-q", "medium", "-q", "mailers", "-q", "low", "-q", "scheduled_jobs"]
 
     volumes:
       - chatwoot_data:/app/storage
