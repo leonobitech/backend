@@ -104,6 +104,9 @@ export class CrearTurnoLeraysiTool
       fechaHora += ":00";
     }
 
+    // Guardar hora local Argentina para devolver en la respuesta
+    const fechaHoraLocal = fechaHora;
+
     // Convertir hora local Argentina a UTC para Odoo
     // Odoo almacena internamente en UTC, el addon espera recibir UTC
     fechaHora = this.argentinaToUTC(fechaHora);
@@ -165,7 +168,7 @@ export class CrearTurnoLeraysiTool
     return {
       turnoId,
       clienta: params.clienta,
-      fecha_hora: fechaHora,
+      fecha_hora: fechaHoraLocal,
       servicio: params.servicio,
       precio: params.precio,
       duracion_estimada: params.duracion_estimada,

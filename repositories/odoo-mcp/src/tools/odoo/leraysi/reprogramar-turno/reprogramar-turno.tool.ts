@@ -382,7 +382,7 @@ export class ReprogramarTurnoTool
       clienta: turno.clienta,
       telefono: turno.telefono,
       servicio: servicioDisplay,
-      fecha_hora_anterior: fechaHoraAnterior,
+      fecha_hora_anterior: fechaHoraAnteriorAR,
       fecha_hora_nueva: nuevaFechaHora,
       estado_anterior: estadoActual,
       acciones,
