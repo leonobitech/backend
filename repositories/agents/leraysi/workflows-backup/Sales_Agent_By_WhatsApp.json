@@ -10,8 +10,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -960,
-        -784
+        -1072,
+        -944
       ],
       "id": "c4afde41-4865-4960-911c-7820c02c0051",
       "name": "Webhook",
@@ -26,8 +26,8 @@
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
       "position": [
-        -656,
-        1232
+        -800,
+        1664
       ],
       "id": "48989cd4-c1f8-4e8d-b2a2-5b64f36b8403",
       "name": "Simple Memory"
@@ -60,8 +60,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -752,
-        -784
+        -864,
+        -944
       ],
       "id": "b613191e-5701-4a7a-ac0a-519caba16532",
       "name": "checkIfMessageCreated"
@@ -94,8 +94,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -464,
-        -784
+        -576,
+        -944
       ],
       "id": "2694a2be-5224-46e7-a40e-e9f620bdd1a1",
       "name": "checkIfClientMessage"
@@ -128,8 +128,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        80,
-        448
+        -64,
+        880
       ],
       "id": "f53fce7b-0848-466a-ba39-4cdbd46f94d7",
       "name": "checkIfLeadAlreadyRegistered"
@@ -186,8 +186,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        -160,
-        720
+        -304,
+        1152
       ],
       "id": "198b867b-13f6-4f87-89fd-30d2feb3056a",
       "name": "CreateLeadOdoo",
@@ -209,8 +209,8 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        -656,
-        720
+        -800,
+        1152
       ],
       "id": "329bf6a0-59b2-4dc7-bafa-c1b143bbfc8f",
       "name": "createLeadBaserow",
@@ -239,8 +239,8 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        80,
-        720
+        -64,
+        1152
       ],
       "id": "e54a2208-71b6-4463-973c-c0636597c00f",
       "name": "UpdateLeadWithLead_Id",
@@ -286,8 +286,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        -928,
-        976
+        -1072,
+        1408
       ],
       "id": "f74a88e7-d41e-47f2-a835-bd3c07cdfa0a",
       "name": "Create an item",
@@ -303,12 +303,12 @@
         "content": "## ---/// Register Leads",
         "height": 1300,
         "width": 1784,
-        "color": 3
+        "color": 5
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
         -1392,
-        288
+        704
       ],
       "typeVersion": 1,
       "id": "7e84c596-42a9-4be7-9d6d-c9a7045e6116",
@@ -316,15 +316,15 @@
     },
     {
       "parameters": {
-        "content": "## Filter Process",
-        "height": 392,
+        "content": "## ---/// Filter Process",
+        "height": 440,
         "width": 1784,
         "color": 4
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
         -1392,
-        -976
+        -1104
       ],
       "typeVersion": 1,
       "id": "c7515b7a-c994-4c70-a380-4f302aaaae61",
@@ -362,8 +362,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        -240,
-        976
+        -384,
+        1408
       ],
       "id": "3cbfcb50-2b8e-4d03-92dd-02ed6badc120",
       "name": "Create an item1",
@@ -381,8 +381,8 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
       "typeVersion": 1.2,
       "position": [
-        3120,
-        416
+        3296,
+        1424
       ],
       "id": "ac42feeb-72fe-4432-a9ba-ffad20243d0a",
       "name": "OpenAI Embeddings - Services",
@@ -409,8 +409,8 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1.3,
       "position": [
-        -528,
-        1232
+        -672,
+        1664
       ],
       "id": "1482e836-d905-424c-b981-e5772cdd303e",
       "name": "Qdrant Vector Store1",
@@ -428,8 +428,8 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
       "typeVersion": 1.2,
       "position": [
-        -528,
-        1408
+        -672,
+        1840
       ],
       "id": "7f9fde48-b147-4868-aecd-a2371f5ae5a0",
       "name": "OpenAI Embeddings - Welcome",
@@ -460,8 +460,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5056,
-        -16
+        4832,
+        1392
       ],
       "id": "67c59dd6-1ae0-45bb-9834-d484ce90574c",
       "name": "Output to Chatwoot",
@@ -483,8 +483,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 2,
       "position": [
-        2976,
-        -112
+        3152,
+        960
       ],
       "id": "a422fb8f-1188-4f40-a4ee-8e7679694d8d",
       "name": "Master AI Agent-Main",
@@ -522,8 +522,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        4688,
-        -160
+        5024,
+        912
       ],
       "id": "a4691174-2ce9-4d81-868d-ddc882c123e5",
       "name": "Record Agent Response",
@@ -569,8 +569,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        1648,
-        352
+        1600,
+        784
       ],
       "id": "1992b0f3-46e9-4f29-8ff9-84ab7092e22f",
       "name": "Register incoming message",
@@ -604,8 +604,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        1856,
-        352
+        1808,
+        784
       ],
       "id": "abf62d0d-232e-43ba-9660-619677179af6",
       "name": "Get Chat History from Lead",
@@ -632,8 +632,8 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1.3,
       "position": [
-        3120,
-        240
+        3296,
+        1264
       ],
       "id": "21d06440-c003-496d-ac80-02bd8f9232ff",
       "name": "Qdrant Vector Store - Services",
@@ -651,8 +651,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2048,
-        352
+        2000,
+        784
       ],
       "id": "d96b669c-1cd2-46fd-ab28-43b48d5ace66",
       "name": "transform_ChatHistory_TextFlow",
@@ -665,8 +665,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -400,
-        976
+        -544,
+        1408
       ],
       "id": "022af334-ad9a-4279-83f6-95751d906061",
       "name": "Filter Output Initial"
@@ -682,8 +682,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 2,
       "position": [
-        -688,
-        976
+        -832,
+        1408
       ],
       "id": "2803519d-91d2-4720-9626-adf04b25fd38",
       "name": "AI Agent Welcome"
@@ -695,8 +695,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -928,
-        464
+        -1072,
+        896
       ],
       "id": "f9537147-c277-4abc-81ca-3ff86e347c7e",
       "name": "Build Lead Row"
@@ -720,8 +720,8 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        -592,
-        384
+        -736,
+        816
       ],
       "id": "cc3f21df-ccf1-40e2-a2dd-88cf523a07b5",
       "name": "FindByChatwootId",
@@ -740,8 +740,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -384,
-        384
+        -528,
+        816
       ],
       "id": "704ca12a-c5c6-442a-8c33-9d267aa324e6",
       "name": "PickLeadRow"
@@ -755,8 +755,8 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        -112,
-        448
+        -256,
+        880
       ],
       "id": "9187e826-9e3e-4fb7-9f62-e86639735d45",
       "name": "MergeForUpdate"
@@ -768,8 +768,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -928,
-        720
+        -1072,
+        1152
       ],
       "id": "059aaba3-c7c6-4957-8957-d43494481f2e",
       "name": "CreatePayload"
@@ -781,8 +781,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        800,
-        432
+        752,
+        864
       ],
       "id": "1d15c7d6-9139-4c0d-b4eb-ef8346bd1cd5",
       "name": "UpdatePayload"
@@ -817,8 +817,8 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        1008,
-        432
+        960,
+        864
       ],
       "id": "439de338-aa87-41e4-a0a5-c4a7ca3cc6c0",
       "name": "UpdateLeadWithRow_Id",
@@ -836,8 +836,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -400,
-        720
+        -544,
+        1152
       ],
       "id": "7f62ae18-56b1-4a8d-aa9f-b72aa2c09a8a",
       "name": "CreatePayloadOdoo"
@@ -849,8 +849,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1248,
-        544
+        1200,
+        976
       ],
       "id": "f0284334-df14-4caf-8a40-e31baae01ce9",
       "name": "ComposeProfile"
@@ -864,8 +864,8 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        2304,
-        528
+        2256,
+        960
       ],
       "id": "9694b2a8-20df-465d-8780-760816447b71",
       "name": "HydrateForHistory"
@@ -892,8 +892,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        4512,
-        -160
+        4832,
+        912
       ],
       "id": "339c6981-006d-4e11-909e-279f6f2c5041",
       "name": "UpdateEmailLead",
@@ -994,8 +994,8 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        4336,
-        -160
+        4640,
+        912
       ],
       "id": "48c7424d-4341-4ca6-932c-f1c053c374e8",
       "name": "StatePatchLead",
@@ -1008,15 +1008,15 @@
     },
     {
       "parameters": {
-        "content": "## ---/// Buffer  Messages (Redis)",
-        "height": 840,
+        "content": "## ---/// Buffer  Messages",
+        "height": 888,
         "width": 1784,
         "color": 7
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
         -1392,
-        -576
+        -624
       ],
       "typeVersion": 1,
       "id": "e4455e4c-b943-4a9d-afdc-70093c8b9158",
@@ -1035,7 +1035,7 @@
           "conditions": [
             {
               "id": "65cda4b9-35fe-4545-b4a9-21b1acd3204c",
-              "leftValue": "={{ !!$json && $json.skip === false && $json.llm && $json.llm.text && $json.llm.text.trim() !== '' && $json.llm.text.trim() !== '[[NO_REPLY]]' }}\n",
+              "leftValue": "={{ !!$json.content_whatsapp && !!$json.content_whatsapp.content && $json.content_whatsapp.content.trim() !== '' }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -1052,8 +1052,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        4112,
-        -144
+        4416,
+        928
       ],
       "id": "cf80a5bf-6c1f-4fb6-9938-742f5b7278bc",
       "name": "Gate: NO_REPLY / Empty"
@@ -1065,8 +1065,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3376,
-        -128
+        3552,
+        944
       ],
       "id": "2995729d-f800-4e7c-9cad-d93cffabf7de",
       "name": "Output Main",
@@ -1082,8 +1082,8 @@
       "type": "n8n-nodes-base.redis",
       "typeVersion": 1,
       "position": [
-        -768,
-        -336
+        -896,
+        -368
       ],
       "id": "340b3321-b532-428f-b1bc-deabfee0ec39",
       "name": "PushBufferEvent",
@@ -1121,8 +1121,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -208,
-        -784
+        -320,
+        -944
       ],
       "id": "43dab2c3-a10e-46ad-be5e-72526fe7b2b2",
       "name": "If_Estado_!=_OFF"
@@ -1134,8 +1134,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -944,
-        -336
+        -1072,
+        -368
       ],
       "id": "a27034bd-c8a5-41f6-8187-6240d7927882",
       "name": "Normalize_Inbound"
@@ -1148,8 +1148,8 @@
       "type": "n8n-nodes-base.redis",
       "typeVersion": 1,
       "position": [
-        96,
-        -240
+        -32,
+        -272
       ],
       "id": "8bdb581f-7071-41c8-8da7-642898dcc4b5",
       "name": "Buf_Flush",
@@ -1170,8 +1170,8 @@
       "type": "n8n-nodes-base.redis",
       "typeVersion": 1,
       "position": [
-        -576,
-        -336
+        -704,
+        -368
       ],
       "id": "6e5f725e-e716-4dbf-b4c6-85384c511a34",
       "name": "Buf_FetchAll",
@@ -1189,8 +1189,8 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -192,
-        -288
+        -320,
+        -320
       ],
       "id": "ea017a89-6811-4ea2-bc72-34c92f180697",
       "name": "Ctrl_WaitSilence",
@@ -1201,8 +1201,8 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        96,
-        -480
+        -32,
+        -512
       ],
       "id": "506311c8-991e-48b9-b551-9e486d0455ab",
       "name": "Util_NoOp"
@@ -1270,8 +1270,8 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.3,
       "position": [
-        -368,
-        -464
+        -496,
+        -496
       ],
       "id": "7f5a4d3a-6b21-4c77-a309-cf8dad1f9eb3",
       "name": "Ctrl_WindowDecision"
@@ -1284,8 +1284,8 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        -928,
-        0
+        -1056,
+        -32
       ],
       "id": "4bd03eff-5397-468c-8f93-414d338b99ae",
       "name": "Buf_SplitItems"
@@ -1299,8 +1299,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -720,
-        0
+        -848,
+        -32
       ],
       "id": "6acf998c-000f-4668-a1a9-9c95873322ec",
       "name": "Buf_ParseJSON"
@@ -1328,8 +1328,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -512,
-        0
+        -640,
+        -32
       ],
       "id": "657284a3-c99a-4eba-802c-6a4ef56e951d",
       "name": "Buf_NormalizeParts"
@@ -1348,8 +1348,8 @@
       "type": "n8n-nodes-base.sort",
       "typeVersion": 1,
       "position": [
-        -288,
-        0
+        -416,
+        -32
       ],
       "id": "34bc7b33-a0af-4193-aec1-c2ccdc2440e3",
       "name": "Buf_SortByTs"
@@ -1368,8 +1368,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        -96,
-        0
+        -224,
+        -32
       ],
       "id": "5d22a85f-b5bf-434d-b1e9-23b62d63ac67",
       "name": "Buf_ConcatTexts"
@@ -1469,8 +1469,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        96,
-        0
+        -32,
+        -32
       ],
       "id": "9683f6c8-759c-4801-b7bc-b004640c4bf0",
       "name": "Buf_FinalizePayload"
@@ -1482,8 +1482,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2784,
-        -112
+        2912,
+        960
       ],
       "id": "a8282314-780f-4bb2-88e2-042059f16ef4",
       "name": "Input Main"
@@ -1491,14 +1491,14 @@
     {
       "parameters": {
         "content": "## ---/// Profile and State Zone ",
-        "height": 880,
-        "width": 2272,
-        "color": 5
+        "height": 1312,
+        "width": 2224,
+        "color": 7
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        416,
-        -64
+        480,
+        704
       ],
       "typeVersion": 1,
       "id": "0511f831-2d25-4eff-bb93-47d26816e806",
@@ -1590,7 +1590,7 @@
       "typeVersion": 3.4,
       "position": [
         128,
-        -816
+        -880
       ],
       "id": "33123f16-60f0-4975-bf09-4984b814657e",
       "name": "MessageType"
@@ -1609,8 +1609,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        720,
-        -688
+        560,
+        -832
       ],
       "id": "d5316fc9-3921-46cc-9aed-904024a225cb",
       "name": "DownloadAudio"
@@ -1624,8 +1624,8 @@
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 2.1,
       "position": [
-        896,
-        -688
+        736,
+        -832
       ],
       "id": "670f6761-f258-44cb-8e28-5b5d8b589766",
       "name": "TranscribeAudio",
@@ -1671,8 +1671,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1104,
-        -688
+        944,
+        -832
       ],
       "id": "c801b720-0317-47f5-a34c-67c110170b12",
       "name": "NormalizeTranscription"
@@ -1704,8 +1704,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -64,
-        976
+        -208,
+        1408
       ],
       "id": "cac7b518-d290-42f0-a138-c701109f5f3f",
       "name": "ResponseType"
@@ -1730,8 +1730,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -80,
-        1216
+        -224,
+        1648
       ],
       "id": "954c48d0-0ad6-40a7-8b1e-eea117d189c5",
       "name": "ResponseChatwootText",
@@ -1772,8 +1772,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        1216
+        48,
+        1648
       ],
       "id": "55987bb9-9522-45ef-a733-a0a0c7a94982",
       "name": "ResponseChatwootAudio",
@@ -1812,8 +1812,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        176,
-        960
+        32,
+        1392
       ],
       "id": "54c873dc-139c-4c5f-9199-69d798d0ed62",
       "name": "GenerateAudio"
@@ -1845,8 +1845,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        4864,
-        -160
+        4640,
+        1184
       ],
       "id": "1e11dee1-d60a-41fb-84f1-320af0f82dd1",
       "name": "ResponseType1"
@@ -1879,8 +1879,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        5040,
-        -304
+        4832,
+        1168
       ],
       "id": "28de7ca6-bede-4696-abae-144083f49049",
       "name": "GenerateAudio1"
@@ -1911,8 +1911,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5216,
-        -304
+        5024,
+        1168
       ],
       "id": "c1817e9a-6acb-494d-829b-170859a9f37b",
       "name": "ResponseChatwootAudio1",
@@ -1941,8 +1941,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        1440,
-        352
+        1392,
+        784
       ],
       "id": "59a4d266-0bdc-4ca5-a743-7823de9e2a4c",
       "name": "UpdateDescription",
@@ -1972,8 +1972,8 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        720,
-        -880
+        560,
+        -992
       ],
       "id": "6a4051e4-715f-4de7-b75b-b3a8b837a698",
       "name": "Baserow List Rows",
@@ -2013,8 +2013,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        896,
-        -880
+        944,
+        -992
       ],
       "id": "92602d42-0e82-4ca3-b83b-eeb381173d9c",
       "name": "IF_WaitingImage"
@@ -2033,8 +2033,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        1120,
-        -896
+        1280,
+        -1008
       ],
       "id": "1da317b4-791a-454d-bee6-6f0e40d2116b",
       "name": "GetImageFromChatwoot"
@@ -2062,8 +2062,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        1520,
-        -896
+        1680,
+        -1008
       ],
       "id": "22ccc2cf-bc50-4fb1-b175-c7d89a36814b",
       "name": "VisionAnalyzeHair",
@@ -2081,8 +2081,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1312,
-        -896
+        1472,
+        -1008
       ],
       "id": "653050a0-8103-4bfa-b832-fdf71eb34eea",
       "name": "ExtractBase64"
@@ -2094,8 +2094,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1728,
-        -896
+        1888,
+        -1008
       ],
       "id": "d6c334a5-953c-4311-88c9-cbfc85ad8f49",
       "name": "ParseVisionResponse"
@@ -2123,8 +2123,8 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        1952,
-        -896
+        2112,
+        -1008
       ],
       "id": "de4a096c-adeb-4813-aba7-2d66af8097ea",
       "name": "Get Chat History from Lead1",
@@ -2142,8 +2142,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2176,
-        -896
+        2336,
+        -1008
       ],
       "id": "edcc9750-d32f-4a79-9115-32ba90252bcf",
       "name": "transform_ChatHistory_ImageFlow",
@@ -2158,8 +2158,8 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        2352,
-        -688
+        2576,
+        -800
       ],
       "id": "a9f9af0c-567d-4ac6-8044-a94fc4840186",
       "name": "HydrateForHistory_2"
@@ -2171,8 +2171,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1968,
-        -672
+        2128,
+        -784
       ],
       "id": "30a8f07b-0a1f-4c02-a272-c3973d58e400",
       "name": "LoadProfileAndStateImage"
@@ -2180,14 +2180,14 @@
     {
       "parameters": {
         "content": "",
-        "height": 1792,
-        "width": 2704,
-        "color": 7
+        "height": 1312,
+        "width": 2576,
+        "color": 5
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        2720,
-        -992
+        2752,
+        704
       ],
       "typeVersion": 1,
       "id": "1b241528-eca8-48ac-89d2-6f70be482eab",
@@ -2237,23 +2237,23 @@
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 2.2,
       "position": [
-        3392,
-        368
+        3616,
+        1424
       ],
       "id": "ef4a8fcb-156d-409c-8c7e-e8d4cafe7f89",
       "name": "agendar_turno_leraysi"
     },
     {
       "parameters": {
-        "content": "## ---/// Audio and Image Zone ",
-        "height": 880,
-        "width": 2272,
+        "content": "## ---/// Audio Process\n ",
+        "height": 544,
+        "width": 672,
         "color": 6
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        416,
-        -976
+        480,
+        -1104
       ],
       "typeVersion": 1,
       "id": "703d205f-5fa5-4f59-a78d-c29a11528406",
@@ -2272,8 +2272,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
       "position": [
-        2976,
-        128
+        3152,
+        1248
       ],
       "id": "adf70e0b-109d-40bd-a48e-f569321600e4",
       "name": "Anthropic Chat Model",
@@ -2297,8 +2297,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
       "position": [
-        -816,
-        1216
+        -960,
+        1648
       ],
       "id": "a95a21f3-2943-439c-a4f8-144e54396b22",
       "name": "Anthropic Chat Model1",
@@ -2355,8 +2355,8 @@
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 2.2,
       "position": [
-        3568,
-        368
+        3792,
+        1424
       ]
     },
     {
@@ -2368,8 +2368,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3568,
-        32
+        3728,
+        1088
       ]
     },
     {
@@ -2379,16 +2379,16 @@
             "caseSensitive": true,
             "leftValue": "",
             "typeValidation": "strict",
-            "version": 2
+            "version": 1
           },
           "conditions": [
             {
-              "id": "retry-check",
-              "leftValue": "={{ $json.canRetry }}",
-              "rightValue": "",
+              "id": "retrygate-cond-1",
+              "leftValue": "={{ $json.attempt }}",
+              "rightValue": "={{ $json.maxAttempts }}",
               "operator": {
-                "type": "boolean",
-                "operation": "true"
+                "type": "number",
+                "operation": "gte"
               }
             }
           ],
@@ -2401,8 +2401,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3744,
-        32
+        3888,
+        1088
       ]
     },
     {
@@ -2414,8 +2414,8 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        4064,
-        448
+        4096,
+        1344
       ],
       "webhookId": "573f6fcb-7554-44cf-916f-6b7ac5258887"
     },
@@ -2428,22 +2428,256 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4256,
-        448
+        4320,
+        1552
       ]
     },
     {
       "parameters": {
-        "jsCode": "const retryInfo = $input.first().json;\nconst inputMainData = $('Input Main').first().json;\nconst originalState = inputMainData.state;\n\nconst fallbackText = '⋆˚🧝‍♀️ Disculpá mi amor, estoy teniendo un problemita técnico 😅 Podrías escribirme de nuevo en unos minutitos? Así te respondo como correspondé 💕';\n\nreturn [{ json: {\n  content_whatsapp: { content: fallbackText, message_type: 'outgoing', content_type: 'text' },\n  body_html: '<p>' + fallbackText + '</p>',\n  lead_id: originalState.lead_id,\n  row_id: originalState.row_id,\n  baserow_update: Object.assign({}, originalState, { notes: 'Error técnico - fallback enviado' }),\n  state: originalState,\n  meta: { timestamp: new Date().toISOString(), fallback: true, retryAttempts: retryInfo.maxAttempts, lastError: retryInfo.errorMessage }\n}}];"
+        "jsCode": "const retryInfo = $input.first().json;\nconst inputMainData = $(\"Input Main\").first().json;\nconst originalState = inputMainData.state;\n\nconst fallbackText =\n  \"⋆˚🧝‍♀️ Disculpá mi amor, estoy teniendo un problemita técnico 😅 Podrías escribirme de nuevo en unos minutitos? Así te respondo como correspondé 💕\";\n\n// Construir baserow_update con tipos correctos (igual que Output Main)\nconst baserowUpdate = {\n  row_id: originalState.row_id,\n  full_name: originalState.full_name || null,\n  email: originalState.email || null,\n  stage: originalState.stage,\n  priority: originalState.priority || \"normal\",\n  servicio_interes: originalState.servicio_interes || null,\n  interests: Array.isArray(originalState.interests) ? originalState.interests : [],\n  foto_recibida: Boolean(originalState.foto_recibida),\n  presupuesto_dado: Boolean(originalState.presupuesto_dado),\n  turno_agendado: Boolean(originalState.turno_agendado),\n  turno_fecha: originalState.turno_fecha || null,\n  sena_pagada: Boolean(originalState.sena_pagada),\n  waiting_image: Boolean(originalState.waiting_image),\n  services_seen: originalState.services_seen ?? 0,\n  prices_asked: originalState.prices_asked ?? 0,\n  deep_interest: originalState.deep_interest ?? 0,\n  email_ask_ts: typeof originalState.email_ask_ts === 'string' ? originalState.email_ask_ts : null,\n  fullname_ask_ts: typeof originalState.fullname_ask_ts === 'string' ? originalState.fullname_ask_ts : null,\n  notes: \"Error técnico - fallback enviado\",\n  image_analysis: originalState.image_analysis\n    ? JSON.stringify(originalState.image_analysis)\n    : null,\n};\n\nreturn [\n  {\n    json: {\n      content_whatsapp: {\n        content: fallbackText,\n        message_type: \"outgoing\",\n        content_type: \"text\",\n      },\n      body_html: \"<p>\" + fallbackText + \"</p>\",\n      lead_id: originalState.lead_id,\n      row_id: originalState.row_id,\n      baserow_update: baserowUpdate,\n      state: originalState,\n      meta: {\n        timestamp: new Date().toISOString(),\n        fallback: true,\n        retryAttempts: retryInfo.maxAttempts,\n        lastError: retryInfo.errorMessage,\n      },\n    },\n  },\n];\n"
       },
       "id": "f1a2b3c4-d5e6-4f78-9abc-def012345605",
       "name": "FallbackMessage",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3968,
-        48
+        4080,
+        1072
       ]
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.event.message_text }}",
+        "guardrails": {
+          "keywords": "",
+          "jailbreak": {
+            "value": {
+              "threshold": 0.7
+            }
+          },
+          "nsfw": {
+            "value": {
+              "threshold": 0.7
+            }
+          },
+          "topicalAlignment": {
+            "value": {
+              "threshold": 0.7,
+              "prompt": "You are a content analysis system that determines if text stays on topic.\n\nBUSINESS SCOPE: Estilos Leraysi es un salón de belleza en Argentina. Los temas permitidos incluyen:\n- Turnos y citas (agendar, reprogramar, cancelar)\n- Servicios del salón (corte, alisado, tintura, mechas, balayage, manicura, pedicura, depilación)\n- Precios y consultas sobre servicios\n- Pagos y seña (MercadoPago)\n- Ubicación y horarios del salón\n- Saludos y conversación casual amigable\n- Consultas sobre cabello y belleza en general\n\nDetermine if the text stays within the defined business scope. Flag any content that strays from the allowed topics."
+            }
+          }
+        }
+      },
+      "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "Guardrails",
+      "type": "@n8n/n8n-nodes-langchain.guardrails",
+      "typeVersion": 2,
+      "position": [
+        -1056,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-3-5-haiku-20241022",
+          "mode": "list",
+          "cachedResultName": "Claude Haiku 3.5"
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "name": "Anthropic Chat Model - Guardrails",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        -1056,
+        496
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "SUw0YD5b2MOCmI7u",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "guard-viol-check-001",
+              "leftValue": "={{ $json.violated }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
+      "name": "IF_GuardrailViolation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -416,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://chatwoot:3000/api/v1/accounts/{{ $('Webhook').first().json.body.account.id }}/conversations/{{ $('Webhook').first().json.body.conversation.messages[0].conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "=json",
+        "specifyBody": "json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\"content\": \"🛡️ *Alerta de Seguridad*\\n\\nHola reina! Tu mensaje fue detectado por nuestro sistema de protección. Estoy acá para ayudarte con todo lo relacionado a turnos y servicios de *Estilos Leraysi* ✨\\n\\nContame, ¿en qué te puedo ayudar ? 💅💖\"}",
+        "options": {}
+      },
+      "id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a",
+      "name": "GuardrailViolationResponse",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -112,
+        432
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4CCgRLgHR96JW4Ue",
+          "name": "Chatwoot Auth account "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## ---/// 🛡️Guardrails",
+        "height": 384,
+        "width": 1792,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1392,
+        288
+      ],
+      "typeVersion": 1,
+      "id": "0a35f45b-eac8-4d45-9af3-deaf800e88a1",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "# Estilos Leraysi - WhatsApp AI Sales Agent\n\nAgente de ventas conversacional para salon de belleza femenino en Buenos Aires.\nManeja consultas, presupuestos, turnos y pagos 100% por WhatsApp.\n\n---\n\n\n## Stack\nn8n | Claude Haiku 3.5 | Claude Sonnet (vision) | OpenAI Whisper | Piper TTS | Qdrant RAG | Redis | Baserow | Odoo 19 | Chatwoot | MercadoPago | Guardrails\n",
+        "height": 304,
+        "width": 2240,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        480,
+        -512
+      ],
+      "typeVersion": 1,
+      "id": "73d47568-6d8f-419e-bc13-161389899018",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "\n\n## Personalidad: Leraysi\n\nPrefijo: especial | Expresiones latinas | Max 2-3 emojis | Espanol LATAM | Salon femenino exclusivo\n\n---\n\n## Workflows\n\nSales_Agent_By_WhatsApp (principal) | Agente Calendario (disponibilidad + turnos) | Crear Turno MCP | Agregar Servicio MCP\n\n---\n\nLeraysi v3 - Multi-agent AI system - Feb 2026",
+        "height": 832,
+        "width": 708,
+        "color": 7
+      },
+      "id": "e0e0e0e0-f1f1-4a2a-b3b3-c4c4c4c4c4c4",
+      "name": "Leraysi Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\n---\n\n## Funcionalidades\n\n**Entrada Multi-Modal**: Texto + Audio (Whisper) + Imagen (Vision AI analisis cabello)\n\n**Buffer Inteligente**: Redis agrupa mensajes en ventana de 8 segundos\n\n**15 Servicios**: 7 de cabello (precio por largo) + 8 fijos (unas, depilacion)\n\n**Precio Determinista por Largo**:\n- corto = base, +0 min, media\n- medio = +10%, +60 min, compleja\n- largo = +20%, +120 min, muy_compleja\n\n**Turnos en 2 Pasos**: consultar_disponibilidad -> clienta elige -> agendar_turno\n\n**Capacidad por Complejidad**: muy_compleja max 2/dia, compleja 3, media 4, simple 5\n\n**Floor por Cantidad**: 2 servicios = min compleja, 3+ = min muy_compleja\n\n**MercadoPago**: Sena 30% automatica, link con expiracion 2h, webhook confirma\n\n**Reprogramar**: 2 pasos post-pago con accion=reprogramar\n\n**Agregar Servicio**: 1 paso, sena diferencial\n\n**Jornada Completa**: Combos 8+ horas como dia completo\n",
+        "height": 832,
+        "width": 720,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        480,
+        -176
+      ],
+      "typeVersion": 1,
+      "id": "675f503d-f639-477e-bab1-a172d19eb9fb",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "\n## Maquina de Estados\n\nexplore -> consulta -> presupuesto -> turno_pendiente -> turno_confirmado\n\nProteccion: turno_confirmado + sena_pagada = no downgrade\nContadores monotonicos: services_seen, prices_asked, deep_interest\n\n---\n\n## Seguridad (Guardrails)\n\nJailbreak (0.7) | NSFW (0.7) | Topical Alignment (0.7) | Keywords\nViolacion -> respuesta amigable + bloqueo\n\n---\n\n## Resiliencia\n\nRetry 3x con 3s | Fallback message | Buffer dedup | Row locks en webhooks | Dual CRM (Baserow + Odoo)\n\n---",
+        "height": 832,
+        "width": 704,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1248,
+        -176
+      ],
+      "typeVersion": 1,
+      "id": "a228d6d1-2f83-4cba-abcc-61387eaa25dd",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "```\nWebhook → checkMsg → checkClient → Estado!=OFF → MessageType\n                                                   ├─ Imagen → Vision AI\n                                                   ├─ Audio → Whisper\n                                                   └─ Texto\n                                                        ↓\n                                              Buffer (8s) → Guardrails\n                                                              ├─ Violacion → Chatwoot (STOP)\n                                                              └─ OK → Build Lead\n                                                                         ↓\n                                                        Nuevo? → Baserow+Odoo → Welcome Agent\n                                                        Existe? → Update → ChatHistory → Input Main\n                                                                                           ↓\n                                                                                    MASTER AGENT\n                                                                                    (Claude Haiku)\n                                                                                         ↓\n                                                                                    Output Main\n                                                                                         ↓\n                                                                                 StatePatch → Chatwoot\n                                                                                         ↓\n                                                                                      WhatsApp\n```\n\n#### MASTER AGENT Tools:\n  - qdrant_servicios (RAG precios)\n```\n  consultar_disponibilidad ──→ AGENTE CALENDARIO\n  agendar_turno ─────────────→ AGENTE CALENDARIO\n\nAGENTE CALENDARIO (wXyvKF0nCCvAxGFG):\n  ParseInput → SwitchModo\n                 ├─ CONSULTAR → AnalizarDisponibilidad → Opciones\n                 └─ AGENDAR → BuildPrompt → LLM → ParseResponse → Baserow\n                                                                      ↓\n                                                                   MCP TOOLS\n                                                                   (odoo-mcp)\n```\n\n### MCP TOOLS:\n - crear_turno (+MP link)\n - reprogramar_turno\n - agregar_servicio (+sena diferencial)\n - confirmar_pago_completo (post-webhook MP)\n",
+        "height": 848,
+        "width": 1168,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1504,
+        1136
+      ],
+      "typeVersion": 1,
+      "id": "8dad0012-a34f-4141-852c-cd80b461b050",
+      "name": "Sticky Note11"
+    },
+    {
+      "parameters": {
+        "content": "## ---///  Image Process\n ",
+        "height": 544,
+        "width": 1536
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1184,
+        -1104
+      ],
+      "typeVersion": 1,
+      "id": "dfab29e0-e888-4ccb-a371-2fab2f0e2ca4",
+      "name": "Sticky Note9"
     }
   ],
   "pinData": {},
@@ -2999,17 +3233,6 @@
         ]
       ]
     },
-    "Buf_FinalizePayload": {
-      "main": [
-        [
-          {
-            "node": "Build Lead Row",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Input Main": {
       "main": [
         [
@@ -3329,24 +3552,6 @@
         ]
       ]
     },
-    "RetryGate": {
-      "main": [
-        [
-          {
-            "node": "RetryWait",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "FallbackMessage",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "RetryWait": {
       "main": [
         [
@@ -3379,6 +3584,75 @@
           }
         ]
       ]
+    },
+    "RetryGate": {
+      "main": [
+        [
+          {
+            "node": "FallbackMessage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "RetryWait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buf_FinalizePayload": {
+      "main": [
+        [
+          {
+            "node": "Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model - Guardrails": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Guardrails",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardrails": {
+      "main": [
+        [
+          {
+            "node": "IF_GuardrailViolation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_GuardrailViolation": {
+      "main": [
+        [
+          {
+            "node": "GuardrailViolationResponse",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Lead Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -3388,7 +3662,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "f0301f66-5617-4a9e-a6e0-26234f900ffb",
+  "versionId": "c01f5605-cd5a-4b73-bf29-f9549099f2f8",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
