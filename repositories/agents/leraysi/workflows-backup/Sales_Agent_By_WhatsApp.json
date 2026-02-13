@@ -10,7 +10,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -1072,
+        -1136,
         -944
       ],
       "id": "c4afde41-4865-4960-911c-7820c02c0051",
@@ -1284,7 +1284,7 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        -1056,
+        -1072,
         -32
       ],
       "id": "4bd03eff-5397-468c-8f93-414d338b99ae",
@@ -2473,7 +2473,7 @@
       "type": "@n8n/n8n-nodes-langchain.guardrails",
       "typeVersion": 2,
       "position": [
-        -1056,
+        -1072,
         320
       ]
     },
@@ -2492,7 +2492,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
       "position": [
-        -1056,
+        -1072,
         496
       ],
       "credentials": {
@@ -2501,40 +2501,6 @@
           "name": "Anthropic account"
         }
       }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "version": 2,
-            "leftValue": "",
-            "caseSensitive": true,
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "guard-viol-check-001",
-              "leftValue": "={{ $json.violated }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
-      "name": "IF_GuardrailViolation",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        -416,
-        448
-      ]
     },
     {
       "parameters": {
@@ -2558,8 +2524,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -112,
-        432
+        -704,
+        480
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -2678,6 +2644,19 @@
       "typeVersion": 1,
       "id": "dfab29e0-e888-4ccb-a371-2fab2f0e2ca4",
       "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restore original payload from Buf_FinalizePayload\n// Guardrails replaces data with {guardrailsInput, checks}\nreturn $('Buf_FinalizePayload').all();"
+      },
+      "id": "c52c7473-465b-47d1-8f7e-9ff4ecfac6ef",
+      "name": "RestorePayload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        496
+      ]
     }
   ],
   "pinData": {},
@@ -3629,22 +3608,22 @@
       "main": [
         [
           {
-            "node": "IF_GuardrailViolation",
+            "node": "RestorePayload",
             "type": "main",
             "index": 0
           }
-        ]
-      ]
-    },
-    "IF_GuardrailViolation": {
-      "main": [
+        ],
         [
           {
             "node": "GuardrailViolationResponse",
             "type": "main",
             "index": 0
           }
-        ],
+        ]
+      ]
+    },
+    "RestorePayload": {
+      "main": [
         [
           {
             "node": "Build Lead Row",
@@ -3662,7 +3641,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "c01f5605-cd5a-4b73-bf29-f9549099f2f8",
+  "versionId": "bff380ef-acaf-4351-804c-38e2f16e4650",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
