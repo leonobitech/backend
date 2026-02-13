@@ -6,7 +6,7 @@ import {
 import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 import { logger } from "@/lib/logger";
-import { getTurnoConfirmadoEmailTemplate } from "@/prompts/email-templates";
+import { getTurnoConfirmadoEmailTemplate, type PagoInfo } from "@/prompts/email-templates";
 
 /**
  * Tool consolidada para confirmar pago de turno en Estilos Leraysi
@@ -53,6 +53,9 @@ export class ConfirmarPagoCompletoTool
       "sena_pagada",
       "complejidad_maxima",
       "odoo_event_id",
+      "total_pagado",
+      "cantidad_pagos",
+      "pago_ids",
     ]);
 
     if (turnos.length === 0) {
@@ -83,6 +86,44 @@ export class ConfirmarPagoCompletoTool
       sena_pagada: true,
       mp_payment_id: params.mp_payment_id,
     });
+
+    // =========================================================================
+    // PASO 1b: Leer historial de pagos (salon.turno.pago)
+    // =========================================================================
+    let pagosInfo: PagoInfo[] = [];
+    let totalPagadoAcumulado: number = turno.total_pagado || 0;
+
+    try {
+      const pagoIds = turno.pago_ids as number[];
+      if (pagoIds && pagoIds.length > 0) {
+        const pagosRaw = await this.odooClient.read("salon.turno.pago", pagoIds, [
+          "mp_payment_id",
+          "monto",
+          "tipo",
+          "descripcion",
+          "estado",
+          "fecha",
+        ]);
+
+        // Filter approved, sort by fecha ASC
+        pagosInfo = pagosRaw
+          .filter((p: any) => p.estado === "approved")
+          .sort((a: any, b: any) => (a.fecha || "").localeCompare(b.fecha || ""))
+          .map((p: any) => ({
+            mp_payment_id: p.mp_payment_id || "",
+            monto: p.monto || 0,
+            tipo: p.tipo || "sena",
+            descripcion: p.descripcion || "",
+          }));
+
+        // Recalculate total from actual payments
+        if (pagosInfo.length > 0) {
+          totalPagadoAcumulado = pagosInfo.reduce((sum, p) => sum + p.monto, 0);
+        }
+      }
+    } catch (error) {
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not read payment history");
+    }
 
     // =========================================================================
     // PASO 2: Crear o obtener contacto (res.partner)
@@ -465,9 +506,13 @@ export class ConfirmarPagoCompletoTool
           hora: horaFormateada,
           precio: turno.precio,
           sena: montoPagado,
-          monto_restante: turno.precio - turno.sena, // Restante = precio total - seña teórica (30%)
+          monto_restante: turno.precio - totalPagadoAcumulado,
           mp_payment_id: params.mp_payment_id,
-          direccion: "Buenos Aires, Argentina", // TODO: Hacer configurable
+          direccion: "Yerbal 513, Caballito, Buenos Aires - Argentina",
+          // Detailed payment breakdown
+          pagos: pagosInfo.length > 0 ? pagosInfo : undefined,
+          total_pagado_acumulado: totalPagadoAcumulado,
+          pago_actual_mp_id: params.mp_payment_id,
         });
 
         // Crear email con adjunto
@@ -548,7 +593,7 @@ export class ConfirmarPagoCompletoTool
                 <h4 style="margin: 0 0 10px 0; color: #166534;">💳 Detalle del Pago</h4>
                 <p style="margin: 5px 0;"><strong>Precio total:</strong> $${turno.precio.toLocaleString('es-AR')}</p>
                 <p style="margin: 5px 0;"><strong>Monto pagado:</strong> $${montoPagado.toLocaleString('es-AR')}</p>
-                <p style="margin: 5px 0;"><strong>Restante:</strong> $${(turno.precio - turno.sena).toLocaleString('es-AR')}</p>
+                <p style="margin: 5px 0;"><strong>Restante:</strong> $${(turno.precio - totalPagadoAcumulado).toLocaleString('es-AR')}</p>
                 <p style="margin: 5px 0; color: #666; font-size: 12px;"><strong>MP ID:</strong> ${params.mp_payment_id}</p>
               </div>
 

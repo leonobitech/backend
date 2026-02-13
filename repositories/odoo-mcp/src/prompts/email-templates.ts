@@ -334,6 +334,22 @@ export function getEmailTemplate(type: string, data: EmailTemplateData = {}): st
 // ESTILOS LERAYSI - TEMPLATES
 // ============================================================================
 
+export interface PagoInfo {
+  mp_payment_id: string;
+  monto: number;
+  tipo: string; // 'sena' | 'sena_adicional' | 'saldo'
+  descripcion: string;
+}
+
+export interface ServicioPagado {
+  servicio: string;
+  precio: number;
+  sena: number;
+  mp_payment_id: string;
+  esPagoActual: boolean;
+  esSenaAdicional: boolean;
+}
+
 export interface TurnoConfirmadoData {
   clienta: string;
   servicio: string;
@@ -345,6 +361,10 @@ export interface TurnoConfirmadoData {
   monto_restante: number;
   mp_payment_id: string;
   direccion: string;
+  // Detailed payment breakdown (optional, enables new design)
+  pagos?: PagoInfo[];
+  total_pagado_acumulado?: number;
+  pago_actual_mp_id?: string;
 }
 
 /**
@@ -386,10 +406,7 @@ const leraysiEmailTemplate = (content: string) => `
                 Estilos Leraysi - Salón de Belleza
               </p>
               <p style="margin: 0 0 10px 0; color: #9ca3af; font-size: 13px;">
-                Buenos Aires, Argentina
-              </p>
-              <p style="margin: 0; color: #adb5bd; font-size: 12px;">
-                WhatsApp: +54 9 11 XXXX-XXXX
+                Yerbal 513, Caballito, Buenos Aires - Argentina
               </p>
               <p style="margin: 15px 0 0 0; color: #d1d5db; font-size: 11px;">
                 Este correo fue enviado automáticamente. Por favor no responder a esta dirección.
@@ -405,10 +422,166 @@ const leraysiEmailTemplate = (content: string) => `
 </html>
 `;
 
+// Base prices for proportional distribution of initial multi-service payments
+// Source: SERVICIOS_CONFIG in ParseInput.js
+const PRECIOS_BASE_LERAYSI: Record<string, number> = {
+  'Corte mujer': 8000,
+  'Alisado brasileño': 45000,
+  'Alisado con keratina': 55000,
+  'Alisado keratina': 55000,
+  'Mechas completas': 35000,
+  'Tintura raíz': 15000,
+  'Tintura completa': 25000,
+  'Balayage': 50000,
+  'Manicura simple': 5000,
+  'Manicura semipermanente': 8000,
+  'Pedicura': 6000,
+  'Depilación cera piernas': 10000,
+  'Depilación cera axilas': 4000,
+  'Depilación cera bikini': 6000,
+  'Depilación láser piernas': 25000,
+  'Depilación láser axilas': 12000,
+};
+
+function extractServicesFromDesc(descripcion: string): string[] {
+  // "Sena - A + B + C" → ["A", "B", "C"]
+  // "Sena Adicional - A + B + C + D" → ["A", "B", "C", "D"]
+  const dashIdx = descripcion.indexOf(' - ');
+  if (dashIdx === -1) return [descripcion.trim()];
+  const servicesPart = descripcion.substring(dashIdx + 3);
+  return servicesPart.split(' + ').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Build per-service breakdown from payment history
+ *
+ * Algorithm:
+ * 1. Diff consecutive payment descriptions to find which service was added
+ * 2. Additional payments: precio = monto / 0.3 (exact)
+ * 3. Initial payment with multiple services: distribute using base prices proportionally
+ */
+export function buildServiciosPagados(
+  pagos: PagoInfo[],
+  pagoActualMpId: string,
+  precioTotal: number
+): ServicioPagado[] {
+  if (!pagos || pagos.length === 0) return [];
+
+  const result: ServicioPagado[] = [];
+  let prevServiceSet = new Set<string>();
+
+  // First pass: identify additional services and their prices
+  const additionalEntries: { services: string[]; pago: PagoInfo }[] = [];
+
+  for (let i = 0; i < pagos.length; i++) {
+    const pago = pagos[i];
+    const currentServices = extractServicesFromDesc(pago.descripcion);
+    const newServices = currentServices.filter(s => !prevServiceSet.has(s));
+
+    if (i > 0 && newServices.length > 0) {
+      additionalEntries.push({ services: newServices, pago });
+    }
+
+    prevServiceSet = new Set(currentServices);
+  }
+
+  // Calculate additional services' prices
+  let additionalTotalPrice = 0;
+  const additionalItems: ServicioPagado[] = [];
+
+  for (const entry of additionalEntries) {
+    if (entry.services.length === 1) {
+      const precio = Math.round(entry.pago.monto / 0.3);
+      additionalTotalPrice += precio;
+      additionalItems.push({
+        servicio: entry.services[0],
+        precio,
+        sena: entry.pago.monto,
+        mp_payment_id: entry.pago.mp_payment_id,
+        esPagoActual: entry.pago.mp_payment_id === pagoActualMpId,
+        esSenaAdicional: true,
+      });
+    } else {
+      // Multiple services added at once - distribute using base prices
+      const baseTotal = entry.services.reduce((sum, s) => sum + (PRECIOS_BASE_LERAYSI[s] || 5000), 0);
+      const totalPrecio = Math.round(entry.pago.monto / 0.3);
+      const scale = totalPrecio / baseTotal;
+
+      for (const srv of entry.services) {
+        const basePrice = PRECIOS_BASE_LERAYSI[srv] || 5000;
+        const precio = Math.round(basePrice * scale);
+        const sena = Math.round(precio * 0.3);
+        additionalTotalPrice += precio;
+        additionalItems.push({
+          servicio: srv,
+          precio,
+          sena,
+          mp_payment_id: entry.pago.mp_payment_id,
+          esPagoActual: entry.pago.mp_payment_id === pagoActualMpId,
+          esSenaAdicional: true,
+        });
+      }
+    }
+  }
+
+  // Handle initial services (first payment)
+  const firstPago = pagos[0];
+  const initialServices = extractServicesFromDesc(firstPago.descripcion);
+  const initialTotalPrice = precioTotal - additionalTotalPrice;
+
+  if (initialServices.length === 1) {
+    result.push({
+      servicio: initialServices[0],
+      precio: initialTotalPrice,
+      sena: firstPago.monto,
+      mp_payment_id: firstPago.mp_payment_id,
+      esPagoActual: firstPago.mp_payment_id === pagoActualMpId,
+      esSenaAdicional: false,
+    });
+  } else {
+    // Multiple initial services - distribute proportionally using base prices
+    const baseTotal = initialServices.reduce((sum, s) => sum + (PRECIOS_BASE_LERAYSI[s] || 5000), 0);
+    const scale = initialTotalPrice / baseTotal;
+
+    for (const srv of initialServices) {
+      const basePrice = PRECIOS_BASE_LERAYSI[srv] || 5000;
+      const precio = Math.round(basePrice * scale);
+      const sena = Math.round(precio * 0.3);
+      result.push({
+        servicio: srv,
+        precio,
+        sena,
+        mp_payment_id: firstPago.mp_payment_id,
+        esPagoActual: firstPago.mp_payment_id === pagoActualMpId,
+        esSenaAdicional: false,
+      });
+    }
+  }
+
+  // Append additional items after initial
+  result.push(...additionalItems);
+
+  return result;
+}
+
+const fmtARS = (n: number) => '$' + n.toLocaleString('es-AR');
+
 /**
  * Template: Turno Confirmado (Estilos Leraysi)
  */
 export const turnoConfirmadoTemplate = (data: TurnoConfirmadoData) => {
+  // If detailed payment data available, use new 5-card design
+  if (data.pagos && data.pagos.length > 0 && data.pago_actual_mp_id) {
+    return turnoConfirmadoDetailedTemplate(data);
+  }
+  // Fallback to simple design (backward compatible)
+  return turnoConfirmadoSimpleTemplate(data);
+};
+
+/**
+ * Simple template (backward compatible, no payment breakdown)
+ */
+function turnoConfirmadoSimpleTemplate(data: TurnoConfirmadoData) {
   const content = `
     <!-- Success Banner -->
     <div style="text-align: center; margin-bottom: 30px;">
@@ -420,12 +593,11 @@ export const turnoConfirmadoTemplate = (data: TurnoConfirmadoData) => {
     <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
       Hola <strong>${data.clienta}</strong>,
     </p>
-
     <p style="margin: 0 0 25px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-      ¡Gracias por tu pago! Tu turno ha sido confirmado exitosamente. A continuación encontrarás los detalles de tu reserva.
+      ¡Gracias por tu pago! Tu turno ha sido confirmado exitosamente.
     </p>
 
-    <!-- Turno Details Card -->
+    <!-- Card 1: Detalles del Turno -->
     <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 25px; margin: 25px 0; border-radius: 12px; color: #ffffff;">
       <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600; text-align: center;">📅 Detalles del Turno</h3>
       <table width="100%" style="border-collapse: collapse;">
@@ -448,21 +620,21 @@ export const turnoConfirmadoTemplate = (data: TurnoConfirmadoData) => {
       </table>
     </div>
 
-    <!-- Payment Details -->
+    <!-- Payment Details (simple) -->
     <div style="background-color: #f0fdf4; border: 2px solid #22c55e; padding: 20px; margin: 25px 0; border-radius: 8px;">
       <h4 style="margin: 0 0 15px 0; color: #166534; font-size: 16px;">💳 Detalle del Pago</h4>
       <table width="100%" style="border-collapse: collapse;">
         <tr>
           <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">Precio total:</td>
-          <td style="padding: 8px 0; color: #1f2937; font-size: 14px; text-align: right;">$${data.precio.toLocaleString('es-AR')}</td>
+          <td style="padding: 8px 0; color: #1f2937; font-size: 14px; text-align: right;">${fmtARS(data.precio)}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #166534; font-size: 14px; font-weight: 600;">Seña pagada (30%):</td>
-          <td style="padding: 8px 0; color: #166534; font-size: 16px; font-weight: 600; text-align: right;">$${data.sena.toLocaleString('es-AR')}</td>
+          <td style="padding: 8px 0; color: #166534; font-size: 16px; font-weight: 600; text-align: right;">${fmtARS(data.sena)}</td>
         </tr>
         <tr style="border-top: 1px dashed #d1d5db;">
           <td style="padding: 12px 0 8px 0; color: #4b5563; font-size: 14px;">Monto restante:</td>
-          <td style="padding: 12px 0 8px 0; color: #1f2937; font-size: 14px; text-align: right;">$${data.monto_restante.toLocaleString('es-AR')}</td>
+          <td style="padding: 12px 0 8px 0; color: #1f2937; font-size: 14px; text-align: right;">${fmtARS(data.monto_restante)}</td>
         </tr>
       </table>
       <p style="margin: 15px 0 0 0; color: #6b7280; font-size: 12px;">
@@ -474,19 +646,182 @@ export const turnoConfirmadoTemplate = (data: TurnoConfirmadoData) => {
     <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 25px 0; border-radius: 4px;">
       <h4 style="margin: 0 0 10px 0; color: #92400e; font-size: 14px;">⚠️ Información Importante</h4>
       <ul style="margin: 0; padding-left: 20px; color: #78350f; font-size: 13px; line-height: 1.6;">
-        <li>El monto restante ($${data.monto_restante.toLocaleString('es-AR')}) debe abonarse el día del turno.</li>
+        <li>El monto restante (${fmtARS(data.monto_restante)}) debe abonarse el día del turno.</li>
         <li>En caso de necesitar cancelar, avisanos con al menos 24hs de anticipación.</li>
         <li>Te recomendamos llegar 5-10 minutos antes de tu turno.</li>
       </ul>
     </div>
 
     <p style="margin: 25px 0 0 0; color: #4b5563; font-size: 16px; line-height: 1.6; text-align: center;">
-      ⋆˚🧚‍♀️ ¡Te esperamos para dejarte divina! 💕
+      ✨ ¡Te esperamos para dejarte divina! 💕
     </p>
   `;
 
   return leraysiEmailTemplate(content);
-};
+}
+
+/**
+ * Detailed template with per-service payment breakdown (5 cards)
+ */
+function turnoConfirmadoDetailedTemplate(data: TurnoConfirmadoData) {
+  const serviciosPagados = buildServiciosPagados(
+    data.pagos!,
+    data.pago_actual_mp_id!,
+    data.precio
+  );
+
+  const totalPagado = data.total_pagado_acumulado ?? data.sena;
+  const montoRestante = data.precio - totalPagado;
+  const hasAdditional = serviciosPagados.some(s => s.esSenaAdicional);
+
+  // --- Build service rows HTML ---
+  let servicioRowsHtml = '';
+  let separatorInserted = false;
+
+  for (const srv of serviciosPagados) {
+    // Insert separator before first additional service
+    if (srv.esSenaAdicional && !separatorInserted && hasAdditional) {
+      servicioRowsHtml += `
+        <tr>
+          <td colspan="3" style="padding: 12px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="border-top: 1px dashed #9ca3af; width: 25%;"></td>
+                <td style="text-align: center; color: #6b7280; font-size: 12px; font-weight: 600; white-space: nowrap; padding: 0 8px;">Servicio Agregado</td>
+                <td style="border-top: 1px dashed #9ca3af; width: 25%;"></td>
+              </tr>
+            </table>
+          </td>
+        </tr>`;
+      separatorInserted = true;
+    }
+
+    const highlightStyle = srv.esPagoActual
+      ? 'background-color: #fef9c3; border-left: 3px solid #f59e0b;'
+      : '';
+
+    servicioRowsHtml += `
+      <tr style="${highlightStyle}">
+        <td style="padding: 10px 8px; color: #1f2937; font-size: 14px;">✅ ${srv.servicio}</td>
+        <td style="padding: 10px 8px; color: #1f2937; font-size: 14px; text-align: right;">${fmtARS(srv.precio)}</td>
+        <td style="padding: 10px 8px; color: #1f2937; font-size: 14px; text-align: right;">${fmtARS(srv.sena)}</td>
+      </tr>`;
+  }
+
+  // --- Build comprobantes rows HTML ---
+  let comprobantesRowsHtml = '';
+  for (const srv of serviciosPagados) {
+    comprobantesRowsHtml += `
+      <tr>
+        <td style="padding: 8px; color: #4b5563; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${srv.servicio}</td>
+        <td style="padding: 8px; color: #4b5563; font-size: 13px; text-align: right; border-bottom: 1px solid #e5e7eb; font-family: monospace;">${srv.mp_payment_id}</td>
+      </tr>`;
+  }
+
+  const content = `
+    <!-- Success Banner -->
+    <div style="text-align: center; margin-bottom: 30px;">
+      <div style="display: inline-block; background-color: #d1fae5; color: #065f46; padding: 12px 30px; border-radius: 50px; font-weight: 600; font-size: 18px;">
+        ✅ ¡Tu turno está confirmado!
+      </div>
+    </div>
+
+    <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+      Hola <strong>${data.clienta}</strong>,
+    </p>
+    <p style="margin: 0 0 25px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+      ¡Gracias por tu pago! Tu turno ha sido confirmado exitosamente. A continuación encontrarás los detalles de tu reserva.
+    </p>
+
+    <!-- Card 1: Detalles del Turno -->
+    <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 25px; margin: 25px 0; border-radius: 12px; color: #ffffff;">
+      <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600; text-align: center;">📅 Detalles del Turno</h3>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">👤 Nombre:</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.clienta}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">📆 Fecha:</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.fecha}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">⏰ Hora:</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.hora}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; font-size: 14px; opacity: 0.9;">📍 Dirección:</td>
+          <td style="padding: 12px 0; font-size: 15px; font-weight: 600; text-align: right;">Yerbal 513, Caballito, Buenos Aires - Argentina</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Card 2: Detalle de Servicios y Pagos -->
+    <div style="background-color: #f0fdf4; border: 2px solid #22c55e; padding: 20px; margin: 25px 0; border-radius: 8px;">
+      <h4 style="margin: 0 0 15px 0; color: #166534; font-size: 16px;">📋 Detalle de Servicios y Pagos</h4>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr style="border-bottom: 2px solid #d1d5db;">
+          <td style="padding: 8px 8px; color: #6b7280; font-size: 13px; font-weight: 600; width: 50%;">Servicio</td>
+          <td style="padding: 8px 8px; color: #6b7280; font-size: 13px; font-weight: 600; text-align: right; width: 25%;">Precio</td>
+          <td style="padding: 8px 8px; color: #6b7280; font-size: 13px; font-weight: 600; text-align: right; width: 25%;">Seña (30%)</td>
+        </tr>
+        ${servicioRowsHtml}
+        <tr style="border-top: 2px solid #166534;">
+          <td style="padding: 12px 8px 0 8px; color: #166534; font-size: 14px; font-weight: 700;">Total</td>
+          <td style="padding: 12px 8px 0 8px; color: #166534; font-size: 14px; font-weight: 700; text-align: right;">${fmtARS(data.precio)}</td>
+          <td style="padding: 12px 8px 0 8px; color: #166534; font-size: 14px; font-weight: 700; text-align: right;">${fmtARS(totalPagado)}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Card 3: Resumen de Cuenta -->
+    <div style="background-color: #f8f9fa; border: 1px solid #e5e7eb; padding: 20px; margin: 25px 0; border-radius: 8px;">
+      <h4 style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px;">💰 Resumen de Cuenta</h4>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">Total señas pagadas:</td>
+          <td style="padding: 8px 0; color: #166534; font-size: 15px; font-weight: 600; text-align: right;">${fmtARS(totalPagado)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">Precio total servicios:</td>
+          <td style="padding: 8px 0; color: #1f2937; font-size: 14px; text-align: right;">${fmtARS(data.precio)}</td>
+        </tr>
+        <tr style="border-top: 1px solid #d1d5db;">
+          <td style="padding: 12px 0 0 0; color: #92400e; font-size: 14px; font-weight: 600;">Monto restante (día del turno):</td>
+          <td style="padding: 12px 0 0 0; color: #92400e; font-size: 16px; font-weight: 700; text-align: right;">${fmtARS(montoRestante)}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Card 4: Comprobantes de Pago -->
+    <div style="background-color: #f8f9fa; border: 1px solid #e5e7eb; padding: 20px; margin: 25px 0; border-radius: 8px;">
+      <h4 style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px;">🔍 Comprobantes de Pago</h4>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr style="border-bottom: 2px solid #d1d5db;">
+          <td style="padding: 8px; color: #6b7280; font-size: 13px; font-weight: 600;">Servicio</td>
+          <td style="padding: 8px; color: #6b7280; font-size: 13px; font-weight: 600; text-align: right;">ID Pago</td>
+        </tr>
+        ${comprobantesRowsHtml}
+      </table>
+    </div>
+
+    <!-- Card 5: Información Importante -->
+    <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 25px 0; border-radius: 4px;">
+      <h4 style="margin: 0 0 10px 0; color: #92400e; font-size: 14px;">⚠️ Información Importante</h4>
+      <ul style="margin: 0; padding-left: 20px; color: #78350f; font-size: 13px; line-height: 1.6;">
+        <li>El monto restante (${fmtARS(montoRestante)}) debe abonarse el día del turno.</li>
+        <li>En caso de necesitar cancelar, avisanos con al menos 24hs de anticipación.</li>
+        <li>Te recomendamos llegar 5-10 minutos antes de tu turno.</li>
+      </ul>
+    </div>
+
+    <p style="margin: 25px 0 0 0; color: #4b5563; font-size: 16px; line-height: 1.6; text-align: center;">
+      ✨ ¡Te esperamos para dejarte divina! 💕
+    </p>
+  `;
+
+  return leraysiEmailTemplate(content);
+}
 
 /**
  * Get Turno Confirmado template (exported for use in tool)
