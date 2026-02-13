@@ -6,7 +6,7 @@ import {
 import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 import { logger } from "@/lib/logger";
-import { getTurnoConfirmadoEmailTemplate, type PagoInfo } from "@/prompts/email-templates";
+import { getTurnoConfirmadoEmailTemplate, getVendorNotificacionTemplate, type PagoInfo } from "@/prompts/email-templates";
 
 /**
  * Tool consolidada para confirmar pago de turno en Estilos Leraysi
@@ -574,33 +574,20 @@ export class ConfirmarPagoCompletoTool
             timeZone: "UTC",
           });
 
-          const notificationBody = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px;">
-              <h2 style="color: #22c55e;">💰 Pago de Seña Confirmado</h2>
-              <p>Hola <strong>${vendorName}</strong>,</p>
-              <p>Se ha confirmado el pago de seña para el siguiente turno:</p>
-
-              <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #22c55e;">
-                <h3 style="margin: 0 0 15px 0; color: #166534;">Turno Confirmado</h3>
-                <p style="margin: 5px 0;"><strong>👤 Clienta:</strong> ${turno.clienta}</p>
-                <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${servicioDisplay}</p>
-                <p style="margin: 5px 0;"><strong>📅 Fecha:</strong> ${fechaFormateadaNotif}</p>
-                <p style="margin: 5px 0;"><strong>⏰ Hora:</strong> ${horaFormateadaNotif}</p>
-                <p style="margin: 5px 0;"><strong>📱 Teléfono:</strong> ${turno.telefono}</p>
-              </div>
-
-              <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <h4 style="margin: 0 0 10px 0; color: #166534;">💳 Detalle del Pago</h4>
-                <p style="margin: 5px 0;"><strong>Precio total:</strong> $${turno.precio.toLocaleString('es-AR')}</p>
-                <p style="margin: 5px 0;"><strong>Monto pagado:</strong> $${montoPagado.toLocaleString('es-AR')}</p>
-                <p style="margin: 5px 0;"><strong>Restante:</strong> $${(turno.precio - totalPagadoAcumulado).toLocaleString('es-AR')}</p>
-                <p style="margin: 5px 0; color: #666; font-size: 12px;"><strong>MP ID:</strong> ${params.mp_payment_id}</p>
-              </div>
-
-              <p style="color: #666; font-size: 14px;">El turno ya está registrado en tu calendario de Odoo.</p>
-              <p style="color: #999; font-size: 12px; margin-top: 20px;"><em>Sistema automatizado Leonobitech - Estilos Leraysi</em></p>
-            </div>
-          `;
+          const notificationBody = getVendorNotificacionTemplate({
+            vendorName,
+            clienta: turno.clienta,
+            telefono: turno.telefono,
+            servicio: servicioDisplay,
+            fecha: fechaFormateadaNotif,
+            hora: horaFormateadaNotif,
+            precio: turno.precio,
+            montoPagado,
+            mp_payment_id: params.mp_payment_id,
+            pagos: pagosInfo.length > 0 ? pagosInfo : undefined,
+            total_pagado_acumulado: totalPagadoAcumulado,
+            pago_actual_mp_id: params.mp_payment_id,
+          });
 
           await this.odooClient.create("mail.mail", {
             subject: `Pago Confirmado: ${servicioDisplay} - ${turno.clienta}`,

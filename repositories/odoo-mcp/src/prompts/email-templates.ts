@@ -830,6 +830,257 @@ export function getTurnoConfirmadoEmailTemplate(data: TurnoConfirmadoData): stri
   return turnoConfirmadoTemplate(data);
 }
 
+// ============================================================================
+// VENDOR NOTIFICATION TEMPLATE (Estilos Leraysi)
+// ============================================================================
+
+export interface VendorNotificacionData {
+  vendorName: string;
+  clienta: string;
+  telefono: string;
+  servicio: string;
+  fecha: string;
+  hora: string;
+  precio: number;
+  montoPagado: number;
+  mp_payment_id: string;
+  // Detailed payment breakdown (optional, enables detailed design)
+  pagos?: PagoInfo[];
+  total_pagado_acumulado?: number;
+  pago_actual_mp_id?: string;
+}
+
+/**
+ * Template: Vendor notification for confirmed payment (Estilos Leraysi)
+ */
+export function getVendorNotificacionTemplate(data: VendorNotificacionData): string {
+  // If detailed payment data available, use detailed design
+  if (data.pagos && data.pagos.length > 0 && data.pago_actual_mp_id) {
+    return vendorNotificacionDetailedTemplate(data);
+  }
+  return vendorNotificacionSimpleTemplate(data);
+}
+
+function vendorNotificacionSimpleTemplate(data: VendorNotificacionData) {
+  const montoRestante = data.precio - (data.total_pagado_acumulado ?? data.montoPagado);
+
+  const content = `
+    <!-- Header -->
+    <div style="text-align: center; margin-bottom: 25px;">
+      <div style="display: inline-block; background-color: #d1fae5; color: #065f46; padding: 10px 25px; border-radius: 50px; font-weight: 600; font-size: 16px;">
+        💰 Pago de Seña Confirmado
+      </div>
+    </div>
+
+    <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 15px;">
+      Hola <strong>${data.vendorName}</strong>, se confirmó un pago de seña:
+    </p>
+
+    <!-- Turno Info -->
+    <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 20px; margin: 20px 0; border-radius: 10px; color: #ffffff;">
+      <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; text-align: center;">📅 Turno Confirmado</h3>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">👤 Clienta:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.clienta}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">💇‍♀️ Servicio:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.servicio}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">📆 Fecha:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.fecha}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">⏰ Hora:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.hora}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9;">📱 Teléfono:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right;">${data.telefono}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Payment Info -->
+    <div style="background-color: #f0fdf4; border: 2px solid #22c55e; padding: 15px; margin: 20px 0; border-radius: 8px;">
+      <h4 style="margin: 0 0 10px 0; color: #166534; font-size: 14px;">💳 Detalle del Pago</h4>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 6px 0; color: #4b5563; font-size: 13px;">Precio total:</td>
+          <td style="padding: 6px 0; color: #1f2937; font-size: 13px; text-align: right;">${fmtARS(data.precio)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #166534; font-size: 13px; font-weight: 600;">Monto pagado:</td>
+          <td style="padding: 6px 0; color: #166534; font-size: 14px; font-weight: 600; text-align: right;">${fmtARS(data.montoPagado)}</td>
+        </tr>
+        <tr style="border-top: 1px dashed #d1d5db;">
+          <td style="padding: 8px 0 0 0; color: #4b5563; font-size: 13px;">Restante:</td>
+          <td style="padding: 8px 0 0 0; color: #1f2937; font-size: 13px; text-align: right;">${fmtARS(montoRestante)}</td>
+        </tr>
+      </table>
+      <p style="margin: 10px 0 0 0; color: #9ca3af; font-size: 11px;">MP ID: ${data.mp_payment_id}</p>
+    </div>
+
+    <p style="color: #9ca3af; font-size: 12px; margin-top: 20px; text-align: center;">
+      Sistema automatizado Leonobitech - Estilos Leraysi
+    </p>
+  `;
+
+  return leraysiEmailTemplate(content);
+}
+
+function vendorNotificacionDetailedTemplate(data: VendorNotificacionData) {
+  const serviciosPagados = buildServiciosPagados(
+    data.pagos!,
+    data.pago_actual_mp_id!,
+    data.precio
+  );
+
+  const totalPagado = data.total_pagado_acumulado ?? data.montoPagado;
+  const montoRestante = data.precio - totalPagado;
+  const hasAdditional = serviciosPagados.some(s => s.esSenaAdicional);
+
+  // --- Build service rows HTML ---
+  let servicioRowsHtml = '';
+  let separatorInserted = false;
+
+  for (const srv of serviciosPagados) {
+    if (srv.esSenaAdicional && !separatorInserted && hasAdditional) {
+      servicioRowsHtml += `
+        <tr>
+          <td colspan="3" style="padding: 10px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="border-top: 1px dashed #9ca3af; width: 25%;"></td>
+                <td style="text-align: center; color: #6b7280; font-size: 11px; font-weight: 600; white-space: nowrap; padding: 0 6px;">Servicio Agregado</td>
+                <td style="border-top: 1px dashed #9ca3af; width: 25%;"></td>
+              </tr>
+            </table>
+          </td>
+        </tr>`;
+      separatorInserted = true;
+    }
+
+    const highlightStyle = srv.esPagoActual
+      ? 'background-color: #fef9c3; border-left: 3px solid #f59e0b;'
+      : '';
+
+    servicioRowsHtml += `
+      <tr style="${highlightStyle}">
+        <td style="padding: 8px 6px; color: #1f2937; font-size: 13px;">✅ ${srv.servicio}</td>
+        <td style="padding: 8px 6px; color: #1f2937; font-size: 13px; text-align: right;">${fmtARS(srv.precio)}</td>
+        <td style="padding: 8px 6px; color: #1f2937; font-size: 13px; text-align: right;">${fmtARS(srv.sena)}</td>
+      </tr>`;
+  }
+
+  // --- Build comprobantes rows ---
+  let comprobantesRowsHtml = '';
+  for (const srv of serviciosPagados) {
+    comprobantesRowsHtml += `
+      <tr>
+        <td style="padding: 6px; color: #4b5563; font-size: 12px; border-bottom: 1px solid #e5e7eb;">${srv.servicio}</td>
+        <td style="padding: 6px; color: #4b5563; font-size: 12px; text-align: right; border-bottom: 1px solid #e5e7eb; font-family: monospace;">${srv.mp_payment_id}</td>
+      </tr>`;
+  }
+
+  const content = `
+    <!-- Header -->
+    <div style="text-align: center; margin-bottom: 25px;">
+      <div style="display: inline-block; background-color: #d1fae5; color: #065f46; padding: 10px 25px; border-radius: 50px; font-weight: 600; font-size: 16px;">
+        💰 Pago de Seña Confirmado
+      </div>
+    </div>
+
+    <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 15px;">
+      Hola <strong>${data.vendorName}</strong>, se confirmó un pago de seña:
+    </p>
+
+    <!-- Card 1: Turno Info -->
+    <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 20px; margin: 20px 0; border-radius: 10px; color: #ffffff;">
+      <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; text-align: center;">📅 Turno Confirmado</h3>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">👤 Clienta:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.clienta}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">📆 Fecha:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.fecha}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">⏰ Hora:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.hora}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">📱 Teléfono:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.telefono}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9;">📍 Dirección:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right;">Yerbal 513, Caballito</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Card 2: Servicios y Pagos -->
+    <div style="background-color: #f0fdf4; border: 2px solid #22c55e; padding: 15px; margin: 20px 0; border-radius: 8px;">
+      <h4 style="margin: 0 0 12px 0; color: #166534; font-size: 14px;">📋 Detalle de Servicios y Pagos</h4>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr style="border-bottom: 2px solid #d1d5db;">
+          <td style="padding: 6px; color: #6b7280; font-size: 12px; font-weight: 600; width: 50%;">Servicio</td>
+          <td style="padding: 6px; color: #6b7280; font-size: 12px; font-weight: 600; text-align: right; width: 25%;">Precio</td>
+          <td style="padding: 6px; color: #6b7280; font-size: 12px; font-weight: 600; text-align: right; width: 25%;">Seña (30%)</td>
+        </tr>
+        ${servicioRowsHtml}
+        <tr style="border-top: 2px solid #166534;">
+          <td style="padding: 10px 6px 0 6px; color: #166534; font-size: 13px; font-weight: 700;">Total</td>
+          <td style="padding: 10px 6px 0 6px; color: #166534; font-size: 13px; font-weight: 700; text-align: right;">${fmtARS(data.precio)}</td>
+          <td style="padding: 10px 6px 0 6px; color: #166534; font-size: 13px; font-weight: 700; text-align: right;">${fmtARS(totalPagado)}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Card 3: Resumen de Cuenta -->
+    <div style="background-color: #f8f9fa; border: 1px solid #e5e7eb; padding: 15px; margin: 20px 0; border-radius: 8px;">
+      <h4 style="margin: 0 0 12px 0; color: #1f2937; font-size: 14px;">💰 Resumen de Cuenta</h4>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 6px 0; color: #4b5563; font-size: 13px;">Total señas pagadas:</td>
+          <td style="padding: 6px 0; color: #166534; font-size: 14px; font-weight: 600; text-align: right;">${fmtARS(totalPagado)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #4b5563; font-size: 13px;">Precio total servicios:</td>
+          <td style="padding: 6px 0; color: #1f2937; font-size: 13px; text-align: right;">${fmtARS(data.precio)}</td>
+        </tr>
+        <tr style="border-top: 1px solid #d1d5db;">
+          <td style="padding: 10px 0 0 0; color: #92400e; font-size: 13px; font-weight: 600;">Restante (día del turno):</td>
+          <td style="padding: 10px 0 0 0; color: #92400e; font-size: 15px; font-weight: 700; text-align: right;">${fmtARS(montoRestante)}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Card 4: Comprobantes -->
+    <div style="background-color: #f8f9fa; border: 1px solid #e5e7eb; padding: 15px; margin: 20px 0; border-radius: 8px;">
+      <h4 style="margin: 0 0 12px 0; color: #1f2937; font-size: 14px;">🔍 Comprobantes de Pago</h4>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr style="border-bottom: 2px solid #d1d5db;">
+          <td style="padding: 6px; color: #6b7280; font-size: 12px; font-weight: 600;">Servicio</td>
+          <td style="padding: 6px; color: #6b7280; font-size: 12px; font-weight: 600; text-align: right;">ID Pago</td>
+        </tr>
+        ${comprobantesRowsHtml}
+      </table>
+    </div>
+
+    <p style="color: #9ca3af; font-size: 12px; margin-top: 20px; text-align: center;">
+      Sistema automatizado Leonobitech - Estilos Leraysi
+    </p>
+  `;
+
+  return leraysiEmailTemplate(content);
+}
+
 /**
  * List available templates
  */
