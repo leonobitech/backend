@@ -233,6 +233,7 @@ export class ReprogramarTurnoTool
             };
 
             const nuevoEventoId = await this.odooClient.create("calendar.event", eventValues);
+            await this.odooClient.write("salon.turno", [turnoId], { odoo_event_id: nuevoEventoId });
             acciones.push("Nuevo evento de calendario creado");
 
             // 2b. Crear actividad en el Lead vinculada al evento
