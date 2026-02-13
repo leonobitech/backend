@@ -117,12 +117,23 @@ if (esReprogramacion && data.fecha_disponible) {
   const duracionExistente = data.turno_duracion_existente || 0;
   const duracionNueva = data.duracion_estimada || 60;
   const duracionCombinada = duracionExistente + duracionNueva;
-  // Complejidad: MAX entre existente y nuevo
+  // Complejidad: MAX(existente, nueva, floor-por-cantidad)
   const COMPLEJIDAD_ORDER = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
+  const ORDER_TO_COMP = { 1: 'simple', 2: 'media', 3: 'compleja', 4: 'muy_compleja' };
   const complejidadExistente = data.turno_complejidad_existente || "media";
   const complejidadNueva = data.complejidad_maxima || "media";
-  const complejidadCombinada = (COMPLEJIDAD_ORDER[complejidadExistente] || 2) >= (COMPLEJIDAD_ORDER[complejidadNueva] || 2)
-    ? complejidadExistente : complejidadNueva;
+  // Contar servicios totales: existentes (split por " + ") + nuevos
+  const _existSvcs = (data.turno_servicio_existente || "").split(" + ").filter(s => s.trim());
+  const _newSvcs = Array.isArray(data.servicio) ? data.servicio : [data.servicio].filter(Boolean);
+  const _totalCount = _existSvcs.length + _newSvcs.length;
+  let _floorComp = 'simple';
+  if (_totalCount >= 3) _floorComp = 'muy_compleja';
+  else if (_totalCount >= 2) _floorComp = 'compleja';
+  const complejidadCombinada = ORDER_TO_COMP[Math.max(
+    COMPLEJIDAD_ORDER[complejidadExistente] || 2,
+    COMPLEJIDAD_ORDER[complejidadNueva] || 2,
+    COMPLEJIDAD_ORDER[_floorComp] || 1
+  )] || "media";
   const servicioExistenteDisplay =
     data.turno_servicio_existente || "servicio existente";
   const serviciosArray = Array.isArray(data.servicio)
@@ -169,9 +180,16 @@ return [
         complejidad_maxima: esAgregarServicio
           ? (() => {
               const ORD = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
+              const ORD_R = { 1: 'simple', 2: 'media', 3: 'compleja', 4: 'muy_compleja' };
               const ex = data.turno_complejidad_existente || "media";
               const nw = data.complejidad_maxima || "media";
-              return (ORD[ex] || 2) >= (ORD[nw] || 2) ? ex : nw;
+              const eSvcs = (data.turno_servicio_existente || "").split(" + ").filter(s => s.trim());
+              const nSvcs = Array.isArray(data.servicio) ? data.servicio : [data.servicio].filter(Boolean);
+              const tot = eSvcs.length + nSvcs.length;
+              let fl = 'simple';
+              if (tot >= 3) fl = 'muy_compleja';
+              else if (tot >= 2) fl = 'compleja';
+              return ORD_R[Math.max(ORD[ex] || 2, ORD[nw] || 2, ORD[fl] || 1)] || "media";
             })()
           : (data.complejidad_maxima || "media"),
         sena: esAgregarServicio

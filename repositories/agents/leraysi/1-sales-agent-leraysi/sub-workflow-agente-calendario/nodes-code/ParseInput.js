@@ -233,25 +233,37 @@ function calcularDuracion(servicios, largo) {
 }
 
 // Determinar la complejidad más alta entre los servicios solicitados
-// Para servicios de cabello: largo_cabello determina complejidad (via COMPLEJIDAD_POR_LARGO)
-// Para servicios sin cabello: usa complejidad fija de SERVICIOS_CONFIG
-// Orden de prioridad: muy_compleja > compleja > media > simple
+// Factor 1: complejidad individual del servicio (cabello: via COMPLEJIDAD_POR_LARGO, otros: fija)
+// Factor 2: cantidad de servicios (2 = mín compleja, 3+ = mín muy_compleja)
+// Resultado: MAX(individual_más_alta, floor_por_cantidad)
 function obtenerComplejidadMaxima(servicios, largo) {
+  const COMP_ORDER = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
+  const ORDER_TO_COMP = { 1: 'simple', 2: 'media', 3: 'compleja', 4: 'muy_compleja' };
+
+  // Paso 1: Max complejidad individual (lógica existente)
   const complejidades = servicios.map(srv => {
     const config = SERVICIOS_CONFIG[srv];
     if (!config) return 'media';
-    // Si requiere largo Y hay dato de largo → usar COMPLEJIDAD_POR_LARGO
     if (config.requiere_largo && largo) {
       return COMPLEJIDAD_POR_LARGO[largo] || config.complejidad;
     }
-    // Sin largo o servicio sin cabello → usar complejidad fija
     return config.complejidad;
   });
 
-  if (complejidades.includes('muy_compleja')) return 'muy_compleja';
-  if (complejidades.includes('compleja')) return 'compleja';
-  if (complejidades.includes('media')) return 'media';
-  return 'simple';
+  let maxIndividual = 'simple';
+  if (complejidades.includes('muy_compleja')) maxIndividual = 'muy_compleja';
+  else if (complejidades.includes('compleja')) maxIndividual = 'compleja';
+  else if (complejidades.includes('media')) maxIndividual = 'media';
+
+  // Paso 2: Floor por cantidad de servicios
+  // 1 servicio = sin boost, 2 = mín compleja, 3+ = mín muy_compleja
+  let floorPorCantidad = 'simple';
+  if (servicios.length >= 3) floorPorCantidad = 'muy_compleja';
+  else if (servicios.length >= 2) floorPorCantidad = 'compleja';
+
+  // Paso 3: Retornar el mayor entre individual y floor
+  const finalOrder = Math.max(COMP_ORDER[maxIndividual] || 2, COMP_ORDER[floorPorCantidad] || 1);
+  return ORDER_TO_COMP[finalOrder] || maxIndividual;
 }
 
 // ============================================================================

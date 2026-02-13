@@ -11,6 +11,9 @@ const turnos = turnosRaw.length > 0 ? turnosRaw.map(item => item.json) : [];
 
 const input = $('ParseInput').first().json;
 
+// Complejidad del turno solicitado (para filtrar capacidad por día)
+const complejidadSolicitada = input.complejidad_maxima || 'media';
+
 // Configuración de capacidad máxima por día según complejidad
 // Horario: 9am-7pm (10 horas disponibles)
 const CAPACIDAD = {
@@ -93,6 +96,13 @@ for (let i = 0; i < 30; i++) {
   const puedeRecibirSimple = datosDia.count_simple < CAPACIDAD.max_simple;
   const puedeRecibirMas = datosDia.count_total < CAPACIDAD.max_turnos_dia;
 
+  // Verificar capacidad para la complejidad del turno solicitado
+  let puedeRecibirEstaComplejidad = true;
+  if (complejidadSolicitada === 'muy_compleja') puedeRecibirEstaComplejidad = puedeRecibirMuyCompleja;
+  else if (complejidadSolicitada === 'compleja') puedeRecibirEstaComplejidad = puedeRecibirCompleja;
+  else if (complejidadSolicitada === 'media') puedeRecibirEstaComplejidad = puedeRecibirMedia;
+  else if (complejidadSolicitada === 'simple') puedeRecibirEstaComplejidad = puedeRecibirSimple;
+
   // 600 minutos = 10 horas (9am-7pm)
   const cargaPorcentaje = Math.round((datosDia.duracion_total / 600) * 100);
 
@@ -114,7 +124,7 @@ for (let i = 0; i < 30; i++) {
     puede_recibir_media: puedeRecibirMedia,
     puede_recibir_simple: puedeRecibirSimple,
     puede_recibir_turno: puedeRecibirMas,
-    disponible: puedeRecibirMas
+    disponible: puedeRecibirMas && puedeRecibirEstaComplejidad
   });
 }
 
@@ -142,7 +152,11 @@ if (!fechaDisponible) {
   } else if (!diaSolicitado.abierto) {
     motivoNoDisponible = 'Cerrado (Domingo)';
   } else if (!diaSolicitado.disponible) {
-    motivoNoDisponible = `Agenda llena (${diaSolicitado.turnos_agendados} turnos, ${diaSolicitado.carga_porcentaje}% de capacidad)`;
+    if (!diaSolicitado.puede_recibir_turno) {
+      motivoNoDisponible = `Agenda llena (${diaSolicitado.turnos_agendados} turnos, ${diaSolicitado.carga_porcentaje}% de capacidad)`;
+    } else {
+      motivoNoDisponible = `Sin capacidad para servicio ${complejidadSolicitada.replace('_', ' ')} (${diaSolicitado.turnos_agendados} turnos agendados)`;
+    }
   }
 
   // Buscar los próximos 3 días disponibles como alternativas
@@ -312,7 +326,7 @@ if (modo === 'consultar_disponibilidad') {
     const MAX_CARGA_JORNADA = 20;
 
     const diasJornada = diasBusqueda
-      .filter(d => (d.carga_porcentaje || 0) < MAX_CARGA_JORNADA)
+      .filter(d => (d.carga_porcentaje || 0) < MAX_CARGA_JORNADA && d.puede_recibir_muy_compleja !== false)
       .sort((a, b) => {
         // Priorizar día solicitado
         if (a.fecha === fechaSolicitada) return -1;
