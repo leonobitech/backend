@@ -123,7 +123,7 @@ http:
           script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://static.cloudflareinsights.com https://cdn.rs.n8n.io https://ph.n8n.io https://sentry.com;
           style-src 'self' 'unsafe-inline';
           img-src 'self' data: https://sentry.com https://static.cloudflareinsights.com;
-          connect-src 'self' blob: https://sentry.com https://static.cloudflareinsights.com wss://leonobit.leonobitech.com;
+          connect-src 'self' blob: https://api.n8n.io https://sentry.com https://static.cloudflareinsights.com wss://leonobit.leonobitech.com;
           frame-ancestors 'self';
 
     # -------------------------------------------------------------------------
