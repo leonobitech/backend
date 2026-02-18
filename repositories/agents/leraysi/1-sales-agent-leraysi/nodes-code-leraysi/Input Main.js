@@ -47,7 +47,7 @@ const meta = {
 // ============================================================================
 
 const lastUserMessage = history.filter((m) => m.role === "user").slice(-1)[0];
-const userMessageText = lastUserMessage?.text || "[Foto enviada]";
+const userMessageText = state.last_message || lastUserMessage?.text || "[Foto enviada]";
 const displayName = state.full_name || state.nick_name || "clienta";
 
 // Sección de análisis de imagen (solo si existe)
