@@ -889,7 +889,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep 'celery' | grep -v grep"]
+      test: ["CMD-SHELL", "cat /proc/1/cmdline | tr '\\0' ' ' | grep -q celery"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -938,7 +938,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD", "pgrep", "celery"]
+      test: ["CMD-SHELL", "cat /proc/1/cmdline | tr '\\0' ' ' | grep -q celery"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -989,7 +989,7 @@ services:
       - no-new-privileges:true
 
     healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep 'celery-beat' | grep -v grep"]
+      test: ["CMD-SHELL", "cat /proc/1/cmdline | tr '\\0' ' ' | grep -q celery"]
       interval: 30s
       timeout: 10s
       retries: 3
