@@ -189,6 +189,14 @@ if (turnoConfirmadoPagado && statePatch.stage && statePatch.stage !== "turno_con
   delete statePatch.stage;
 }
 
+// ── Protección: foto ya recibida → no volver a pedir ──
+// Si ya tenemos image_analysis y foto_recibida, el LLM no debería setear waiting_image=true.
+// Esto previene que el bot pida foto de nuevo cuando la clienta pregunta por otro servicio de cabello.
+if (originalState.foto_recibida === true && originalState.image_analysis && statePatch.waiting_image === true) {
+  console.log(`[OutputMain v3.2] 🛡️ Protección foto_recibida: bloqueando waiting_image=true (ya tenemos image_analysis)`);
+  statePatch.waiting_image = false;
+}
+
 for (const [key, value] of Object.entries(statePatch)) {
   // Saltar campos protegidos
   if (protectedFields.includes(key)) {
@@ -244,6 +252,14 @@ for (const [key, value] of Object.entries(statePatch)) {
 
   // Campos normales: sobrescribir
   mergedState[key] = value;
+}
+
+// ── Normalización post-merge: foto_recibida + image_analysis → waiting_image=false ──
+// Cubre tanto LLM enviando waiting_image:true (ya bloqueado arriba) como datos
+// preexistentes en Baserow donde waiting_image quedó true por error.
+if (mergedState.foto_recibida === true && mergedState.image_analysis && mergedState.waiting_image === true) {
+  console.log(`[OutputMain v3.2] 🛡️ Normalización post-merge: waiting_image=true → false (foto_recibida + image_analysis existen)`);
+  mergedState.waiting_image = false;
 }
 
 console.log("[OutputMain v3.2] Merged state:");
