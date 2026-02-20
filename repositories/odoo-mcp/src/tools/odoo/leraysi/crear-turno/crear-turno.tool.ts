@@ -162,9 +162,22 @@ export class CrearTurnoLeraysiTool
       );
     }
 
-    // Avanzar lead de Calificado → Propuesta
+    // Avanzar lead de Calificado → Propuesta + setear expected_revenue y tags
     try {
       await this.odooClient.updateDealStage(params.lead_id, "Proposition");
+
+      // Resolver tags CRM: categoría del servicio + complejidad
+      const tagIds = await this.resolveLeadTags(
+        params.servicio,
+        params.complejidad_maxima,
+        params.servicio_detalle
+      );
+      const tagCommands = tagIds.map((id: number) => [4, id]); // link tags
+
+      await this.odooClient.write("crm.lead", [params.lead_id], {
+        expected_revenue: params.precio,
+        tag_ids: tagCommands,
+      });
     } catch (e) {
       logger.warn({ error: e, lead_id: params.lead_id }, "[CrearTurnoLeraysi] Could not advance lead to Proposition");
     }
@@ -243,6 +256,72 @@ export class CrearTurnoLeraysiTool
 
     // Si ya es un código válido (ej: "manicura_simple"), dejarlo como está
     return input;
+  }
+
+  /**
+   * Busca o crea tags en crm.tag y devuelve sus IDs.
+   * Tags: categoría de servicio + complejidad máxima.
+   */
+  private async resolveLeadTags(
+    servicio: string,
+    complejidad: string | null,
+    _servicioDetalle?: string
+  ): Promise<number[]> {
+    const CATEGORY_MAP: Record<string, string> = {
+      corte_mujer: "Corte",
+      alisado_brasileno: "Alisado",
+      alisado_keratina: "Alisado",
+      mechas_completas: "Color",
+      tintura_raiz: "Color",
+      tintura_completa: "Color",
+      balayage: "Color",
+      manicura_simple: "Uñas",
+      manicura_semipermanente: "Uñas",
+      pedicura: "Uñas",
+      depilacion_cera_piernas: "Depilación",
+      depilacion_cera_axilas: "Depilación",
+      depilacion_cera_bikini: "Depilación",
+      depilacion_laser_piernas: "Depilación",
+      depilacion_laser_axilas: "Depilación",
+    };
+
+    const COMPLEJIDAD_LABELS: Record<string, string> = {
+      simple: "Simple",
+      media: "Media",
+      compleja: "Compleja",
+      muy_compleja: "Muy Compleja",
+    };
+
+    const tagNames: string[] = [];
+
+    const category = CATEGORY_MAP[servicio];
+    if (category) tagNames.push(category);
+
+    if (complejidad) {
+      const label = COMPLEJIDAD_LABELS[complejidad];
+      if (label) tagNames.push(label);
+    }
+
+    if (tagNames.length === 0) return [];
+
+    const tagIds: number[] = [];
+    for (const name of tagNames) {
+      const existing = await this.odooClient.search(
+        "crm.tag",
+        [["name", "=", name]],
+        { fields: ["id"], limit: 1 }
+      );
+
+      if (existing.length > 0) {
+        tagIds.push(existing[0].id);
+      } else {
+        const newId = await this.odooClient.create("crm.tag", { name });
+        tagIds.push(newId);
+        logger.info({ tagName: name, tagId: newId }, "[CrearTurnoLeraysi] Created new CRM tag");
+      }
+    }
+
+    return tagIds;
   }
 
   definition(): ToolDefinition {
