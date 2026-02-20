@@ -19,7 +19,7 @@ import { createHash } from "crypto";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
 import { generateClientKeyLegacy } from "@utils/auth/generateClientKeyLegacy";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
-import { clearAuthCookies } from "@utils/auth/cookies";
+import { clearAuthCookies, refreshClientMetaCookie } from "@utils/auth/cookies";
 import { refreshAccessTokenService } from "@services/account.service";
 import { refreshAuthCookies } from "@utils/auth/cookies";
 import { loggerEvent } from "@utils/logging/loggerEvent";
@@ -203,6 +203,7 @@ const authenticate: RequestHandler = catchErrors(
             accessKey: result.tokens.accessTokenId,
             clientKey: result.tokens.hashedPublicKey,
           });
+          refreshClientMetaCookie(req, res);
 
           setAuthenticatedUser(req, res, recoveredPayload);
 
@@ -337,6 +338,7 @@ const authenticate: RequestHandler = catchErrors(
         accessKey: result.tokens.accessTokenId,
         clientKey: result.tokens.hashedPublicKey,
       });
+      refreshClientMetaCookie(req, res);
 
       setAuthenticatedUser(req, res, payload);
 
@@ -541,6 +543,7 @@ const authenticate: RequestHandler = catchErrors(
           accessKey: result.tokens.accessTokenId,
           clientKey: result.tokens.hashedPublicKey,
         });
+        refreshClientMetaCookie(req, res);
 
         setAuthenticatedUser(req, res, recoveredPayload);
 
