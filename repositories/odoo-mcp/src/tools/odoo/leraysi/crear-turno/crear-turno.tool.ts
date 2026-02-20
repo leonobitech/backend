@@ -255,6 +255,20 @@ export class CrearTurnoLeraysiTool
     }
 
     // Si ya es un código válido (ej: "manicura_simple"), dejarlo como está
+    if (Object.keys(COMPLEJIDAD_SERVICIO).includes(servicioLower)) {
+      return input;
+    }
+
+    // Fallback: resolver desde servicio_detalle (más confiable, tiene el nombre completo)
+    if (typeof obj.servicio_detalle === "string") {
+      const detalleLower = obj.servicio_detalle.toLowerCase().trim();
+      for (const [key, code] of Object.entries(SERVICIO_MAP)) {
+        if (detalleLower.includes(key)) {
+          return { ...obj, servicio: code };
+        }
+      }
+    }
+
     return input;
   }
 
