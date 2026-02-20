@@ -632,7 +632,7 @@ services:
       #########################################
       # 🌍 Router principal
       #########################################
-      - "traefik.http.routers.odoo-main.rule=Host(`odoo.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.odoo-main.rule=Host(`odoo.${DOMAIN_NAME}`) || Host(`leraysi.${DOMAIN_NAME}`)"
       - "traefik.http.routers.odoo-main.entrypoints=websecure"
       - "traefik.http.routers.odoo-main.tls=true"
       - "traefik.http.routers.odoo-main.tls.certresolver=le"
@@ -643,7 +643,7 @@ services:
       #########################################
       # 🔌 WebSocket (longpolling)
       #########################################
-      - "traefik.http.routers.odoo-ws.rule=Host(`odoo.${DOMAIN_NAME}`) && PathPrefix(`/websocket`)"
+      - "traefik.http.routers.odoo-ws.rule=(Host(`odoo.${DOMAIN_NAME}`) || Host(`leraysi.${DOMAIN_NAME}`)) && PathPrefix(`/websocket`)"
       - "traefik.http.routers.odoo-ws.entrypoints=websecure"
       - "traefik.http.routers.odoo-ws.tls=true"
       - "traefik.http.routers.odoo-ws.tls.certresolver=le"
@@ -653,7 +653,7 @@ services:
       #########################################
       # 📦 Media pública y binarios (descargas, imágenes)
       #########################################
-      - traefik.http.routers.odoo-media.rule=Host(`odoo.leonobitech.com`) && (PathPrefix(`/web/content`) || PathPrefix(`/web/image`) || PathPrefix(`/web/binary`) || PathPrefix(`/media`))
+      - "traefik.http.routers.odoo-media.rule=(Host(`odoo.${DOMAIN_NAME}`) || Host(`leraysi.${DOMAIN_NAME}`)) && (PathPrefix(`/web/content`) || PathPrefix(`/web/image`) || PathPrefix(`/web/binary`) || PathPrefix(`/media`))"
       - "traefik.http.routers.odoo-media.entrypoints=websecure"
       - "traefik.http.routers.odoo-media.tls=true"
       - "traefik.http.routers.odoo-media.service=odoo@docker"
