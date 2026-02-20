@@ -162,6 +162,13 @@ export class CrearTurnoLeraysiTool
       );
     }
 
+    // Avanzar lead de Calificado → Propuesta
+    try {
+      await this.odooClient.updateDealStage(params.lead_id, "Proposition");
+    } catch (e) {
+      logger.warn({ error: e, lead_id: params.lead_id }, "[CrearTurnoLeraysi] Could not advance lead to Proposition");
+    }
+
     // Calcular seña (30%)
     const sena = params.precio * 0.3;
 

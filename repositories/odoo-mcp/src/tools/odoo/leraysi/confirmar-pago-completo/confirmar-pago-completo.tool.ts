@@ -13,9 +13,9 @@ import { getTurnoConfirmadoEmailTemplate, getVendorNotificacionTemplate, type Pa
  *
  * Ejecuta todo el proceso post-pago en una sola llamada:
  * 1. Confirmar turno (estado=confirmado, sena_pagada=true)
- * 2. Crear contacto si no existe
- * 3. Vincular contacto al Lead
- * 4. Mover Lead a "Calificado"
+ * 2. Obtener contacto del Lead (creado en Fase 1: Nuevo→Calificado), fallback: crear si no existe
+ * 3. Actualizar tags y revenue del Lead
+ * 4. Mover Lead a "Won" (Ganado)
  * 5. Crear evento en calendario
  * 6. Crear factura en account.move (módulo contabilidad Odoo)
  * 7. Generar PDF de factura (reporte nativo Odoo)
@@ -126,13 +126,24 @@ export class ConfirmarPagoCompletoTool
     }
 
     // =========================================================================
-    // PASO 2: Crear o obtener contacto (res.partner)
+    // PASO 2: Obtener contacto del Lead (creado en Fase 1: Nuevo→Calificado)
+    // Fallback: buscar por email/teléfono o crear si no existe
     // =========================================================================
     const emailToUse = params.email_override || turno.email;
     let partnerId: number | null = null;
 
-    // Buscar contacto existente por email o teléfono
-    if (emailToUse) {
+    // Primero: leer partner_id del lead (ya debería existir desde Fase 1)
+    try {
+      const leadData = await this.odooClient.read("crm.lead", [params.lead_id], ["partner_id"]);
+      if (leadData.length > 0 && leadData[0].partner_id && Array.isArray(leadData[0].partner_id)) {
+        partnerId = leadData[0].partner_id[0];
+      }
+    } catch (error) {
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not read partner_id from lead");
+    }
+
+    // Fallback: buscar contacto por email o teléfono
+    if (!partnerId && emailToUse) {
       const existingPartners = await this.odooClient.search(
         "res.partner",
         [["email", "=", emailToUse]],
@@ -154,7 +165,7 @@ export class ConfirmarPagoCompletoTool
       }
     }
 
-    // Crear contacto si no existe
+    // Último recurso: crear contacto
     if (!partnerId) {
       const partnerData: Record<string, any> = {
         name: turno.clienta,
@@ -164,6 +175,7 @@ export class ConfirmarPagoCompletoTool
       if (emailToUse) partnerData.email = emailToUse;
 
       partnerId = await this.odooClient.create("res.partner", partnerData);
+      logger.info({ partnerId }, "[ConfirmarPagoCompleto] Created contact as fallback (Fase 1 may have failed)");
     }
 
     // =========================================================================
@@ -222,12 +234,12 @@ export class ConfirmarPagoCompletoTool
     });
 
     // =========================================================================
-    // PASO 4: Mover Lead a "Qualified"
+    // PASO 4: Mover Lead a "Won" (Ganado)
     // =========================================================================
     try {
-      await this.odooClient.updateDealStage(params.lead_id, "Qualified");
+      await this.odooClient.updateDealStage(params.lead_id, "Won");
     } catch (error) {
-      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not move Lead to Qualified");
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not move Lead to Won");
     }
 
     // =========================================================================
@@ -906,7 +918,7 @@ Te esperamos! Estilos Leraysi`;
       name: "leraysi_confirmar_pago_completo",
       description:
         "Confirmar pago de turno en Estilos Leraysi - Proceso completo post-pago. " +
-        "Ejecuta: confirmar turno, crear contacto, vincular a Lead, mover a Calificado, " +
+        "Ejecuta: confirmar turno, obtener contacto del Lead, actualizar tags/revenue, mover a Won (Ganado), " +
         "crear evento calendario, crear factura en account.move, generar PDF factura (reporte nativo Odoo), enviar email confirmación. " +
         "Usar cuando se recibe notificación de pago aprobado de Mercado Pago.",
       inputSchema: {
