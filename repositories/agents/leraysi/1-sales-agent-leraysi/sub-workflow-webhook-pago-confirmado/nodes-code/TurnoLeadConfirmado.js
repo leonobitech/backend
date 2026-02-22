@@ -93,6 +93,10 @@ const precioTotal = parseFloat(turno.precio) || 0;
 // Seña recién pagada (monto de este pago)
 const senaMontoNum = parseFloat(turno.sena_monto) || 0;
 
+// Monto del pago reciente (este pago específico)
+const mcpTurno = mcpData.turno || {};
+const pagoReciente = parseFloat(mcpTurno.sena) || senaMontoNum;
+
 // Datos acumulados del MCP (si están disponibles)
 const totalPagado = pagos.total_pagado || senaMontoNum;
 const cantidadPagos = pagos.cantidad_pagos || 1;
@@ -134,7 +138,8 @@ mensajeContent += `
   💰 *Detalle de Pago*
 ━━━━━━━━━━━━━━━━━━
 
-✅ *Seña pagada:* $${formatearMonto(totalPagado)}
+💳 *Pago recibido:* $${formatearMonto(pagoReciente)}
+✅ *Seña total pagada:* $${formatearMonto(totalPagado)}
 💲 *Precio total:* $${formatearMonto(precioTotal)}`;
 
 if (pendienteRestante > 0) {
