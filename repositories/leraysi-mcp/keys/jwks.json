@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "n": "qrJblo6pkcM5iiU9pPr8lMSV4INdzJ1-X8j7bBdUnp4qAoC9DqGvzlsWqN9IKwH2Lpylu8dRMbCWnsU3g9LVBkXDr7chaBcrQ2vb7oOIUCMurfgYi6KA8BFxbhWC3uSo94tIdbyQEVshgJhzLeYJqKDRVFOhdxO1xtXoR1IjAfXnXrb-QgnE2w7zp6Y9NPH-RSo0tKbUHpehYrQcUdMVuOl6E-H4cy8FjEgxGOSnKe1_hKuf7qjHV0qnW9FuxwTSzDRNRsVMRrMS0Te5yvOmnacs5XipvzPmPfLuhNS869kGFkA-ZBEabKMlkCBAnMOdKhgtTcZyvTwsaBtwaHTY4Q",
+      "e": "AQAB",
+      "kid": "odoo-mcp-key-1",
+      "use": "sig",
+      "alg": "RS256"
+    }
+  ]
+}
