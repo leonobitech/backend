@@ -226,6 +226,7 @@ export class ReprogramarTurnoTool
               start: startUTC,
               stop: stopUTC,
               duration: duracion,
+              location: 'Yerbal 513, C1405CDK Cdad. Autónoma de Buenos Aires',
               description: `TURNO REPROGRAMADO\n\nFecha anterior: ${fechaHoraAnteriorAR}\nMotivo: ${params.motivo}\n\nServicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio: $${turno.precio}`,
               partner_ids: [[6, 0, eventPartnerIds]],
               opportunity_id: leadId,

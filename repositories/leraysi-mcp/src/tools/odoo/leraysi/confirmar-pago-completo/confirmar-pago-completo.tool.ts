@@ -291,6 +291,7 @@ export class ConfirmarPagoCompletoTool
         start: startUTC,
         stop: stopUTC,
         duration: turno.duracion || 1,
+        location: 'Yerbal 513, C1405CDK Cdad. Autónoma de Buenos Aires',
         description: `Servicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${montoPagado}`,
         partner_ids: [[6, 0, eventPartnerIds]],
         opportunity_id: params.lead_id,
