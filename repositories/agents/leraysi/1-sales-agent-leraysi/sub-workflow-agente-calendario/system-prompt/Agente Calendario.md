@@ -105,6 +105,7 @@ Reprograma un turno existente a una nueva fecha/hora.
   "fecha_hora_nueva": "2025-01-30 14:00:00",
   "estado_anterior": "confirmado",
   "acciones": ["Fecha actualizada en turno", "1 evento(s) de calendario eliminado(s)", "Nuevo evento de calendario creado", "Email de notificación enviado"],
+  "calendar_accept_url": "https://leraysi.leonobitech.com/calendar/meeting/accept?token=abc123&id=456",
   "message": "Turno reprogramado para el jueves 30 de enero a las 14:00."
 }
 ```
