@@ -105,6 +105,7 @@ if (llmResponse.estado === "turno_reprogramado") {
     mp_preference_id: mpPreferenceId,
     link_pago: llmResponse.link_pago || null,
     calendario_actualizado: true,
+    calendar_accept_url: llmResponse.calendar_accept_url || null,
     motivo_reprogramacion: llmResponse.motivo || "Solicitud de la clienta",
   };
 }

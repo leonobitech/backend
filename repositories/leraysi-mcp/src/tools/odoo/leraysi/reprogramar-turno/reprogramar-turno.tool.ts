@@ -100,6 +100,7 @@ export class ReprogramarTurnoTool
     let nuevoTurnoId: number | null = null;
     let linkPago: string | undefined;
     let sena: number | undefined;
+    let calendarAcceptUrl: string | null = null;
 
     // =========================================================================
     // CASO A: PENDIENTE_PAGO → Cancelar viejo + Crear nuevo turno
@@ -244,6 +245,27 @@ export class ReprogramarTurnoTool
             await this.odooClient.write("salon.turno", [turnoId], { odoo_event_id: nuevoEventoId });
             acciones.push("Nuevo evento de calendario creado");
 
+            // 2a-bis. Obtener URL de confirmación de asistencia
+            const clientePartnerId = lead.partner_id && Array.isArray(lead.partner_id) ? lead.partner_id[0] : null;
+            if (clientePartnerId) {
+              try {
+                const attendees = await this.odooClient.search("calendar.attendee", [
+                  ["event_id", "=", nuevoEventoId],
+                  ["partner_id", "=", clientePartnerId],
+                ], { fields: ["access_token"], limit: 1 });
+
+                if (attendees.length > 0 && attendees[0].access_token) {
+                  const baseUrl = await this.odooClient.execute(
+                    "ir.config_parameter", "get_param", ["web.base.url"]
+                  );
+                  calendarAcceptUrl = `${baseUrl}/calendar/meeting/accept?token=${attendees[0].access_token}&id=${nuevoEventoId}`;
+                  logger.info({ calendarAcceptUrl }, "[ReprogramarTurno] Calendar accept URL generated");
+                }
+              } catch (error) {
+                logger.warn({ error }, "[ReprogramarTurno] Could not get calendar accept URL");
+              }
+            }
+
             // 2b. Crear actividad en el Lead vinculada al evento
             try {
               // Buscar tipo de actividad "Meeting"
@@ -387,6 +409,7 @@ export class ReprogramarTurnoTool
       acciones,
       link_pago: linkPago,
       sena,
+      calendar_accept_url: calendarAcceptUrl,
       message: estadoActual === "pendiente_pago"
         ? `Turno reprogramado. Nuevo turno #${nuevoTurnoId} para el ${fechaHumana}. Nuevo link de pago generado.`
         : `Turno reprogramado para el ${fechaHumana}. Calendario actualizado y notificación enviada.`,

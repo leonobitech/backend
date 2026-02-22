@@ -1157,10 +1157,6 @@ export function getVendorReprogramacionTemplate(data: VendorReprogramacionData):
     <p style="color: #4b5563; font-size: 14px; margin-top: 20px; text-align: center;">
       El calendario de Odoo ya fue actualizado con la nueva fecha.
     </p>
-
-    <p style="color: #9ca3af; font-size: 12px; margin-top: 20px; text-align: center;">
-      Sistema automatizado Leonobitech - Estilos Leraysi
-    </p>
   `;
 
   return leraysiEmailTemplate(content);

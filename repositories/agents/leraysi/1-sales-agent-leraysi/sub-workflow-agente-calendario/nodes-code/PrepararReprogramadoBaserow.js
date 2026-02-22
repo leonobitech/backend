@@ -87,7 +87,8 @@ return [{
       lead_row_id: data.lead_row_id,
       fecha_hora_anterior: data.fecha_hora_anterior,
       fecha_hora_nueva: data.fecha_hora_nueva,
-      calendario_actualizado: data.calendario_actualizado
+      calendario_actualizado: data.calendario_actualizado,
+      calendar_accept_url: data.calendar_accept_url || null
     }
   }
 }];

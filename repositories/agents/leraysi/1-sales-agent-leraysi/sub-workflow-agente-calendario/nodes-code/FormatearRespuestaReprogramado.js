@@ -94,6 +94,17 @@ if (esPrepago && prepData.mp_link) {
 ${prepData.mp_link}`;
 }
 
+// Link de confirmación de asistencia (post-pago, calendario actualizado)
+const calendarAcceptUrl = metaData.calendar_accept_url || null;
+if (!esPrepago && calendarAcceptUrl) {
+  mensajeFormateado += `
+
+━━━━━━━━━━━━━━━━━━
+
+👉 *Confirmá tu asistencia:*
+${calendarAcceptUrl}`;
+}
+
 mensajeFormateado += `
 
 ¡Te esperamos en *Estilos Leraysi*! 💅`;
