@@ -6,6 +6,7 @@ import {
 import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 import { logger } from "@/lib/logger";
+import { getVendorReprogramacionTemplate } from "@/prompts/email-templates";
 
 export class ReprogramarTurnoTool
   implements ITool<ReprogramarTurnoInput, ReprogramarTurnoResponse>
@@ -301,34 +302,16 @@ export class ReprogramarTurnoTool
               const fechaHumanaAnterior = this.formatearFechaHumana(fechaHoraAnteriorAR);
               const fechaHumanaNueva = this.formatearFechaHumana(nuevaFechaHora);
 
-              const notificationBody = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px;">
-                  <h2 style="color: #f59e0b;">🔄 Turno Reprogramado</h2>
-                  <p>Hola <strong>${vendorName}</strong>,</p>
-                  <p>Se ha reprogramado el siguiente turno:</p>
-
-                  <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-                    <h3 style="margin: 0 0 15px 0; color: #92400e;">Cambio de Fecha</h3>
-                    <p style="margin: 5px 0; text-decoration: line-through; color: #92400e;">
-                      <strong>Fecha anterior:</strong> ${fechaHumanaAnterior}
-                    </p>
-                    <p style="margin: 5px 0; color: #059669; font-size: 18px;">
-                      <strong>Nueva fecha:</strong> ${fechaHumanaNueva}
-                    </p>
-                  </div>
-
-                  <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>👤 Clienta:</strong> ${turno.clienta}</p>
-                    <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${servicioDisplay}</p>
-                    <p style="margin: 5px 0;"><strong>📱 Teléfono:</strong> ${turno.telefono}</p>
-                    <p style="margin: 5px 0;"><strong>💰 Precio:</strong> $${turno.precio.toLocaleString('es-AR')}</p>
-                    <p style="margin: 5px 0; color: #666;"><strong>Motivo:</strong> ${params.motivo}</p>
-                  </div>
-
-                  <p style="color: #666; font-size: 14px;">El calendario de Odoo ya fue actualizado con la nueva fecha.</p>
-                  <p style="color: #999; font-size: 12px; margin-top: 20px;"><em>Sistema automatizado Leonobitech - Estilos Leraysi</em></p>
-                </div>
-              `;
+              const notificationBody = getVendorReprogramacionTemplate({
+                vendorName,
+                clienta: turno.clienta,
+                telefono: turno.telefono,
+                servicio: servicioDisplay,
+                fechaAnterior: fechaHumanaAnterior,
+                fechaNueva: fechaHumanaNueva,
+                precio: turno.precio,
+                motivo: params.motivo,
+              });
 
               await this.odooClient.create("mail.mail", {
                 subject: `🔄 Turno Reprogramado: ${servicioDisplay} - ${turno.clienta}`,

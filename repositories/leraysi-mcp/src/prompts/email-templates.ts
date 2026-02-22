@@ -1081,6 +1081,91 @@ function vendorNotificacionDetailedTemplate(data: VendorNotificacionData) {
   return leraysiEmailTemplate(content);
 }
 
+// ============================================================================
+// VENDOR REPROGRAMACIÓN TEMPLATE (Estilos Leraysi)
+// ============================================================================
+
+export interface VendorReprogramacionData {
+  vendorName: string;
+  clienta: string;
+  telefono: string;
+  servicio: string;
+  fechaAnterior: string;
+  fechaNueva: string;
+  precio: number;
+  motivo: string;
+}
+
+/**
+ * Template: Vendor notification for rescheduled appointment (Estilos Leraysi)
+ */
+export function getVendorReprogramacionTemplate(data: VendorReprogramacionData): string {
+  const content = `
+    <!-- Header -->
+    <div style="text-align: center; margin-bottom: 25px;">
+      <div style="display: inline-block; background-color: #fef3c7; color: #92400e; padding: 10px 25px; border-radius: 50px; font-weight: 600; font-size: 16px;">
+        🔄 Turno Reprogramado
+      </div>
+    </div>
+
+    <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 15px;">
+      Hola <strong>${data.vendorName}</strong>, se ha reprogramado el siguiente turno:
+    </p>
+
+    <!-- Cambio de Fecha Card -->
+    <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 20px; margin: 20px 0; border-radius: 10px; color: #ffffff;">
+      <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; text-align: center;">📅 Cambio de Fecha</h3>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">❌ Anterior:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; text-decoration: line-through; opacity: 0.8; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.fechaAnterior}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9;">✅ Nueva:</td>
+          <td style="padding: 8px 0; font-size: 16px; font-weight: 700; text-align: right;">${data.fechaNueva}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Turno Info Card -->
+    <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 20px; margin: 20px 0; border-radius: 10px; color: #ffffff;">
+      <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; text-align: center;">📋 Detalles del Turno</h3>
+      <table width="100%" style="border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">👤 Clienta:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.clienta}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">💇‍♀️ Servicio:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.servicio}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">📱 Teléfono:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${data.telefono}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">💰 Precio:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.2);">${fmtARS(data.precio)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 13px; opacity: 0.9;">📝 Motivo:</td>
+          <td style="padding: 8px 0; font-size: 14px; font-weight: 600; text-align: right;">${data.motivo}</td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="color: #4b5563; font-size: 14px; margin-top: 20px; text-align: center;">
+      El calendario de Odoo ya fue actualizado con la nueva fecha.
+    </p>
+
+    <p style="color: #9ca3af; font-size: 12px; margin-top: 20px; text-align: center;">
+      Sistema automatizado Leonobitech - Estilos Leraysi
+    </p>
+  `;
+
+  return leraysiEmailTemplate(content);
+}
+
 /**
  * List available templates
  */
