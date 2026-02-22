@@ -271,13 +271,9 @@ export class ReprogramarTurnoTool
             // 2c. Registrar en chatter del Lead
             try {
               await this.odooClient.execute("crm.lead", "message_post", [[leadId]], {
-                body: `<p><strong>🔄 Turno reprogramado</strong></p>
-                       <p><strong>Clienta:</strong> ${turno.clienta}</p>
-                       <p><strong>Servicio:</strong> ${servicioDisplay}</p>
-                       <p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p>
-                       <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
-                       <p><strong>Motivo:</strong> ${params.motivo}</p>`,
+                body: `<p><strong>🔄 Turno reprogramado</strong></p><p><strong>Clienta:</strong> ${turno.clienta}</p><p><strong>Servicio:</strong> ${servicioDisplay}</p><p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p><p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p><p><strong>Motivo:</strong> ${params.motivo}</p>`,
                 message_type: "comment",
+                subtype_xmlid: "mail.mt_note",
               });
               acciones.push("Mensaje registrado en chatter del Lead");
             } catch (msgError) {
@@ -358,12 +354,9 @@ export class ReprogramarTurnoTool
 
       // 4. Registrar en chatter del turno
       await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
-        body: `<p><strong>🔄 Turno reprogramado</strong></p>
-               <p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p>
-               <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
-               <p><strong>Motivo:</strong> ${params.motivo}</p>
-               <p><strong>Acciones:</strong> ${acciones.join(", ")}</p>`,
+        body: `<p><strong>🔄 Turno reprogramado</strong></p><p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p><p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p><p><strong>Motivo:</strong> ${params.motivo}</p><p><strong>Acciones:</strong> ${acciones.join(", ")}</p>`,
         message_type: "comment",
+        subtype_xmlid: "mail.mt_note",
       });
     }
 
