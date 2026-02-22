@@ -109,11 +109,13 @@ export class ReprogramarTurnoTool
       await this.odooClient.write("salon.turno", [turnoId], {
         estado: "cancelado",
       });
-      await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
+      await this.odooClient.postMessageToChatter({
+        model: "salon.turno",
+        resId: turnoId,
         body: `<p><strong>🔄 Turno reprogramado</strong></p>
-               <p>Motivo: ${params.motivo}</p>
-               <p>Este turno fue cancelado y se creó uno nuevo con la fecha actualizada.</p>`,
-        message_type: "comment",
+          <p>Motivo: ${params.motivo}</p>
+          <p>Este turno fue cancelado y se creó uno nuevo con la fecha actualizada.</p>`,
+        messageType: "comment",
       });
       acciones.push("Turno anterior cancelado");
 
@@ -154,13 +156,17 @@ export class ReprogramarTurnoTool
       }
 
       // 4. Registrar en nuevo turno
-      await this.odooClient.execute("salon.turno", "message_post", [[nuevoTurnoId]], {
+      await this.odooClient.postMessageToChatter({
+        model: "salon.turno",
+        resId: nuevoTurnoId,
         body: `<p><strong>🔄 Turno creado por reprogramación</strong></p>
-               <p>Turno original: #${turnoId}</p>
-               <p>Fecha anterior: ${fechaHoraAnteriorAR}</p>
-               <p>Nueva fecha: ${nuevaFechaHora}</p>
-               <p>Motivo: ${params.motivo}</p>`,
-        message_type: "comment",
+          <ul>
+            <li>Turno original: #${turnoId}</li>
+            <li>Fecha anterior: ${fechaHoraAnteriorAR}</li>
+            <li>Nueva fecha: ${nuevaFechaHora}</li>
+            <li>Motivo: ${params.motivo}</li>
+          </ul>`,
+        messageType: "comment",
       });
     }
 
@@ -271,10 +277,19 @@ export class ReprogramarTurnoTool
 
             // 2c. Registrar en chatter del Lead
             try {
-              await this.odooClient.execute("crm.lead", "message_post", [[leadId]], {
-                body: `<p><strong>🔄 Turno reprogramado</strong></p><p><strong>Clienta:</strong> ${turno.clienta}</p><p><strong>Servicio:</strong> ${servicioDisplay}</p><p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p><p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p><p><strong>Motivo:</strong> ${params.motivo}</p>`,
-                message_type: "comment",
-                subtype_xmlid: "mail.mt_note",
+              await this.odooClient.postMessageToChatter({
+                model: "crm.lead",
+                resId: leadId,
+                body: `<p><strong>🔄 Turno reprogramado</strong></p>
+                  <ul>
+                    <li><strong>Clienta:</strong> ${turno.clienta}</li>
+                    <li><strong>Servicio:</strong> ${servicioDisplay}</li>
+                    <li><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</li>
+                    <li><strong>Nueva fecha:</strong> ${nuevaFechaHora}</li>
+                    <li><strong>Motivo:</strong> ${params.motivo}</li>
+                  </ul>
+                  <p><em>Sistema automatizado Leonobitech</em></p>`,
+                messageType: "comment",
               });
               acciones.push("Mensaje registrado en chatter del Lead");
             } catch (msgError) {
@@ -336,10 +351,17 @@ export class ReprogramarTurnoTool
       }
 
       // 4. Registrar en chatter del turno
-      await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
-        body: `<p><strong>🔄 Turno reprogramado</strong></p><p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p><p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p><p><strong>Motivo:</strong> ${params.motivo}</p><p><strong>Acciones:</strong> ${acciones.join(", ")}</p>`,
-        message_type: "comment",
-        subtype_xmlid: "mail.mt_note",
+      await this.odooClient.postMessageToChatter({
+        model: "salon.turno",
+        resId: turnoId,
+        body: `<p><strong>🔄 Turno reprogramado</strong></p>
+          <ul>
+            <li><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</li>
+            <li><strong>Nueva fecha:</strong> ${nuevaFechaHora}</li>
+            <li><strong>Motivo:</strong> ${params.motivo}</li>
+            <li><strong>Acciones:</strong> ${acciones.join(", ")}</li>
+          </ul>`,
+        messageType: "comment",
       });
     }
 
