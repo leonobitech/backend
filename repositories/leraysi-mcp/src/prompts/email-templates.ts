@@ -586,7 +586,7 @@ function turnoConfirmadoSimpleTemplate(data: TurnoConfirmadoData) {
     <!-- Success Banner -->
     <div style="text-align: center; margin-bottom: 30px;">
       <div style="display: inline-block; background-color: #d1fae5; color: #065f46; padding: 12px 30px; border-radius: 50px; font-weight: 600; font-size: 18px;">
-        ✅ ¡Tu turno está confirmado!
+        ✅ Pago de Seña Confirmado
       </div>
     </div>
 
@@ -594,12 +594,12 @@ function turnoConfirmadoSimpleTemplate(data: TurnoConfirmadoData) {
       Hola <strong>${data.clienta}</strong>,
     </p>
     <p style="margin: 0 0 25px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-      ¡Gracias por tu pago! Tu turno ha sido confirmado exitosamente.
+      ¡Gracias por tu pago! Tu seña ha sido registrada exitosamente y tu turno está reservado.
     </p>
 
-    <!-- Card 1: Detalles del Turno -->
+    <!-- Card 1: Detalles del Turno Reservado -->
     <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 25px; margin: 25px 0; border-radius: 12px; color: #ffffff;">
-      <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600; text-align: center;">📅 Detalles del Turno</h3>
+      <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600; text-align: center;">📅 Detalles del Turno Reservado</h3>
       <table width="100%" style="border-collapse: collapse;">
         <tr>
           <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">💇‍♀️ Servicio:</td>
@@ -722,7 +722,7 @@ function turnoConfirmadoDetailedTemplate(data: TurnoConfirmadoData) {
     <!-- Success Banner -->
     <div style="text-align: center; margin-bottom: 30px;">
       <div style="display: inline-block; background-color: #d1fae5; color: #065f46; padding: 12px 30px; border-radius: 50px; font-weight: 600; font-size: 18px;">
-        ✅ ¡Tu turno está confirmado!
+        ✅ Pago de Seña Confirmado
       </div>
     </div>
 
@@ -730,12 +730,12 @@ function turnoConfirmadoDetailedTemplate(data: TurnoConfirmadoData) {
       Hola <strong>${data.clienta}</strong>,
     </p>
     <p style="margin: 0 0 25px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-      ¡Gracias por tu pago! Tu turno ha sido confirmado exitosamente. A continuación encontrarás los detalles de tu reserva.
+      ¡Gracias por tu pago! Tu seña ha sido registrada exitosamente y tu turno está reservado. A continuación encontrarás los detalles de tu reserva.
     </p>
 
-    <!-- Card 1: Detalles del Turno -->
+    <!-- Card 1: Detalles del Turno Reservado -->
     <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 25px; margin: 25px 0; border-radius: 12px; color: #ffffff;">
-      <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600; text-align: center;">📅 Detalles del Turno</h3>
+      <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600; text-align: center;">📅 Detalles del Turno Reservado</h3>
       <table width="100%" style="border-collapse: collapse;">
         <tr>
           <td style="padding: 12px 0; font-size: 14px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">👤 Nombre:</td>
@@ -878,7 +878,7 @@ function vendorNotificacionSimpleTemplate(data: VendorNotificacionData) {
 
     <!-- Turno Info -->
     <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 20px; margin: 20px 0; border-radius: 10px; color: #ffffff;">
-      <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; text-align: center;">📅 Turno Confirmado</h3>
+      <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; text-align: center;">📅 Detalles del Turno Reservado</h3>
       <table width="100%" style="border-collapse: collapse;">
         <tr>
           <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">👤 Clienta:</td>
@@ -999,7 +999,7 @@ function vendorNotificacionDetailedTemplate(data: VendorNotificacionData) {
 
     <!-- Card 1: Turno Info -->
     <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%); padding: 20px; margin: 20px 0; border-radius: 10px; color: #ffffff;">
-      <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; text-align: center;">📅 Turno Confirmado</h3>
+      <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; text-align: center;">📅 Detalles del Turno Reservado</h3>
       <table width="100%" style="border-collapse: collapse;">
         <tr>
           <td style="padding: 8px 0; font-size: 13px; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.2);">👤 Clienta:</td>

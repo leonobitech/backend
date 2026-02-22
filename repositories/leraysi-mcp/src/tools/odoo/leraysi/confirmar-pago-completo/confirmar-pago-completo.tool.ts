@@ -530,7 +530,7 @@ export class ConfirmarPagoCompletoTool
 
         // Crear email con adjunto
         const mailValues: Record<string, any> = {
-          subject: `Turno Confirmado - Estilos Leraysi${invoiceName ? ` - ${invoiceName}` : ""}`,
+          subject: `Pago de Seña Confirmado - Estilos Leraysi${invoiceName ? ` - ${invoiceName}` : ""}`,
           body_html: emailHtml,
           email_to: emailToUse,
           auto_delete: false,
