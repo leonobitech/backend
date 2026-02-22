@@ -1309,9 +1309,9 @@ services:
       - "traefik.http.routers.chatwoot-cable.middlewares=ws-safe@file"
 
       #########################################
-      # 🟢 RUTA EXCEPCIÓN PARA WEBHOOK DE WHATSAPP
+      # 🟢 RUTA EXCEPCIÓN PARA WEBHOOKS (WhatsApp + Telegram)
       #########################################
-      - "traefik.http.routers.chatwoot-webhook.rule=Host(`chat.leonobitech.com`) && PathPrefix(`/webhooks/whatsapp`)"
+      - "traefik.http.routers.chatwoot-webhook.rule=Host(`chat.leonobitech.com`) && (PathPrefix(`/webhooks/whatsapp`) || PathPrefix(`/webhooks/telegram`))"
       - "traefik.http.routers.chatwoot-webhook.entrypoints=websecure"
       - "traefik.http.routers.chatwoot-webhook.tls.certresolver=le"
       - "traefik.http.routers.chatwoot-webhook.service=chatwoot"
