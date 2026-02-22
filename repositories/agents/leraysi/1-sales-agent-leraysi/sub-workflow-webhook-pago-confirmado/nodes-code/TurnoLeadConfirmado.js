@@ -15,7 +15,7 @@ const turno = $('ActualizarTurnoPagado').first().json;
 const webhook = $('WebhookPagoConfirmado').first().json;
 
 // ============================================================================
-// EXTRAER DATOS DEL TURNO
+// EXTRAER DATOS DEL TURNO (Baserow)
 // ============================================================================
 
 // Servicios como string
@@ -53,15 +53,55 @@ function getNombreDia(fechaISO) {
   return dias[fecha.getDay()];
 }
 
+// Formatear duración en texto legible
+function formatearDuracion(minutos) {
+  if (!minutos || minutos <= 0) return null;
+  const horas = Math.floor(minutos / 60);
+  const mins = minutos % 60;
+  if (horas === 0) return `${mins} min`;
+  if (mins === 0) return horas === 1 ? '1 hora' : `${horas} horas`;
+  return `${horas}h ${mins}min`;
+}
+
+// Formatear monto en pesos argentinos
+function formatearMonto(monto) {
+  return (monto || 0).toLocaleString('es-AR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  });
+}
+
 const fechaLegible = formatearFechaLegible(fechaTurno);
 const nombreDia = getNombreDia(fechaTurno);
+const nombreDiaCap = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1);
 
-// Datos de pago
+// Duración desde Baserow (minutos)
+const duracionMin = parseInt(turno.duracion_min) || 0;
+const duracionTexto = formatearDuracion(duracionMin);
+
+// ============================================================================
+// EXTRAER DATOS DE PAGO (MCP result vía webhook)
+// ============================================================================
+
+// MCP data: webhook.body.mcp.data (estructura real del endpoint /internal/mcp/call-tool)
+const mcpData = webhook.body?.mcp?.data || webhook.body?.mcp || {};
+const pagos = mcpData.pagos || {};
+
+// Precio total desde Baserow (fuente de verdad para precio)
+const precioTotal = parseFloat(turno.precio) || 0;
+
+// Seña recién pagada (monto de este pago)
 const senaMontoNum = parseFloat(turno.sena_monto) || 0;
-const senaMonto = senaMontoNum.toLocaleString('es-AR', {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0
-});
+
+// Datos acumulados del MCP (si están disponibles)
+const totalPagado = pagos.total_pagado || senaMontoNum;
+const cantidadPagos = pagos.cantidad_pagos || 1;
+const pendienteRestante = pagos.pendiente_restante != null
+  ? pagos.pendiente_restante
+  : Math.max(0, precioTotal - totalPagado);
+
+// URL de confirmación de asistencia
+const calendarAcceptUrl = mcpData.calendar_accept_url || null;
 
 // ============================================================================
 // CONSTRUIR MENSAJE PARA LA CLIENTA
@@ -70,14 +110,52 @@ const senaMonto = senaMontoNum.toLocaleString('es-AR', {
 const nombreClienta = lead.full_name || turno.nombre_clienta?.[0]?.value || 'clienta';
 const primerNombre = nombreClienta.split(' ')[0];
 
-const mensajeContent = `⋆˚🧚‍♀️ ¡${primerNombre}, tu pago de $${senaMonto} fue recibido! ✨
+// Card 1: Turno Reservado
+let mensajeContent = `⋆˚🧚‍♀️ ¡${primerNombre}, tu pago fue recibido! ✨
 
-✅ *Turno confirmado*
-📅 ${nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)} ${fechaLegible}
-🕐 ${horaTurno} hs
-💇 ${servicios}
+━━━━━━━━━━━━━━━━━━
+  📅 *Turno Reservado*
+━━━━━━━━━━━━━━━━━━
 
-¡Te esperamos en Estilos Leraysi! 💅`;
+💇 *Servicio:* ${servicios}
+📆 *Fecha:* ${nombreDiaCap} ${fechaLegible}
+🕐 *Hora:* ${horaTurno} hs`;
+
+if (duracionTexto) {
+  mensajeContent += `\n⏱️ *Duración:* ${duracionTexto}`;
+}
+
+mensajeContent += `\n📍 *Dirección:* Yerbal 513, CABA`;
+
+// Card 2: Detalle de Pago
+mensajeContent += `
+
+━━━━━━━━━━━━━━━━━━
+  💰 *Detalle de Pago*
+━━━━━━━━━━━━━━━━━━
+
+✅ *Seña pagada:* $${formatearMonto(totalPagado)}
+💲 *Precio total:* $${formatearMonto(precioTotal)}`;
+
+if (pendienteRestante > 0) {
+  mensajeContent += `\n📌 *Pendiente:* $${formatearMonto(pendienteRestante)}`;
+} else {
+  mensajeContent += `\n✨ *Pago completo*`;
+}
+
+// Link de confirmación de asistencia
+if (calendarAcceptUrl) {
+  mensajeContent += `
+
+━━━━━━━━━━━━━━━━━━
+
+👉 *Confirmá tu asistencia:*
+${calendarAcceptUrl}`;
+}
+
+mensajeContent += `
+
+¡Te esperamos en *Estilos Leraysi*! 💅`;
 
 // ============================================================================
 // CONSTRUIR NOTA ACTUALIZADA
@@ -190,7 +268,7 @@ return [{
     // Metadata
     meta: {
       timestamp: new Date().toISOString(),
-      version: 'leraysi-pago-confirmado@1.0',
+      version: 'leraysi-pago-confirmado@2.0',
       turno_id: turno.id,
       odoo_turno_id: turno.odoo_turno_id,
       mp_payment_id: turno.mp_payment_id

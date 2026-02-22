@@ -349,6 +349,29 @@ export class ConfirmarPagoCompletoTool
     }
 
     // =========================================================================
+    // PASO 5b: Obtener URL de confirmación de asistencia del calendario
+    // =========================================================================
+    let calendarAcceptUrl: string | null = null;
+    try {
+      if (eventId && partnerId) {
+        const attendees = await this.odooClient.search("calendar.attendee", [
+          ["event_id", "=", eventId],
+          ["partner_id", "=", partnerId],
+        ], { fields: ["access_token"], limit: 1 });
+
+        if (attendees.length > 0 && attendees[0].access_token) {
+          const baseUrl = await this.odooClient.execute(
+            "ir.config_parameter", "get_param", ["web.base.url"]
+          );
+          calendarAcceptUrl = `${baseUrl}/calendar/meeting/accept?token=${attendees[0].access_token}&id=${eventId}`;
+          logger.info({ calendarAcceptUrl }, "[ConfirmarPagoCompleto] Calendar accept URL generated");
+        }
+      }
+    } catch (error) {
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not get calendar accept URL");
+    }
+
+    // =========================================================================
     // PASO 6: Crear o actualizar factura en account.move (módulo contabilidad Odoo)
     // Si existe una factura borrador para este turno, agregar línea en vez de crear nueva
     // =========================================================================
@@ -662,6 +685,9 @@ export class ConfirmarPagoCompletoTool
       "[ConfirmarPagoCompleto] Completed"
     );
 
+    // Calcular pendiente restante después de este pago
+    const pendienteRestante = Math.max(0, (turno.precio || 0) - totalPagadoAcumulado);
+
     return {
       success: true,
       turno: {
@@ -673,9 +699,19 @@ export class ConfirmarPagoCompletoTool
         servicio_detalle: turno.servicio_detalle || null,
         fecha_hora: turno.fecha_hora,
         precio: turno.precio,
+        duracion: turno.duracion,
         sena: montoPagado,
         estado: "confirmado",
       },
+      // Datos acumulados de pago
+      pagos: {
+        total_pagado: totalPagadoAcumulado,
+        cantidad_pagos: pagosInfo.length,
+        pendiente_restante: pendienteRestante,
+        detalle: pagosInfo,
+      },
+      // URL de confirmación de asistencia
+      calendar_accept_url: calendarAcceptUrl,
       partner_id: partnerId,
       event_id: eventId,
       activity_id: activityId,

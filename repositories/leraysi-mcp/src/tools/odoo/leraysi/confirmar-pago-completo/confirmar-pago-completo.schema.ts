@@ -46,9 +46,26 @@ export interface ConfirmarPagoCompletoResponse {
     servicio_detalle: string | null;
     fecha_hora: string;
     precio: number;
+    duracion: number;
     sena: number;
     estado: string;
   };
+
+  // Datos acumulados de pago
+  pagos: {
+    total_pagado: number;
+    cantidad_pagos: number;
+    pendiente_restante: number;
+    detalle: Array<{
+      mp_payment_id: string;
+      monto: number;
+      tipo: string;
+      descripcion: string;
+    }>;
+  };
+
+  // URL de confirmación de asistencia al calendario
+  calendar_accept_url: string | null;
 
   // IDs creados/actualizados
   partner_id: number;
