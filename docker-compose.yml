@@ -1316,8 +1316,8 @@ services:
       - "traefik.http.routers.chatwoot-webhook.tls.certresolver=le"
       - "traefik.http.routers.chatwoot-webhook.service=chatwoot"
       - "traefik.http.routers.chatwoot-webhook.priority=100"
-      # ⚠️ sin middleware de auth, solo opcionalmente uno de seguridad básica
-      - "traefik.http.routers.chatwoot-webhook.middlewares=webhook-open@file"
+      # 🛡️ Sin ForwardAuth, pero con rate-limit + headers básicos
+      - "traefik.http.routers.chatwoot-webhook.middlewares=rate-limit-strict@file,webhook-open@file"
 
       #########################################
       # 📎 RUTA PÚBLICA PARA ACTIVE STORAGE (WhatsApp media)
