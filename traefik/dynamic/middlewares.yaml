@@ -33,6 +33,7 @@ http:
         addAuthCookiesToResponse:
           - "accessKey"
           - "clientKey"
+          - "clientMeta"
 
     # -------------------------------------------------------------------------
     # 🔐 User Auth – delegates to Core but only requires authenticated user (not admin)
@@ -50,6 +51,7 @@ http:
         addAuthCookiesToResponse:
           - "accessKey"
           - "clientKey"
+          - "clientMeta"
 
     # 🔒 APIs: sin cache + aisladas por sesión
     api-nostore-vary:

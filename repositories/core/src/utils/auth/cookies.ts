@@ -10,7 +10,7 @@ export const AUTH_COOKIE_PATH = "/";
 
 // 🧱 Configuración base para todas las cookies de autenticación
 const baseCookieOptions: CookieOptions = {
-  sameSite: "lax", // ✅ ← "lax" permite Set-Cookie same-site (www↔core). Cross-origin reads se manejan via proxy server-side.
+  sameSite: "strict", // ✅ ← "strict" máxima protección. Todos los servicios son subdominios de leonobitech.com (same-site).
   httpOnly: true,
   secure: true,
   domain: ".leonobitech.com", // ✅ ← Punto inicial para compartir entre TODOS los subdominios (www, core, etc)
@@ -39,7 +39,7 @@ export const clientKeyCookieOptions = (): CookieOptions => ({
 const clearCookieOptions: CookieOptions = {
   domain: ".leonobitech.com",
   path: AUTH_COOKIE_PATH,
-  sameSite: "lax",
+  sameSite: "strict",
   httpOnly: true,
   secure: true,
 };
