@@ -27,7 +27,9 @@ const serviciosLista = turno.servicio.map(s => s.value);
 
 // Fecha y hora del turno
 const fechaTurno = turno.fecha ? turno.fecha.split('T')[0] : null;
-const horaTurno = turno.hora || '09:00';
+// Normalizar hora a HH:MM (Baserow puede enviar HH:MM:SS)
+const horaTurnoRaw = turno.hora || '09:00';
+const horaTurno = horaTurnoRaw.split(':').slice(0, 2).join(':');
 
 // Construir fecha completa para turno_fecha (ISO 8601)
 let turnoFechaISO = null;
