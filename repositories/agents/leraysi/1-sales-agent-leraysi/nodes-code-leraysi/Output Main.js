@@ -363,9 +363,10 @@ const baserowUpdate = {
     if (!tf) return null;
     // Si ya es ISO UTC (contiene T y Z), pasar directo
     if (tf.includes('T') && tf.includes('Z')) return tf;
-    // Convertir hora Argentina → UTC para Baserow (formato "YYYY-MM-DD HH:MM" o "YYYY-MM-DDTHH:MM:SS")
-    const normalized = tf.includes('T') ? tf : tf.replace(' ', 'T');
-    const withSeconds = normalized.includes(':') && normalized.split(':').length < 3 ? normalized + ':00' : normalized;
+    // Convertir hora Argentina → UTC para Baserow
+    // "YYYY-MM-DD" → agregar T00:00:00 | "YYYY-MM-DD HH:MM" → T | ya tiene T → dejar
+    const normalized = tf.includes('T') ? tf : (tf.includes(' ') ? tf.replace(' ', 'T') : `${tf}T00:00:00`);
+    const withSeconds = normalized.split(':').length < 3 ? normalized + ':00' : normalized;
     const d = new Date(`${withSeconds}-03:00`);
     return isNaN(d.getTime()) ? tf : d.toISOString();
   })(),
