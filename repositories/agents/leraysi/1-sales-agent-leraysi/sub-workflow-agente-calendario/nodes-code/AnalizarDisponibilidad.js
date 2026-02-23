@@ -76,6 +76,12 @@ turnos.forEach(turno => {
   const estado = turno.estado?.value || turno.estado || '';
   if (estado === 'cancelado' || estado === 'expirado') return;
 
+  // Filtrar pendiente_pago con hold vencido (slot libre en tiempo real)
+  if (estado === 'pendiente_pago' && turno.expira_at) {
+    const expiraAt = new Date(turno.expira_at);
+    if (expiraAt < new Date()) return;
+  }
+
   inicializarDia(fecha);
 
   const trabajadora = turno.trabajadora?.value || turno.trabajadora || 'Leraysi';

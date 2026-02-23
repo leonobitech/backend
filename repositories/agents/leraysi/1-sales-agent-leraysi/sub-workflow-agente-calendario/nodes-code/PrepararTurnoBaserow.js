@@ -15,7 +15,7 @@ const data = $input.first().json;
 // CONFIGURACIÓN
 // ============================================================================
 const CONFIG = {
-  expiracion_minutos: 120, // 2 horas para pagar la seña
+  expiracion_minutos: 15, // 15 minutos para pagar la sena
 };
 
 // Calcular timestamps

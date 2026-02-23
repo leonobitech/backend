@@ -1,6 +1,7 @@
 import logging
 import requests
 import base64
+from datetime import timedelta
 from odoo import models, fields, api
 from odoo.exceptions import UserError
 
@@ -259,6 +260,9 @@ class SalonTurno(models.Model):
                 'pending': f'{self.env["ir.config_parameter"].sudo().get_param("web.base.url")}/salon_turnos/pago/pendiente',
             },
             'auto_return': 'approved',
+            # Expirar link en 15 minutos — MP rechaza pagos despues de esto
+            'expiration_date_from': fields.Datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000-03:00'),
+            'expiration_date_to': (fields.Datetime.now() + timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%M:%S.000-03:00'),
         }
 
         try:
