@@ -15,13 +15,12 @@ const params = typeof raw.query === 'string'
 // Validar campos requeridos
 const required = [
   'clienta',
-  'telefono',
   'email',
   'servicio',
   'servicio_detalle',
   'fecha_hora',
   'precio',
-  'duracion',
+  'duracion_estimada',
   'lead_id'
 ];
 const missing = required.filter(f => !params[f]);
@@ -30,20 +29,21 @@ if (missing.length > 0) {
   throw new Error(`[leraysi_crear_turno] Faltantes: ${missing.join(', ')}`);
 }
 
-// Construir arguments (todos requeridos)
+// Construir arguments (requeridos + opcionales)
 const args = {
   clienta: params.clienta,
-  telefono: params.telefono,
   email: params.email,
   servicio: params.servicio,
   servicio_detalle: params.servicio_detalle,
   fecha_hora: params.fecha_hora,
   precio: Number(params.precio),
-  duracion: Number(params.duracion),
+  duracion_estimada: Number(params.duracion_estimada || params.duracion),
+  complejidad_maxima: params.complejidad_maxima || 'media',
   lead_id: Number(params.lead_id)
 };
 
-// Campo opcional
+// Campos opcionales
+if (params.telefono) args.telefono = params.telefono;
 if (params.notas) args.notas = params.notas;
 
 // Output para MCP

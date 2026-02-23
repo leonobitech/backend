@@ -168,7 +168,7 @@ function algunServicioRequiereLargo(servicios) {
 const modoConsulta = input.modo === 'consultar_disponibilidad';
 const camposRequeridos = modoConsulta
   ? ['servicio', 'fecha_deseada']
-  : ['clienta_id', 'nombre_clienta', 'telefono', 'servicio', 'fecha_deseada'];
+  : ['clienta_id', 'nombre_clienta', 'servicio', 'fecha_deseada'];
 const camposFaltantes = camposRequeridos.filter(campo => !input[campo]);
 
 if (camposFaltantes.length > 0) {
