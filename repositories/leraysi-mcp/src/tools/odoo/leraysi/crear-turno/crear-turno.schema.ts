@@ -3,7 +3,7 @@ import { z } from "zod";
 export const crearTurnoSchema = z.object({
   // === Campos obligatorios ===
   clienta: z.string().min(1, "Nombre de la clienta es requerido"),
-  telefono: z.string().min(1, "Teléfono es requerido"),
+  telefono: z.string().min(1).optional(),
   email: z.string().email("Email inválido").min(1, "Email es requerido para enviar confirmación"),
   servicio: z.enum([
     "corte_mujer",
