@@ -357,12 +357,12 @@ if (modo === 'consultar_disponibilidad') {
     for (const dia of diasBusqueda) {
       if (candidatos.length >= 9) break; // suficientes candidatos
 
-      // Obtener turnos del día con sus bloques de tiempo
+      // Turnos del día (solo para scoring de adyacencia, NO bloquean slots)
+      // Leraysi atiende en paralelo: la CAPACIDAD por complejidad + carga diaria controlan el límite
       const turnosDelDia = (turnosPorDia[dia.fecha]?.turnos || []).map(t => {
         const horaStr = t.hora || '09:00';
         const startMin = horaToMinutos(horaStr);
-        const dur = Number(t.duracion_min) || 60;
-        return { start: startMin, end: startMin + dur };
+        return { start: startMin };
       });
 
       // Generar slots disponibles
@@ -371,9 +371,9 @@ if (modo === 'consultar_disponibilidad') {
 
         // Hoy ya está excluido en diasBusqueda (regla de negocio: mínimo mañana)
 
-        // Verificar que no solape con ningún turno existente
-        const solapa = turnosDelDia.some(o => start < o.end && end > o.start);
-        if (solapa) continue;
+        // Verificar que la carga total del día no exceda la jornada
+        const cargaConNuevoTurno = ((dia.duracion_total_min + duracionServicio) / 600) * 100;
+        if (cargaConNuevoTurno > 100) continue; // No exceder jornada total (600 min)
 
         // Puntuar el slot
         let score = 0;
@@ -399,12 +399,12 @@ if (modo === 'consultar_disponibilidad') {
           if (motivo === 'Horario disponible') motivo = 'Disponible por la tarde';
         }
 
-        // +3 si está adyacente a otro turno (pack calendar)
+        // +3 si está cerca de otro turno (pack calendar)
         if (turnosDelDia.length > 0) {
           const minGap = Math.min(...turnosDelDia.map(o =>
-            Math.min(Math.abs(start - o.end), Math.abs(o.start - end))
+            Math.abs(start - o.start)
           ));
-          if (minGap <= 30) score += 3;
+          if (minGap <= 60) score += 3;
         }
 
         // +2 si el día tiene baja carga
