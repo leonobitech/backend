@@ -42,17 +42,20 @@ if (slots.length > 0) {
   // Hay opciones disponibles
   accion = 'opciones_disponibles';
 
-  const esJornadaCompleta = data.jornada_completa || slots.some(s => s.jornada_completa);
+  const esJornadaCompleta = slots.some(s => s.duracion_min >= 600);
 
   const opcionesTexto = slots.map(s => {
-    if (s.jornada_completa) {
-      return `* ${s.fecha_humana} - jornada completa (${s.hora} a ${s.hora_fin})`;
+    if (s.en_proceso) {
+      return `* ${s.fecha_humana} a las ${s.hora_inicio} (aprovechando tiempo de proceso)`;
     }
-    return `* ${s.fecha_humana} a las ${s.hora}`;
+    if (s.duracion_min >= 600) {
+      return `* ${s.fecha_humana} - jornada completa (${s.hora_inicio} a ${s.hora_fin})`;
+    }
+    return `* ${s.fecha_humana} a las ${s.hora_inicio}`;
   }).join('\n');
 
   if (esJornadaCompleta) {
-    mensajeParaClienta = `${nombreClienta}, como ${servicioDisplay.toLowerCase()} es una combinación extensa, necesitamos una jornada completa. Tengo disponibles estos días:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
+    mensajeParaClienta = `${nombreClienta}, como ${servicioDisplay.toLowerCase()} es un servicio extenso, necesitamos una jornada completa. Tengo disponibles estos días:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
   } else {
     mensajeParaClienta = `${nombreClienta}, para ${servicioDisplay.toLowerCase()} tengo estos horarios:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
   }

@@ -198,6 +198,7 @@ return [
         fecha_hora_completa: fechaHoraCompleta,
         fecha_humana: fechaHumana,
         servicio_display: servicioDisplay,
+        trabajadora: (data.opciones || data.slots_recomendados || [])[0]?.trabajadora || data.turno_trabajadora_existente || 'Leraysi',
       },
     },
   },

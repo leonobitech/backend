@@ -1,238 +1,372 @@
 // ============================================================================
-// ANALIZAR DISPONIBILIDAD - Agente Calendario Leraysi
+// ANALIZAR DISPONIBILIDAD - Agente Calendario Leraysi v2
 // ============================================================================
 // INPUT: ParseInput (datos del turno) + GetTurnosSemana (turnos existentes)
-// OUTPUT: Disponibilidad calculada + alternativas pre-calculadas si no hay cupo
+// OUTPUT: Opciones disponibles con trabajadora asignada
+// ============================================================================
+// MODELO: 2 trabajadoras (A, B), bloques activos continuos,
+// servicios muy_compleja con 3 fases (activo_inicio + proceso + activo_fin).
+// Durante la fase de proceso la trabajadora queda LIBRE para atender otras clientas.
 // ============================================================================
 
-// Obtener turnos (puede ser array vacío)
 const turnosRaw = $('GetTurnosSemana').all();
 const turnos = turnosRaw.length > 0 ? turnosRaw.map(item => item.json) : [];
-
 const input = $('ParseInput').first().json;
 
-// Complejidad del turno solicitado (para filtrar capacidad por día)
-const complejidadSolicitada = input.complejidad_maxima || 'media';
+// ============================================================================
+// CONSTANTES
+// ============================================================================
+const JORNADA_INICIO = 540;   // 09:00 en minutos desde medianoche
+const JORNADA_FIN = 1140;     // 19:00 en minutos desde medianoche
+const TRABAJADORAS = ['Leraysi', 'Compañera'];
+const STEP = 15;              // Granularidad de búsqueda en minutos
 
-// Configuración de capacidad máxima por día según complejidad
-// Horario: 9am-7pm (10 horas disponibles)
-const CAPACIDAD = {
-  max_muy_compleja: 2,  // Servicios muy complejos (Alisados, Balayage, Mechas, Tintura completa)
-  max_compleja: 3,      // Servicios complejos (Tintura raíz, Manicura semipermanente)
-  max_media: 4,         // Servicios medios (Corte, Manicura simple, Pedicura, Depilación cera/láser piernas)
-  max_simple: 5,        // Servicios simples (Depilación axilas, bikini)
-  max_turnos_dia: 8     // Máximo absoluto de turnos por día
-};
+// Fases estándar para todos los servicios muy_compleja
+const FASES_MUY_COMPLEJA = { activo_inicio: 180, proceso: 300, activo_fin: 120 };
 
-// Agrupar turnos por fecha
-const turnosPorDia = {};
+// ============================================================================
+// HELPERS
+// ============================================================================
+function horaToMinutos(horaStr) {
+  if (!horaStr) return JORNADA_INICIO;
+  const parts = horaStr.split(':');
+  return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');
+}
+
+function minutosToHora(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+// Detectar solapamiento entre dos intervalos [a1,a2) y [b1,b2)
+function solapan(a1, a2, b1, b2) {
+  return a1 < b2 && b1 < a2;
+}
+
+const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const diasNombre = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+// ============================================================================
+// PASO 1: CONSTRUIR BLOQUES ACTIVOS POR TRABAJADORA POR DÍA
+// ============================================================================
+// Para cada turno existente en Baserow, calcular sus bloques de tiempo activo:
+//   - muy_compleja: DOS bloques [inicio, inicio+180] y [inicio+480, inicio+600]
+//   - Otros: UN bloque continuo [inicio, inicio+duracion]
+// Turnos sin campo "trabajadora" se asignan a "A" por defecto (legacy).
+
+const bloquesPorDiaTrabajadora = {};  // { "2026-02-24": { "A": [...], "B": [...] } }
+const ventanasProcesoPorDia = {};     // { "2026-02-24": [{ trabajadora, inicio, fin, turno_id }] }
+
+function inicializarDia(fecha) {
+  if (!bloquesPorDiaTrabajadora[fecha]) {
+    bloquesPorDiaTrabajadora[fecha] = { 'A': [], 'B': [] };
+    ventanasProcesoPorDia[fecha] = [];
+  }
+}
 
 turnos.forEach(turno => {
   const fecha = turno.fecha?.split('T')[0];
   if (!fecha) return;
 
-  if (!turnosPorDia[fecha]) {
-    turnosPorDia[fecha] = {
-      fecha,
-      turnos: [],
-      count_total: 0,
-      count_simple: 0,
-      count_media: 0,
-      count_compleja: 0,
-      count_muy_compleja: 0,
-      duracion_total: 0
-    };
-  }
+  // Filtrar estados inválidos
+  const estado = turno.estado?.value || turno.estado || '';
+  if (estado === 'cancelado' || estado === 'expirado') return;
 
-  turnosPorDia[fecha].turnos.push(turno);
-  turnosPorDia[fecha].count_total++;
-  turnosPorDia[fecha].duracion_total += Number(turno.duracion_min) || 0;
+  inicializarDia(fecha);
 
-  // Usar complejidad_maxima del turno (campo unificado con ParseInput)
+  const trabajadora = turno.trabajadora?.value || turno.trabajadora || 'Leraysi';
+  const horaInicio = horaToMinutos(turno.hora || '09:00');
+  const duracion = Number(turno.duracion_min) || 60;
   const complejidad = turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';
-  if (complejidad === 'simple') turnosPorDia[fecha].count_simple++;
-  else if (complejidad === 'media') turnosPorDia[fecha].count_media++;
-  else if (complejidad === 'compleja') turnosPorDia[fecha].count_compleja++;
-  else if (complejidad === 'muy_compleja') turnosPorDia[fecha].count_muy_compleja++;
+
+  if (complejidad === 'muy_compleja') {
+    // 3 fases: activo_inicio (180min) + proceso (300min) + activo_fin (120min)
+    const ai = FASES_MUY_COMPLEJA.activo_inicio;
+    const pr = FASES_MUY_COMPLEJA.proceso;
+    const af = FASES_MUY_COMPLEJA.activo_fin;
+
+    bloquesPorDiaTrabajadora[fecha][trabajadora].push(
+      { start: horaInicio, end: horaInicio + ai },
+      { start: horaInicio + ai + pr, end: horaInicio + ai + pr + af }
+    );
+
+    // Registrar ventana de proceso (trabajadora LIBRE durante este tiempo)
+    ventanasProcesoPorDia[fecha].push({
+      trabajadora,
+      inicio: horaInicio + ai,
+      fin: horaInicio + ai + pr,
+      turno_id: turno.odoo_turno_id || turno.id
+    });
+  } else {
+    // Bloque continuo
+    bloquesPorDiaTrabajadora[fecha][trabajadora].push({
+      start: horaInicio,
+      end: horaInicio + duracion
+    });
+  }
 });
 
-// Generar próximos 30 días con disponibilidad (cobertura de 1 mes)
-const dias = [];
+// ============================================================================
+// PASO 2: GENERAR DÍAS DE BÚSQUEDA
+// ============================================================================
+// Próximos 30 días, excluir domingos y hoy (regla de negocio: mínimo mañana)
 const hoy = new Date();
+const ahoraArgentina = new Date(hoy.getTime() - 3 * 60 * 60 * 1000);
+const hoyStr = ahoraArgentina.toISOString().split('T')[0];
 
-for (let i = 0; i < 30; i++) {
+const diasDisponibles = [];
+for (let i = 1; i <= 30; i++) {
   const fecha = new Date(hoy);
   fecha.setDate(hoy.getDate() + i);
   const fechaStr = fecha.toISOString().split('T')[0];
-
   const diaSemana = fecha.getDay();
-  const nombreDia = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][diaSemana];
-
-  // Domingo cerrado
-  if (diaSemana === 0) {
-    dias.push({
-      fecha: fechaStr,
-      nombre_dia: nombreDia,
-      abierto: false,
-      disponible: false,
-      motivo: 'Cerrado'
-    });
-    continue;
-  }
-
-  const datosDia = turnosPorDia[fechaStr] || {
-    count_total: 0,
-    count_simple: 0,
-    count_media: 0,
-    count_compleja: 0,
-    count_muy_compleja: 0,
-    duracion_total: 0
-  };
-
-  // Verificar capacidad por nivel de complejidad
-  const puedeRecibirMuyCompleja = datosDia.count_muy_compleja < CAPACIDAD.max_muy_compleja;
-  const puedeRecibirCompleja = datosDia.count_compleja < CAPACIDAD.max_compleja;
-  const puedeRecibirMedia = datosDia.count_media < CAPACIDAD.max_media;
-  const puedeRecibirSimple = datosDia.count_simple < CAPACIDAD.max_simple;
-  const puedeRecibirMas = datosDia.count_total < CAPACIDAD.max_turnos_dia;
-
-  // Verificar capacidad para la complejidad del turno solicitado
-  let puedeRecibirEstaComplejidad = true;
-  if (complejidadSolicitada === 'muy_compleja') puedeRecibirEstaComplejidad = puedeRecibirMuyCompleja;
-  else if (complejidadSolicitada === 'compleja') puedeRecibirEstaComplejidad = puedeRecibirCompleja;
-  else if (complejidadSolicitada === 'media') puedeRecibirEstaComplejidad = puedeRecibirMedia;
-  else if (complejidadSolicitada === 'simple') puedeRecibirEstaComplejidad = puedeRecibirSimple;
-
-  // 600 minutos = 10 horas (9am-7pm)
-  const cargaPorcentaje = Math.round((datosDia.duracion_total / 600) * 100);
-
-  dias.push({
+  if (diaSemana === 0) continue; // Domingo cerrado
+  diasDisponibles.push({
     fecha: fechaStr,
-    nombre_dia: nombreDia,
-    abierto: true,
-    turnos_agendados: datosDia.count_total,
-    // Conteo por complejidad
-    muy_complejos_agendados: datosDia.count_muy_compleja,
-    complejos_agendados: datosDia.count_compleja,
-    medios_agendados: datosDia.count_media,
-    simples_agendados: datosDia.count_simple,
-    duracion_total_min: datosDia.duracion_total,
-    carga_porcentaje: cargaPorcentaje,
-    // Capacidad disponible por complejidad
-    puede_recibir_muy_compleja: puedeRecibirMuyCompleja,
-    puede_recibir_compleja: puedeRecibirCompleja,
-    puede_recibir_media: puedeRecibirMedia,
-    puede_recibir_simple: puedeRecibirSimple,
-    puede_recibir_turno: puedeRecibirMas,
-    disponible: puedeRecibirMas && puedeRecibirEstaComplejidad
+    nombre_dia: diasNombre[diaSemana],
+    fechaObj: fecha
   });
 }
 
 // ============================================================================
-// VERIFICAR DISPONIBILIDAD DEL DÍA SOLICITADO Y GENERAR ALTERNATIVAS
+// PASO 3: PARÁMETROS DEL NUEVO SERVICIO
 // ============================================================================
-// Extraer solo la fecha (sin hora) para comparación - soporta ISO con T o solo fecha
+const duracionNueva = input.duracion_estimada || 60;
+const complejidadNueva = input.complejidad_maxima || 'media';
+const esMuyCompleja = complejidadNueva === 'muy_compleja' && input.activo_inicio != null;
+
+const nuevoActivoInicio = input.activo_inicio || 0;
+const nuevoProceso = input.proceso || 0;
+const nuevoActivoFin = input.activo_fin || 0;
+
+// Fecha y hora deseadas
 const fechaSolicitadaRaw = input.fecha_deseada || '';
 const fechaSolicitada = fechaSolicitadaRaw.includes('T')
   ? fechaSolicitadaRaw.split('T')[0]
   : fechaSolicitadaRaw.split(' ')[0];
-const diaSolicitado = dias.find(d => d.fecha === fechaSolicitada);
+const horaDeseada = input.hora_deseada ? horaToMinutos(input.hora_deseada) : null;
+const preferenciaHorario = input.preferencia_horario || null;
 
-// Determinar si la fecha está disponible
-const fechaDisponible = diaSolicitado?.abierto && diaSolicitado?.disponible;
+// ============================================================================
+// PASO 4: FUNCIONES DE CÁLCULO DE BLOQUES
+// ============================================================================
 
-// Pre-calcular alternativas si el día NO está disponible
-let alternativas = [];
-let motivoNoDisponible = null;
-
-if (!fechaDisponible) {
-  // Determinar el motivo
-  if (!diaSolicitado) {
-    motivoNoDisponible = 'Fecha fuera de rango (solo se pueden agendar turnos en los próximos 30 días)';
-  } else if (!diaSolicitado.abierto) {
-    motivoNoDisponible = 'Cerrado (Domingo)';
-  } else if (!diaSolicitado.disponible) {
-    if (!diaSolicitado.puede_recibir_turno) {
-      motivoNoDisponible = `Agenda llena (${diaSolicitado.turnos_agendados} turnos, ${diaSolicitado.carga_porcentaje}% de capacidad)`;
-    } else {
-      motivoNoDisponible = `Sin capacidad para servicio ${complejidadSolicitada.replace('_', ' ')} (${diaSolicitado.turnos_agendados} turnos agendados)`;
-    }
+// Retorna los bloques activos que el nuevo servicio ocuparía si empieza en horaInicio
+function bloquesActivosNuevoServicio(horaInicio) {
+  if (esMuyCompleja) {
+    return [
+      { start: horaInicio, end: horaInicio + nuevoActivoInicio },
+      { start: horaInicio + nuevoActivoInicio + nuevoProceso, end: horaInicio + nuevoActivoInicio + nuevoProceso + nuevoActivoFin }
+    ];
   }
-
-  // Buscar los próximos 3 días disponibles como alternativas
-  alternativas = dias
-    .filter(d => d.abierto && d.disponible)
-    .slice(0, 3)
-    .map(d => ({
-      fecha: d.fecha,
-      nombre_dia: d.nombre_dia,
-      turnos_agendados: d.turnos_agendados,
-      carga_porcentaje: d.carga_porcentaje
-    }));
+  return [{ start: horaInicio, end: horaInicio + duracionNueva }];
 }
 
-// Resumen para el agente
-const resumen = dias
-  .filter(d => d.abierto)
-  .map(d => {
-    let estado = '';
-    if (!d.disponible) estado = '❌ Lleno';
-    else if (d.carga_porcentaje >= 70) estado = '⚠️ Casi lleno';
-    else if (d.carga_porcentaje >= 40) estado = '📅 Moderado';
-    else estado = '✅ Disponible';
+// Verificar que todos los bloques están dentro de la jornada
+function dentroDeJornada(bloques) {
+  return bloques.every(b => b.start >= JORNADA_INICIO && b.end <= JORNADA_FIN);
+}
 
-    return `${d.nombre_dia} ${d.fecha}: ${estado} (${d.turnos_agendados} turnos, ${d.carga_porcentaje}% carga)`;
-  })
-  .join('\n');
+// Verificar que ningún bloque nuevo solapa con bloques existentes
+function sinConflictos(bloquesNuevos, bloquesExistentes) {
+  for (const nuevo of bloquesNuevos) {
+    for (const existente of bloquesExistentes) {
+      if (solapan(nuevo.start, nuevo.end, existente.start, existente.end)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 // ============================================================================
-// EXTRAER SERVICIO DEL TURNO EXISTENTE (para detectar reprogramación vs turno adicional)
+// PASO 5: BUSCAR SLOTS DISPONIBLES
 // ============================================================================
-// Si la usuaria tiene turno_agendado=true, buscamos su turno en los turnos de la semana
-// para extraer el servicio y poder compararlo con el servicio solicitado
-//
-// IMPORTANTE: En Baserow tabla TurnosLeraysi, el linked field es "clienta_id"
-// que apunta a la tabla LeadsLeraysi. El formato es:
-// - Array de objetos: [{id: 116, value: "428"}] donde id es el ROW_ID del lead
-//
-// Debemos comparar contra lead_row_id (el row_id de Baserow), NO contra lead_id (Odoo ID)
+const candidatos = [];
+
+// Priorizar la fecha solicitada
+let diasBusqueda = [...diasDisponibles];
+if (fechaSolicitada) {
+  const idxReq = diasBusqueda.findIndex(d => d.fecha === fechaSolicitada);
+  if (idxReq > 0) {
+    const [diaReq] = diasBusqueda.splice(idxReq, 1);
+    diasBusqueda.unshift(diaReq);
+  }
+}
+
+// Limitar búsqueda a 14 días
+diasBusqueda = diasBusqueda.slice(0, 14);
+
+for (const dia of diasBusqueda) {
+  if (candidatos.length >= 12) break;
+
+  inicializarDia(dia.fecha);
+  const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
+
+  for (let startMin = JORNADA_INICIO; startMin < JORNADA_FIN; startMin += STEP) {
+    const bloquesNuevos = bloquesActivosNuevoServicio(startMin);
+
+    // Verificar que cabe en la jornada
+    if (!dentroDeJornada(bloquesNuevos)) continue;
+
+    // Probar con cada trabajadora (A primero por prioridad de desempate)
+    for (const trabajadora of TRABAJADORAS) {
+      if (!sinConflictos(bloquesNuevos, bloquesDia[trabajadora])) continue;
+
+      // Slot válido — calcular score
+      const esFechaDeseada = dia.fecha === fechaSolicitada;
+      let score = 0;
+
+      // +10 si coincide con hora exacta deseada
+      if (horaDeseada !== null && startMin === horaDeseada) score += 10;
+
+      // +8 si es la fecha solicitada
+      if (esFechaDeseada) score += 8;
+
+      // +5 si encaja en preferencia horaria
+      if (preferenciaHorario === 'manana' && startMin < 12 * 60) score += 5;
+      else if (preferenciaHorario === 'tarde' && startMin >= 13 * 60) score += 5;
+
+      // +2 cercanía a hora deseada (≤60min de distancia)
+      if (horaDeseada !== null && Math.abs(startMin - horaDeseada) <= 60) score += 2;
+
+      // +1 Leraysi tiene prioridad (desempate)
+      if (trabajadora === 'Leraysi') score += 1;
+
+      // Hora fin para display (tiempo total de la clienta en el salón)
+      const horaFinMin = esMuyCompleja
+        ? startMin + nuevoActivoInicio + nuevoProceso + nuevoActivoFin
+        : startMin + duracionNueva;
+
+      candidatos.push({
+        trabajadora,
+        fecha: dia.fecha,
+        hora_inicio: minutosToHora(startMin),
+        hora_fin: minutosToHora(horaFinMin),
+        nombre_dia: dia.nombre_dia,
+        duracion_min: esMuyCompleja ? (nuevoActivoInicio + nuevoProceso + nuevoActivoFin) : duracionNueva,
+        score,
+        es_fecha_alternativa: !esFechaDeseada,
+        en_proceso: false
+      });
+    }
+  }
+}
+
+// ============================================================================
+// PASO 6: CASO ESPECIAL — AGREGAR SERVICIO EN VENTANA DE PROCESO
+// ============================================================================
+// Si la clienta tiene un turno muy_compleja existente y quiere agregar un servicio,
+// el nuevo servicio puede caber dentro de la ventana de proceso (5h libre).
+// La misma trabajadora lo atiende durante el tiempo de espera del químico.
+
+if (input.agregar_a_turno_existente && input.turno_fecha) {
+  const turnoFecha = input.turno_fecha.includes('T')
+    ? input.turno_fecha.split('T')[0]
+    : input.turno_fecha.split(' ')[0];
+
+  const ventanas = ventanasProcesoPorDia[turnoFecha] || [];
+
+  for (const ventana of ventanas) {
+    // Solo servicios NO muy_compleja pueden meterse en una ventana de proceso
+    if (esMuyCompleja) continue;
+
+    const ventanaDuracion = ventana.fin - ventana.inicio;
+    if (duracionNueva > ventanaDuracion) continue;
+
+    // Verificar que no haya otros servicios ya en esta ventana
+    const bloquesVentanaTrabajadora = (bloquesPorDiaTrabajadora[turnoFecha] || {})[ventana.trabajadora] || [];
+    const nuevoBloque = [{ start: ventana.inicio, end: ventana.inicio + duracionNueva }];
+
+    if (sinConflictos(nuevoBloque, bloquesVentanaTrabajadora)) {
+      candidatos.unshift({
+        trabajadora: ventana.trabajadora,
+        fecha: turnoFecha,
+        hora_inicio: minutosToHora(ventana.inicio),
+        hora_fin: minutosToHora(ventana.inicio + duracionNueva),
+        nombre_dia: diasNombre[new Date(turnoFecha + 'T12:00:00').getDay()],
+        duracion_min: duracionNueva,
+        score: 20,  // Máxima prioridad: reutilizar ventana de proceso del mismo día
+        es_fecha_alternativa: false,
+        en_proceso: true
+      });
+    }
+  }
+}
+
+// ============================================================================
+// PASO 7: DEDUPLICAR Y SELECCIONAR TOP 3
+// ============================================================================
+// No repetir misma fecha+hora (quedarse con el de mayor score)
+const vistos = new Set();
+const candidatosUnicos = [];
+for (const c of candidatos) {
+  const key = `${c.fecha}-${c.hora_inicio}`;
+  if (!vistos.has(key)) {
+    vistos.add(key);
+    candidatosUnicos.push(c);
+  }
+}
+
+// Ordenar por score descendente
+candidatosUnicos.sort((a, b) => b.score - a.score);
+
+const opciones = candidatosUnicos.slice(0, 3).map((s, i) => {
+  const fechaObj = new Date(s.fecha + 'T12:00:00');
+  return {
+    opcion: i + 1,
+    trabajadora: s.trabajadora,
+    fecha: s.fecha,
+    hora_inicio: s.hora_inicio,
+    hora_fin: s.hora_fin,
+    nombre_dia: s.nombre_dia,
+    fecha_humana: `${s.nombre_dia.toLowerCase()} ${fechaObj.getDate()} de ${meses[fechaObj.getMonth()]}`,
+    duracion_min: s.duracion_min,
+    es_fecha_alternativa: s.es_fecha_alternativa,
+    en_proceso: s.en_proceso
+  };
+});
+
+// ============================================================================
+// PASO 8: DETERMINAR DISPONIBILIDAD
+// ============================================================================
+const disponible = opciones.length > 0;
+let motivoNoDisponible = null;
+
+if (!disponible) {
+  motivoNoDisponible = `No hay disponibilidad para ${input.servicio_detalle || 'el servicio solicitado'} en los próximos días. Ambas trabajadoras tienen la agenda completa.`;
+}
+
+// ============================================================================
+// PASO 9: EXTRAER DATOS DE TURNO EXISTENTE (reprogramación/agregar servicio)
+// ============================================================================
 let turnoServicioExistente = null;
 let turnoIdExistente = null;
 let turnoPrecioExistente = null;
 let turnoDuracionExistente = null;
 let turnoComplejidadExistente = null;
 let turnoSenaPagada = null;
+let turnoTrabajadoraExistente = null;
 
 if (input.turno_agendado && input.lead_row_id) {
-  // Buscar turno de esta usuaria por lead_row_id (ID de fila en Baserow)
   const turnoUsuaria = turnos.find(t => {
-    // El campo en Baserow se llama "clienta_id" (linked field a LeadsLeraysi)
     let turnoClientaRowId = null;
     if (Array.isArray(t.clienta_id) && t.clienta_id.length > 0) {
-      // Formato: [{id: 116, value: "428"}] - id es el row_id del lead
       turnoClientaRowId = t.clienta_id[0]?.id;
     } else if (t.clienta_id && typeof t.clienta_id === 'object') {
-      // Formato objeto directo
       turnoClientaRowId = t.clienta_id.id || t.clienta_id.value;
     } else {
-      // Formato: valor directo
       turnoClientaRowId = t.clienta_id;
     }
-
     return turnoClientaRowId && String(turnoClientaRowId) === String(input.lead_row_id);
   });
 
   if (turnoUsuaria) {
-    // Extraer el servicio existente completo
-    // PRIORIDAD: servicio_detalle (string concatenado "Manicura simple + Pedicura")
-    // porque el multi-select 'servicio' solo da valores individuales y antes
-    // solo tomábamos el primero, perdiendo servicios intermedios con 3+ servicios
     let servicioValue = null;
     if (turnoUsuaria.servicio_detalle) {
-      // Mejor fuente: string concatenado con todos los servicios
       servicioValue = turnoUsuaria.servicio_detalle;
     } else if (Array.isArray(turnoUsuaria.servicio) && turnoUsuaria.servicio.length > 0) {
-      // Fallback: unir todos los valores del multi-select
       servicioValue = turnoUsuaria.servicio.map(s => s?.value || s).join(' + ');
     } else if (turnoUsuaria.servicio?.value) {
       servicioValue = turnoUsuaria.servicio.value;
@@ -240,241 +374,62 @@ if (input.turno_agendado && input.lead_row_id) {
       servicioValue = turnoUsuaria.servicio;
     }
     turnoServicioExistente = servicioValue || null;
-
-    // Extraer odoo_turno_id (ID del turno en Odoo)
     turnoIdExistente = turnoUsuaria.odoo_turno_id || null;
-
-    // Extraer precio del turno existente (para calcular seña diferencial)
     turnoPrecioExistente = turnoUsuaria.precio ? Number(turnoUsuaria.precio) : null;
-
-    // Extraer duración del turno existente (para sumar al agregar servicio)
     turnoDuracionExistente = turnoUsuaria.duracion_min ? Number(turnoUsuaria.duracion_min) : null;
-
-    // Extraer complejidad del turno existente (para MAX al agregar servicio)
     turnoComplejidadExistente = turnoUsuaria.complejidad_maxima?.value || turnoUsuaria.complejidad_maxima || null;
-
-    // Extraer seña pagada del turno existente (para calcular diferencial)
     turnoSenaPagada = turnoUsuaria.sena_monto ? Number(turnoUsuaria.sena_monto) : null;
+    turnoTrabajadoraExistente = turnoUsuaria.trabajadora?.value || turnoUsuaria.trabajadora || 'Leraysi';
   }
 }
 
 // ============================================================================
-// CÁLCULO DE SLOTS POR HORA (solo para modo consultar_disponibilidad)
+// PASO 10: RESUMEN PARA BUILDAGENTPROMPT
 // ============================================================================
-const modo = input.modo || null;
-let slotsRecomendados = [];
-let esJornadaCompleta = false;
+const resumen = opciones.length > 0
+  ? opciones.map(o => `Opción ${o.opcion}: ${o.fecha_humana} ${o.hora_inicio}-${o.hora_fin} (Trabajadora ${o.trabajadora})`).join('\n')
+  : 'Sin disponibilidad en los próximos días';
 
-if (modo === 'consultar_disponibilidad') {
-  const APERTURA = 9 * 60;   // 09:00 = 540 min
-  const CIERRE = 19 * 60;    // 19:00 = 1140 min
-  const STEP = 30;            // granularidad 30 min
-  const duracionServicio = input.duracion_estimada || 60;
-  const horaPreferida = input.hora_deseada ? (() => {
-    const parts = input.hora_deseada.split(':');
-    return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');
-  })() : null;
-  const preferencia = input.preferencia_horario || null;
-
-  const ahora = new Date();
-  // Usar hora Argentina (UTC-3)
-  const ahoraArgentina = new Date(ahora.getTime() - 3 * 60 * 60 * 1000);
-  const ahoraMin = ahoraArgentina.getUTCHours() * 60 + ahoraArgentina.getUTCMinutes();
-  const hoyStr = ahoraArgentina.toISOString().split('T')[0];
-
-  function horaToMinutos(horaStr) {
-    if (!horaStr) return 9 * 60;
-    const parts = horaStr.split(':');
-    return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');
-  }
-
-  function minutosToHora(min) {
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-
-  // Filtrar dias disponibles y priorizarlos
-  // REGLA DE NEGOCIO: No se aceptan turnos para el mismo día. Mínimo = mañana.
-  let diasBusqueda = dias.filter(d => d.abierto && d.disponible && d.fecha !== hoyStr);
-
-  // Si se pidió una fecha específica, priorizarla
-  if (fechaSolicitada) {
-    const diaReq = diasBusqueda.find(d => d.fecha === fechaSolicitada);
-    const diasOtros = diasBusqueda.filter(d => d.fecha !== fechaSolicitada);
-    diasBusqueda = diaReq ? [diaReq, ...diasOtros] : diasOtros;
-  }
-
-  // Solo buscar en los próximos 14 días para consulta
-  diasBusqueda = diasBusqueda.slice(0, 14);
-
-  const candidatos = [];
-
-  // ================================================================
-  // JORNADA COMPLETA: servicios combinados que exceden el día laboral
-  // ================================================================
-  // Cuando la duración total supera las 10h (600 min), el loop normal
-  // de slots no genera resultados. En la práctica, la estilista SÍ puede
-  // hacer estos servicios en un día (paralleliza: trabaja uñas mientras
-  // la química actúa en el cabello). Ofrecemos "jornada completa" en
-  // días con baja carga.
-  const JORNADA_MIN = CIERRE - APERTURA; // 600 min
-  esJornadaCompleta = duracionServicio > JORNADA_MIN;
-
-  if (esJornadaCompleta) {
-    // Buscar días con carga < 20% (máx ~120 min de turnos existentes)
-    const MAX_CARGA_JORNADA = 20;
-
-    const diasJornada = diasBusqueda
-      .filter(d => (d.carga_porcentaje || 0) < MAX_CARGA_JORNADA && d.puede_recibir_muy_compleja !== false)
-      .sort((a, b) => {
-        // Priorizar día solicitado
-        if (a.fecha === fechaSolicitada) return -1;
-        if (b.fecha === fechaSolicitada) return 1;
-        // Luego por menor carga
-        return (a.carga_porcentaje || 0) - (b.carga_porcentaje || 0);
-      })
-      .slice(0, 3);
-
-    for (const dia of diasJornada) {
-      candidatos.push({
-        fecha: dia.fecha,
-        hora: minutosToHora(APERTURA),
-        hora_fin: minutosToHora(CIERRE),
-        nombre_dia: dia.nombre_dia,
-        score: dia.fecha === fechaSolicitada ? 18 : 10,
-        motivo: 'Jornada completa disponible',
-        carga_dia: dia.carga_porcentaje || 0,
-        jornada_completa: true
-      });
-    }
-
-    console.log(`[AnalizarDisponibilidad] 🗓️ JORNADA COMPLETA: ${duracionServicio}min > ${JORNADA_MIN}min, ${diasJornada.length} días encontrados`);
-  } else {
-    // ================================================================
-    // MODO NORMAL: generar slots por hora
-    // ================================================================
-    for (const dia of diasBusqueda) {
-      if (candidatos.length >= 9) break; // suficientes candidatos
-
-      // Turnos del día (solo para scoring de adyacencia, NO bloquean slots)
-      // Leraysi atiende en paralelo: la CAPACIDAD por complejidad + carga diaria controlan el límite
-      const turnosDelDia = (turnosPorDia[dia.fecha]?.turnos || []).map(t => {
-        const horaStr = t.hora || '09:00';
-        const startMin = horaToMinutos(horaStr);
-        return { start: startMin };
-      });
-
-      // Generar slots disponibles
-      for (let start = APERTURA; start + duracionServicio <= CIERRE; start += STEP) {
-        const end = start + duracionServicio;
-
-        // Hoy ya está excluido en diasBusqueda (regla de negocio: mínimo mañana)
-
-        // Verificar que la carga total del día no exceda la jornada
-        const cargaConNuevoTurno = ((dia.duracion_total_min + duracionServicio) / 600) * 100;
-        if (cargaConNuevoTurno > 100) continue; // No exceder jornada total (600 min)
-
-        // Puntuar el slot
-        let score = 0;
-        let motivo = 'Horario disponible';
-
-        // +10 si coincide con hora_deseada exacta
-        if (horaPreferida !== null && start === horaPreferida) {
-          score += 10;
-          motivo = 'Horario solicitado disponible';
-        }
-
-        // +8 si es el día solicitado
-        if (dia.fecha === fechaSolicitada) {
-          score += 8;
-        }
-
-        // +5 si encaja en preferencia de horario
-        if (preferencia === 'manana' && start >= APERTURA && start < 12 * 60) {
-          score += 5;
-          if (motivo === 'Horario disponible') motivo = 'Disponible por la mañana';
-        } else if (preferencia === 'tarde' && start >= 13 * 60 && start < CIERRE) {
-          score += 5;
-          if (motivo === 'Horario disponible') motivo = 'Disponible por la tarde';
-        }
-
-        // +3 si está cerca de otro turno (pack calendar)
-        if (turnosDelDia.length > 0) {
-          const minGap = Math.min(...turnosDelDia.map(o =>
-            Math.abs(start - o.start)
-          ));
-          if (minGap <= 60) score += 3;
-        }
-
-        // +2 si el día tiene baja carga
-        const loadPct = dia.carga_porcentaje || 0;
-        if (loadPct < 30) score += 2;
-
-        candidatos.push({
-          fecha: dia.fecha,
-          hora: minutosToHora(start),
-          hora_fin: minutosToHora(end),
-          nombre_dia: dia.nombre_dia,
-          score,
-          motivo,
-          carga_dia: loadPct
-        });
-      }
-    }
-  }
-
-  // Ordenar por score descendente y tomar top 3
-  candidatos.sort((a, b) => b.score - a.score);
-
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-
-  slotsRecomendados = candidatos.slice(0, 3).map((s, i) => {
-    const fechaObj = new Date(s.fecha + 'T12:00:00');
-    const slot = {
-      opcion: i + 1,
-      fecha: s.fecha,
-      hora: s.hora,
-      hora_fin: s.hora_fin,
-      nombre_dia: s.nombre_dia,
-      fecha_humana: `${s.nombre_dia.toLowerCase()} ${fechaObj.getDate()} de ${meses[fechaObj.getMonth()]}`,
-      motivo: s.motivo
-    };
-    if (s.jornada_completa) slot.jornada_completa = true;
-    return slot;
-  });
-}
-
+// ============================================================================
+// OUTPUT — Compatible con BuildAgentPrompt y FormatearRespuestaOpciones
+// ============================================================================
 return [{
   json: {
     ...input,
-    disponibilidad: dias,
-    resumen_disponibilidad: resumen,
-    capacidad_config: CAPACIDAD,
-    turnos_existentes: turnos.length,
-    // Nuevos campos para el agente
-    // Mantener fecha original completa (con hora si viene) para BuildAgentPrompt
+
+    // Nuevo modelo de disponibilidad
+    disponible,
+    opciones,
+    mensaje_no_disponible: motivoNoDisponible,
+
+    // Alias para compatibilidad con FormatearRespuestaOpciones (lee slots_recomendados)
+    slots_recomendados: opciones,
+
+    // Compatibilidad con BuildAgentPrompt
+    fecha_disponible: opciones.some(o => !o.es_fecha_alternativa),
     fecha_solicitada: fechaSolicitadaRaw,
-    fecha_disponible: fechaDisponible,
     motivo_no_disponible: motivoNoDisponible,
-    alternativas: alternativas,
-    // Servicio del turno existente (para comparar con servicio solicitado)
+    resumen_disponibilidad: resumen,
+
+    // Alternativas (días sin slot en fecha deseada)
+    alternativas: opciones.filter(o => o.es_fecha_alternativa).map(o => ({
+      fecha: o.fecha,
+      nombre_dia: o.nombre_dia
+    })),
+
+    // Turno existente (para reprogramación/agregar servicio)
     turno_servicio_existente: turnoServicioExistente,
-    // ID del turno en Odoo (para agregar servicio al turno existente)
     turno_id_existente: turnoIdExistente,
-    // Precio del turno existente (para calcular seña diferencial)
     turno_precio_existente: turnoPrecioExistente,
-    // Duración del turno existente en minutos (para sumar al agregar servicio)
     turno_duracion_existente: turnoDuracionExistente,
-    // Complejidad del turno existente (para MAX al agregar servicio)
     turno_complejidad_existente: turnoComplejidadExistente,
-    // Seña ya pagada del turno existente (para calcular diferencial)
     turno_sena_pagada: turnoSenaPagada,
-    // Slots recomendados (solo en modo consultar_disponibilidad)
-    slots_recomendados: slotsRecomendados,
-    // Jornada completa: servicios combinados exceden el día laboral
-    jornada_completa: esJornadaCompleta,
-    // Acción explícita (no depender solo de ...input spread)
-    accion: input.accion || null
+    turno_trabajadora_existente: turnoTrabajadoraExistente,
+
+    // Acción explícita
+    accion: input.accion || null,
+
+    // Metadata
+    turnos_existentes: turnos.length
   }
 }];

@@ -51,6 +51,7 @@ let resultado = {
   servicio_detalle: input.servicio_detalle || "",
   duracion_estimada: input.duracion_estimada || 60,
   complejidad_maxima: input.complejidad_maxima || "media",
+  trabajadora: input._precalculado?.trabajadora || input.turno_trabajadora_existente || 'Leraysi',
   accion: accion,
   mensaje_para_clienta: llmResponse.mensaje_para_clienta,
   alternativas: llmResponse.alternativas || [],

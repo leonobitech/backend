@@ -102,15 +102,15 @@ const SERVICIOS_CONFIG = {
   // === CORTE (1 servicio) ===
   'Corte mujer': { base_min: 60, complejidad: 'media', requiere_largo: true, precio_base: 8000 },
 
-  // === ALISADO (2 servicios) ===
-  'Alisado brasileño': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 45000 },
-  'Alisado keratina': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 55000 },
+  // === ALISADO (2 servicios) — muy_compleja con 3 fases ===
+  'Alisado brasileño': { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 45000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
+  'Alisado keratina':  { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 55000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
 
-  // === COLOR (4 servicios) ===
-  'Mechas completas': { base_min: 180, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 35000 },
+  // === COLOR (4 servicios) — muy_compleja con 3 fases (excepto Tintura raíz) ===
+  'Mechas completas':  { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 35000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
   'Tintura raíz': { base_min: 60, complejidad: 'compleja', requiere_largo: true, precio_base: 15000 },
-  'Tintura completa': { base_min: 120, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 25000 },
-  'Balayage': { base_min: 240, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 50000 },
+  'Tintura completa':  { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 25000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
+  'Balayage':          { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 50000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
 
   // === UÑAS (3 servicios) ===
   'Manicura simple': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 5000 },
@@ -218,7 +218,8 @@ function calcularDuracion(servicios, largo) {
     if (config) {
       let duracionServicio = config.base_min;
       // Solo agregar tiempo extra si el servicio requiere largo Y hay dato de largo
-      if (config.requiere_largo && largo) {
+      // NO aplica a muy_compleja (base_min 600 ya es el total real: 3h+5h+2h)
+      if (config.requiere_largo && largo && config.complejidad !== 'muy_compleja') {
         duracionServicio += (DURACION_EXTRA_LARGO[largo] || 0);
       }
       duracionTotal += duracionServicio;
@@ -332,6 +333,26 @@ if (gate_bloqueado) {
 const modoOutput = gate_bloqueado ? 'consultar_disponibilidad' : input.modo;
 
 // ============================================================================
+// EXTRAER FASES DEL SERVICIO MUY_COMPLEJA (si aplica)
+// ============================================================================
+// Si algún servicio tiene estructura de 3 fases (activo_inicio + proceso + activo_fin),
+// extraer para que AnalizarDisponibilidad pueda modelar los bloques activos
+let activo_inicio = null;
+let proceso = null;
+let activo_fin = null;
+
+const servicioConFases = servicio.find(srv => {
+  const config = SERVICIOS_CONFIG[srv];
+  return config && config.activo_inicio != null;
+});
+if (servicioConFases) {
+  const config = SERVICIOS_CONFIG[servicioConFases];
+  activo_inicio = config.activo_inicio;
+  proceso = config.proceso;
+  activo_fin = config.activo_fin;
+}
+
+// ============================================================================
 // OUTPUT
 // ============================================================================
 return [{
@@ -350,6 +371,11 @@ return [{
     precio: precioFinal,
     duracion_estimada,
     complejidad_maxima,
+
+    // Fases para servicios muy_compleja (3 fases: activo_inicio, proceso, activo_fin)
+    activo_inicio,
+    proceso,
+    activo_fin,
 
     // Análisis de imagen
     image_analysis,
