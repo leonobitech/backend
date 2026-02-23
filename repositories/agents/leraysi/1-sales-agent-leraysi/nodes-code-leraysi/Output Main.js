@@ -227,9 +227,8 @@ for (const [key, value] of Object.entries(statePatch)) {
   // Manejar timestamps de solicitud (true → timestamp ISO, false → null)
   if ((key === "email_ask_ts" || key === "fullname_ask_ts") && typeof value === 'boolean') {
     if (value === false) {
-      // LLM dice "ya no preguntar" → limpiar el campo (Baserow necesita null, no false)
-      mergedState[key] = null;
-      console.log(`[OutputMain v3.2] ${key} → null (LLM envió false)`);
+      // LLM dice "ya no preguntar" → mantener timestamp existente como registro histórico
+      console.log(`[OutputMain v3.2] ${key} → preservado (LLM envió false, manteniendo timestamp original)`);
       continue;
     }
     // value === true → convertir a timestamp
