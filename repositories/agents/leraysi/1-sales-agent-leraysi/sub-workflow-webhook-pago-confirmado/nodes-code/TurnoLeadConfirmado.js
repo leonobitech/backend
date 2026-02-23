@@ -31,10 +31,10 @@ const fechaTurno = turno.fecha ? turno.fecha.split('T')[0] : null;
 const horaTurnoRaw = turno.hora || '09:00';
 const horaTurno = horaTurnoRaw.split(':').slice(0, 2).join(':');
 
-// Construir fecha completa para turno_fecha (ISO 8601)
+// Construir fecha completa para turno_fecha (sin timezone, Baserow aplica -03 automáticamente)
 let turnoFechaISO = null;
 if (fechaTurno) {
-  turnoFechaISO = `${fechaTurno}T${horaTurno}:00-03:00`;
+  turnoFechaISO = `${fechaTurno}T${horaTurno}:00`;
 }
 
 // Formatear fecha legible para el mensaje (DD/MM/YYYY)
