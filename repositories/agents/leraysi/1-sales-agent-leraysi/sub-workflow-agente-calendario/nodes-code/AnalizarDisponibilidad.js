@@ -60,7 +60,10 @@ const ventanasProcesoPorDia = {};     // { "2026-02-24": [{ trabajadora, inicio,
 
 function inicializarDia(fecha) {
   if (!bloquesPorDiaTrabajadora[fecha]) {
-    bloquesPorDiaTrabajadora[fecha] = { 'A': [], 'B': [] };
+    bloquesPorDiaTrabajadora[fecha] = {};
+    for (const t of TRABAJADORAS) {
+      bloquesPorDiaTrabajadora[fecha][t] = [];
+    }
     ventanasProcesoPorDia[fecha] = [];
   }
 }
