@@ -278,22 +278,26 @@ if (input.agregar_a_turno_existente && input.turno_fecha) {
     const ventanaDuracion = ventana.fin - ventana.inicio;
     if (duracionNueva > ventanaDuracion) continue;
 
-    // Verificar que no haya otros servicios ya en esta ventana
+    // Buscar el primer hueco libre DENTRO de la ventana de proceso
     const bloquesVentanaTrabajadora = (bloquesPorDiaTrabajadora[turnoFecha] || {})[ventana.trabajadora] || [];
-    const nuevoBloque = [{ start: ventana.inicio, end: ventana.inicio + duracionNueva }];
 
-    if (sinConflictos(nuevoBloque, bloquesVentanaTrabajadora)) {
-      candidatos.unshift({
-        trabajadora: ventana.trabajadora,
-        fecha: turnoFecha,
-        hora_inicio: minutosToHora(ventana.inicio),
-        hora_fin: minutosToHora(ventana.inicio + duracionNueva),
-        nombre_dia: diasNombre[new Date(turnoFecha + 'T12:00:00').getDay()],
-        duracion_min: duracionNueva,
-        score: 20,  // Máxima prioridad: reutilizar ventana de proceso del mismo día
-        es_fecha_alternativa: false,
-        en_proceso: true
-      });
+    for (let start = ventana.inicio; start + duracionNueva <= ventana.fin; start += STEP) {
+      const nuevoBloque = [{ start: start, end: start + duracionNueva }];
+
+      if (sinConflictos(nuevoBloque, bloquesVentanaTrabajadora)) {
+        candidatos.unshift({
+          trabajadora: ventana.trabajadora,
+          fecha: turnoFecha,
+          hora_inicio: minutosToHora(start),
+          hora_fin: minutosToHora(start + duracionNueva),
+          nombre_dia: diasNombre[new Date(turnoFecha + 'T12:00:00').getDay()],
+          duracion_min: duracionNueva,
+          score: 20,  // Máxima prioridad: reutilizar ventana de proceso del mismo día
+          es_fecha_alternativa: false,
+          en_proceso: true
+        });
+        break; // Primer hueco libre encontrado
+      }
     }
   }
 }
