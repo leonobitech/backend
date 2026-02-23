@@ -134,6 +134,20 @@ export class AgregarServicioTurnoLeraysiTool
       SERVICIO_DISPLAY[params.nuevo_servicio] || params.nuevo_servicio;
     const servicioDetalleCombinado = `${detalleExistente} + ${nuevoDetalle}`;
 
+    // 2b. Floor de complejidad por cantidad de servicios (misma lógica que ParseInput.js)
+    // 2 servicios → mín compleja, 3+ → mín muy_compleja
+    const totalServicios = servicioDetalleCombinado.split("+").length;
+    const COMP_ORDER: Record<string, number> = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
+    const ORDER_TO_COMP: Record<number, string> = { 1: "simple", 2: "media", 3: "compleja", 4: "muy_compleja" };
+
+    let floorPorCantidad = "simple";
+    if (totalServicios >= 3) floorPorCantidad = "muy_compleja";
+    else if (totalServicios >= 2) floorPorCantidad = "compleja";
+
+    const complejidadFinal = ORDER_TO_COMP[
+      Math.max(COMP_ORDER[params.complejidad_maxima] || 2, COMP_ORDER[floorPorCantidad] || 1)
+    ] || params.complejidad_maxima;
+
     // 3. Sumar precios y duraciones
     const precioExistente = (turnoExistente.precio as number) || 0;
     const precioTotal = precioExistente + params.nuevo_precio;
@@ -170,7 +184,7 @@ export class AgregarServicioTurnoLeraysiTool
       servicio_detalle: servicioDetalleCombinado,
       precio: precioTotal,
       duracion: duracionTotal,
-      complejidad_maxima: params.complejidad_maxima,
+      complejidad_maxima: complejidadFinal,
       monto_pago_pendiente: montoAPagar, // Monto real a cobrar (diferencia o total)
       estado: "pendiente_pago",
     });
@@ -180,7 +194,52 @@ export class AgregarServicioTurnoLeraysiTool
       "[AgregarServicioTurno] Appointment updated"
     );
 
-    // 6. Regenerar link de pago (usará monto_pago_pendiente que acabamos de setear)
+    // 6. Agregar tags CRM del nuevo servicio al lead (reemplazando complejidad vieja)
+    const leadId = turnoExistente.lead_id;
+    if (leadId) {
+      try {
+        const tagIds = await this.resolveLeadTags(
+          params.nuevo_servicio,
+          complejidadFinal
+        );
+        if (tagIds.length > 0) {
+          let tagCommands: any[] = tagIds.map((id: number) => [4, id]); // link new tags
+
+          // Remover tag de complejidad anterior para que solo quede UNO
+          const complexityNames = ["Simple", "Media", "Compleja", "Muy Compleja"];
+          try {
+            const leadData = await this.odooClient.read("crm.lead", [leadId as number], ["tag_ids"]);
+            if (leadData.length > 0 && leadData[0].tag_ids?.length > 0) {
+              const existingComplexityTags = await this.odooClient.search(
+                "crm.tag",
+                [["id", "in", leadData[0].tag_ids], ["name", "in", complexityNames]],
+                { fields: ["id"] }
+              );
+              const unlinkCommands = existingComplexityTags.map((t: any) => [3, t.id]);
+              tagCommands = [...unlinkCommands, ...tagCommands];
+            }
+          } catch (err) {
+            logger.warn({ error: err }, "[AgregarServicioTurno] Could not read existing lead tags");
+          }
+
+          await this.odooClient.write("crm.lead", [leadId as number], {
+            expected_revenue: precioTotal,
+            tag_ids: tagCommands,
+          });
+          logger.info(
+            { leadId, tagIds },
+            "[AgregarServicioTurno] CRM tags updated for new service"
+          );
+        }
+      } catch (e) {
+        logger.warn(
+          { error: e, leadId },
+          "[AgregarServicioTurno] Could not update CRM tags"
+        );
+      }
+    }
+
+    // 7. Regenerar link de pago (usará monto_pago_pendiente que acabamos de setear)
     let linkPago = "";
     let mpPreferenceId = "";
     try {
@@ -223,7 +282,7 @@ export class AgregarServicioTurnoLeraysiTool
       precio_total: precioTotal,
       duracion_total: duracionTotal,
       duracion_estimada: Math.round(duracionTotal * 60),
-      complejidad_maxima: params.complejidad_maxima,
+      complejidad_maxima: complejidadFinal,
       sena: montoAPagar, // Lo que tiene que pagar ahora
       link_pago: linkPago,
       mp_preference_id: mpPreferenceId,
@@ -253,6 +312,92 @@ export class AgregarServicioTurnoLeraysiTool
     }
 
     return input;
+  }
+
+  /**
+   * Busca o crea tags en crm.tag y devuelve sus IDs.
+   * Tags: categoría de servicio + nombre específico + complejidad.
+   */
+  private async resolveLeadTags(
+    servicio: string,
+    complejidad: string | null
+  ): Promise<number[]> {
+    const CATEGORY_MAP: Record<string, string> = {
+      corte_mujer: "Corte",
+      alisado_brasileno: "Alisado",
+      alisado_keratina: "Alisado",
+      mechas_completas: "Color",
+      tintura_raiz: "Color",
+      tintura_completa: "Color",
+      balayage: "Color",
+      manicura_simple: "Uñas",
+      manicura_semipermanente: "Uñas",
+      pedicura: "Uñas",
+      depilacion_cera_piernas: "Depilación",
+      depilacion_cera_axilas: "Depilación",
+      depilacion_cera_bikini: "Depilación",
+      depilacion_laser_piernas: "Depilación",
+      depilacion_laser_axilas: "Depilación",
+    };
+
+    const SERVICE_NAME_MAP: Record<string, string> = {
+      corte_mujer: "Corte mujer",
+      alisado_brasileno: "Alisado brasileño",
+      alisado_keratina: "Alisado keratina",
+      mechas_completas: "Mechas completas",
+      tintura_raiz: "Tintura raíz",
+      tintura_completa: "Tintura completa",
+      balayage: "Balayage",
+      manicura_simple: "Manicura simple",
+      manicura_semipermanente: "Manicura semipermanente",
+      pedicura: "Pedicura",
+      depilacion_cera_piernas: "Depilación cera piernas",
+      depilacion_cera_axilas: "Depilación cera axilas",
+      depilacion_cera_bikini: "Depilación cera bikini",
+      depilacion_laser_piernas: "Depilación láser piernas",
+      depilacion_laser_axilas: "Depilación láser axilas",
+    };
+
+    const COMPLEJIDAD_LABELS: Record<string, string> = {
+      simple: "Simple",
+      media: "Media",
+      compleja: "Compleja",
+      muy_compleja: "Muy Compleja",
+    };
+
+    const tagNames: string[] = [];
+
+    const category = CATEGORY_MAP[servicio];
+    if (category) tagNames.push(category);
+
+    const serviceName = SERVICE_NAME_MAP[servicio];
+    if (serviceName) tagNames.push(serviceName);
+
+    if (complejidad) {
+      const label = COMPLEJIDAD_LABELS[complejidad];
+      if (label) tagNames.push(label);
+    }
+
+    if (tagNames.length === 0) return [];
+
+    const tagIds: number[] = [];
+    for (const name of tagNames) {
+      const existing = await this.odooClient.search(
+        "crm.tag",
+        [["name", "=", name]],
+        { fields: ["id"], limit: 1 }
+      );
+
+      if (existing.length > 0) {
+        tagIds.push(existing[0].id);
+      } else {
+        const newId = await this.odooClient.create("crm.tag", { name });
+        tagIds.push(newId);
+        logger.info({ tagName: name, tagId: newId }, "[AgregarServicioTurno] Created new CRM tag");
+      }
+    }
+
+    return tagIds;
   }
 
   definition(): ToolDefinition {

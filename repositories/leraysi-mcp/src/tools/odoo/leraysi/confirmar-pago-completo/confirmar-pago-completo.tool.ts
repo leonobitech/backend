@@ -840,6 +840,27 @@ export class ConfirmarPagoCompletoTool
     return categoryMap[servicio] || "";
   }
 
+  private getServicioName(servicio: string): string {
+    const serviceNameMap: Record<string, string> = {
+      corte_mujer: "Corte mujer",
+      alisado_brasileno: "Alisado brasileño",
+      alisado_keratina: "Alisado keratina",
+      mechas_completas: "Mechas completas",
+      tintura_raiz: "Tintura raíz",
+      tintura_completa: "Tintura completa",
+      balayage: "Balayage",
+      manicura_simple: "Manicura simple",
+      manicura_semipermanente: "Manicura semipermanente",
+      pedicura: "Pedicura",
+      depilacion_cera_piernas: "Depilación cera piernas",
+      depilacion_cera_axilas: "Depilación cera axilas",
+      depilacion_cera_bikini: "Depilación cera bikini",
+      depilacion_laser_piernas: "Depilación láser piernas",
+      depilacion_laser_axilas: "Depilación láser axilas",
+    };
+    return serviceNameMap[servicio] || "";
+  }
+
   /**
    * Mapea código de complejidad a nombre legible para tag CRM
    */
@@ -865,22 +886,28 @@ export class ConfirmarPagoCompletoTool
     const tagNames: string[] = [];
 
     // Si hay servicio_detalle con múltiples servicios (formato "Servicio A + Servicio B"),
-    // extraer categoría de cada uno
+    // extraer categoría y nombre de cada uno
     if (servicioDetalle && servicioDetalle.includes("+")) {
       const servicios = servicioDetalle.split("+").map((s) => s.trim());
       const categories = new Set<string>();
+      const serviceNames = new Set<string>();
       for (const srv of servicios) {
         const code = this.findServicioCode(srv);
         if (code) {
           const cat = this.getServicioCategory(code);
           if (cat) categories.add(cat);
+          const name = this.getServicioName(code);
+          if (name) serviceNames.add(name);
         }
       }
       categories.forEach((c) => tagNames.push(c));
+      serviceNames.forEach((n) => tagNames.push(n));
     } else {
       // Servicio único - comportamiento original
       const category = this.getServicioCategory(servicio);
       if (category) tagNames.push(category);
+      const serviceName = this.getServicioName(servicio);
+      if (serviceName) tagNames.push(serviceName);
     }
 
     if (complejidad) {

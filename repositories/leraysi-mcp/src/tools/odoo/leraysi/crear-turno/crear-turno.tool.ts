@@ -111,6 +111,22 @@ export class CrearTurnoLeraysiTool
     // Odoo almacena internamente en UTC, el addon espera recibir UTC
     fechaHora = this.argentinaToUTC(fechaHora);
 
+    // Floor de complejidad por cantidad de servicios (misma lógica que ParseInput.js)
+    // Si servicio_detalle tiene "Servicio A + Servicio B", contar por "+"
+    const totalServicios = params.servicio_detalle.includes("+")
+      ? params.servicio_detalle.split("+").length
+      : 1;
+    const COMP_ORDER: Record<string, number> = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
+    const ORDER_TO_COMP: Record<number, string> = { 1: "simple", 2: "media", 3: "compleja", 4: "muy_compleja" };
+
+    let floorPorCantidad = "simple";
+    if (totalServicios >= 3) floorPorCantidad = "muy_compleja";
+    else if (totalServicios >= 2) floorPorCantidad = "compleja";
+
+    const complejidadFinal = ORDER_TO_COMP[
+      Math.max(COMP_ORDER[params.complejidad_maxima] || 2, COMP_ORDER[floorPorCantidad] || 1)
+    ] || params.complejidad_maxima;
+
     // Crear el turno en salon.turno
     const senaInicial = Math.round(params.precio * 0.3);
     const values: Record<string, any> = {
@@ -122,7 +138,7 @@ export class CrearTurnoLeraysiTool
       fecha_hora: fechaHora,
       precio: params.precio,
       duracion: params.duracion_estimada / 60, // Convertir minutos → horas para Odoo
-      complejidad_maxima: params.complejidad_maxima,
+      complejidad_maxima: complejidadFinal,
       monto_pago_pendiente: senaInicial, // Monto real a cobrar (usado por action_generar_link_pago)
       lead_id: params.lead_id,
       estado: "pendiente_pago",
@@ -169,7 +185,7 @@ export class CrearTurnoLeraysiTool
       // Resolver tags CRM: categoría del servicio + complejidad
       const tagIds = await this.resolveLeadTags(
         params.servicio,
-        params.complejidad_maxima,
+        complejidadFinal,
         params.servicio_detalle
       );
       const tagCommands = tagIds.map((id: number) => [4, id]); // link tags
@@ -192,7 +208,7 @@ export class CrearTurnoLeraysiTool
       servicio: params.servicio,
       precio: params.precio,
       duracion_estimada: params.duracion_estimada,
-      complejidad_maxima: params.complejidad_maxima,
+      complejidad_maxima: complejidadFinal,
       sena,
       link_pago: linkPago,
       mp_preference_id: mpPreferenceId,
@@ -299,6 +315,24 @@ export class CrearTurnoLeraysiTool
       depilacion_laser_axilas: "Depilación",
     };
 
+    const SERVICE_NAME_MAP: Record<string, string> = {
+      corte_mujer: "Corte mujer",
+      alisado_brasileno: "Alisado brasileño",
+      alisado_keratina: "Alisado keratina",
+      mechas_completas: "Mechas completas",
+      tintura_raiz: "Tintura raíz",
+      tintura_completa: "Tintura completa",
+      balayage: "Balayage",
+      manicura_simple: "Manicura simple",
+      manicura_semipermanente: "Manicura semipermanente",
+      pedicura: "Pedicura",
+      depilacion_cera_piernas: "Depilación cera piernas",
+      depilacion_cera_axilas: "Depilación cera axilas",
+      depilacion_cera_bikini: "Depilación cera bikini",
+      depilacion_laser_piernas: "Depilación láser piernas",
+      depilacion_laser_axilas: "Depilación láser axilas",
+    };
+
     const COMPLEJIDAD_LABELS: Record<string, string> = {
       simple: "Simple",
       media: "Media",
@@ -310,6 +344,9 @@ export class CrearTurnoLeraysiTool
 
     const category = CATEGORY_MAP[servicio];
     if (category) tagNames.push(category);
+
+    const serviceName = SERVICE_NAME_MAP[servicio];
+    if (serviceName) tagNames.push(serviceName);
 
     if (complejidad) {
       const label = COMPLEJIDAD_LABELS[complejidad];
