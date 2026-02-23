@@ -358,7 +358,17 @@ const baserowUpdate = {
   foto_recibida: Boolean(mergedState.foto_recibida),
   presupuesto_dado: Boolean(mergedState.presupuesto_dado),
   turno_agendado: Boolean(mergedState.turno_agendado),
-  turno_fecha: mergedState.turno_fecha || null,
+  turno_fecha: (() => {
+    const tf = mergedState.turno_fecha;
+    if (!tf) return null;
+    // Si ya es ISO UTC (contiene T y Z), pasar directo
+    if (tf.includes('T') && tf.includes('Z')) return tf;
+    // Convertir hora Argentina → UTC para Baserow (formato "YYYY-MM-DD HH:MM" o "YYYY-MM-DDTHH:MM:SS")
+    const normalized = tf.includes('T') ? tf : tf.replace(' ', 'T');
+    const withSeconds = normalized.includes(':') && normalized.split(':').length < 3 ? normalized + ':00' : normalized;
+    const d = new Date(`${withSeconds}-03:00`);
+    return isNaN(d.getTime()) ? tf : d.toISOString();
+  })(),
   sena_pagada: Boolean(mergedState.sena_pagada),
   waiting_image: Boolean(mergedState.waiting_image),
 
