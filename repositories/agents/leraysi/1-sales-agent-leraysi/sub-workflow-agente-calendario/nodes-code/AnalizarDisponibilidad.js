@@ -319,7 +319,20 @@ for (const c of candidatos) {
 // Ordenar por score descendente
 candidatosUnicos.sort((a, b) => b.score - a.score);
 
-const opciones = candidatosUnicos.slice(0, 3).map((s, i) => {
+// Seleccionar 3 opciones significativamente distintas
+// Misma día+trabajadora: mínimo 60min de separación
+const elegidos = [];
+for (const c of candidatosUnicos) {
+  const cercano = elegidos.some(e =>
+    e.fecha === c.fecha &&
+    e.trabajadora === c.trabajadora &&
+    Math.abs(horaToMinutos(e.hora_inicio) - horaToMinutos(c.hora_inicio)) < 60
+  );
+  if (!cercano) elegidos.push(c);
+  if (elegidos.length >= 3) break;
+}
+
+const opciones = elegidos.map((s, i) => {
   const fechaObj = new Date(s.fecha + 'T12:00:00');
   return {
     opcion: i + 1,
