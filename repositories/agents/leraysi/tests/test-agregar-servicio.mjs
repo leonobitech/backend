@@ -515,6 +515,489 @@ info('Esperado: ParseInput fuerza modo = consultar_disponibilidad');
 
 
 // ============================================================================
+// TEST G: Turno nuevo (otra clienta) en ventana de proceso de balayage existente
+// ============================================================================
+// Leraysi tiene un balayage (jornada completa 09:00-19:00) el mie 25.
+// Otra clienta quiere manicura simple (120min, media) ese mismo dia.
+// Esperado: el sistema encuentra slot en la ventana de proceso (12:00-17:00)
+// porque los bloques activos son solo [09:00-12:00] y [17:00-19:00].
+
+header('TEST G: Turno nuevo en ventana de proceso de balayage existente');
+info('Leraysi tiene balayage (muy_compleja) el mie 25 — bloques activos: 09:00-12:00 + 17:00-19:00');
+info('Otra clienta pide manicura simple (120min, media) para el mismo dia');
+info('Esperado: slot disponible en ventana de proceso (12:00-17:00)');
+
+{
+  const turnosConBalayage = [
+    {
+      id: 200,
+      odoo_turno_id: 20,
+      fecha: '2026-02-25T12:00:00Z',
+      hora: '09:00',
+      duracion_min: 600,
+      complejidad_maxima: { value: 'muy_compleja' },
+      servicio: [{ value: 'Balayage' }],
+      servicio_detalle: 'Balayage',
+      trabajadora: { value: 'Leraysi' },
+      estado: { value: 'confirmado' },
+      precio: 50000,
+      sena_monto: 15000,
+      clienta_id: [{ id: 99 }]  // Otra clienta
+    }
+  ];
+
+  // Turno NUEVO (no agregar servicio) — otra clienta quiere manicura simple
+  const toolInput = {
+    llm_output: {
+      modo: 'consultar_disponibilidad',
+      servicio: ['Manicura simple'],
+      fecha_deseada: '2026-02-25',
+      hora_deseada: '14:00',
+      full_name: 'Laura Test',
+      email: 'laura@test.com'
+    },
+    state: {
+      lead_id: 200,
+      row_id: 200,
+      phone: '+5491199999999',
+      email: 'laura@test.com',
+      full_name: 'Laura Test'
+    }
+  };
+
+  const { parseOutput, analizarOutput, formatOutput } = runPipeline(toolInput, turnosConBalayage);
+
+  subheader('ParseInput');
+  assert(parseOutput.complejidad_maxima === 'media', 'complejidad manicura simple = media');
+  assert(parseOutput.duracion_estimada === 120, 'duracion manicura simple = 120min');
+  assert(!parseOutput.agregar_a_turno_existente, 'NO es agregar servicio (turno nuevo)');
+
+  subheader('AnalizarDisponibilidad');
+  const opciones = analizarOutput.opciones || analizarOutput.slots_recomendados || [];
+  assert(opciones.length > 0, `tiene opciones (${opciones.length})`);
+
+  if (opciones.length > 0) {
+    // Buscar opcion del mie 25 con Leraysi
+    const opMie25Leraysi = opciones.find(o => o.fecha === '2026-02-25' && o.trabajadora === 'Leraysi');
+    assert(!!opMie25Leraysi, 'hay opcion para mie 25 con Leraysi');
+
+    if (opMie25Leraysi) {
+      const horaInicioMin = parseInt(opMie25Leraysi.hora_inicio.split(':')[0]) * 60 + parseInt(opMie25Leraysi.hora_inicio.split(':')[1]);
+      const horaFinMin = parseInt(opMie25Leraysi.hora_fin.split(':')[0]) * 60 + parseInt(opMie25Leraysi.hora_fin.split(':')[1]);
+      info(`  Slot encontrado: ${opMie25Leraysi.hora_inicio}-${opMie25Leraysi.hora_fin}`);
+
+      // Debe estar DENTRO de la ventana de proceso (12:00-17:00)
+      assert(horaInicioMin >= 720, `hora inicio >= 12:00 (ventana proceso)`, '>= 12:00', opMie25Leraysi.hora_inicio);
+      assert(horaFinMin <= 1020, `hora fin <= 17:00 (ventana proceso)`, '<= 17:00', opMie25Leraysi.hora_fin);
+
+      // No debe solapar con bloques activos del balayage
+      assert(horaInicioMin >= 720 && horaFinMin <= 1020, 'slot cabe en ventana proceso sin solapar bloques activos');
+    }
+  }
+
+  subheader('FormatearRespuestaOpciones');
+  assert(formatOutput.accion === 'opciones_disponibles', 'accion = opciones_disponibles (turno nuevo, no agregar)', 'opciones_disponibles', formatOutput.accion);
+  info(`  Mensaje: ${formatOutput.mensaje_para_clienta.substring(0, 150)}...`);
+}
+
+
+// ============================================================================
+// TEST H: Turno nuevo muy_compleja cuando Leraysi ya tiene balayage
+// ============================================================================
+// Leraysi tiene balayage (09:00-19:00) el mie 25.
+// Otra clienta quiere alisado brasileño (muy_compleja, 600min) ese mismo dia.
+// Esperado: Leraysi NO puede (bloques activos solapan), ofrece Companera o dias alternativos.
+
+header('TEST H: Turno nuevo muy_compleja cuando Leraysi ya tiene balayage');
+info('Leraysi tiene balayage el mie 25 — bloques activos: 09:00-12:00 + 17:00-19:00');
+info('Otra clienta pide alisado brasileño (muy_compleja, 600min) mismo dia');
+info('Esperado: Leraysi NO puede, ofrece Companera ese dia o dias alternativos');
+
+{
+  const turnosConBalayage = [
+    {
+      id: 200,
+      odoo_turno_id: 20,
+      fecha: '2026-02-25T12:00:00Z',
+      hora: '09:00',
+      duracion_min: 600,
+      complejidad_maxima: { value: 'muy_compleja' },
+      servicio: [{ value: 'Balayage' }],
+      servicio_detalle: 'Balayage',
+      trabajadora: { value: 'Leraysi' },
+      estado: { value: 'confirmado' },
+      precio: 50000,
+      sena_monto: 15000,
+      clienta_id: [{ id: 99 }]
+    }
+  ];
+
+  const toolInput = {
+    llm_output: {
+      modo: 'consultar_disponibilidad',
+      servicio: ['Alisado brasileño'],
+      fecha_deseada: '2026-02-25',
+      hora_deseada: '09:00',
+      full_name: 'Carolina Test',
+      email: 'carolina@test.com'
+    },
+    state: {
+      lead_id: 300,
+      row_id: 300,
+      phone: '+5491188888888',
+      email: 'carolina@test.com',
+      full_name: 'Carolina Test'
+    }
+  };
+
+  const { parseOutput, analizarOutput, formatOutput } = runPipeline(toolInput, turnosConBalayage);
+
+  subheader('ParseInput');
+  assert(parseOutput.complejidad_maxima === 'muy_compleja', 'complejidad alisado = muy_compleja');
+  assert(parseOutput.duracion_estimada === 600, 'duracion alisado = 600min');
+  assert(parseOutput.activo_inicio === 180, 'activo_inicio = 180');
+
+  subheader('AnalizarDisponibilidad');
+  const opciones = analizarOutput.opciones || analizarOutput.slots_recomendados || [];
+  assert(opciones.length > 0, `tiene opciones (${opciones.length})`);
+
+  // Leraysi NO debe tener opcion el mie 25 (sus bloques activos chocan)
+  const opMie25Leraysi = opciones.find(o => o.fecha === '2026-02-25' && o.trabajadora === 'Leraysi');
+  assert(!opMie25Leraysi, 'Leraysi NO tiene opcion el mie 25 (conflicto bloques activos)');
+
+  // Companera SI debe tener opcion el mie 25 (esta libre)
+  const opMie25Companera = opciones.find(o => o.fecha === '2026-02-25' && o.trabajadora === 'Companera');
+  assert(!!opMie25Companera, 'Companera SI tiene opcion el mie 25');
+
+  if (opMie25Companera) {
+    info(`  Companera: ${opMie25Companera.fecha} ${opMie25Companera.hora_inicio}-${opMie25Companera.hora_fin}`);
+    assert(opMie25Companera.hora_inicio === '09:00', 'Companera empieza 09:00', '09:00', opMie25Companera.hora_inicio);
+    assert(opMie25Companera.hora_fin === '19:00', 'Companera jornada completa hasta 19:00', '19:00', opMie25Companera.hora_fin);
+  }
+
+  subheader('FormatearRespuestaOpciones');
+  assert(formatOutput.accion === 'opciones_disponibles', 'accion = opciones_disponibles');
+  info(`  Mensaje: ${formatOutput.mensaje_para_clienta.substring(0, 150)}...`);
+}
+
+
+// ============================================================================
+// TEST I: 3ra muy_compleja mismo dia — ambas trabajadoras ocupadas
+// ============================================================================
+// Leraysi tiene balayage + Companera tiene alisado brasileño el mie 25.
+// Tercera clienta pide mechas completas (muy_compleja) mismo dia.
+// Esperado: NO hay opcion para mie 25, ofrece dias alternativos.
+
+header('TEST I: 3ra muy_compleja mismo dia — ambas trabajadoras ocupadas');
+info('Leraysi: balayage mie 25 (09:00-19:00) + Companera: alisado mie 25 (09:00-19:00)');
+info('Tercera clienta pide mechas completas (muy_compleja) mismo dia');
+info('Esperado: sin disponibilidad mie 25, ofrece otros dias');
+
+{
+  const turnosAmbasOcupadas = [
+    {
+      id: 200,
+      odoo_turno_id: 20,
+      fecha: '2026-02-25T12:00:00Z',
+      hora: '09:00',
+      duracion_min: 600,
+      complejidad_maxima: { value: 'muy_compleja' },
+      servicio: [{ value: 'Balayage' }],
+      servicio_detalle: 'Balayage',
+      trabajadora: { value: 'Leraysi' },
+      estado: { value: 'confirmado' },
+      precio: 50000,
+      sena_monto: 15000,
+      clienta_id: [{ id: 99 }]
+    },
+    {
+      id: 201,
+      odoo_turno_id: 21,
+      fecha: '2026-02-25T12:00:00Z',
+      hora: '09:00',
+      duracion_min: 600,
+      complejidad_maxima: { value: 'muy_compleja' },
+      servicio: [{ value: 'Alisado brasileño' }],
+      servicio_detalle: 'Alisado brasileño',
+      trabajadora: { value: 'Companera' },
+      estado: { value: 'confirmado' },
+      precio: 45000,
+      sena_monto: 13500,
+      clienta_id: [{ id: 98 }]
+    }
+  ];
+
+  const toolInput = {
+    llm_output: {
+      modo: 'consultar_disponibilidad',
+      servicio: ['Mechas completas'],
+      fecha_deseada: '2026-02-25',
+      hora_deseada: '09:00',
+      full_name: 'Diana Test',
+      email: 'diana@test.com'
+    },
+    state: {
+      lead_id: 400,
+      row_id: 400,
+      phone: '+5491177777777',
+      email: 'diana@test.com',
+      full_name: 'Diana Test'
+    }
+  };
+
+  const { parseOutput, analizarOutput, formatOutput } = runPipeline(toolInput, turnosAmbasOcupadas);
+
+  subheader('ParseInput');
+  assert(parseOutput.complejidad_maxima === 'muy_compleja', 'complejidad mechas = muy_compleja');
+  assert(parseOutput.duracion_estimada === 600, 'duracion mechas = 600min');
+
+  subheader('AnalizarDisponibilidad');
+  const opciones = analizarOutput.opciones || analizarOutput.slots_recomendados || [];
+
+  // NO debe haber opciones para mie 25 (ambas trabajadoras ocupadas)
+  const opMie25 = opciones.find(o => o.fecha === '2026-02-25');
+  assert(!opMie25, 'NO hay opcion para mie 25 (ambas trabajadoras ocupadas)');
+
+  // Debe ofrecer dias alternativos
+  assert(opciones.length > 0, `ofrece opciones en otros dias (${opciones.length})`);
+  if (opciones.length > 0) {
+    const primerDia = opciones[0];
+    info(`  Primera opcion: ${primerDia.fecha} ${primerDia.hora_inicio}-${primerDia.hora_fin} (${primerDia.trabajadora})`);
+    assert(primerDia.fecha !== '2026-02-25', 'primera opcion es otro dia', '!= 2026-02-25', primerDia.fecha);
+  }
+
+  subheader('FormatearRespuestaOpciones');
+  assert(formatOutput.accion === 'opciones_disponibles', 'accion = opciones_disponibles');
+  assert(formatOutput.mensaje_para_clienta.includes('jornada completa'), 'mensaje menciona jornada completa');
+  info(`  Mensaje: ${formatOutput.mensaje_para_clienta.substring(0, 150)}...`);
+}
+
+
+// ============================================================================
+// TEST J: Servicio media/compleja cuando ambas tienen muy_compleja
+// ============================================================================
+// Leraysi: balayage + Companera: alisado (ambas jornada completa mie 25).
+// Pero ambas tienen ventana de proceso libre (12:00-17:00).
+// Nueva clienta pide manicura simple (120min, media).
+// Esperado: cabe en ventana de proceso de cualquier trabajadora.
+
+header('TEST J: Servicio media cuando ambas tienen muy_compleja');
+info('Leraysi: balayage + Companera: alisado — ambas mie 25 jornada completa');
+info('Pero ventanas de proceso (12:00-17:00) estan libres en ambas');
+info('Nueva clienta pide manicura simple (120min, media)');
+info('Esperado: encuentra slot en ventana de proceso');
+
+{
+  const turnosAmbasMuyCompleja = [
+    {
+      id: 200,
+      odoo_turno_id: 20,
+      fecha: '2026-02-25T12:00:00Z',
+      hora: '09:00',
+      duracion_min: 600,
+      complejidad_maxima: { value: 'muy_compleja' },
+      servicio: [{ value: 'Balayage' }],
+      servicio_detalle: 'Balayage',
+      trabajadora: { value: 'Leraysi' },
+      estado: { value: 'confirmado' },
+      precio: 50000,
+      sena_monto: 15000,
+      clienta_id: [{ id: 99 }]
+    },
+    {
+      id: 201,
+      odoo_turno_id: 21,
+      fecha: '2026-02-25T12:00:00Z',
+      hora: '09:00',
+      duracion_min: 600,
+      complejidad_maxima: { value: 'muy_compleja' },
+      servicio: [{ value: 'Alisado brasileño' }],
+      servicio_detalle: 'Alisado brasileño',
+      trabajadora: { value: 'Companera' },
+      estado: { value: 'confirmado' },
+      precio: 45000,
+      sena_monto: 13500,
+      clienta_id: [{ id: 98 }]
+    }
+  ];
+
+  const toolInput = {
+    llm_output: {
+      modo: 'consultar_disponibilidad',
+      servicio: ['Manicura simple'],
+      fecha_deseada: '2026-02-25',
+      hora_deseada: '14:00',
+      full_name: 'Elena Test',
+      email: 'elena@test.com'
+    },
+    state: {
+      lead_id: 500,
+      row_id: 500,
+      phone: '+5491166666666',
+      email: 'elena@test.com',
+      full_name: 'Elena Test'
+    }
+  };
+
+  const { parseOutput, analizarOutput, formatOutput } = runPipeline(toolInput, turnosAmbasMuyCompleja);
+
+  subheader('ParseInput');
+  assert(parseOutput.complejidad_maxima === 'media', 'complejidad manicura = media');
+  assert(parseOutput.duracion_estimada === 120, 'duracion = 120min');
+
+  subheader('AnalizarDisponibilidad');
+  const opciones = analizarOutput.opciones || analizarOutput.slots_recomendados || [];
+  assert(opciones.length > 0, `tiene opciones (${opciones.length})`);
+
+  // Debe encontrar slot el mie 25 en ventana de proceso
+  const opMie25 = opciones.find(o => o.fecha === '2026-02-25');
+  assert(!!opMie25, 'SI hay opcion para mie 25 (cabe en ventana proceso)');
+
+  if (opMie25) {
+    const horaInicioMin = parseInt(opMie25.hora_inicio.split(':')[0]) * 60 + parseInt(opMie25.hora_inicio.split(':')[1]);
+    const horaFinMin = parseInt(opMie25.hora_fin.split(':')[0]) * 60 + parseInt(opMie25.hora_fin.split(':')[1]);
+    info(`  Slot: ${opMie25.hora_inicio}-${opMie25.hora_fin} (${opMie25.trabajadora})`);
+
+    // Debe estar dentro de la ventana de proceso (12:00-17:00)
+    assert(horaInicioMin >= 720, 'hora inicio >= 12:00 (ventana proceso)', '>= 12:00', opMie25.hora_inicio);
+    assert(horaFinMin <= 1020, 'hora fin <= 17:00 (ventana proceso)', '<= 17:00', opMie25.hora_fin);
+  }
+
+  subheader('FormatearRespuestaOpciones');
+  assert(formatOutput.accion === 'opciones_disponibles', 'accion = opciones_disponibles');
+  info(`  Mensaje: ${formatOutput.mensaje_para_clienta.substring(0, 150)}...`);
+}
+
+
+// ============================================================================
+// TEST K: Ventanas de proceso casi llenas — ultimo slot disponible
+// ============================================================================
+// Leraysi: balayage + 120min (12:00-14:00) + 60min (14:00-15:00) en ventana
+//   → libre: [15:00-17:00] = 120min
+// Companera: balayage + 120min (12:00-14:00) en ventana
+//   → libre: [14:00-17:00] = 180min
+// Nueva clienta pide manicura simple (120min, media).
+// Esperado: cabe en Companera (14:00-16:00) o Leraysi (15:00-17:00, justo)
+
+header('TEST K: Ventanas de proceso casi llenas — ultimo slot disponible');
+info('Leraysi: balayage + 120min + 60min en ventana → libre [15:00-17:00] (120min)');
+info('Companera: balayage + 120min en ventana → libre [14:00-17:00] (180min)');
+info('Nueva clienta pide manicura simple (120min, media)');
+info('Esperado: encuentra slot en ventana de proceso');
+
+{
+  const turnosVentanasCasiLlenas = [
+    // Leraysi: balayage
+    {
+      id: 200, odoo_turno_id: 20,
+      fecha: '2026-02-25T12:00:00Z', hora: '09:00', duracion_min: 600,
+      complejidad_maxima: { value: 'muy_compleja' },
+      servicio: [{ value: 'Balayage' }], servicio_detalle: 'Balayage',
+      trabajadora: { value: 'Leraysi' }, estado: { value: 'confirmado' },
+      precio: 50000, sena_monto: 15000, clienta_id: [{ id: 99 }]
+    },
+    // Leraysi: servicio 120min en ventana proceso (12:00-14:00)
+    {
+      id: 202, odoo_turno_id: 22,
+      fecha: '2026-02-25T15:00:00Z', hora: '12:00', duracion_min: 120,
+      complejidad_maxima: { value: 'media' },
+      servicio: [{ value: 'Manicura simple' }], servicio_detalle: 'Manicura simple',
+      trabajadora: { value: 'Leraysi' }, estado: { value: 'confirmado' },
+      precio: 5000, sena_monto: 1500, clienta_id: [{ id: 97 }]
+    },
+    // Leraysi: servicio 60min en ventana proceso (14:00-15:00)
+    {
+      id: 203, odoo_turno_id: 23,
+      fecha: '2026-02-25T17:00:00Z', hora: '14:00', duracion_min: 60,
+      complejidad_maxima: { value: 'simple' },
+      servicio: [{ value: 'Depilación cera axilas' }], servicio_detalle: 'Depilación cera axilas',
+      trabajadora: { value: 'Leraysi' }, estado: { value: 'confirmado' },
+      precio: 4000, sena_monto: 1200, clienta_id: [{ id: 96 }]
+    },
+    // Companera: balayage
+    {
+      id: 201, odoo_turno_id: 21,
+      fecha: '2026-02-25T12:00:00Z', hora: '09:00', duracion_min: 600,
+      complejidad_maxima: { value: 'muy_compleja' },
+      servicio: [{ value: 'Alisado brasileño' }], servicio_detalle: 'Alisado brasileño',
+      trabajadora: { value: 'Companera' }, estado: { value: 'confirmado' },
+      precio: 45000, sena_monto: 13500, clienta_id: [{ id: 98 }]
+    },
+    // Companera: servicio 120min en ventana proceso (12:00-14:00)
+    {
+      id: 204, odoo_turno_id: 24,
+      fecha: '2026-02-25T15:00:00Z', hora: '12:00', duracion_min: 120,
+      complejidad_maxima: { value: 'media' },
+      servicio: [{ value: 'Pedicura' }], servicio_detalle: 'Pedicura',
+      trabajadora: { value: 'Companera' }, estado: { value: 'confirmado' },
+      precio: 6000, sena_monto: 1800, clienta_id: [{ id: 95 }]
+    }
+  ];
+
+  const toolInput = {
+    llm_output: {
+      modo: 'consultar_disponibilidad',
+      servicio: ['Manicura simple'],
+      fecha_deseada: '2026-02-25',
+      hora_deseada: '14:00',
+      full_name: 'Fernanda Test',
+      email: 'fernanda@test.com'
+    },
+    state: {
+      lead_id: 600,
+      row_id: 600,
+      phone: '+5491155555555',
+      email: 'fernanda@test.com',
+      full_name: 'Fernanda Test'
+    }
+  };
+
+  const { parseOutput, analizarOutput, formatOutput } = runPipeline(toolInput, turnosVentanasCasiLlenas);
+
+  subheader('ParseInput');
+  assert(parseOutput.complejidad_maxima === 'media', 'complejidad manicura = media');
+  assert(parseOutput.duracion_estimada === 120, 'duracion = 120min');
+
+  subheader('AnalizarDisponibilidad');
+  const opciones = analizarOutput.opciones || analizarOutput.slots_recomendados || [];
+  assert(opciones.length > 0, `tiene opciones (${opciones.length})`);
+
+  // Debe encontrar slot el mie 25
+  const opsMie25 = opciones.filter(o => o.fecha === '2026-02-25');
+  assert(opsMie25.length > 0, `SI hay opciones para mie 25 (${opsMie25.length})`);
+
+  if (opsMie25.length > 0) {
+    const mejor = opsMie25[0];
+    const horaInicioMin = parseInt(mejor.hora_inicio.split(':')[0]) * 60 + parseInt(mejor.hora_inicio.split(':')[1]);
+    const horaFinMin = parseInt(mejor.hora_fin.split(':')[0]) * 60 + parseInt(mejor.hora_fin.split(':')[1]);
+    info(`  Mejor slot mie 25: ${mejor.hora_inicio}-${mejor.hora_fin} (${mejor.trabajadora})`);
+
+    // Debe estar dentro de ventana de proceso (12:00-17:00) y no solapar con servicios existentes
+    assert(horaInicioMin >= 720, 'hora inicio >= 12:00', '>= 12:00', mejor.hora_inicio);
+    assert(horaFinMin <= 1020, 'hora fin <= 17:00', '<= 17:00', mejor.hora_fin);
+
+    // Verificar que no solapa con bloques existentes
+    // Leraysi: ocupada 12:00-15:00, libre 15:00-17:00
+    // Companera: ocupada 12:00-14:00, libre 14:00-17:00
+    if (mejor.trabajadora === 'Leraysi') {
+      assert(horaInicioMin >= 900, 'Leraysi: empieza >= 15:00 (despues de sus servicios)', '>= 15:00', mejor.hora_inicio);
+    } else {
+      assert(horaInicioMin >= 840, 'Companera: empieza >= 14:00 (despues de su servicio)', '>= 14:00', mejor.hora_inicio);
+    }
+  }
+
+  // Mostrar todas las opciones del mie 25
+  for (const op of opsMie25) {
+    info(`  ${op.trabajadora}: ${op.hora_inicio}-${op.hora_fin}`);
+  }
+
+  subheader('FormatearRespuestaOpciones');
+  assert(formatOutput.accion === 'opciones_disponibles', 'accion = opciones_disponibles');
+  info(`  Mensaje: ${formatOutput.mensaje_para_clienta.substring(0, 200)}...`);
+}
+
+
+// ============================================================================
 // RESUMEN
 // ============================================================================
 console.log(`\n${COLORS.bold}${'='.repeat(70)}${COLORS.reset}`);
