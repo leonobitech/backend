@@ -331,8 +331,10 @@ if (gate_bloqueado) {
 
 // Forzar modo consultar para rutear a FormatearRespuestaOpciones (bypass LLM):
 // - gate_bloqueado: faltan datos → respuesta determinística
-// - agregar_a_turno_existente: validar disponibilidad → presentar opciones
-const modoOutput = (gate_bloqueado || input.agregar_a_turno_existente) ? 'consultar_disponibilidad' : input.modo;
+// - agregar_a_turno_existente EN PRIMERA LLAMADA: validar disponibilidad → presentar opciones
+//   (segunda llamada viene con modo="agendar_turno" explícito → respetar)
+const forzarConsulta = gate_bloqueado || (input.agregar_a_turno_existente && input.modo !== 'agendar_turno');
+const modoOutput = forzarConsulta ? 'consultar_disponibilidad' : input.modo;
 
 // ============================================================================
 // EXTRAER FASES DEL SERVICIO MUY_COMPLEJA (si aplica)
