@@ -133,12 +133,12 @@ const DURACION_EXTRA_LARGO = {
   'largo': 120
 };
 
-// Mapeo largo_cabello → complejidad para servicios de cabello
-// Reemplaza la complejidad fija de SERVICIOS_CONFIG cuando hay análisis de imagen
+// Mapeo largo_cabello → complejidad para servicios de cabello (máximo: compleja)
+// muy_compleja es EXCLUSIVA de los 5 tratamientos químicos (siempre, sin importar largo)
 const COMPLEJIDAD_POR_LARGO = {
   'corto': 'media',
   'medio': 'compleja',
-  'largo': 'muy_compleja'
+  'largo': 'compleja'
 };
 
 // Multiplicador de precio según largo del cabello
@@ -245,7 +245,7 @@ function obtenerComplejidadMaxima(servicios, largo) {
   const complejidades = servicios.map(srv => {
     const config = SERVICIOS_CONFIG[srv];
     if (!config) return 'media';
-    if (config.requiere_largo && largo) {
+    if (config.requiere_largo && largo && config.complejidad !== 'muy_compleja') {
       return COMPLEJIDAD_POR_LARGO[largo] || config.complejidad;
     }
     return config.complejidad;
