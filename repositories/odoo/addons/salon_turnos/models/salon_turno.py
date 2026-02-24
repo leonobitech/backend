@@ -261,8 +261,9 @@ class SalonTurno(models.Model):
             },
             'auto_return': 'approved',
             # Expirar link en 15 minutos — MP rechaza pagos despues de esto
-            'expiration_date_from': fields.Datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000-03:00'),
-            'expiration_date_to': (fields.Datetime.now() + timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%M:%S.000-03:00'),
+            # fields.Datetime.now() devuelve UTC, usar +00:00 para que MP lo interprete correctamente
+            'expiration_date_from': fields.Datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000+00:00'),
+            'expiration_date_to': (fields.Datetime.now() + timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%M:%S.000+00:00'),
         }
 
         try:
