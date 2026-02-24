@@ -75,8 +75,10 @@ const turnoFechaExistente = data.turno_fecha
   : null;
 const turnoIdExistente = data.turno_id_existente || data.odoo_turno_id || null;
 
-// Detección explícita: el Master Agent envía accion: "reprogramar"
-if (data.accion === "reprogramar") {
+// Detección explícita: priorizar flags del Master Agent
+if (data.agregar_a_turno_existente && turnoIdExistente) {
+  esAgregarServicio = true;
+} else if (data.accion === "reprogramar") {
   esReprogramacion = true;
 } else if (turnoExistente) {
   if (servicioTurnoExistente) {

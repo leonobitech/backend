@@ -89,6 +89,8 @@ turnos.forEach(turno => {
   const duracion = Number(turno.duracion_min) || 60;
   const complejidad = turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';
 
+  const turnoId = turno.odoo_turno_id || turno.id || null;
+
   if (complejidad === 'muy_compleja') {
     // 3 fases: activo_inicio (180min) + proceso (300min) + activo_fin (120min)
     const ai = FASES_MUY_COMPLEJA.activo_inicio;
@@ -96,8 +98,8 @@ turnos.forEach(turno => {
     const af = FASES_MUY_COMPLEJA.activo_fin;
 
     bloquesPorDiaTrabajadora[fecha][trabajadora].push(
-      { start: horaInicio, end: horaInicio + ai },
-      { start: horaInicio + ai + pr, end: horaInicio + ai + pr + af }
+      { start: horaInicio, end: horaInicio + ai, turno_id: turnoId },
+      { start: horaInicio + ai + pr, end: horaInicio + ai + pr + af, turno_id: turnoId }
     );
 
     // Registrar ventana de proceso (trabajadora LIBRE durante este tiempo)
@@ -105,13 +107,14 @@ turnos.forEach(turno => {
       trabajadora,
       inicio: horaInicio + ai,
       fin: horaInicio + ai + pr,
-      turno_id: turno.odoo_turno_id || turno.id
+      turno_id: turnoId
     });
   } else {
     // Bloque continuo
     bloquesPorDiaTrabajadora[fecha][trabajadora].push({
       start: horaInicio,
-      end: horaInicio + duracion
+      end: horaInicio + duracion,
+      turno_id: turnoId
     });
   }
 });
@@ -187,6 +190,56 @@ function sinConflictos(bloquesNuevos, bloquesExistentes) {
     }
   }
   return true;
+}
+
+// ============================================================================
+// PASO 4b: EXTRAER DATOS DE TURNO EXISTENTE (antes de buscar slots)
+// ============================================================================
+// Necesitamos estos datos antes del Paso 5 para:
+// - Excluir bloques del turno actual en agregar servicio (se reorganiza)
+// - Calcular duracion combinada
+let turnoServicioExistente = null;
+let turnoIdExistente = null;
+let turnoPrecioExistente = null;
+let turnoDuracionExistente = null;
+let turnoComplejidadExistente = null;
+let turnoSenaPagada = null;
+let turnoTrabajadoraExistente = null;
+let turnoHoraExistente = null;
+
+if (input.turno_agendado && input.lead_row_id) {
+  const turnoUsuaria = turnos.find(t => {
+    let turnoClientaRowId = null;
+    if (Array.isArray(t.clienta_id) && t.clienta_id.length > 0) {
+      turnoClientaRowId = t.clienta_id[0]?.id;
+    } else if (t.clienta_id && typeof t.clienta_id === 'object') {
+      turnoClientaRowId = t.clienta_id.id || t.clienta_id.value;
+    } else {
+      turnoClientaRowId = t.clienta_id;
+    }
+    return turnoClientaRowId && String(turnoClientaRowId) === String(input.lead_row_id);
+  });
+
+  if (turnoUsuaria) {
+    let servicioValue = null;
+    if (turnoUsuaria.servicio_detalle) {
+      servicioValue = turnoUsuaria.servicio_detalle;
+    } else if (Array.isArray(turnoUsuaria.servicio) && turnoUsuaria.servicio.length > 0) {
+      servicioValue = turnoUsuaria.servicio.map(s => s?.value || s).join(' + ');
+    } else if (turnoUsuaria.servicio?.value) {
+      servicioValue = turnoUsuaria.servicio.value;
+    } else {
+      servicioValue = turnoUsuaria.servicio;
+    }
+    turnoServicioExistente = servicioValue || null;
+    turnoIdExistente = turnoUsuaria.odoo_turno_id || null;
+    turnoPrecioExistente = turnoUsuaria.precio ? Number(turnoUsuaria.precio) : null;
+    turnoDuracionExistente = turnoUsuaria.duracion_min ? Number(turnoUsuaria.duracion_min) : null;
+    turnoComplejidadExistente = turnoUsuaria.complejidad_maxima?.value || turnoUsuaria.complejidad_maxima || null;
+    turnoSenaPagada = turnoUsuaria.sena_monto ? Number(turnoUsuaria.sena_monto) : null;
+    turnoTrabajadoraExistente = turnoUsuaria.trabajadora?.value || turnoUsuaria.trabajadora || 'Leraysi';
+    turnoHoraExistente = turnoUsuaria.hora || null;
+  }
 }
 
 // ============================================================================
@@ -309,6 +362,182 @@ if (input.agregar_a_turno_existente && input.turno_fecha) {
 }
 
 // ============================================================================
+// PASO 6b: AGREGAR SERVICIO CON VALIDACION DE DISPONIBILIDAD
+// ============================================================================
+// Cuando se agrega un servicio a un turno existente, verificar que la duracion
+// combinada cabe en el horario. Dos estrategias:
+//   A) simple/media/compleja: bloque continuo fusionado
+//   B) muy_compleja: 3 fases a las 9:00, existente en ventana de proceso
+
+if (input.agregar_a_turno_existente && turnoIdExistente) {
+  // Limpiar candidatos del Paso 5 (eran para servicio nuevo solo, sin contexto de turno existente)
+  candidatos.length = 0;
+
+  const trabajadoraActual = turnoTrabajadoraExistente || 'Leraysi';
+  const duracionExistente = turnoDuracionExistente || 60;
+  const turnoFechaExistente = input.turno_fecha
+    ? (input.turno_fecha.includes('T') ? input.turno_fecha.split('T')[0] : input.turno_fecha.split(' ')[0])
+    : fechaSolicitada;
+  const horaOriginalMin = turnoHoraExistente ? horaToMinutos(turnoHoraExistente) : (horaDeseada || JORNADA_INICIO);
+
+  // Funcion auxiliar: filtrar bloques excluyendo el turno actual
+  function bloquesSinTurnoActual(bloquesArr) {
+    return bloquesArr.filter(b => b.turno_id == null || String(b.turno_id) !== String(turnoIdExistente));
+  }
+
+  // Buscar en el dia del turno existente primero, luego alternativas
+  const diasBusquedaAgregar = [];
+  const diaExistente = diasDisponibles.find(d => d.fecha === turnoFechaExistente);
+  // Incluir el dia del turno incluso si no esta en diasDisponibles (puede ser hoy+1)
+  if (diaExistente) {
+    diasBusquedaAgregar.push(diaExistente);
+  } else if (turnoFechaExistente) {
+    const fechaObj = new Date(turnoFechaExistente + 'T12:00:00');
+    if (fechaObj.getDay() !== 0) { // No domingo
+      diasBusquedaAgregar.push({
+        fecha: turnoFechaExistente,
+        nombre_dia: diasNombre[fechaObj.getDay()],
+        fechaObj
+      });
+    }
+  }
+  // Agregar dias alternativos
+  for (const dia of diasDisponibles) {
+    if (dia.fecha !== turnoFechaExistente) {
+      diasBusquedaAgregar.push(dia);
+    }
+    if (diasBusquedaAgregar.length >= 14) break;
+  }
+
+  if (esMuyCompleja) {
+    // ── ESTRATEGIA B: muy_compleja a las 9:00 + existente en ventana proceso ──
+    // El servicio muy_compleja SIEMPRE empieza a las 9:00 (unico slot donde cabe)
+    // El servicio existente se reubica en la ventana de proceso (12:00-17:00)
+
+    const ventanaInicio = JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio; // 720 = 12:00
+    const ventanaFin = ventanaInicio + FASES_MUY_COMPLEJA.proceso; // 1020 = 17:00
+
+    // Verificar que el servicio existente cabe en la ventana de proceso
+    if (duracionExistente <= FASES_MUY_COMPLEJA.proceso) {
+      for (const dia of diasBusquedaAgregar) {
+        if (candidatos.length >= 6) break;
+        inicializarDia(dia.fecha);
+        const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
+        const esMismoDia = dia.fecha === turnoFechaExistente;
+
+        // Probar trabajadora actual primero, luego la otra
+        const trabajadorasOrdenadas = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
+
+        for (const trabajadora of trabajadorasOrdenadas) {
+          // Bloques activos del muy_compleja: [9:00-12:00] y [17:00-19:00]
+          const bloquesNuevoMC = [
+            { start: JORNADA_INICIO, end: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio },
+            { start: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio + FASES_MUY_COMPLEJA.proceso,
+              end: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio + FASES_MUY_COMPLEJA.proceso + FASES_MUY_COMPLEJA.activo_fin }
+          ];
+
+          // Obtener bloques de la trabajadora SIN el turno actual (se va a reorganizar)
+          const bloquesExistentes = esMismoDia
+            ? bloquesSinTurnoActual(bloquesDia[trabajadora] || [])
+            : (bloquesDia[trabajadora] || []);
+
+          // Verificar que los bloques activos del muy_compleja no solapan
+          if (!sinConflictos(bloquesNuevoMC, bloquesExistentes)) continue;
+
+          // Verificar que el servicio existente cabe en la ventana de proceso sin conflictos
+          // Buscar primer hueco libre en la ventana [12:00-17:00]
+          let horaServicioEnProceso = null;
+          for (let s = ventanaInicio; s + duracionExistente <= ventanaFin; s += STEP) {
+            const bloqueExist = [{ start: s, end: s + duracionExistente }];
+            if (sinConflictos(bloqueExist, bloquesExistentes)) {
+              horaServicioEnProceso = s;
+              break;
+            }
+          }
+
+          if (horaServicioEnProceso === null) continue; // No cabe en la ventana
+
+          candidatos.push({
+            trabajadora,
+            fecha: dia.fecha,
+            hora_inicio: minutosToHora(JORNADA_INICIO), // 09:00
+            hora_fin: minutosToHora(JORNADA_FIN), // 19:00
+            nombre_dia: dia.nombre_dia,
+            duracion_min: FASES_MUY_COMPLEJA.activo_inicio + FASES_MUY_COMPLEJA.proceso + FASES_MUY_COMPLEJA.activo_fin,
+            score: (esMismoDia ? 18 : 0) + (trabajadora === trabajadoraActual ? 5 : 0),
+            es_fecha_alternativa: !esMismoDia,
+            en_proceso: false,
+            // Metadata agregar servicio
+            es_agregar_servicio: true,
+            hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
+            servicio_reubicado: true,
+            servicio_en_proceso: true,
+            hora_servicio_existente: minutosToHora(horaServicioEnProceso)
+          });
+        }
+      }
+    }
+  } else {
+    // ── ESTRATEGIA A: bloque continuo combinado ──
+    // Fusionar servicios en un bloque sin tiempos muertos
+    const duracionCombinada = duracionExistente + duracionNueva;
+
+    for (const dia of diasBusquedaAgregar) {
+      if (candidatos.length >= 12) break;
+      inicializarDia(dia.fecha);
+      const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
+      const esMismoDia = dia.fecha === turnoFechaExistente;
+
+      for (let startMin = JORNADA_INICIO; startMin + duracionCombinada <= JORNADA_FIN; startMin += STEP) {
+        const bloqueCombinado = [{ start: startMin, end: startMin + duracionCombinada }];
+
+        // Verificar dentro de jornada
+        if (!dentroDeJornada(bloqueCombinado)) continue;
+
+        // Probar trabajadora actual primero, luego la otra
+        const trabajadorasOrdenadas = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
+
+        for (const trabajadora of trabajadorasOrdenadas) {
+          // Bloques de la trabajadora SIN el turno actual (se va a reorganizar)
+          const bloquesExistentes = esMismoDia
+            ? bloquesSinTurnoActual(bloquesDia[trabajadora] || [])
+            : (bloquesDia[trabajadora] || []);
+
+          if (!sinConflictos(bloqueCombinado, bloquesExistentes)) continue;
+
+          // Calcular score
+          let score = 0;
+          if (esMismoDia) score += 8;
+          if (startMin === horaOriginalMin) score += 20; // Mismo horario original = maximo
+          else if (esMismoDia && Math.abs(startMin - horaOriginalMin) <= 60) score += 5;
+          if (trabajadora === trabajadoraActual) score += 3;
+          if (trabajadora === 'Leraysi') score += 1;
+
+          const servicioReubicado = startMin !== horaOriginalMin;
+
+          candidatos.push({
+            trabajadora,
+            fecha: dia.fecha,
+            hora_inicio: minutosToHora(startMin),
+            hora_fin: minutosToHora(startMin + duracionCombinada),
+            nombre_dia: dia.nombre_dia,
+            duracion_min: duracionCombinada,
+            score,
+            es_fecha_alternativa: !esMismoDia,
+            en_proceso: false,
+            // Metadata agregar servicio
+            es_agregar_servicio: true,
+            hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
+            servicio_reubicado: servicioReubicado,
+            servicio_en_proceso: false
+          });
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
 // PASO 7: DEDUPLICAR Y SELECCIONAR TOP 3
 // ============================================================================
 // No repetir misma fecha+hora (quedarse con el de mayor score)
@@ -365,52 +594,7 @@ if (!disponible) {
 }
 
 // ============================================================================
-// PASO 9: EXTRAER DATOS DE TURNO EXISTENTE (reprogramacion/agregar servicio)
-// ============================================================================
-let turnoServicioExistente = null;
-let turnoIdExistente = null;
-let turnoPrecioExistente = null;
-let turnoDuracionExistente = null;
-let turnoComplejidadExistente = null;
-let turnoSenaPagada = null;
-let turnoTrabajadoraExistente = null;
-
-if (input.turno_agendado && input.lead_row_id) {
-  const turnoUsuaria = turnos.find(t => {
-    let turnoClientaRowId = null;
-    if (Array.isArray(t.clienta_id) && t.clienta_id.length > 0) {
-      turnoClientaRowId = t.clienta_id[0]?.id;
-    } else if (t.clienta_id && typeof t.clienta_id === 'object') {
-      turnoClientaRowId = t.clienta_id.id || t.clienta_id.value;
-    } else {
-      turnoClientaRowId = t.clienta_id;
-    }
-    return turnoClientaRowId && String(turnoClientaRowId) === String(input.lead_row_id);
-  });
-
-  if (turnoUsuaria) {
-    let servicioValue = null;
-    if (turnoUsuaria.servicio_detalle) {
-      servicioValue = turnoUsuaria.servicio_detalle;
-    } else if (Array.isArray(turnoUsuaria.servicio) && turnoUsuaria.servicio.length > 0) {
-      servicioValue = turnoUsuaria.servicio.map(s => s?.value || s).join(' + ');
-    } else if (turnoUsuaria.servicio?.value) {
-      servicioValue = turnoUsuaria.servicio.value;
-    } else {
-      servicioValue = turnoUsuaria.servicio;
-    }
-    turnoServicioExistente = servicioValue || null;
-    turnoIdExistente = turnoUsuaria.odoo_turno_id || null;
-    turnoPrecioExistente = turnoUsuaria.precio ? Number(turnoUsuaria.precio) : null;
-    turnoDuracionExistente = turnoUsuaria.duracion_min ? Number(turnoUsuaria.duracion_min) : null;
-    turnoComplejidadExistente = turnoUsuaria.complejidad_maxima?.value || turnoUsuaria.complejidad_maxima || null;
-    turnoSenaPagada = turnoUsuaria.sena_monto ? Number(turnoUsuaria.sena_monto) : null;
-    turnoTrabajadoraExistente = turnoUsuaria.trabajadora?.value || turnoUsuaria.trabajadora || 'Leraysi';
-  }
-}
-
-// ============================================================================
-// PASO 10: RESUMEN PARA BUILDAGENTPROMPT
+// PASO 9: RESUMEN PARA BUILDAGENTPROMPT
 // ============================================================================
 const resumen = opciones.length > 0
   ? opciones.map(o => `Opcion ${o.opcion}: ${o.fecha_humana} ${o.hora_inicio}-${o.hora_fin} (Trabajadora ${o.trabajadora})`).join('\n')
@@ -451,6 +635,7 @@ return [{
     turno_complejidad_existente: turnoComplejidadExistente,
     turno_sena_pagada: turnoSenaPagada,
     turno_trabajadora_existente: turnoTrabajadoraExistente,
+    turno_hora_original: turnoHoraExistente,
 
     // Accion explicita
     accion: input.accion || null,

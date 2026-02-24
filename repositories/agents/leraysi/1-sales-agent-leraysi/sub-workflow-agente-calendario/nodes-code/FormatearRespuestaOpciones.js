@@ -34,12 +34,33 @@ if (data.gate_bloqueado) {
 const slots = data.slots_recomendados || [];
 const servicioDisplay = data.servicio_detalle || (Array.isArray(data.servicio) ? data.servicio.join(' + ') : data.servicio) || 'servicio';
 const nombreClienta = data.nombre_clienta || 'Reina';
+const esAgregarServicio = data.agregar_a_turno_existente === true;
+const horaOriginal = data.turno_hora_original || null;
 
 let accion;
 let mensajeParaClienta;
 
-if (slots.length > 0) {
-  // Hay opciones disponibles
+if (esAgregarServicio && slots.length > 0) {
+  // ── AGREGAR SERVICIO: opciones con contexto de cambio horario ──
+  accion = 'opciones_agregar_servicio';
+
+  const opcionesTexto = slots.map(s => {
+    if (s.duracion_min >= 600) {
+      return `* ${s.fecha_humana} - jornada completa (${s.hora_inicio} a ${s.hora_fin}, tu servicio actual se acomoda dentro)`;
+    }
+    if (horaOriginal && s.hora_inicio === horaOriginal && !s.es_fecha_alternativa) {
+      return `* ${s.fecha_humana} a las ${s.hora_inicio} (tu horario actual se mantiene)`;
+    }
+    if (horaOriginal && !s.es_fecha_alternativa) {
+      return `* ${s.fecha_humana} a las ${s.hora_inicio} (tu turno se moveria de ${horaOriginal} a ${s.hora_inicio})`;
+    }
+    return `* ${s.fecha_humana} a las ${s.hora_inicio}`;
+  }).join('\n');
+
+  mensajeParaClienta = `${nombreClienta}, para agregar ${servicioDisplay.toLowerCase()} a tu turno, estas son las opciones:\n\n${opcionesTexto}\n\n¿Cual te queda mejor?`;
+
+} else if (slots.length > 0) {
+  // ── TURNO NUEVO: opciones normales ──
   accion = 'opciones_disponibles';
 
   const esJornadaCompleta = slots.some(s => s.duracion_min >= 600);
@@ -60,17 +81,21 @@ if (slots.length > 0) {
     mensajeParaClienta = `${nombreClienta}, para ${servicioDisplay.toLowerCase()} tengo estos horarios:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
   }
 } else {
-  // Sin disponibilidad - ofrecer alternativas por día
-  accion = 'sin_disponibilidad';
+  // ── SIN DISPONIBILIDAD ──
+  accion = esAgregarServicio ? 'sin_disponibilidad_agregar' : 'sin_disponibilidad';
 
   const alternativas = data.alternativas || [];
   if (alternativas.length > 0) {
     const altTexto = alternativas.map(a =>
       `* ${a.nombre_dia} ${a.fecha}`
     ).join('\n');
-    mensajeParaClienta = `${nombreClienta}, no encontré horarios disponibles para ${servicioDisplay.toLowerCase()} en la fecha que pediste. Te puedo ofrecer estos días:\n\n${altTexto}\n\n¿Cuál te queda mejor?`;
+    mensajeParaClienta = esAgregarServicio
+      ? `${nombreClienta}, no es posible agregar ${servicioDisplay.toLowerCase()} a tu turno ese dia. Te puedo ofrecer estos dias:\n\n${altTexto}\n\n¿Cual te queda mejor?`
+      : `${nombreClienta}, no encontré horarios disponibles para ${servicioDisplay.toLowerCase()} en la fecha que pediste. Te puedo ofrecer estos días:\n\n${altTexto}\n\n¿Cuál te queda mejor?`;
   } else {
-    mensajeParaClienta = `${nombreClienta}, no encontré horarios disponibles para ${servicioDisplay.toLowerCase()} en los próximos días. ¿Querés que busque en otra fecha?`;
+    mensajeParaClienta = esAgregarServicio
+      ? `${nombreClienta}, no es posible agregar ${servicioDisplay.toLowerCase()} a tu turno en los proximos dias. Ambas estilistas tienen la agenda completa.`
+      : `${nombreClienta}, no encontré horarios disponibles para ${servicioDisplay.toLowerCase()} en los próximos días. ¿Querés que busque en otra fecha?`;
   }
 }
 
@@ -85,6 +110,11 @@ return [{
     precio: data.precio || 0,
     sena: Math.round((data.precio || 0) * 0.3),
     duracion_estimada: data.duracion_estimada || 0,
-    complejidad_maxima: data.complejidad_maxima || 'media'
+    complejidad_maxima: data.complejidad_maxima || 'media',
+    // Contexto agregar servicio (para que Master Agent sepa el flujo)
+    agregar_a_turno_existente: esAgregarServicio,
+    turno_id_existente: data.turno_id_existente || null,
+    turno_precio_existente: data.turno_precio_existente || null,
+    turno_hora_original: horaOriginal
   }
 }];
