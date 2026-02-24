@@ -579,7 +579,15 @@ const opciones = elegidos.map((s, i) => {
     fecha_humana: `${s.nombre_dia.toLowerCase()} ${fechaObj.getDate()} de ${meses[fechaObj.getMonth()]}`,
     duracion_min: s.duracion_min,
     es_fecha_alternativa: s.es_fecha_alternativa,
-    en_proceso: s.en_proceso
+    en_proceso: s.en_proceso,
+    // Metadata agregar servicio (solo presente cuando aplica)
+    ...(s.es_agregar_servicio ? {
+      es_agregar_servicio: true,
+      hora_original: s.hora_original,
+      servicio_reubicado: s.servicio_reubicado,
+      servicio_en_proceso: s.servicio_en_proceso,
+      hora_servicio_existente: s.hora_servicio_existente
+    } : {})
   };
 });
 
