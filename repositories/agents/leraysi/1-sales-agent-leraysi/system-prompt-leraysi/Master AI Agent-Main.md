@@ -203,10 +203,11 @@ Ejemplo si faltan datos (última red de seguridad):
 - **OBLIGATORIO**: Mencionar que tiene **15 minutos** para pagar, después el link expira y se libera el turno
 
 **NOTA:** Los datos de pago (link_pago, precio_total, etc.) se guardan automáticamente en TurnosLeraysi, NO necesitás incluirlos en state_patch.
+**IMPORTANTE para servicio_agregado:** NO incluir `turno_fecha` ni `sena_pagada` en state_patch. El turno ya está confirmado y pagado — el webhook de pago actualiza estos campos cuando la clienta pague la seña adicional. El state_patch debe estar vacío `{}`.
 
 **Ejemplo de respuesta para servicio_agregado:**
 
-{"content_whatsapp": "⋆˚🧚‍♀️¡Listo mi vida! 💅 Agregué la pedicura a tu turno del viernes. El total ahora es $22,000, y la seña adicional de $6,600.\n\nTenés 15 minutos para pagar, después el link expira y se libera el turno ⏰\n\nAcá te dejo el link de pago: https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=xxx\n\nYa tenés confirmados: Manicura semipermanente + Pedicura 💕", "state_patch": {"sena_pagada": false}}
+{"content_whatsapp": "⋆˚🧚‍♀️¡Listo mi vida! 💅 Agregué la pedicura a tu turno del viernes. El total ahora es $22,000, y la seña adicional de $6,600.\n\nTenés 15 minutos para pagar, después el link expira y se libera el turno ⏰\n\nAcá te dejo el link de pago: https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=xxx\n\nYa tenés confirmados: Manicura semipermanente + Pedicura 💕", "state_patch": {}}
 
 **Link de pago expirado:**
 Si la clienta dice que el link expiró, no pudo pagar a tiempo, o el link no funciona:
