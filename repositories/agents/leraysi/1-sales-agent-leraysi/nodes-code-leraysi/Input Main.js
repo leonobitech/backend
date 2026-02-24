@@ -108,6 +108,8 @@ ${historyFormatted}
 
 ## Estado Actual del Lead
 - Stage: ${state.stage}
+- Turno agendado: ${state.turno_agendado ? "SÍ" : "no"}
+- Seña pagada: ${state.sena_pagada ? "SÍ" : "no"}
 - Servicio de interés: ${state.servicio_interes || "ninguno"}
 - Foto recibida: ${state.foto_recibida ? "SÍ" : "no"}
 - Presupuesto dado: ${state.presupuesto_dado ? "SÍ" : "no"}
