@@ -11,6 +11,7 @@ import { ConsultarTurnosDiaTool } from "./odoo/leraysi/consultar-turnos-dia/cons
 import { ConsultarDisponibilidadTool } from "./odoo/leraysi/consultar-disponibilidad/consultar-disponibilidad.tool";
 import { ConfirmarTurnoTool } from "./odoo/leraysi/confirmar-turno/confirmar-turno.tool";
 import { CancelarTurnoTool } from "./odoo/leraysi/cancelar-turno/cancelar-turno.tool";
+import { ExpirarTurnoTool } from "./odoo/leraysi/expirar-turno/expirar-turno.tool";
 import { ReprogramarTurnoTool } from "./odoo/leraysi/reprogramar-turno/reprogramar-turno.tool";
 import { ConfirmarPagoCompletoTool } from "./odoo/leraysi/confirmar-pago-completo/confirmar-pago-completo.tool";
 import { AgregarServicioTurnoLeraysiTool } from "./odoo/leraysi/agregar-servicio-turno/agregar-servicio-turno.tool";
@@ -79,6 +80,13 @@ export async function initializeTools(): Promise<ToolRegistry> {
     version: "1.0.0",
     requiredScopes: ["odoo:write"],
     estimatedTime: 800,
+  });
+
+  registry.register(new ExpirarTurnoTool(odooClient), {
+    category: "leraysi",
+    version: "1.0.0",
+    requiredScopes: ["odoo:write"],
+    estimatedTime: 1500,
   });
 
   registry.register(new ReprogramarTurnoTool(odooClient), {
