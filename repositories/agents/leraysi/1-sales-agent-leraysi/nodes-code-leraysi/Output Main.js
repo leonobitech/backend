@@ -189,6 +189,14 @@ if (turnoConfirmadoPagado && statePatch.stage && statePatch.stage !== "turno_con
   delete statePatch.stage;
 }
 
+// ── Protección: turno confirmado+pagado → no actualizar turno_fecha ──
+// Cuando se agrega un servicio, la LLM envía la fecha/hora nueva antes del pago.
+// Delegamos la actualización de turno_fecha al webhook de pago (TurnoLeadConfirmado).
+if (turnoConfirmadoPagado && statePatch.turno_fecha) {
+  console.log(`[OutputMain v3.2] 🛡️ Protección turno confirmado+pagado: bloqueando turno_fecha "${statePatch.turno_fecha}" → manteniendo original "${originalState.turno_fecha}"`);
+  delete statePatch.turno_fecha;
+}
+
 // ── Protección: foto ya recibida → no volver a pedir ──
 // Si ya tenemos image_analysis y foto_recibida, el LLM no debería setear waiting_image=true.
 // Esto previene que el bot pida foto de nuevo cuando la clienta pregunta por otro servicio de cabello.
