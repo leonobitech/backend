@@ -40,6 +40,7 @@ function formatBaserowDatetime(date) {
 }
 
 const ahora = new Date();
+const expiraAt = new Date(ahora.getTime() + 15 * 60 * 1000); // 15 min para pagar
 
 // ============================================================================
 // CAMPOS A ACTUALIZAR EN BASEROW (misma estructura que turno_creado)
@@ -73,8 +74,9 @@ const updateFields = {
   mp_preference_id: data.mp_preference_id || '',
   mp_link: data.link_pago || '',
 
-  // Timestamp de actualización
+  // Timestamps
   updated_at: formatBaserowDatetime(ahora),
+  expira_at: formatBaserowDatetime(expiraAt),
 
   // Notas con historial
   notas: `Servicio agregado el ${ahora.toLocaleDateString('es-AR')}. ` +
