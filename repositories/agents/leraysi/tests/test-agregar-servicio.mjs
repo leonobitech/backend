@@ -237,6 +237,7 @@ info('Esperado: sistema propone horario mas temprano');
 {
   const toolInput = {
     llm_output: {
+      modo: 'consultar_disponibilidad',
       servicio: ['Manicura semipermanente'],
       fecha_deseada: '2026-02-25',
       hora_deseada: '15:00',
@@ -257,7 +258,7 @@ info('Esperado: sistema propone horario mas temprano');
   const { parseOutput, analizarOutput, formatOutput } = runPipeline(toolInput, crearTurnosBase());
 
   subheader('ParseInput');
-  assert(parseOutput.modo === 'consultar_disponibilidad', 'modo forzado a consultar_disponibilidad (por agregar_a_turno_existente)', 'consultar_disponibilidad', parseOutput.modo);
+  assert(parseOutput.modo === 'consultar_disponibilidad', 'modo = consultar_disponibilidad (primera llamada)', 'consultar_disponibilidad', parseOutput.modo);
   assert(parseOutput.duracion_estimada === 180, 'duracion manicura semipermanente = 180min', 180, parseOutput.duracion_estimada);
 
   subheader('AnalizarDisponibilidad');
@@ -287,6 +288,7 @@ info('Esperado: jornada completa 09:00-19:00, manicura en ventana proceso');
 {
   const toolInput = {
     llm_output: {
+      modo: 'consultar_disponibilidad',
       servicio: ['Balayage'],
       fecha_deseada: '2026-02-25',
       hora_deseada: '15:00',
@@ -363,6 +365,7 @@ info('Esperado: propone Companera en el mismo dia');
 
   const toolInput = {
     llm_output: {
+      modo: 'consultar_disponibilidad',
       servicio: ['Tintura raíz'],
       fecha_deseada: '2026-02-25',
       hora_deseada: '15:00',
@@ -441,6 +444,7 @@ info('Esperado: ofrece otros dias o sin disponibilidad');
 
   const toolInput = {
     llm_output: {
+      modo: 'consultar_disponibilidad',
       servicio: ['Balayage'],
       fecha_deseada: '2026-02-25',
       hora_deseada: '15:00',
@@ -481,14 +485,15 @@ info('Esperado: ofrece otros dias o sin disponibilidad');
 }
 
 
-header('TEST F: modo forzado por ParseInput (sin modo del LLM)');
-info('LLM NO envia modo, pero agregar_a_turno_existente = true');
-info('Esperado: ParseInput fuerza modo = consultar_disponibilidad');
+header('TEST F: Segunda llamada (sin modo del LLM) NO fuerza consultar');
+info('LLM NO envia modo (segunda llamada), agregar_a_turno_existente = true');
+info('Esperado: ParseInput NO fuerza consultar — deja pasar al agente calendario');
+info('(Solo fuerza consultar cuando modo es EXPLICITAMENTE "consultar_disponibilidad")');
 
 {
   const toolInput = {
     llm_output: {
-      // Sin modo! El LLM no lo envio
+      // Sin modo! Asi es como el LLM envia la segunda llamada
       servicio: ['Pedicura'],
       fecha_deseada: '2026-02-25',
       hora_deseada: '15:00',
@@ -509,7 +514,40 @@ info('Esperado: ParseInput fuerza modo = consultar_disponibilidad');
   const parseCtx = createN8nContext(toolInput);
   const parseOutput = runNode(join(NODES_DIR, 'ParseInput.js'), parseCtx);
 
-  assert(parseOutput.modo === 'consultar_disponibilidad', 'modo forzado a consultar_disponibilidad (el fix clave!)', 'consultar_disponibilidad', parseOutput.modo);
+  assert(parseOutput.modo !== 'consultar_disponibilidad', 'modo NO forzado (segunda llamada sin modo explicito)', '!= consultar_disponibilidad', parseOutput.modo);
+  assert(parseOutput.agregar_a_turno_existente === true, 'agregar_a_turno_existente se preserva');
+}
+
+
+header('TEST F2: Primera llamada (modo explicito) SI fuerza consultar');
+info('LLM envia modo = "consultar_disponibilidad" + agregar_a_turno_existente = true');
+info('Esperado: ParseInput mantiene modo = consultar_disponibilidad');
+
+{
+  const toolInput = {
+    llm_output: {
+      modo: 'consultar_disponibilidad',
+      servicio: ['Pedicura'],
+      fecha_deseada: '2026-02-25',
+      hora_deseada: '15:00',
+      nombre_clienta: 'Maria Test'
+    },
+    state: {
+      lead_id: 100,
+      row_id: 86,
+      phone: '+5491112345678',
+      turno_agendado: true,
+      turno_fecha: '2026-02-25T15:00:00-03:00',
+      odoo_turno_id: 8,
+      turno_precio_existente: 5000,
+      agregar_a_turno_existente: true
+    }
+  };
+
+  const parseCtx = createN8nContext(toolInput);
+  const parseOutput = runNode(join(NODES_DIR, 'ParseInput.js'), parseCtx);
+
+  assert(parseOutput.modo === 'consultar_disponibilidad', 'modo = consultar_disponibilidad (primera llamada con modo explicito)', 'consultar_disponibilidad', parseOutput.modo);
   assert(parseOutput.agregar_a_turno_existente === true, 'agregar_a_turno_existente se preserva');
 }
 

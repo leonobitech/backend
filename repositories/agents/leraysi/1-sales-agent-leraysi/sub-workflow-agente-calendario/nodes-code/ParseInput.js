@@ -331,9 +331,9 @@ if (gate_bloqueado) {
 
 // Forzar modo consultar para rutear a FormatearRespuestaOpciones (bypass LLM):
 // - gate_bloqueado: faltan datos → respuesta determinística
-// - agregar_a_turno_existente EN PRIMERA LLAMADA: validar disponibilidad → presentar opciones
-//   (segunda llamada viene con modo="agendar_turno" explícito → respetar)
-const forzarConsulta = gate_bloqueado || (input.agregar_a_turno_existente && input.modo !== 'agendar_turno');
+// - agregar_a_turno_existente CON modo EXPLÍCITO "consultar_disponibilidad": validar disponibilidad
+//   (segunda llamada: LLM no envía modo → null → NO forzar, deja pasar al agente calendario)
+const forzarConsulta = gate_bloqueado || (input.agregar_a_turno_existente && input.modo === 'consultar_disponibilidad');
 const modoOutput = forzarConsulta ? 'consultar_disponibilidad' : input.modo;
 
 // ============================================================================
