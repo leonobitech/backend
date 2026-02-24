@@ -41,7 +41,7 @@ let accion;
 let mensajeParaClienta;
 
 if (esAgregarServicio && slots.length > 0) {
-  // ── AGREGAR SERVICIO: opciones con contexto de cambio horario ──
+  // ── AGREGAR SERVICIO: opciones con contexto de cambio horario + desglose seña ──
   accion = 'opciones_agregar_servicio';
 
   const opcionesTexto = slots.map(s => {
@@ -57,7 +57,24 @@ if (esAgregarServicio && slots.length > 0) {
     return `* ${s.fecha_humana} a las ${s.hora_inicio}`;
   }).join('\n');
 
-  mensajeParaClienta = `${nombreClienta}, para agregar ${servicioDisplay.toLowerCase()} a tu turno, estas son las opciones:\n\n${opcionesTexto}\n\n¿Cual te queda mejor?`;
+  // Calcular desglose de seña para agregar servicio
+  const precioExistente = data.turno_precio_existente || 0;
+  const precioNuevo = data.precio || 0;
+  const precioTotal = precioExistente + precioNuevo;
+  const senaPagada = data.turno_sena_pagada || Math.round(precioExistente * 0.3);
+  const senaTotalNueva = Math.round(precioTotal * 0.3);
+  const senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);
+
+  const servicioExistente = data.turno_servicio_existente || 'servicio actual';
+
+  const desgloseSena = `\n\n📋 Resumen del turno actualizado:\n` +
+    `* ${servicioExistente}: $${precioExistente.toLocaleString('es-AR')}\n` +
+    `* ${servicioDisplay}: $${precioNuevo.toLocaleString('es-AR')}\n` +
+    `* Total: $${precioTotal.toLocaleString('es-AR')}\n\n` +
+    `💰 Seña ya pagada: $${senaPagada.toLocaleString('es-AR')}\n` +
+    `💰 Seña adicional a pagar: $${senaDiferencial.toLocaleString('es-AR')}`;
+
+  mensajeParaClienta = `${nombreClienta}, para agregar ${servicioDisplay.toLowerCase()} a tu turno, estas son las opciones:\n\n${opcionesTexto}${desgloseSena}\n\n¿Cual te queda mejor?`;
 
 } else if (slots.length > 0) {
   // ── TURNO NUEVO: opciones normales ──
@@ -115,6 +132,9 @@ return [{
     agregar_a_turno_existente: esAgregarServicio,
     turno_id_existente: data.turno_id_existente || null,
     turno_precio_existente: data.turno_precio_existente || null,
-    turno_hora_original: horaOriginal
+    turno_hora_original: horaOriginal,
+    // Desglose seña (solo relevante cuando esAgregarServicio)
+    turno_sena_pagada: data.turno_sena_pagada || null,
+    turno_servicio_existente: data.turno_servicio_existente || null
   }
 }];

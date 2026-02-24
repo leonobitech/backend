@@ -16,6 +16,10 @@ for (const item of items) {
   if (isNaN(expiraAt.getTime())) continue;
   if (expiraAt >= ahora) continue;
 
+  // Si ya tiene un pago previo (mp_payment_id), no expirar.
+  // Esto protege turnos con servicio agregado cuya seña adicional no se pagó a tiempo.
+  if (turno.mp_payment_id) continue;
+
   // Extraer lead_row_id del campo clienta_id (link_row en Baserow)
   let leadRowId = null;
   let nombreClienta = "";
