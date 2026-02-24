@@ -278,6 +278,18 @@ class MercadoPagoWebhook(http.Controller):
                 _logger.info(f'Pago {payment_id} ya registrado en historial, ignorando duplicado')
                 return {'status': 'ok', 'message': 'Already processed'}
 
+            # Guard: rechazar pagos para turnos cancelados/expirados
+            if turno.estado == 'cancelado':
+                _logger.warning(
+                    f'[MP Webhook] Pago {payment_id} para turno CANCELADO {turno.id}, '
+                    f'ignorando (link viejo sin expiración). Requiere devolución manual.'
+                )
+                turno.message_post(
+                    body=f'⚠️ Se recibió un pago (MP #{payment_id}) pero el turno ya estaba cancelado. '
+                         f'Verificar si corresponde devolución.'
+                )
+                return {'status': 'ok', 'message': 'Turno cancelled, payment ignored'}
+
             # Actualizar según estado del pago
             if status == 'approved':
                 # Determinar tipo de pago (seña inicial o adicional)
