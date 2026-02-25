@@ -305,6 +305,13 @@ class MercadoPagoWebhook(http.Controller):
                     'mp_payment_id': str(payment_id),
                 })
 
+                # Aplicar cambios pendientes si existen (servicio agregado post-pago)
+                # pending_changes contiene los campos definitivos (servicio, precio,
+                # duracion, complejidad) que se guardaron como staging al agregar
+                # servicio, y se aplican aquí solo cuando el pago se confirma.
+                if turno.pending_changes:
+                    turno.action_aplicar_pending_changes()
+
                 monto = payment_data.get('transaction_amount', 0)
                 turno.message_post(
                     body=f'Pago de seña confirmado via Mercado Pago. '

@@ -1,3 +1,4 @@
+import json
 import logging
 import requests
 import base64
@@ -179,6 +180,14 @@ class SalonTurno(models.Model):
         string='Complejidad Máxima',
         tracking=True,
         help='Nivel de complejidad del turno (determina capacidad del salón)',
+    )
+
+    # Cambios pendientes (staging para agregar servicio - separación de responsabilidades)
+    pending_changes = fields.Text(
+        string='Cambios Pendientes',
+        help='JSON con cambios a aplicar post-pago al agregar servicio. '
+             'Se aplican en mercadopago_webhook al confirmar pago. '
+             'Se limpian al expirar el link de pago.',
     )
 
     # Notas
@@ -459,6 +468,89 @@ class SalonTurno(models.Model):
         if turno.exists():
             return turno._to_dict()
         return None
+
+    def action_aplicar_pending_changes(self):
+        """
+        Aplica los cambios pendientes (staging) al turno post-pago.
+
+        Llamado desde mercadopago_webhook.py cuando se confirma el pago
+        de un servicio agregado. Los campos definitivos (servicio, precio,
+        duracion, complejidad) se aplican aquí, no al momento de agregar.
+        """
+        self.ensure_one()
+        if not self.pending_changes:
+            return
+
+        try:
+            changes = json.loads(self.pending_changes)
+        except (json.JSONDecodeError, TypeError) as e:
+            _logger.error(f'[PendingChanges] Error parseando JSON turno {self.id}: {e}')
+            return
+
+        # Campos permitidos para aplicar (whitelist de seguridad)
+        ALLOWED_FIELDS = {
+            'servicio', 'servicio_detalle', 'precio', 'duracion',
+            'complejidad_maxima', 'fecha_hora',
+        }
+
+        update_vals = {k: v for k, v in changes.items() if k in ALLOWED_FIELDS}
+        update_vals['pending_changes'] = False  # Limpiar staging
+
+        self.write(update_vals)
+
+        _logger.info(
+            f'[PendingChanges] Aplicados cambios pendientes a turno {self.id}: '
+            f'{list(update_vals.keys())}'
+        )
+        self.message_post(
+            body=f'Servicio agregado confirmado post-pago: '
+                 f'{changes.get("servicio_detalle", "")}'
+        )
+
+    @api.model
+    def api_revertir_servicio_agregado(self, turno_id):
+        """
+        Revierte un turno a estado confirmado cuando el pago del servicio
+        agregado expira. Limpia campos de pago pendiente y staging.
+
+        Como los campos definitivos (servicio, precio, duracion) nunca se
+        modificaron (separación de responsabilidades), solo hay que limpiar
+        los campos de pago y el staging.
+
+        Args:
+            turno_id: int ID del turno
+
+        Returns:
+            dict con resultado
+        """
+        turno = self.browse(turno_id)
+        if not turno.exists():
+            _logger.warning(f'[Revertir] Turno {turno_id} no encontrado')
+            return {'success': False, 'message': f'Turno {turno_id} not found'}
+
+        # Solo revertir si está pendiente_pago (evitar revertir turnos ya confirmados)
+        if turno.estado != 'pendiente_pago':
+            _logger.info(
+                f'[Revertir] Turno {turno_id} no está pendiente_pago '
+                f'(estado={turno.estado}), ignorando'
+            )
+            return {'success': False, 'message': f'Turno not in pendiente_pago state'}
+
+        turno.write({
+            'estado': 'confirmado',
+            'monto_pago_pendiente': 0,
+            'link_pago': False,
+            'mp_preference_id': False,
+            'pending_changes': False,
+        })
+
+        turno.message_post(
+            body='Seña adicional expirada. Servicio agregado revertido. '
+                 'Turno original mantenido.'
+        )
+
+        _logger.info(f'[Revertir] Turno {turno_id} revertido a confirmado')
+        return {'success': True, 'message': 'Reverted to confirmed'}
 
     def _to_dict(self):
         """Convierte el turno a diccionario para la API"""
