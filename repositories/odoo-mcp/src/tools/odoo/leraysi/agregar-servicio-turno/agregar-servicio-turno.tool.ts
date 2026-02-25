@@ -196,10 +196,16 @@ export class AgregarServicioTurnoLeraysiTool
     };
 
     // Incluir nueva fecha_hora si cambió (ej: jornada completa cambia 15:00 → 09:00)
+    // nueva_hora viene en Argentina (ART), Odoo almacena en UTC → sumar 3h
     if (params.nueva_hora) {
       const fechaExistente = turnoExistente.fecha_hora as string;
-      const soloFecha = fechaExistente.split(" ")[0];
-      pendingChanges.fecha_hora = `${soloFecha} ${params.nueva_hora}:00`;
+      const soloFecha = fechaExistente.split(" ")[0]; // "2026-02-26"
+      const [year, month, day] = soloFecha.split("-").map(Number);
+      const [hh, mm] = params.nueva_hora.split(":").map(Number);
+      // Usar Date.UTC para manejar overflow correctamente (misma lógica que crear-turno)
+      const utcDate = new Date(Date.UTC(year, month - 1, day, hh + 3, mm, 0));
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      pendingChanges.fecha_hora = `${utcDate.getUTCFullYear()}-${pad(utcDate.getUTCMonth() + 1)}-${pad(utcDate.getUTCDate())} ${pad(utcDate.getUTCHours())}:${pad(utcDate.getUTCMinutes())}:00`;
     }
 
     // 5b. Escribir solo campos de pago + staging al turno
@@ -258,7 +264,7 @@ export class AgregarServicioTurnoLeraysiTool
       turnoId: params.turno_id,
       clienta: turnoExistente.clienta as string,
       fecha_hora: params.nueva_hora
-        ? `${(turnoExistente.fecha_hora as string).split(" ")[0]} ${params.nueva_hora}:00`
+        ? pendingChanges.fecha_hora as string
         : turnoExistente.fecha_hora as string,
       servicios: serviciosArray,
       servicio_detalle: servicioDetalleCombinado,
