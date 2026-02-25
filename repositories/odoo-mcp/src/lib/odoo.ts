@@ -164,7 +164,7 @@ export class OdooClient {
       order?: string;
     } = {}
   ): Promise<any[]> {
-    return this.execute_kw(model, "search_read", [domain], options);
+    return this.execute_kw(model, "search_read", [domain], { ...options, context: { tz: 'UTC' } });
   }
 
   /**
@@ -198,7 +198,7 @@ export class OdooClient {
    * Leer registros de un modelo
    */
   async read(model: string, ids: number[], fields: string[] = []): Promise<any[]> {
-    return this.execute_kw(model, "read", [ids], { fields });
+    return this.execute_kw(model, "read", [ids], { fields, context: { tz: 'UTC' } });
   }
 
   /**
