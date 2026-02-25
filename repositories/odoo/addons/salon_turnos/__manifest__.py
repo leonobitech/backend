@@ -1,6 +1,6 @@
 {
     'name': 'Salón de Turnos - Estilos Leraysi',
-    'version': '19.0.2.0.0',
+    'version': '19.0.3.0.0',
     'category': 'Services',
     'summary': 'Gestión de turnos para salón de belleza con integración Mercado Pago',
     'description': """
