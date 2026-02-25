@@ -552,6 +552,28 @@ class SalonTurno(models.Model):
         _logger.info(f'[Revertir] Turno {turno_id} revertido a confirmado')
         return {'success': True, 'message': 'Reverted to confirmed'}
 
+    @api.model
+    def api_post_message(self, turno_id, body_html, subtype='mail.mt_note'):
+        """
+        Postea un mensaje HTML en el chatter sin que Odoo lo escape.
+        Usa Markup() para que el HTML se renderice correctamente.
+
+        Args:
+            turno_id: int ID del turno
+            body_html: str HTML del mensaje
+            subtype: str xmlid del subtipo (default: mail.mt_note)
+        """
+        from markupsafe import Markup
+        turno = self.browse(turno_id)
+        if not turno.exists():
+            return False
+        turno.message_post(
+            body=Markup(body_html),
+            message_type='comment',
+            subtype_xmlid=subtype,
+        )
+        return True
+
     def _to_dict(self):
         """Convierte el turno a diccionario para la API"""
         self.ensure_one()

@@ -223,20 +223,17 @@ export class AgregarServicioTurnoLeraysiTool
     );
 
     // 5c. Registrar en chatter qué servicio se está agregando
-    // Usar Markup para evitar doble-escape HTML via XML-RPC
+    // Usar api_post_message (Python Markup()) para evitar doble-escape HTML via XML-RPC
     await this.odooClient.execute(
       "salon.turno",
-      "message_post",
-      [[params.turno_id]],
-      {
-        body: `<strong>Servicio agregado (pendiente de pago)</strong><br/>` +
-              `Nuevo servicio: ${nuevoServicioDisplay}<br/>` +
-              `Combinación: ${servicioDetalleCombinado}<br/>` +
-              `Precio total: $${precioTotal.toLocaleString("es-AR")}<br/>` +
-              `Seña a pagar: $${montoAPagar.toLocaleString("es-AR")}`,
-        message_type: "comment",
-        subtype_xmlid: "mail.mt_note",
-      }
+      "api_post_message",
+      [params.turno_id,
+        `<strong>Servicio agregado (pendiente de pago)</strong><br/>` +
+        `Nuevo servicio: ${nuevoServicioDisplay}<br/>` +
+        `Combinación: ${servicioDetalleCombinado}<br/>` +
+        `Precio total: $${precioTotal.toLocaleString("es-AR")}<br/>` +
+        `Seña a pagar: $${montoAPagar.toLocaleString("es-AR")}`
+      ]
     );
 
     // 6. CRM tags: DIFERIDO al post-pago
