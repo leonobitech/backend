@@ -97,6 +97,10 @@ return [{
     confirmado_at: payment.confirmado_at || new Date().toISOString(),
 
     // Campos definitivos (del turno de Odoo, fuente de verdad)
+    // Actualizar fecha con hora real para que Baserow muestre fecha+hora correcta
+    fecha: turnoBaserow.fecha
+      ? turnoBaserow.fecha.split('T')[0] + 'T' + hora + ':00-03:00'
+      : null,
     servicio: servicioArray,
     servicio_detalle: servicioDetalle,
     hora: hora,

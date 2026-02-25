@@ -43,8 +43,8 @@ function formatBaserowDatetime(date) {
 // ============================================================================
 const turnoBaserow = {
   // === Fecha y Hora ===
-  // Fecha con timezone offset para que Baserow no la desplace al aplicar UTC-3
-  fecha: data.fecha_turno ? data.fecha_turno + "T00:00:00-03:00" : null,
+  // Fecha+hora con timezone Argentina para que Baserow muestre correctamente
+  fecha: data.fecha_turno ? data.fecha_turno + "T" + (data.hora_sugerida || "09:00") + ":00-03:00" : null,
   hora: data.hora_sugerida || "09:00",
 
   // === Relación con Lead ===
