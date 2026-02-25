@@ -1,8 +1,8 @@
 // ============================================================================
-// FORMATEAR RESPUESTA SERVICIO AGREGADO - Agente Calendario Leraysi v2
+// FORMATEAR RESPUESTA SERVICIO AGREGADO - Agente Calendario Leraysi v3
 // ============================================================================
 // Construye la respuesta final cuando se agrega un servicio a turno existente
-// Compatible con estructura simplificada (igual a turno_creado)
+// Lee datos definitivos desde _meta.datos_definitivos (v3: separación de responsabilidades)
 // ============================================================================
 // NODO: FormatearRespuestaServicioAgregado (Code)
 // INPUT: ActualizarTurnoBaserow (respuesta de Baserow Update)
@@ -14,17 +14,18 @@ const baserowResponse = $input.first().json;
 // Recuperar datos del nodo PrepararServicioAgregadoBaserow
 const prepararData = $('PrepararServicioAgregadoBaserow').first().json;
 const metaData = prepararData._meta;
+const definitivos = metaData.datos_definitivos || {};
 
 // El ID del turno actualizado en Baserow
 const turnoRowId = baserowResponse.id;
 
 // ============================================================================
-// CALCULAR DESGLOSE DE SEÑA
+// CALCULAR DESGLOSE DE SEÑA (usando datos definitivos)
 // ============================================================================
 const precioExistente = Number(metaData.turno_precio_existente) || 0;
 const senaPagada = Number(metaData.turno_sena_pagada) || 0;
-const precioTotal = prepararData.precio || 0;
-const senaTotalNueva = Math.round(precioTotal * 0.3); // 30% del total combinado
+const precioTotal = definitivos.precio || 0;
+const senaTotalNueva = definitivos.sena_monto || Math.round(precioTotal * 0.3);
 const senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);
 const servicioExistente = metaData.turno_servicio_existente || '';
 
@@ -45,7 +46,7 @@ return [{
     // Datos específicos de servicio agregado
     servicio_agregado: {
       odoo_turno_id: metaData.odoo_turno_id,
-      servicios_combinados: prepararData.servicio_detalle,
+      servicios_combinados: definitivos.servicio_detalle,
       precio_total: precioTotal,
       link_pago: prepararData.mp_link,
       // Desglose de seña (para que la LLM explique claramente a la clienta)

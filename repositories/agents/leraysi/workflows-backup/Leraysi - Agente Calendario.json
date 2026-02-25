@@ -890,26 +890,6 @@
         "fieldsUi": {
           "fieldValues": [
             {
-              "fieldId": 8385,
-              "fieldValue": "={{ $json.servicio }}"
-            },
-            {
-              "fieldId": 8406,
-              "fieldValue": "={{ $json.servicio_detalle }}"
-            },
-            {
-              "fieldId": 8386,
-              "fieldValue": "={{ $json.complejidad_maxima }}"
-            },
-            {
-              "fieldId": 8387,
-              "fieldValue": "={{ $json.duracion_min }}"
-            },
-            {
-              "fieldId": 8388,
-              "fieldValue": "={{ $json.precio }}"
-            },
-            {
               "fieldId": 8390,
               "fieldValue": "={{ $json.sena_pagada }}"
             },
@@ -928,6 +908,10 @@
             {
               "fieldId": 8403,
               "fieldValue": "={{ $json.mp_preference_id }}"
+            },
+            {
+              "fieldId": 8401,
+              "fieldValue": "={{ $json.expira_at }}"
             },
             {
               "fieldId": 8405,
@@ -953,7 +937,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================================\n// FORMATEAR RESPUESTA SERVICIO AGREGADO - Agente Calendario Leraysi v2\n// ============================================================================\n// Construye la respuesta final cuando se agrega un servicio a turno existente\n// Compatible con estructura simplificada (igual a turno_creado)\n// ============================================================================\n// NODO: FormatearRespuestaServicioAgregado (Code)\n// INPUT: ActualizarTurnoBaserow (respuesta de Baserow Update)\n// OUTPUT: Respuesta estructurada para Return → Master Agent\n// ============================================================================\n\nconst baserowResponse = $input.first().json;\n\n// Recuperar datos del nodo PrepararServicioAgregadoBaserow\nconst prepararData = $('PrepararServicioAgregadoBaserow').first().json;\nconst metaData = prepararData._meta;\n\n// El ID del turno actualizado en Baserow\nconst turnoRowId = baserowResponse.id;\n\n// ============================================================================\n// OUTPUT PARA MASTER AGENT\n// ============================================================================\n// Mantiene nombres compatibles con lo que espera el Master Agent prompt\n// (link_pago, precio_total, sena_diferencial, servicios_combinados)\n// ============================================================================\nreturn [{\n  json: {\n    success: true,\n    accion: metaData.accion,\n    turno_id: turnoRowId,\n    mensaje_para_clienta: metaData.mensaje_para_clienta,\n    lead_row_id: metaData.lead_row_id,\n\n    // Datos específicos de servicio agregado\n    // Mapea nombres nuevos → nombres que espera el Master Agent\n    servicio_agregado: {\n      odoo_turno_id: metaData.odoo_turno_id,\n      // servicios_combinados ← servicio_detalle\n      servicios_combinados: prepararData.servicio_detalle,\n      // precio_total ← precio\n      precio_total: prepararData.precio,\n      // sena_diferencial ← sena_monto (es la seña total, no diferencial)\n      sena_diferencial: prepararData.sena_monto,\n      // link_pago ← mp_link\n      link_pago: prepararData.mp_link\n    }\n  }\n}];"
+        "jsCode": "// ============================================================================\n// FORMATEAR RESPUESTA SERVICIO AGREGADO - Agente Calendario Leraysi v3\n// ============================================================================\n// Construye la respuesta final cuando se agrega un servicio a turno existente\n// Lee datos definitivos desde _meta.datos_definitivos (v3: separación de responsabilidades)\n// ============================================================================\n// NODO: FormatearRespuestaServicioAgregado (Code)\n// INPUT: ActualizarTurnoBaserow (respuesta de Baserow Update)\n// OUTPUT: Respuesta estructurada para Return → Master Agent\n// ============================================================================\n\nconst baserowResponse = $input.first().json;\n\n// Recuperar datos del nodo PrepararServicioAgregadoBaserow\nconst prepararData = $('PrepararServicioAgregadoBaserow').first().json;\nconst metaData = prepararData._meta;\nconst definitivos = metaData.datos_definitivos || {};\n\n// El ID del turno actualizado en Baserow\nconst turnoRowId = baserowResponse.id;\n\n// ============================================================================\n// CALCULAR DESGLOSE DE SEÑA (usando datos definitivos)\n// ============================================================================\nconst precioExistente = Number(metaData.turno_precio_existente) || 0;\nconst senaPagada = Number(metaData.turno_sena_pagada) || 0;\nconst precioTotal = definitivos.precio || 0;\nconst senaTotalNueva = definitivos.sena_monto || Math.round(precioTotal * 0.3);\nconst senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);\nconst servicioExistente = metaData.turno_servicio_existente || '';\n\n// ============================================================================\n// OUTPUT PARA MASTER AGENT\n// ============================================================================\nreturn [{\n  json: {\n    success: true,\n    accion: metaData.accion,\n    turno_id: turnoRowId,\n    mensaje_para_clienta: metaData.mensaje_para_clienta,\n    lead_row_id: metaData.lead_row_id,\n\n    // Datos específicos de servicio agregado\n    servicio_agregado: {\n      odoo_turno_id: metaData.odoo_turno_id,\n      servicios_combinados: definitivos.servicio_detalle,\n      precio_total: precioTotal,\n      link_pago: prepararData.mp_link,\n      // Desglose de seña (para que la LLM explique claramente a la clienta)\n      sena_ya_pagada: senaPagada,\n      sena_adicional: senaDiferencial,\n      sena_total_nueva: senaTotalNueva,\n      servicio_existente: servicioExistente,\n      precio_existente: precioExistente\n    }\n  }\n}];"
       },
       "id": "formatear-respuesta-servicio-agregado",
       "name": "FormatearRespuestaServicioAgregado",

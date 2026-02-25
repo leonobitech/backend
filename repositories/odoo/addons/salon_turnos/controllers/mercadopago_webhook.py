@@ -494,8 +494,11 @@ class MercadoPagoWebhook(http.Controller):
                     'servicio_detalle': turno.servicio_detalle,
                     'fecha_hora': turno.fecha_hora.isoformat() if turno.fecha_hora else None,
                     'duracion': turno.duracion,
+                    'duracion_min': int(turno.duracion * 60) if turno.duracion else 60,
+                    'complejidad_maxima': turno.complejidad_maxima or 'media',
                     'precio': turno.precio,
                     'sena': turno.sena,
+                    'monto_pago_pendiente': turno.monto_pago_pendiente,
                     'monto_restante': turno.monto_restante,
                     'estado': turno.estado,  # Ya actualizado a 'confirmado'
                     'mp_preference_id': turno.mp_preference_id,  # Para buscar en Baserow

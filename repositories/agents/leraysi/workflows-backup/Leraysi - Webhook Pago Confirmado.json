@@ -60,24 +60,52 @@
         "operation": "update",
         "databaseId": 4,
         "tableId": 852,
-        "rowId": "={{ $json.id }}",
+        "rowId": "={{ $json.row_id }}",
         "fieldsUi": {
           "fieldValues": [
             {
               "fieldId": 8390,
-              "fieldValue": "=true"
+              "fieldValue": "={{ $json.sena_pagada }}"
             },
             {
               "fieldId": 8391,
-              "fieldValue": "={{ $('WebhookPagoConfirmado').item.json.body.turno.estado }}"
+              "fieldValue": "={{ $json.estado }}"
             },
             {
               "fieldId": 8398,
-              "fieldValue": "={{ $('WebhookPagoConfirmado').item.json.body.payment.mp_payment_id }}"
+              "fieldValue": "={{ $json.mp_payment_id }}"
             },
             {
               "fieldId": 8402,
-              "fieldValue": "={{ $('WebhookPagoConfirmado').item.json.body.payment.confirmado_at }}"
+              "fieldValue": "={{ $json.confirmado_at }}"
+            },
+            {
+              "fieldId": 8385,
+              "fieldValue": "={{ $json.servicio }}"
+            },
+            {
+              "fieldId": 8406,
+              "fieldValue": "={{ $json.servicio_detalle }}"
+            },
+            {
+              "fieldId": 8396,
+              "fieldValue": "={{ $json.hora }}"
+            },
+            {
+              "fieldId": 8387,
+              "fieldValue": "={{ $json.duracion_min }}"
+            },
+            {
+              "fieldId": 8386,
+              "fieldValue": "={{ $json.complejidad_maxima }}"
+            },
+            {
+              "fieldId": 8388,
+              "fieldValue": "={{ $json.precio }}"
+            },
+            {
+              "fieldId": 8389,
+              "fieldValue": "={{ $json.sena_monto }}"
             }
           ]
         }
@@ -85,7 +113,7 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        688,
+        808,
         -112
       ],
       "id": "d6be1039-bc8c-421e-b635-548ee054d765",
@@ -96,6 +124,19 @@
           "name": "Baserow account"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PREPARAR TURNO PAGADO - Webhook Pago Confirmado\n// ============================================================================\n// Combina datos del webhook (Odoo) con datos del turno (Baserow) para preparar\n// la actualización definitiva de TurnosLeraysi.\n// ============================================================================\n\nconst turnoBaserow = $input.first().json;\nconst webhook = $('WebhookPagoConfirmado').first().json;\n\nconst odooTurno = webhook.body?.turno || {};\nconst payment = webhook.body?.payment || {};\n\n// Mapeo código Odoo → display name Baserow\nconst CODE_TO_DISPLAY = {\n  corte_mujer: 'Corte mujer',\n  alisado_brasileno: 'Alisado brasileño',\n  alisado_keratina: 'Alisado keratina',\n  mechas_completas: 'Mechas completas',\n  tintura_raiz: 'Tintura raíz',\n  tintura_completa: 'Tintura completa',\n  balayage: 'Balayage',\n  manicura_simple: 'Manicura simple',\n  manicura_semipermanente: 'Manicura semipermanente',\n  pedicura: 'Pedicura',\n  depilacion_cera_piernas: 'Depilación cera piernas',\n  depilacion_cera_axilas: 'Depilación cera axilas',\n  depilacion_cera_bikini: 'Depilación cera bikini',\n  depilacion_laser_piernas: 'Depilación láser piernas',\n  depilacion_laser_axilas: 'Depilación láser axilas',\n};\n\n// Resolver servicio (multi-select para Baserow)\nlet servicioArray;\nconst servicioDetalle = odooTurno.servicio_detalle || '';\n\nif (servicioDetalle && servicioDetalle.includes('+')) {\n  servicioArray = servicioDetalle.split('+').map(s => s.trim());\n} else if (servicioDetalle) {\n  servicioArray = [servicioDetalle];\n} else {\n  const code = odooTurno.servicio || '';\n  servicioArray = [CODE_TO_DISPLAY[code] || code];\n}\n\n// Resolver hora (UTC de Odoo → Argentina)\nlet hora = turnoBaserow.hora || '09:00';\nif (odooTurno.fecha_hora) {\n  try {\n    const d = new Date(odooTurno.fecha_hora);\n    d.setHours(d.getHours() - 3);\n    hora = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');\n  } catch (e) {}\n}\n\nconst precio = odooTurno.precio || parseFloat(turnoBaserow.precio) || 0;\n\nreturn [{\n  json: {\n    row_id: turnoBaserow.id,\n    sena_pagada: true,\n    estado: odooTurno.estado || 'confirmado',\n    mp_payment_id: payment.mp_payment_id || '',\n    confirmado_at: payment.confirmado_at || new Date().toISOString(),\n    servicio: servicioArray,\n    servicio_detalle: servicioDetalle,\n    hora: hora,\n    duracion_min: odooTurno.duracion_min || parseInt(turnoBaserow.duracion_min) || 60,\n    complejidad_maxima: odooTurno.complejidad_maxima || turnoBaserow.complejidad_maxima || 'media',\n    precio: precio,\n    sena_monto: Math.round(precio * 0.3),\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        568,
+        -112
+      ],
+      "id": "preparar-turno-pagado",
+      "name": "PrepararTurnoPagado"
     },
     {
       "parameters": {
@@ -258,6 +299,17 @@
   "pinData": {},
   "connections": {
     "BuscarTurnoPorMP": {
+      "main": [
+        [
+          {
+            "node": "PrepararTurnoPagado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PrepararTurnoPagado": {
       "main": [
         [
           {

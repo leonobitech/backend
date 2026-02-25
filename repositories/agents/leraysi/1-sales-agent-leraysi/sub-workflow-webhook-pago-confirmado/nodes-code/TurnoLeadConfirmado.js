@@ -1,13 +1,20 @@
 // ============================================================================
-// TURNO LEAD CONFIRMADO - Webhook Pago Confirmado
+// TURNO LEAD CONFIRMADO - Webhook Pago Confirmado v2
 // ============================================================================
 // Prepara los datos para actualizar LeadsLeraysi después de pago confirmado
 // y construye el mensaje de confirmación para la clienta
+//
+// v2: Incluye turno_update con campos definitivos (servicio, hora, precio,
+//     duracion_min, complejidad_maxima, sena_monto) para que el nodo
+//     ActualizarTurnoPagadoDefinitivo los escriba a Baserow.
+//     Separación de responsabilidades: PrepararServicioAgregadoBaserow solo
+//     escribe campos "pendientes", los definitivos se aplican aquí post-pago.
 // ============================================================================
 // NODO: TurnoLeadConfirmado (Code)
 // INPUT: ObtenerLead (datos del lead actual)
 // ACCESO: WebhookPagoConfirmado, ActualizarTurnoPagado
 // OUTPUT: Formato compatible con Output Main (content_whatsapp, baserow_update, state)
+//         + turno_update con campos definitivos para TurnosLeraysi
 // ============================================================================
 
 const lead = $input.first().json;
@@ -201,6 +208,49 @@ const baserow_update = {
 };
 
 // ============================================================================
+// CONSTRUIR turno_update (campos definitivos para TurnosLeraysi)
+// ============================================================================
+// v2: El webhook de pago ahora escribe los campos definitivos a Baserow.
+// Estos datos vienen de Odoo (fuente de verdad) via el webhook body.
+// Antes de pagar, PrepararServicioAgregadoBaserow solo escribió campos
+// pendientes (mp_link, estado, expira_at). Ahora aplicamos los definitivos.
+// ============================================================================
+
+const webhookTurno = webhook.body?.turno || {};
+
+// Extraer hora del turno de Odoo (fecha_hora viene como ISO: "2026-02-26T12:00:00")
+let horaDefinitiva = horaTurno; // fallback a la hora de Baserow
+if (webhookTurno.fecha_hora) {
+  try {
+    // fecha_hora de Odoo viene en UTC, convertir a Argentina para extraer hora local
+    const fechaOdoo = new Date(webhookTurno.fecha_hora);
+    // Restar 3 horas (UTC → Argentina)
+    fechaOdoo.setHours(fechaOdoo.getHours() - 3);
+    const h = String(fechaOdoo.getHours()).padStart(2, '0');
+    const m = String(fechaOdoo.getMinutes()).padStart(2, '0');
+    horaDefinitiva = `${h}:${m}`;
+  } catch (e) {
+    // mantener fallback
+  }
+}
+
+// servicio de Odoo puede ser string (código) o puede venir servicio_detalle
+const servicioOdoo = webhookTurno.servicio || turno.servicio;
+const servicioDetalleOdoo = webhookTurno.servicio_detalle || turno.servicio_detalle || '';
+
+// turno_update: campos definitivos para Baserow TurnosLeraysi (tabla 855)
+const turno_update = {
+  row_id: turno.id,                                                 // Row ID del turno en Baserow
+  servicio: Array.isArray(servicioOdoo) ? servicioOdoo : turno.servicio, // Multi-select (array de Baserow)
+  servicio_detalle: servicioDetalleOdoo,                             // "Manicura semipermanente + Pedicura"
+  hora: horaDefinitiva,                                              // HH:MM en Argentina
+  duracion_min: webhookTurno.duracion_min || parseInt(turno.duracion_min) || 60,
+  complejidad_maxima: webhookTurno.complejidad_maxima || turno.complejidad_maxima || 'media',
+  precio: webhookTurno.precio || parseFloat(turno.precio) || 0,
+  sena_monto: Math.round((webhookTurno.precio || parseFloat(turno.precio) || 0) * 0.3),
+};
+
+// ============================================================================
 // CONSTRUIR state (estado completo del lead)
 // ============================================================================
 
@@ -267,8 +317,11 @@ return [{
     lead_id: parseInt(lead.lead_id),
     row_id: lead.id,
 
-    // Campos a actualizar en Baserow
+    // Campos a actualizar en Baserow LeadsLeraysi
     baserow_update,
+
+    // Campos definitivos a actualizar en Baserow TurnosLeraysi
+    turno_update,
 
     // Estado completo del lead
     state,

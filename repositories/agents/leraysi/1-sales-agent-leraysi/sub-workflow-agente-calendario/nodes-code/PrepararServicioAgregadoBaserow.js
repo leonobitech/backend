@@ -1,11 +1,17 @@
 // ============================================================================
-// PREPARAR SERVICIO AGREGADO BASEROW - Agente Calendario Leraysi v2
+// PREPARAR SERVICIO AGREGADO BASEROW - Agente Calendario Leraysi v3
 // ============================================================================
 // Transforma datos para UPDATE en Baserow cuando se agrega un servicio
-// ESTRUCTURA IGUAL A turno_creado para simplificar mapeo
+//
+// SEPARACIÓN DE RESPONSABILIDADES (v3):
+// - Este nodo solo escribe campos "pendientes" (mp_link, estado, expira_at)
+// - Los campos definitivos (servicio, hora, precio, duracion, complejidad)
+//   se guardan en _meta.datos_definitivos para que el webhook de pago
+//   los aplique SOLO cuando la clienta pague
+// - Si NO paga, el cron expira el turno y los datos originales están intactos
 // ============================================================================
 // INPUT: BuscarTurnoBaserow (resultado de búsqueda con row_id)
-// OUTPUT: Campos listos para Baserow Update Row (misma estructura que turno_creado)
+// OUTPUT: Campos pendientes para Baserow Update + _meta con datos definitivos
 // ============================================================================
 
 // Datos del turno encontrado en Baserow (viene de BuscarTurnoBaserow / Get many rows)
@@ -43,37 +49,31 @@ const ahora = new Date();
 const expiraAt = new Date(ahora.getTime() + 15 * 60 * 1000); // 15 min para pagar
 
 // ============================================================================
-// CAMPOS A ACTUALIZAR EN BASEROW (misma estructura que turno_creado)
+// DATOS DEFINITIVOS (se aplican SOLO cuando paga, via webhook)
+// ============================================================================
+const horaDefinitiva = data.hora_sugerida || turnoEncontrado.hora || '09:00';
+const precioDefinitivo = data.precio;
+const senaMonto = Math.round((precioDefinitivo || 0) * 0.3);
+
+const datosDefinitivos = {
+  servicio: data.servicio,                              // Array: ["Manicura semipermanente", "Pedicura"]
+  servicio_detalle: data.servicio_detalle,               // "Manicura semipermanente + Pedicura"
+  hora: horaDefinitiva,                                  // Hora actualizada (ej: 15:00 → 09:00 para muy_compleja)
+  duracion_min: data.duracion_estimada || 60,            // Duración total en minutos
+  complejidad_maxima: data.complejidad_maxima || 'media', // Complejidad combinada
+  precio: precioDefinitivo,                              // Precio total combinado
+  sena_monto: senaMonto,                                 // 30% del precio total
+};
+
+// ============================================================================
+// CAMPOS PENDIENTES (se escriben ahora en Baserow, reversibles por cron)
 // ============================================================================
 const updateFields = {
-  // Servicios como array (campo multi-select de Baserow)
-  servicio: data.servicio, // Array: ["Manicura semipermanente", "Pedicura"]
-
-  // Detalle para display (concatenación)
-  servicio_detalle: data.servicio_detalle, // "Manicura semipermanente + Pedicura"
-
-  // Hora actualizada (importante para jornada completa: 15:00 → 09:00)
-  hora: data.hora_sugerida || turnoEncontrado.hora || '09:00',
-
-  // Duración total actualizada (en minutos)
-  duracion_min: data.duracion_estimada || 60,
-
-  // Complejidad máxima (puede cambiar al agregar servicio más complejo)
-  complejidad_maxima: data.complejidad_maxima || 'media',
-
-  // Precio total actualizado
-  precio: data.precio,
-
-  // Seña total (30% del precio total combinado)
-  sena_monto: Math.round((data.precio || 0) * 0.3),
-
-  // Estado de pago (false porque hay nueva seña pendiente)
+  // Estado pendiente de pago
   sena_pagada: false,
-
-  // Estado del turno
   estado: 'pendiente_pago',
 
-  // MercadoPago (nuevo link)
+  // MercadoPago (nuevo link para la seña diferencial)
   mp_preference_id: data.mp_preference_id || '',
   mp_link: data.link_pago || '',
 
@@ -81,11 +81,12 @@ const updateFields = {
   updated_at: formatBaserowDatetime(ahora),
   expira_at: formatBaserowDatetime(expiraAt),
 
-  // Notas con historial
+  // Notas informativas (no afectan lógica)
   notas: `Servicio agregado el ${ahora.toLocaleDateString('es-AR')}. ` +
          `Servicios: ${data.servicio_detalle}. ` +
-         `Total: $${data.precio?.toLocaleString('es-AR') || 0}. ` +
-         `Seña: $${Math.round((data.precio || 0) * 0.3).toLocaleString('es-AR')}`
+         `Total: $${precioDefinitivo?.toLocaleString('es-AR') || 0}. ` +
+         `Seña diferencial: $${senaMonto.toLocaleString('es-AR')}. ` +
+         `Pendiente de pago.`
 };
 
 // ============================================================================
@@ -96,10 +97,10 @@ return [{
     // Row ID para el Update
     row_id: turnoRowId,
 
-    // Campos para Baserow Update (estructura igual a turno_creado)
+    // Campos pendientes para Baserow Update (SOLO estos se escriben ahora)
     ...updateFields,
 
-    // Metadata para FormatearRespuestaServicioAgregado
+    // Metadata para FormatearRespuestaServicioAgregado + webhook de pago
     _meta: {
       accion: data.accion,
       mensaje_para_clienta: data.mensaje_para_clienta,
@@ -108,7 +109,9 @@ return [{
       // Datos del turno original (para desglose de seña en respuesta)
       turno_precio_existente: turnoEncontrado.precio || 0,
       turno_sena_pagada: turnoEncontrado.sena_monto || 0,
-      turno_servicio_existente: turnoEncontrado.servicio_detalle || ''
+      turno_servicio_existente: turnoEncontrado.servicio_detalle || '',
+      // Datos definitivos: el webhook aplica estos campos cuando confirma pago
+      datos_definitivos: datosDefinitivos,
     }
   }
 }];
