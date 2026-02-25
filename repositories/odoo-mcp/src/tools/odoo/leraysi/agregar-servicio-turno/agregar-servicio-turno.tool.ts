@@ -222,6 +222,21 @@ export class AgregarServicioTurnoLeraysiTool
       "[AgregarServicioTurno] Payment fields + staging saved (definitive fields deferred)"
     );
 
+    // 5c. Registrar en chatter qué servicio se está agregando
+    await this.odooClient.execute(
+      "salon.turno",
+      "message_post",
+      [[params.turno_id]],
+      {
+        body: `<p><strong>Servicio agregado (pendiente de pago)</strong></p>` +
+              `<p>Nuevo servicio: ${nuevoServicioDisplay}</p>` +
+              `<p>Combinación: ${servicioDetalleCombinado}</p>` +
+              `<p>Precio total: $${precioTotal.toLocaleString("es-AR")}</p>` +
+              `<p>Seña a pagar: $${montoAPagar.toLocaleString("es-AR")}</p>`,
+        message_type: "comment",
+      }
+    );
+
     // 6. CRM tags: DIFERIDO al post-pago
     // No actualizar tags ahora porque si el pago expira, los tags quedarían
     // incorrectos. Se actualizarán en confirmar_pago_completo post-pago.

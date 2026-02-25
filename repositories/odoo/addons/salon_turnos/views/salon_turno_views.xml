@@ -63,6 +63,10 @@
                             <field name="monto_restante"/>
                         </group>
                     </group>
+                    <group string="Servicio Pendiente de Pago" invisible="not pending_changes">
+                        <field name="pending_changes" readonly="1" widget="text"/>
+                        <field name="monto_pago_pendiente"/>
+                    </group>
                     <notebook>
                         <page string="Mercado Pago" invisible="not link_pago">
                             <group>
