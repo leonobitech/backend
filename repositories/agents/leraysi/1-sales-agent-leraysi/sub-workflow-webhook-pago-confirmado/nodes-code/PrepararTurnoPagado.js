@@ -63,22 +63,11 @@ if (servicioDetalle && servicioDetalle.includes('+')) {
 }
 
 // ============================================================================
-// RESOLVER HORA (convertir fecha_hora UTC de Odoo a hora Argentina)
+// RESOLVER HORA
 // ============================================================================
-let hora = turnoBaserow.hora || '09:00';
-
-if (odooTurno.fecha_hora) {
-  try {
-    const fechaOdoo = new Date(odooTurno.fecha_hora);
-    // Restar 3 horas (UTC → Argentina)
-    fechaOdoo.setHours(fechaOdoo.getHours() - 3);
-    const h = String(fechaOdoo.getHours()).padStart(2, '0');
-    const m = String(fechaOdoo.getMinutes()).padStart(2, '0');
-    hora = `${h}:${m}`;
-  } catch (e) {
-    // mantener fallback de Baserow
-  }
-}
+// El webhook envía hora_argentina (HH:MM) ya convertida desde UTC en Python.
+// Fallback: turnoBaserow.hora (valor pre-pago de Baserow).
+const hora = odooTurno.hora_argentina || turnoBaserow.hora || '09:00';
 
 // ============================================================================
 // OUTPUT: Todos los campos para Baserow Update Row
@@ -97,9 +86,10 @@ return [{
     confirmado_at: payment.confirmado_at || new Date().toISOString(),
 
     // Campos definitivos (del turno de Odoo, fuente de verdad)
-    // Actualizar fecha con hora real para que Baserow muestre fecha+hora correcta
+    // Baserow recibe UTC puro y convierte a timezone configurado (-03:00 AR) automáticamente
+    // Patrón: hora Argentina → construir con -03:00 → .toISOString() → UTC
     fecha: turnoBaserow.fecha
-      ? turnoBaserow.fecha.split('T')[0] + 'T' + hora + ':00-03:00'
+      ? new Date(`${turnoBaserow.fecha.split('T')[0]}T${hora}:00-03:00`).toISOString()
       : null,
     servicio: servicioArray,
     servicio_detalle: servicioDetalle,
@@ -107,6 +97,8 @@ return [{
     duracion_min: odooTurno.duracion_min || (odooTurno.duracion ? Math.round(odooTurno.duracion * 60) : null) || parseInt(turnoBaserow.duracion_min) || 60,
     complejidad_maxima: odooTurno.complejidad_maxima || turnoBaserow.complejidad_maxima?.value || turnoBaserow.complejidad_maxima || 'media',
     precio: precio,
-    sena_monto: Math.round(precio * 0.3),
+    // sena_monto: usar monto_pago_pendiente de Odoo si existe (agregar servicio = diferencial),
+    // sino calcular 30% del precio total
+    sena_monto: odooTurno.monto_pago_pendiente || Math.round(precio * 0.3),
   }
 }];

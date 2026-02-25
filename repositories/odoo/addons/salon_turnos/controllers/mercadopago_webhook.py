@@ -508,6 +508,9 @@ class MercadoPagoWebhook(http.Controller):
                     'servicio': turno.servicio,
                     'servicio_detalle': turno.servicio_detalle,
                     'fecha_hora': turno.fecha_hora.isoformat() if turno.fecha_hora else None,
+                    # hora_argentina: conversión explícita UTC→AR para evitar ambigüedad
+                    # turno.fecha_hora es naive UTC en el ORM de Odoo
+                    'hora_argentina': (turno.fecha_hora - timedelta(hours=3)).strftime('%H:%M') if turno.fecha_hora else None,
                     'duracion': turno.duracion,
                     'duracion_min': int(turno.duracion * 60) if turno.duracion else 60,
                     'complejidad_maxima': turno.complejidad_maxima or 'media',
