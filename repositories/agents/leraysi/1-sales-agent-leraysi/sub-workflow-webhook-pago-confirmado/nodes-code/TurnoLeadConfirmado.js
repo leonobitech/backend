@@ -244,8 +244,8 @@ const turno_update = {
   servicio: Array.isArray(servicioOdoo) ? servicioOdoo : turno.servicio, // Multi-select (array de Baserow)
   servicio_detalle: servicioDetalleOdoo,                             // "Manicura semipermanente + Pedicura"
   hora: horaDefinitiva,                                              // HH:MM en Argentina
-  duracion_min: webhookTurno.duracion_min || parseInt(turno.duracion_min) || 60,
-  complejidad_maxima: webhookTurno.complejidad_maxima || turno.complejidad_maxima || 'media',
+  duracion_min: webhookTurno.duracion_min || (webhookTurno.duracion ? Math.round(webhookTurno.duracion * 60) : null) || parseInt(turno.duracion_min) || 60,
+  complejidad_maxima: webhookTurno.complejidad_maxima || turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media',
   precio: webhookTurno.precio || parseFloat(turno.precio) || 0,
   sena_monto: Math.round((webhookTurno.precio || parseFloat(turno.precio) || 0) * 0.3),
 };
