@@ -124,12 +124,15 @@ export class AgregarServicioTurnoLeraysiTool
     );
 
     // 2. Combinar servicios
-    const servicioExistente = turnoExistente.servicio as string;
-    const serviciosArray = [servicioExistente, params.nuevo_servicio];
+    // Usar SERVICIO_DISPLAY para nombres amigables (evitar códigos Odoo como "manicura_simple")
+    const servicioExistenteCodigo = turnoExistente.servicio as string;
+    const servicioExistenteDisplay = SERVICIO_DISPLAY[servicioExistenteCodigo] || servicioExistenteCodigo;
+    const nuevoServicioDisplay = SERVICIO_DISPLAY[params.nuevo_servicio] || params.nuevo_servicio;
+    const serviciosArray = [servicioExistenteDisplay, nuevoServicioDisplay];
 
     // Combinar detalles de servicio
     const detalleExistente = (turnoExistente.servicio_detalle as string) ||
-      SERVICIO_DISPLAY[servicioExistente] || servicioExistente;
+      SERVICIO_DISPLAY[servicioExistenteCodigo] || servicioExistenteCodigo;
     const nuevoDetalle = params.nuevo_servicio_detalle ||
       SERVICIO_DISPLAY[params.nuevo_servicio] || params.nuevo_servicio;
     const servicioDetalleCombinado = `${detalleExistente} + ${nuevoDetalle}`;
@@ -148,14 +151,14 @@ export class AgregarServicioTurnoLeraysiTool
       Math.max(COMP_ORDER[params.complejidad_maxima] || 2, COMP_ORDER[floorPorCantidad] || 1)
     ] || params.complejidad_maxima;
 
-    // 3. Sumar precios y duraciones
+    // 3. Sumar precios y calcular duración
     const precioExistente = (turnoExistente.precio as number) || 0;
     const precioTotal = precioExistente + params.nuevo_precio;
-    // Leer duración existente de Odoo y sumar la del nuevo servicio.
-    // El LLM puede enviar solo la duración del nuevo servicio en vez del total combinado.
-    const duracionExistente = (turnoExistente.duracion as number) || 0;
-    const duracionNueva = params.duracion_estimada / 60;
-    const duracionTotal = duracionExistente + duracionNueva;
+    // Duración: si muy_compleja → jornada completa (10h), sino usar lo que viene de BuildAgentPrompt
+    // BuildAgentPrompt ya calcula la duración combinada correcta (incluyendo overlap de proceso)
+    const duracionTotal = complejidadFinal === "muy_compleja"
+      ? 10  // Jornada completa en horas (Odoo usa horas)
+      : params.duracion_estimada / 60;
 
     // 4. Calcular monto a pagar: seña del nuevo total menos lo ya pagado
     const senaTotalNueva = Math.round(precioTotal * 0.3);
@@ -180,14 +183,24 @@ export class AgregarServicioTurnoLeraysiTool
     // 5. Actualizar el turno en Odoo
     // NOTA: `sena` es computed (precio*0.30), no se puede escribir.
     // Usamos `monto_pago_pendiente` para que action_generar_link_pago genere el link correcto.
-    await this.odooClient.write("salon.turno", [params.turno_id], {
+    const updateData: Record<string, unknown> = {
       servicio_detalle: servicioDetalleCombinado,
       precio: precioTotal,
       duracion: duracionTotal,
       complejidad_maxima: complejidadFinal,
       monto_pago_pendiente: montoAPagar, // Monto real a cobrar (diferencia o total)
       estado: "pendiente_pago",
-    });
+    };
+
+    // Actualizar fecha_hora si se proporcionó nueva_hora (ej: jornada completa cambia 15:00 → 09:00)
+    if (params.nueva_hora) {
+      const fechaExistente = turnoExistente.fecha_hora as string;
+      // Extraer solo la parte de fecha y reemplazar la hora
+      const soloFecha = fechaExistente.split(" ")[0];
+      updateData.fecha_hora = `${soloFecha} ${params.nueva_hora}:00`;
+    }
+
+    await this.odooClient.write("salon.turno", [params.turno_id], updateData);
 
     logger.info(
       { turnoId: params.turno_id, precioTotal, duracionTotal, montoAPagar },
@@ -276,7 +289,9 @@ export class AgregarServicioTurnoLeraysiTool
     return {
       turnoId: params.turno_id,
       clienta: turnoExistente.clienta as string,
-      fecha_hora: turnoExistente.fecha_hora as string,
+      fecha_hora: params.nueva_hora
+        ? `${(turnoExistente.fecha_hora as string).split(" ")[0]} ${params.nueva_hora}:00`
+        : turnoExistente.fecha_hora as string,
       servicios: serviciosArray,
       servicio_detalle: servicioDetalleCombinado,
       precio_total: precioTotal,
@@ -452,6 +467,10 @@ export class AgregarServicioTurnoLeraysiTool
             type: "string",
             enum: ["simple", "media", "compleja", "muy_compleja"],
             description: "Nivel de complejidad máxima del turno combinado (determina capacidad del salón)",
+          },
+          nueva_hora: {
+            type: "string",
+            description: "Nueva hora del turno (ej: '09:00') cuando cambia por jornada completa. Opcional.",
           },
         },
         required: [

@@ -36,14 +36,16 @@ const state = typeof data.state === 'string' ? JSON.parse(data.state) : (data.st
 const input = {
   // === MODO DE OPERACIÓN ===
   // "consultar_disponibilidad" = solo buscar slots disponibles (sin crear turno)
-  // null/undefined = flujo normal (crear/reprogramar/agregar)
-  modo: llmOutput.modo || null,
+  // "agendar" = confirmar turno (crear/reprogramar/agregar servicio)
+  // null/undefined = flujo normal
+  modo: llmOutput.modo || ((!llmOutput.modo && llmOutput.agregar_a_turno_existente) ? 'agendar' : null),
   preferencia_horario: llmOutput.preferencia_horario || null, // "manana", "tarde", null
 
   // === ACCIÓN EXPLÍCITA ===
   // "reprogramar" = reprogramar turno existente (BuildAgentPrompt genera TAREA de reprogramación)
-  // null = flujo automático (crear turno nuevo o agregar servicio)
-  accion: llmOutput.accion || null,
+  // "agregar_servicio" = agregar servicio a turno existente
+  // null = flujo automático (crear turno nuevo)
+  accion: llmOutput.accion || (llmOutput.agregar_a_turno_existente ? 'agregar_servicio' : null),
 
   // === Del LLM_OUTPUT (lo que el LLM extrajo del mensaje) ===
   nombre_clienta: llmOutput.full_name || llmOutput.nombre_clienta || state.full_name || state.nick_name,

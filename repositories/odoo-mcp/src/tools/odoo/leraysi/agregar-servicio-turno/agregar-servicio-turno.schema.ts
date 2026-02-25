@@ -24,6 +24,8 @@ export const agregarServicioTurnoSchema = z.object({
   nuevo_precio: z.number().positive("El precio del nuevo servicio debe ser mayor a 0"),
   duracion_estimada: z.number().positive("La duración estimada del nuevo servicio debe ser mayor a 0"),
   complejidad_maxima: z.enum(["simple", "media", "compleja", "muy_compleja"]),
+  // === Campos opcionales ===
+  nueva_hora: z.string().optional(), // Hora nueva del turno (ej: "09:00") cuando cambia por jornada completa
 });
 
 export type AgregarServicioTurnoInput = z.infer<typeof agregarServicioTurnoSchema>;

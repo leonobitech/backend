@@ -52,6 +52,9 @@ const updateFields = {
   // Detalle para display (concatenación)
   servicio_detalle: data.servicio_detalle, // "Manicura semipermanente + Pedicura"
 
+  // Hora actualizada (importante para jornada completa: 15:00 → 09:00)
+  hora: data.hora_sugerida || turnoEncontrado.hora || '09:00',
+
   // Duración total actualizada (en minutos)
   duracion_min: data.duracion_estimada || 60,
 
@@ -61,8 +64,8 @@ const updateFields = {
   // Precio total actualizado
   precio: data.precio,
 
-  // Seña total (30% del precio total)
-  sena_monto: data.sena_monto,
+  // Seña total (30% del precio total combinado)
+  sena_monto: Math.round((data.precio || 0) * 0.3),
 
   // Estado de pago (false porque hay nueva seña pendiente)
   sena_pagada: false,
@@ -82,7 +85,7 @@ const updateFields = {
   notas: `Servicio agregado el ${ahora.toLocaleDateString('es-AR')}. ` +
          `Servicios: ${data.servicio_detalle}. ` +
          `Total: $${data.precio?.toLocaleString('es-AR') || 0}. ` +
-         `Seña: $${data.sena_monto?.toLocaleString('es-AR') || 0}`
+         `Seña: $${Math.round((data.precio || 0) * 0.3).toLocaleString('es-AR')}`
 };
 
 // ============================================================================
@@ -101,7 +104,11 @@ return [{
       accion: data.accion,
       mensaje_para_clienta: data.mensaje_para_clienta,
       lead_row_id: data.lead_row_id,
-      odoo_turno_id: data.odoo_turno_id
+      odoo_turno_id: data.odoo_turno_id,
+      // Datos del turno original (para desglose de seña en respuesta)
+      turno_precio_existente: turnoEncontrado.precio || 0,
+      turno_sena_pagada: turnoEncontrado.sena_monto || 0,
+      turno_servicio_existente: turnoEncontrado.servicio_detalle || ''
     }
   }
 }];

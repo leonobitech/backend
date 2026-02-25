@@ -114,9 +114,9 @@ Reprograma un turno existente a una nueva fecha/hora.
 
 ### `leraysi_agregar_servicio_turno`
 
-Agrega un servicio adicional a un turno existente (mismo día).
+Agrega un servicio adicional a un turno existente, calcula el nuevo precio total y regenera el link de pago con la seña diferencial.
 
-**Uso:** Cuando la clienta ya tiene turno y quiere agregar otro servicio para la misma cita.
+**Uso:** Cuando la clienta ya tiene turno y quiere agregar otro servicio. El horario puede cambiar si la duración combinada no cabe en el horario original (ej: agregar balayage = jornada completa 09:00-19:00).
 
 **Parámetros:**
 
@@ -126,8 +126,9 @@ Agrega un servicio adicional a un turno existente (mismo día).
 | nuevo_servicio | string | ✅ | Código del servicio a agregar |
 | nuevo_servicio_detalle | string | ✅ | Descripción del nuevo servicio |
 | nuevo_precio | number | ✅ | Precio del nuevo servicio en ARS |
-| duracion_estimada | number | ✅ | Duración en minutos |
-| complejidad_maxima | string | ✅ | Complejidad: simple, media, compleja, muy_compleja |
+| duracion_estimada | number | ✅ | Duración combinada en minutos (600 si muy_compleja) |
+| complejidad_maxima | string | ✅ | Complejidad máxima resultante: simple, media, compleja, muy_compleja |
+| nueva_hora | string | ❌ | Nueva hora inicio "HH:MM" (cuando el turno cambia de horario) |
 
 **Respuesta de la tool:**
 
@@ -135,20 +136,20 @@ Agrega un servicio adicional a un turno existente (mismo día).
 {
   "turnoId": 123,
   "clienta": "María García",
-  "fecha_hora": "2025-01-29 10:00:00",
-  "servicios": ["manicura_semipermanente", "pedicura"],
-  "servicio_detalle": "Manicura semipermanente + Pedicura",
-  "precio_total": 14000,
-  "duracion_estimada": 300,
-  "sena": 1800,
+  "fecha_hora": "2025-01-29 09:00:00",
+  "servicios": ["Manicura semipermanente", "Balayage"],
+  "servicio_detalle": "Manicura semipermanente + Balayage",
+  "precio_total": 68000,
+  "duracion_estimada": 600,
+  "sena": 20400,
   "link_pago": "https://www.mercadopago.com.ar/checkout/v1/...",
   "mp_preference_id": "123456789-...",
   "estado": "pendiente_pago",
-  "message": "Servicio agregado al turno. Nuevo total: $14.000. Link de pago actualizado."
+  "message": "Servicio agregado al turno. Nuevo total: $68.000. Link de pago actualizado."
 }
 ```
 
-*Nota: La seña es diferencial (solo cobra la diferencia si ya había pagado).*
+*Nota: La seña es diferencial — solo cobra la diferencia entre la seña total (30% del nuevo precio_total) y lo que ya había pagado.*
 
 ---
 

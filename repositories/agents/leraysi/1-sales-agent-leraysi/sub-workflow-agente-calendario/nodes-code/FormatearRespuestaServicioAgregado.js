@@ -19,10 +19,20 @@ const metaData = prepararData._meta;
 const turnoRowId = baserowResponse.id;
 
 // ============================================================================
+// CALCULAR DESGLOSE DE SEÑA
+// ============================================================================
+const precioExistente = Number(metaData.turno_precio_existente) || 0;
+const senaPagada = Number(metaData.turno_sena_pagada) || 0;
+const precioTotal = prepararData.precio || 0;
+const senaTotalNueva = Math.round(precioTotal * 0.3); // 30% del total combinado
+const senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);
+const servicioExistente = metaData.turno_servicio_existente || '';
+
+// ============================================================================
 // OUTPUT PARA MASTER AGENT
 // ============================================================================
 // Mantiene nombres compatibles con lo que espera el Master Agent prompt
-// (link_pago, precio_total, sena_diferencial, servicios_combinados)
+// + desglose de seña para mensaje claro a la clienta
 // ============================================================================
 return [{
   json: {
@@ -33,17 +43,17 @@ return [{
     lead_row_id: metaData.lead_row_id,
 
     // Datos específicos de servicio agregado
-    // Mapea nombres nuevos → nombres que espera el Master Agent
     servicio_agregado: {
       odoo_turno_id: metaData.odoo_turno_id,
-      // servicios_combinados ← servicio_detalle
       servicios_combinados: prepararData.servicio_detalle,
-      // precio_total ← precio
-      precio_total: prepararData.precio,
-      // sena_diferencial ← sena_monto (es la seña total, no diferencial)
-      sena_diferencial: prepararData.sena_monto,
-      // link_pago ← mp_link
-      link_pago: prepararData.mp_link
+      precio_total: precioTotal,
+      link_pago: prepararData.mp_link,
+      // Desglose de seña (para que la LLM explique claramente a la clienta)
+      sena_ya_pagada: senaPagada,
+      sena_adicional: senaDiferencial,
+      sena_total_nueva: senaTotalNueva,
+      servicio_existente: servicioExistente,
+      precio_existente: precioExistente
     }
   }
 }];
