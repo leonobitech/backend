@@ -34,9 +34,6 @@ export interface ReprogramarTurnoResponse {
   link_pago?: string;
   sena?: number;
 
-  // Solo para confirmado (calendario actualizado)
-  calendar_accept_url?: string | null;
-
   // Mensaje
   message: string;
 }

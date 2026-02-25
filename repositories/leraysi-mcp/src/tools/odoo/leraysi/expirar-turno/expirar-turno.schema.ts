@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const expirarTurnoSchema = z.object({
-  turno_id: z.number().positive("ID de turno inválido"),
+  turno_id: z.number().positive("ID de turno invalido"),
 });
 
 export type ExpirarTurnoInput = z.infer<typeof expirarTurnoSchema>;

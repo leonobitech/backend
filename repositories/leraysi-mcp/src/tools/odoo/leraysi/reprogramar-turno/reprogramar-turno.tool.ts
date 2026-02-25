@@ -6,7 +6,6 @@ import {
 import type { OdooClient } from "@/lib/odoo";
 import { ITool, ToolDefinition } from "@/tools/base/Tool.interface";
 import { logger } from "@/lib/logger";
-import { getVendorReprogramacionTemplate } from "@/prompts/email-templates";
 
 export class ReprogramarTurnoTool
   implements ITool<ReprogramarTurnoInput, ReprogramarTurnoResponse>
@@ -100,7 +99,6 @@ export class ReprogramarTurnoTool
     let nuevoTurnoId: number | null = null;
     let linkPago: string | undefined;
     let sena: number | undefined;
-    let calendarAcceptUrl: string | null = null;
 
     // =========================================================================
     // CASO A: PENDIENTE_PAGO → Cancelar viejo + Crear nuevo turno
@@ -110,13 +108,11 @@ export class ReprogramarTurnoTool
       await this.odooClient.write("salon.turno", [turnoId], {
         estado: "cancelado",
       });
-      await this.odooClient.postMessageToChatter({
-        model: "salon.turno",
-        resId: turnoId,
+      await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
         body: `<p><strong>🔄 Turno reprogramado</strong></p>
-          <p>Motivo: ${params.motivo}</p>
-          <p>Este turno fue cancelado y se creó uno nuevo con la fecha actualizada.</p>`,
-        messageType: "comment",
+               <p>Motivo: ${params.motivo}</p>
+               <p>Este turno fue cancelado y se creó uno nuevo con la fecha actualizada.</p>`,
+        message_type: "comment",
       });
       acciones.push("Turno anterior cancelado");
 
@@ -157,17 +153,13 @@ export class ReprogramarTurnoTool
       }
 
       // 4. Registrar en nuevo turno
-      await this.odooClient.postMessageToChatter({
-        model: "salon.turno",
-        resId: nuevoTurnoId,
+      await this.odooClient.execute("salon.turno", "message_post", [[nuevoTurnoId]], {
         body: `<p><strong>🔄 Turno creado por reprogramación</strong></p>
-          <ul>
-            <li>Turno original: #${turnoId}</li>
-            <li>Fecha anterior: ${fechaHoraAnteriorAR}</li>
-            <li>Nueva fecha: ${nuevaFechaHora}</li>
-            <li>Motivo: ${params.motivo}</li>
-          </ul>`,
-        messageType: "comment",
+               <p>Turno original: #${turnoId}</p>
+               <p>Fecha anterior: ${fechaHoraAnteriorAR}</p>
+               <p>Nueva fecha: ${nuevaFechaHora}</p>
+               <p>Motivo: ${params.motivo}</p>`,
+        message_type: "comment",
       });
     }
 
@@ -234,7 +226,6 @@ export class ReprogramarTurnoTool
               start: startUTC,
               stop: stopUTC,
               duration: duracion,
-              location: 'Yerbal 513, C1405CDK Cdad. Autónoma de Buenos Aires',
               description: `TURNO REPROGRAMADO\n\nFecha anterior: ${fechaHoraAnteriorAR}\nMotivo: ${params.motivo}\n\nServicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio: $${turno.precio}`,
               partner_ids: [[6, 0, eventPartnerIds]],
               opportunity_id: leadId,
@@ -244,27 +235,6 @@ export class ReprogramarTurnoTool
             const nuevoEventoId = await this.odooClient.create("calendar.event", eventValues);
             await this.odooClient.write("salon.turno", [turnoId], { odoo_event_id: nuevoEventoId });
             acciones.push("Nuevo evento de calendario creado");
-
-            // 2a-bis. Obtener URL de confirmación de asistencia
-            const clientePartnerId = lead.partner_id && Array.isArray(lead.partner_id) ? lead.partner_id[0] : null;
-            if (clientePartnerId) {
-              try {
-                const attendees = await this.odooClient.search("calendar.attendee", [
-                  ["event_id", "=", nuevoEventoId],
-                  ["partner_id", "=", clientePartnerId],
-                ], { fields: ["access_token"], limit: 1 });
-
-                if (attendees.length > 0 && attendees[0].access_token) {
-                  const baseUrl = await this.odooClient.execute(
-                    "ir.config_parameter", "get_param", ["web.base.url"]
-                  );
-                  calendarAcceptUrl = `${baseUrl}/calendar/meeting/accept?token=${attendees[0].access_token}&id=${nuevoEventoId}`;
-                  logger.info({ calendarAcceptUrl }, "[ReprogramarTurno] Calendar accept URL generated");
-                }
-              } catch (error) {
-                logger.warn({ error }, "[ReprogramarTurno] Could not get calendar accept URL");
-              }
-            }
 
             // 2b. Crear actividad en el Lead vinculada al evento
             try {
@@ -299,19 +269,14 @@ export class ReprogramarTurnoTool
 
             // 2c. Registrar en chatter del Lead
             try {
-              await this.odooClient.postMessageToChatter({
-                model: "crm.lead",
-                resId: leadId,
+              await this.odooClient.execute("crm.lead", "message_post", [[leadId]], {
                 body: `<p><strong>🔄 Turno reprogramado</strong></p>
-                  <ul>
-                    <li><strong>Clienta:</strong> ${turno.clienta}</li>
-                    <li><strong>Servicio:</strong> ${servicioDisplay}</li>
-                    <li><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</li>
-                    <li><strong>Nueva fecha:</strong> ${nuevaFechaHora}</li>
-                    <li><strong>Motivo:</strong> ${params.motivo}</li>
-                  </ul>
-                  <p><em>Sistema automatizado Leonobitech</em></p>`,
-                messageType: "comment",
+                       <p><strong>Clienta:</strong> ${turno.clienta}</p>
+                       <p><strong>Servicio:</strong> ${servicioDisplay}</p>
+                       <p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p>
+                       <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
+                       <p><strong>Motivo:</strong> ${params.motivo}</p>`,
+                message_type: "comment",
               });
               acciones.push("Mensaje registrado en chatter del Lead");
             } catch (msgError) {
@@ -339,16 +304,34 @@ export class ReprogramarTurnoTool
               const fechaHumanaAnterior = this.formatearFechaHumana(fechaHoraAnteriorAR);
               const fechaHumanaNueva = this.formatearFechaHumana(nuevaFechaHora);
 
-              const notificationBody = getVendorReprogramacionTemplate({
-                vendorName,
-                clienta: turno.clienta,
-                telefono: turno.telefono,
-                servicio: servicioDisplay,
-                fechaAnterior: fechaHumanaAnterior,
-                fechaNueva: fechaHumanaNueva,
-                precio: turno.precio,
-                motivo: params.motivo,
-              });
+              const notificationBody = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                  <h2 style="color: #f59e0b;">🔄 Turno Reprogramado</h2>
+                  <p>Hola <strong>${vendorName}</strong>,</p>
+                  <p>Se ha reprogramado el siguiente turno:</p>
+
+                  <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                    <h3 style="margin: 0 0 15px 0; color: #92400e;">Cambio de Fecha</h3>
+                    <p style="margin: 5px 0; text-decoration: line-through; color: #92400e;">
+                      <strong>Fecha anterior:</strong> ${fechaHumanaAnterior}
+                    </p>
+                    <p style="margin: 5px 0; color: #059669; font-size: 18px;">
+                      <strong>Nueva fecha:</strong> ${fechaHumanaNueva}
+                    </p>
+                  </div>
+
+                  <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>👤 Clienta:</strong> ${turno.clienta}</p>
+                    <p style="margin: 5px 0;"><strong>💇‍♀️ Servicio:</strong> ${servicioDisplay}</p>
+                    <p style="margin: 5px 0;"><strong>📱 Teléfono:</strong> ${turno.telefono}</p>
+                    <p style="margin: 5px 0;"><strong>💰 Precio:</strong> $${turno.precio.toLocaleString('es-AR')}</p>
+                    <p style="margin: 5px 0; color: #666;"><strong>Motivo:</strong> ${params.motivo}</p>
+                  </div>
+
+                  <p style="color: #666; font-size: 14px;">El calendario de Odoo ya fue actualizado con la nueva fecha.</p>
+                  <p style="color: #999; font-size: 12px; margin-top: 20px;"><em>Sistema automatizado Leonobitech - Estilos Leraysi</em></p>
+                </div>
+              `;
 
               await this.odooClient.create("mail.mail", {
                 subject: `🔄 Turno Reprogramado: ${servicioDisplay} - ${turno.clienta}`,
@@ -373,17 +356,13 @@ export class ReprogramarTurnoTool
       }
 
       // 4. Registrar en chatter del turno
-      await this.odooClient.postMessageToChatter({
-        model: "salon.turno",
-        resId: turnoId,
+      await this.odooClient.execute("salon.turno", "message_post", [[turnoId]], {
         body: `<p><strong>🔄 Turno reprogramado</strong></p>
-          <ul>
-            <li><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</li>
-            <li><strong>Nueva fecha:</strong> ${nuevaFechaHora}</li>
-            <li><strong>Motivo:</strong> ${params.motivo}</li>
-            <li><strong>Acciones:</strong> ${acciones.join(", ")}</li>
-          </ul>`,
-        messageType: "comment",
+               <p><strong>Fecha anterior:</strong> ${fechaHoraAnteriorAR}</p>
+               <p><strong>Nueva fecha:</strong> ${nuevaFechaHora}</p>
+               <p><strong>Motivo:</strong> ${params.motivo}</p>
+               <p><strong>Acciones:</strong> ${acciones.join(", ")}</p>`,
+        message_type: "comment",
       });
     }
 
@@ -409,7 +388,6 @@ export class ReprogramarTurnoTool
       acciones,
       link_pago: linkPago,
       sena,
-      calendar_accept_url: calendarAcceptUrl,
       message: estadoActual === "pendiente_pago"
         ? `Turno reprogramado. Nuevo turno #${nuevoTurnoId} para el ${fechaHumana}. Nuevo link de pago generado.`
         : `Turno reprogramado para el ${fechaHumana}. Calendario actualizado y notificación enviada.`,

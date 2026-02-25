@@ -17,14 +17,14 @@ export class ExpirarTurnoTool
 
     logger.info(
       { turnoId: params.turno_id },
-      "[ExpirarTurno] Expiring unpaid appointment"
+      "[ExpirarTurno] Processing expired appointment"
     );
 
-    // 1. Leer turno actual
+    // 1. Leer turno actual (incluir pending_changes para auto-detectar tipo)
     const turnos = await this.odooClient.read(
       "salon.turno",
       [params.turno_id],
-      ["clienta", "estado", "lead_id"]
+      ["clienta", "estado", "lead_id", "pending_changes"]
     );
 
     if (turnos.length === 0) {
@@ -46,6 +46,33 @@ export class ExpirarTurnoTool
       };
     }
 
+    // AUTO-DETECT: Si tiene pending_changes, es un servicio agregado que expiró.
+    // Revertir a confirmado en vez de cancelar (el turno original sigue vigente).
+    if (turno.pending_changes) {
+      await this.odooClient.execute(
+        "salon.turno",
+        "api_revertir_servicio_agregado",
+        [params.turno_id]
+      );
+
+      logger.info(
+        { turnoId: params.turno_id, estadoAnterior },
+        "[ExpirarTurno] Service addition reverted (pending_changes detected)"
+      );
+
+      return {
+        turnoId: params.turno_id,
+        clienta: turno.clienta,
+        estado_anterior: estadoAnterior,
+        estado_nuevo: "confirmado",
+        lead_reverted: false,
+        lead_id: turno.lead_id ? turno.lead_id[0] : null,
+        message: `Servicio agregado de ${turno.clienta} expirado. Turno original mantenido como confirmado.`,
+      };
+    }
+
+    // CASO NORMAL: Turno nuevo sin pagar → cancelar completamente
+
     // 2. Cancelar turno en Odoo
     await this.odooClient.write("salon.turno", [params.turno_id], {
       estado: "cancelado",
@@ -57,7 +84,7 @@ export class ExpirarTurnoTool
       "message_post",
       [[params.turno_id]],
       {
-        body: "<p><strong>Turno expirado</strong></p><p>El link de pago expiró sin completar el pago. Slot liberado automáticamente.</p>",
+        body: "<p><strong>Turno expirado</strong></p><p>El link de pago expiro sin completar el pago. Slot liberado automaticamente.</p>",
         message_type: "comment",
       }
     );
@@ -68,6 +95,7 @@ export class ExpirarTurnoTool
 
     if (leadId) {
       try {
+        // Buscar stage "Qualified" (Calificado)
         const stages = await this.odooClient.search(
           "crm.stage",
           [["name", "ilike", "Qualified"]],
@@ -117,7 +145,7 @@ export class ExpirarTurnoTool
       description:
         "Expirar un turno con pago pendiente vencido. " +
         "Cancela el turno en Odoo, revierte el CRM lead a Qualified, " +
-        "y limpia el expected_revenue. Usado por el cron de expiración.",
+        "y limpia el expected_revenue. Usado por el cron de expiracion.",
       inputSchema: {
         type: "object",
         properties: {
