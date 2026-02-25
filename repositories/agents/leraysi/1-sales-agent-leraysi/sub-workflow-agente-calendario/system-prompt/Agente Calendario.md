@@ -28,7 +28,7 @@ Crea un turno en el sistema y genera link de pago MercadoPago.
 | clienta | string | ✅ | Nombre completo |
 | telefono | string | ✅ | Teléfono con código país |
 | email | string | ✅ | Email de la clienta (para enviar confirmación y factura) |
-| servicio | string | ✅ | Código: corte, tintura, mechas, brushing, peinado, tratamiento, manicura, pedicura, depilacion, maquillaje, otro |
+| servicio | string | ✅ | Código Odoo exacto (ej: corte_mujer, manicura_semipermanente, balayage, tintura_raiz). Usar el valor EXACTO del prompt |
 | servicio_detalle | string | ✅ | Descripción completa del servicio solicitado |
 | fecha_hora | string | ✅ | Formato "YYYY-MM-DD HH:MM" |
 | precio | number | ✅ | Precio total en ARS |

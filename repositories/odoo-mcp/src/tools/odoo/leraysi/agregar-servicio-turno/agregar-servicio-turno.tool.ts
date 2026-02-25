@@ -183,7 +183,9 @@ export class AgregarServicioTurnoLeraysiTool
     // 5. Actualizar el turno en Odoo
     // NOTA: `sena` es computed (precio*0.30), no se puede escribir.
     // Usamos `monto_pago_pendiente` para que action_generar_link_pago genere el link correcto.
+    // `servicio` (Selection field): poner el nuevo servicio agregado (el de mayor relevancia/precio)
     const updateData: Record<string, unknown> = {
+      servicio: params.nuevo_servicio,
       servicio_detalle: servicioDetalleCombinado,
       precio: precioTotal,
       duracion: duracionTotal,

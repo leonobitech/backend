@@ -15,6 +15,28 @@ const horaDeseada = horaSolicitadaParte || data.hora_deseada || "09:00";
 const senaCalculada = Math.round((data.precio || 0) * 0.3);
 const fechaHoraCompleta = `${fechaSoloParte} ${horaDeseada}`;
 
+// Mapeo display name → código Odoo (determinístico, no depender del LLM)
+const DISPLAY_TO_CODE = {
+  'Corte mujer': 'corte_mujer',
+  'Alisado brasileño': 'alisado_brasileno',
+  'Alisado keratina': 'alisado_keratina',
+  'Mechas completas': 'mechas_completas',
+  'Tintura raíz': 'tintura_raiz',
+  'Tintura completa': 'tintura_completa',
+  'Balayage': 'balayage',
+  'Manicura simple': 'manicura_simple',
+  'Manicura semipermanente': 'manicura_semipermanente',
+  'Pedicura': 'pedicura',
+  'Depilación cera piernas': 'depilacion_cera_piernas',
+  'Depilación cera axilas': 'depilacion_cera_axilas',
+  'Depilación cera bikini': 'depilacion_cera_bikini',
+  'Depilación láser piernas': 'depilacion_laser_piernas',
+  'Depilación láser axilas': 'depilacion_laser_axilas',
+};
+// Convertir servicio(s) de display name a código Odoo
+const servicioRaw = Array.isArray(data.servicio) ? data.servicio[0] : data.servicio;
+const servicioCodigo = DISPLAY_TO_CODE[servicioRaw] || servicioRaw || 'otro';
+
 const formatearFechaHumana = (fechaStr) => {
   if (!fechaStr) return "fecha no especificada";
   const soloFecha = fechaStr.includes("T")
@@ -111,7 +133,7 @@ let jsonRespuestaEsperada = "";
 
 if (esReprogramacion && data.fecha_disponible) {
   const mensajeClientaReprogramado = `Listo ${data.nombre_clienta || "reina"}! Tu turno fue reprogramado para el ${fechaHumana} a las ${horaDeseada}. Te enviamos un email de confirmacion.`;
-  instruccionTarea = `## REPROGRAMAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_reprogramar_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "lead_id": ${data.lead_id || "null"},\n  "nueva_fecha_hora": "${fechaHoraCompleta}",\n  "motivo": "Solicitud de la clienta"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\nReemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:\n\n\`\`\`json\n{\n  "estado": "turno_reprogramado",\n  "odoo_turno_id": {turno_id_nuevo de la respuesta si existe, sino turno_id_anterior},\n  "turno_id_anterior": {turno_id_anterior de la respuesta},\n  "turno_id_nuevo": {turno_id_nuevo de la respuesta o null},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora_anterior": "{fecha_hora_anterior de la respuesta}",\n  "fecha_hora_nueva": "${fechaHoraCompleta}",\n  "servicio": "${data.servicio || "otro"}",\n  "link_pago": "{link_pago de la respuesta si existe, o null}",\n  "mp_preference_id": "{mp_preference_id de la respuesta si existe, o null}",\n  "calendar_accept_url": "{calendar_accept_url de la respuesta si existe, o null}",\n  "mensaje_para_clienta": "${mensajeClientaReprogramado}"\n}\n\`\`\``;
+  instruccionTarea = `## REPROGRAMAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_reprogramar_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "lead_id": ${data.lead_id || "null"},\n  "nueva_fecha_hora": "${fechaHoraCompleta}",\n  "motivo": "Solicitud de la clienta"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\nReemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:\n\n\`\`\`json\n{\n  "estado": "turno_reprogramado",\n  "odoo_turno_id": {turno_id_nuevo de la respuesta si existe, sino turno_id_anterior},\n  "turno_id_anterior": {turno_id_anterior de la respuesta},\n  "turno_id_nuevo": {turno_id_nuevo de la respuesta o null},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora_anterior": "{fecha_hora_anterior de la respuesta}",\n  "fecha_hora_nueva": "${fechaHoraCompleta}",\n  "servicio": "${servicioCodigo}",\n  "link_pago": "{link_pago de la respuesta si existe, o null}",\n  "mp_preference_id": "{mp_preference_id de la respuesta si existe, o null}",\n  "calendar_accept_url": "{calendar_accept_url de la respuesta si existe, o null}",\n  "mensaje_para_clienta": "${mensajeClientaReprogramado}"\n}\n\`\`\``;
 } else if (esAgregarServicio && data.fecha_disponible) {
   const precioExistente = data.turno_precio_existente || 0;
   const precioNuevo = data.precio || 0;
@@ -158,12 +180,13 @@ if (esReprogramacion && data.fecha_disponible) {
     ) ||
     serviciosArray[serviciosArray.length - 1] ||
     "otro";
+  const servicioNuevoCodigo = DISPLAY_TO_CODE[servicioNuevo] || servicioNuevo;
   const serviciosCombinados = `${servicioExistenteDisplay} + ${servicioNuevo}`;
   const mensajeClientaAgregado = `Listo ${data.nombre_clienta || "reina"}! Actualice tu turno del ${fechaHumana} a las ${horaDeseada}. Ahora tenes: ${serviciosCombinados}. Total: $${precioTotal.toLocaleString("es-AR")}. Sena adicional a pagar: $${senaDiferencial.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
-  instruccionTarea = `## AGREGAR SERVICIO AL TURNO EXISTENTE\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${turnoIdExistente},\n  "nuevo_servicio": "${servicioNuevo}",\n  "nuevo_servicio_detalle": "${servicioNuevo}",\n  "nuevo_precio": ${precioNuevo},\n  "duracion_estimada": ${duracionCombinada},\n  "complejidad_maxima": "${complejidadCombinada}",\n  "nueva_hora": "${horaDeseada}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "servicio_agregado",\n  "turno_id": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicios_combinados": "{servicio_detalle de la respuesta}",\n  "precio_total": {precio_total de la respuesta},\n  "duracion_estimada": ${duracionCombinada},\n  "complejidad_maxima": "${complejidadCombinada}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaAgregado}"\n}\n\`\`\``;
+  instruccionTarea = `## AGREGAR SERVICIO AL TURNO EXISTENTE\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${turnoIdExistente},\n  "nuevo_servicio": "${servicioNuevoCodigo}",\n  "nuevo_servicio_detalle": "${servicioNuevo}",\n  "nuevo_precio": ${precioNuevo},\n  "duracion_estimada": ${duracionCombinada},\n  "complejidad_maxima": "${complejidadCombinada}",\n  "nueva_hora": "${horaDeseada}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "servicio_agregado",\n  "turno_id": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicios_combinados": "{servicio_detalle de la respuesta}",\n  "precio_total": {precio_total de la respuesta},\n  "duracion_estimada": ${duracionCombinada},\n  "complejidad_maxima": "${complejidadCombinada}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaAgregado}"\n}\n\`\`\``;
 } else if (data.fecha_disponible) {
   const mensajeClientaTemplate = `Listo ${data.nombre_clienta || "reina"}! Tu turno de ${servicioDisplay.toLowerCase()} esta reservado para el ${fechaHumana} a las ${horaDeseada}. Para confirmarlo, paga la sena de $${senaCalculada.toLocaleString("es-AR")} en este link: {LINK_PAGO}. Tenes 15 minutos para abonar, despues el link expira y se libera el turno.`;
-  instruccionTarea = `## FECHA DISPONIBLE - CREAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.nombre_clienta || ""}",\n  "telefono": "${data.telefono || ""}",\n  "servicio": "${data.servicio || "otro"}",\n  "fecha_hora": "${fechaHoraCompleta}",\n  "precio": ${data.precio || 0},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "lead_id": ${data.lead_id || "null"}${data.email ? `,\n  "email": "${data.email}"` : ""}${data.servicio_detalle ? `,\n  "servicio_detalle": "${data.servicio_detalle}"` : ""}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_creado",\n  "turno_id": {turnoId de la respuesta},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicio": "${data.servicio || "otro"}",\n  "servicio_detalle": "${servicioDisplay}",\n  "precio": ${data.precio || 0},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaTemplate}"\n}\n\`\`\`\n\n**IMPORTANTE:** En mensaje_para_clienta, reemplazar {LINK_PAGO} con el link_pago real de la respuesta.`;
+  instruccionTarea = `## FECHA DISPONIBLE - CREAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.nombre_clienta || ""}",\n  "telefono": "${data.telefono || ""}",\n  "servicio": "${servicioCodigo}",\n  "fecha_hora": "${fechaHoraCompleta}",\n  "precio": ${data.precio || 0},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "lead_id": ${data.lead_id || "null"}${data.email ? `,\n  "email": "${data.email}"` : ""}${data.servicio_detalle ? `,\n  "servicio_detalle": "${data.servicio_detalle}"` : ""}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_creado",\n  "turno_id": {turnoId de la respuesta},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicio": "${servicioCodigo}",\n  "servicio_detalle": "${servicioDisplay}",\n  "precio": ${data.precio || 0},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaTemplate}"\n}\n\`\`\`\n\n**IMPORTANTE:** En mensaje_para_clienta, reemplazar {LINK_PAGO} con el link_pago real de la respuesta.`;
 } else {
   const alternativasTexto =
     data.alternativas?.length > 0
