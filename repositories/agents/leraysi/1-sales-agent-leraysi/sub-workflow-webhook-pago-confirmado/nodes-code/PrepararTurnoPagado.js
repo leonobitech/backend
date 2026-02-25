@@ -101,7 +101,7 @@ return [{
     servicio_detalle: servicioDetalle,
     hora: hora,
     duracion_min: odooTurno.duracion_min || parseInt(turnoBaserow.duracion_min) || 60,
-    complejidad_maxima: odooTurno.complejidad_maxima || turnoBaserow.complejidad_maxima || 'media',
+    complejidad_maxima: odooTurno.complejidad_maxima || turnoBaserow.complejidad_maxima?.value || turnoBaserow.complejidad_maxima || 'media',
     precio: precio,
     sena_monto: Math.round(precio * 0.3),
   }
