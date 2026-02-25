@@ -333,6 +333,14 @@ class MercadoPagoWebhook(http.Controller):
                 # 3. MCP y n8n son "fire and forget" (no necesitan rollback)
                 request.env.cr.commit()
 
+                # Forzar re-lectura del ORM después del commit.
+                # action_aplicar_pending_changes() hizo write() dentro de la misma
+                # transacción. Después del commit los datos están en DB, pero el
+                # recordset de Python puede tener valores cacheados (ej: complejidad_maxima
+                # pre-pending_changes). Sin invalidate, el payload del webhook
+                # envía el valor viejo a n8n/Baserow.
+                turno.invalidate_recordset()
+
                 # Llamar al MCP para ejecutar el proceso completo de confirmación
                 # (contacto, factura, calendario, email con PDF)
                 mcp_result = self._call_mcp_confirmar_pago(turno, payment_id)
