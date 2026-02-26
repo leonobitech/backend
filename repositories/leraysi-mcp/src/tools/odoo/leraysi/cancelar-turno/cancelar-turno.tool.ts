@@ -55,14 +55,13 @@ export class CancelarTurnoTool
       ? `Motivo: ${params.motivo}`
       : "Sin motivo especificado";
 
+    // Usar api_post_message (Python Markup()) para evitar doble-escape HTML via XML-RPC
     await this.odooClient.execute(
       "salon.turno",
-      "message_post",
-      [[params.turno_id]],
-      {
-        body: `<p><strong>Turno cancelado</strong></p><p>${motivoMsg}</p>`,
-        message_type: "comment",
-      }
+      "api_post_message",
+      [params.turno_id,
+        `<strong>Turno cancelado</strong><br/>${motivoMsg}`
+      ]
     );
 
     // TODO: Si notificar_clienta es true, enviar SMS/WhatsApp

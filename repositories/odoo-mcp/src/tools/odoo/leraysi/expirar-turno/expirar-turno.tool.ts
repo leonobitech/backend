@@ -79,14 +79,14 @@ export class ExpirarTurnoTool
     });
 
     // 3. Registrar motivo
+    // Usar api_post_message (Python Markup()) para evitar doble-escape HTML via XML-RPC
     await this.odooClient.execute(
       "salon.turno",
-      "message_post",
-      [[params.turno_id]],
-      {
-        body: "<p><strong>Turno expirado</strong></p><p>El link de pago expiro sin completar el pago. Slot liberado automaticamente.</p>",
-        message_type: "comment",
-      }
+      "api_post_message",
+      [params.turno_id,
+        `<strong>Turno expirado</strong><br/>` +
+        `El link de pago expiró sin completar el pago. Slot liberado automáticamente.`
+      ]
     );
 
     // 4. Revertir CRM lead si existe
