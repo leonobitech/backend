@@ -1,11 +1,13 @@
 // ============================================================================
-// FILTRAR TURNOS EXPIRADOS v2
+// FILTRAR TURNOS EXPIRADOS v3
 // Recibe turnos con estado=pendiente_pago, filtra los que tienen expira_at < now
 //
-// DOS TIPOS DE EXPIRACIÓN:
+// TRES TIPOS DE EXPIRACIÓN:
 // 1. Turno nuevo sin pagar (mp_payment_id = null) → expirar completamente
-// 2. Servicio agregado sin pagar (mp_payment_id existe) → revertir a confirmado
+// 2. Servicio agregado sin pagar (mp_payment_id existe, sin turno_padre_id) → revertir a confirmado
 //    (los datos originales están intactos gracias a separación de responsabilidades v3)
+// 3. Turno adicional sin pagar (turno_padre_id existe) → expirar fila hija, padre intacto
+//    (fila independiente creada para otra trabajadora, el turno original no se tocó)
 // ============================================================================
 
 const items = $input.all();
@@ -29,8 +31,27 @@ for (const item of items) {
     nombreClienta = turno.clienta_id[0].value || "";
   }
 
-  if (turno.mp_payment_id) {
-    // CASO 2: Servicio agregado sin pagar.
+  // Detectar turno_padre_id (puede ser número, string, o link_row)
+  const tieneTurnoPadre = turno.turno_padre_id != null && turno.turno_padre_id !== '' && turno.turno_padre_id !== 0;
+
+  if (tieneTurnoPadre) {
+    // CASO 3: Turno adicional sin pagar.
+    // Fila hija creada para otra trabajadora. El turno padre (fila original)
+    // está intacto — nunca se modificó. Solo expirar/borrar esta fila hija.
+    expirados.push({
+      json: {
+        turno_row_id: turno.id,
+        lead_row_id: leadRowId,
+        odoo_turno_id: turno.odoo_turno_id ? Number(turno.odoo_turno_id) : null,
+        turno_padre_id: turno.turno_padre_id,
+        nombre_clienta: nombreClienta,
+        servicio: turno.servicio_detalle || turno.servicio || "",
+        expira_at: turno.expira_at,
+        tipo: 'expirar_turno_adicional',
+      },
+    });
+  } else if (turno.mp_payment_id) {
+    // CASO 2: Servicio agregado sin pagar (misma trabajadora, UPDATE).
     // El turno ya fue pagado antes (mp_payment_id existe).
     // Con la separación de responsabilidades v3, los datos originales
     // (servicio, hora, precio, duracion, complejidad) están intactos en Baserow.
@@ -43,9 +64,7 @@ for (const item of items) {
         nombre_clienta: nombreClienta,
         servicio: turno.servicio_detalle || turno.servicio || "",
         expira_at: turno.expira_at,
-        // Tipo de expiración: revertir a confirmado (no expirar completamente)
         tipo: 'revertir_servicio_agregado',
-        // Campos a restaurar en Baserow
         revertir: {
           estado: 'confirmado',
           sena_pagada: true,
@@ -78,5 +97,6 @@ if (expirados.length === 0) {
 
 const nuevos = expirados.filter(e => e.json.tipo === 'expirar_turno_nuevo').length;
 const revertidos = expirados.filter(e => e.json.tipo === 'revertir_servicio_agregado').length;
-console.log(`[ExpirarTurnos] ${expirados.length} turno(s) expirado(s): ${nuevos} nuevos, ${revertidos} servicio agregado`);
+const adicionales = expirados.filter(e => e.json.tipo === 'expirar_turno_adicional').length;
+console.log(`[ExpirarTurnos] ${expirados.length} turno(s) expirado(s): ${nuevos} nuevos, ${revertidos} servicio agregado, ${adicionales} turno adicional`);
 return expirados;

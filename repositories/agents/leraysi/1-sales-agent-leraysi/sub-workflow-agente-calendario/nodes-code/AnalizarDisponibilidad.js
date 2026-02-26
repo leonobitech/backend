@@ -625,9 +625,11 @@ if (input.agregar_a_turno_existente && turnoIdExistente) {
       }
     }
   } else {
-    // ── ESTRATEGIA A: bloque continuo combinado ──
-    // Fusionar servicios en un bloque sin tiempos muertos
+    // ── ESTRATEGIA A: misma trabajadora (combinado) o turno adicional (otra) ──
+    // Misma trabajadora: buscar bloque combinado (extender turno, UPDATE fila)
+    // Otra trabajadora: buscar solo servicio nuevo (turno adicional, CREATE fila nueva)
     const duracionCombinada = duracionExistente + duracionNueva;
+    const finTurnoExistenteMin = horaOriginalMin + duracionExistente;
 
     for (const dia of diasBusquedaAgregar) {
       if (candidatos.length >= 12) break;
@@ -635,47 +637,70 @@ if (input.agregar_a_turno_existente && turnoIdExistente) {
       const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
       const esMismoDia = dia.fecha === turnoFechaExistente;
 
-      for (let startMin = JORNADA_INICIO; startMin + duracionCombinada <= JORNADA_FIN; startMin += STEP) {
-        const bloqueCombinado = [{ start: startMin, end: startMin + duracionCombinada }];
+      // Probar trabajadora actual primero (bloque combinado), luego otra (turno adicional)
+      const trabajadorasOrdenadas = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
 
-        // Verificar dentro de jornada
-        if (!dentroDeJornada(bloqueCombinado)) continue;
+      for (const trabajadora of trabajadorasOrdenadas) {
+        const esMismaTrabajadora = trabajadora === trabajadoraActual;
+        // Misma trabajadora: buscar bloque combinado (extender turno)
+        // Otra trabajadora: buscar solo servicio nuevo (turno adicional)
+        const duracionBusqueda = esMismaTrabajadora ? duracionCombinada : duracionNueva;
 
-        // Probar trabajadora actual primero, luego la otra
-        const trabajadorasOrdenadas = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
+        // Solo excluir turno actual de bloques de la misma trabajadora en el mismo dia
+        // (porque el bloque combinado reemplaza al turno actual)
+        // Para otra trabajadora: no excluir nada (el turno actual no esta en sus bloques)
+        const bloquesExistentes = (esMismoDia && esMismaTrabajadora)
+          ? bloquesSinTurnoActual(bloquesDia[trabajadora] || [])
+          : (bloquesDia[trabajadora] || []);
 
-        for (const trabajadora of trabajadorasOrdenadas) {
-          // Bloques de la trabajadora SIN el turno actual (se va a reorganizar)
-          const bloquesExistentes = esMismoDia
-            ? bloquesSinTurnoActual(bloquesDia[trabajadora] || [])
-            : (bloquesDia[trabajadora] || []);
+        for (let startMin = JORNADA_INICIO; startMin + duracionBusqueda <= JORNADA_FIN; startMin += STEP) {
+          const bloque = [{ start: startMin, end: startMin + duracionBusqueda }];
 
-          if (!sinConflictos(bloqueCombinado, bloquesExistentes)) continue;
+          if (!dentroDeJornada(bloque)) continue;
+          if (!sinConflictos(bloque, bloquesExistentes)) continue;
+
+          // Turno adicional (otra trabajadora, mismo dia): el slot NO puede solaparse
+          // con el turno original de la clienta (no puede estar en dos servicios a la vez)
+          if (!esMismaTrabajadora && esMismoDia) {
+            const turnoOrigStart = horaOriginalMin;
+            const turnoOrigEnd = horaOriginalMin + duracionExistente;
+            if (solapan(startMin, startMin + duracionBusqueda, turnoOrigStart, turnoOrigEnd)) continue;
+          }
 
           // Calcular score
           let score = 0;
           if (esMismoDia) score += 8;
-          if (startMin === horaOriginalMin) score += 20; // Mismo horario original = maximo
-          else if (esMismoDia && Math.abs(startMin - horaOriginalMin) <= 60) score += 5;
-          if (trabajadora === trabajadoraActual) score += 3;
-          if (trabajadora === 'Leraysi') score += 1;
 
-          const servicioReubicado = startMin !== horaOriginalMin;
+          if (esMismaTrabajadora) {
+            // Bloque combinado: bonus por mismo horario original
+            if (startMin === horaOriginalMin) score += 20;
+            else if (esMismoDia && Math.abs(startMin - horaOriginalMin) <= 60) score += 5;
+            score += 3; // misma trabajadora
+          } else {
+            // Turno adicional: bonus por adyacencia (justo despues del turno existente)
+            if (esMismoDia && startMin === finTurnoExistenteMin) score += 20;
+            else if (esMismoDia && Math.abs(startMin - finTurnoExistenteMin) <= 60) score += 5;
+          }
+
+          const cargaDia = (bloquesDia[trabajadora] || []).length;
+          score -= cargaDia * 2;
 
           candidatos.push({
             trabajadora,
             fecha: dia.fecha,
             hora_inicio: minutosToHora(startMin),
-            hora_fin: minutosToHora(startMin + duracionCombinada),
+            hora_fin: minutosToHora(startMin + duracionBusqueda),
             nombre_dia: dia.nombre_dia,
-            duracion_min: duracionCombinada,
+            duracion_min: duracionBusqueda,
             score,
             es_fecha_alternativa: !esMismoDia,
             en_proceso: false,
             // Metadata agregar servicio
             es_agregar_servicio: true,
+            es_turno_adicional: !esMismaTrabajadora,
+            trabajadora_turno_original: esMismaTrabajadora ? null : trabajadoraActual,
             hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
-            servicio_reubicado: servicioReubicado,
+            servicio_reubicado: esMismaTrabajadora ? (startMin !== horaOriginalMin) : false,
             servicio_en_proceso: false
           });
         }
@@ -735,6 +760,8 @@ const opciones = elegidos.map((s, i) => {
     // Metadata agregar servicio (solo presente cuando aplica)
     ...(s.es_agregar_servicio ? {
       es_agregar_servicio: true,
+      es_turno_adicional: s.es_turno_adicional || false,
+      trabajadora_turno_original: s.trabajadora_turno_original || null,
       hora_original: s.hora_original,
       servicio_reubicado: s.servicio_reubicado,
       servicio_en_proceso: s.servicio_en_proceso,

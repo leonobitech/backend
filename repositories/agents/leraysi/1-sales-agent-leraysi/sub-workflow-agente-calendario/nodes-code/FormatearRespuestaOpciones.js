@@ -45,6 +45,14 @@ if (esAgregarServicio && slots.length > 0) {
   accion = 'opciones_agregar_servicio';
 
   const opcionesTexto = slots.map(s => {
+    if (s.es_turno_adicional) {
+      // Turno adicional: otra trabajadora hace solo el servicio nuevo
+      // La hora de llegada NO cambia — excelente UX
+      if (!s.es_fecha_alternativa && horaOriginal) {
+        return `* ${s.fecha_humana} - ${s.trabajadora} hace tu ${servicioDisplay.toLowerCase()} a las ${s.hora_inicio} (vos llegas a las ${horaOriginal} como estaba previsto)`;
+      }
+      return `* ${s.fecha_humana} a las ${s.hora_inicio} con ${s.trabajadora}`;
+    }
     if (s.duracion_min >= 600) {
       return `* ${s.fecha_humana} - jornada completa (${s.hora_inicio} a ${s.hora_fin}, tu servicio actual se acomoda dentro)`;
     }
@@ -60,19 +68,29 @@ if (esAgregarServicio && slots.length > 0) {
   // Calcular desglose de seña para agregar servicio
   const precioExistente = data.turno_precio_existente || 0;
   const precioNuevo = data.precio || 0;
-  const precioTotal = precioExistente + precioNuevo;
-  const senaPagada = data.turno_sena_pagada || Math.round(precioExistente * 0.3);
+  // Turno adicional: seña solo del servicio nuevo. Bloque combinado: seña diferencial
+  const hayTurnoAdicional = slots.some(s => s.es_turno_adicional);
+  const precioTotal = hayTurnoAdicional ? precioNuevo : (precioExistente + precioNuevo);
+  const senaPagada = hayTurnoAdicional ? 0 : (data.turno_sena_pagada || Math.round(precioExistente * 0.3));
   const senaTotalNueva = Math.round(precioTotal * 0.3);
   const senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);
 
   const servicioExistente = data.turno_servicio_existente || 'servicio actual';
 
-  const desgloseSena = `\n\n📋 Resumen del turno actualizado:\n` +
-    `* ${servicioExistente}: $${precioExistente.toLocaleString('es-AR')}\n` +
-    `* ${servicioDisplay}: $${precioNuevo.toLocaleString('es-AR')}\n` +
-    `* Total: $${precioTotal.toLocaleString('es-AR')}\n\n` +
-    `💰 Seña ya pagada: $${senaPagada.toLocaleString('es-AR')}\n` +
-    `💰 Seña adicional a pagar: $${senaDiferencial.toLocaleString('es-AR')}`;
+  let desgloseSena;
+  if (hayTurnoAdicional) {
+    desgloseSena = `\n\n📋 Servicio adicional:\n` +
+      `* ${servicioDisplay}: $${precioNuevo.toLocaleString('es-AR')}\n` +
+      `💰 Seña a pagar: $${senaDiferencial.toLocaleString('es-AR')}\n` +
+      `(tu turno de ${servicioExistente} a las ${horaOriginal || '?'} no cambia)`;
+  } else {
+    desgloseSena = `\n\n📋 Resumen del turno actualizado:\n` +
+      `* ${servicioExistente}: $${precioExistente.toLocaleString('es-AR')}\n` +
+      `* ${servicioDisplay}: $${precioNuevo.toLocaleString('es-AR')}\n` +
+      `* Total: $${(precioExistente + precioNuevo).toLocaleString('es-AR')}\n\n` +
+      `💰 Seña ya pagada: $${(data.turno_sena_pagada || Math.round(precioExistente * 0.3)).toLocaleString('es-AR')}\n` +
+      `💰 Seña adicional a pagar: $${senaDiferencial.toLocaleString('es-AR')}`;
+  }
 
   mensajeParaClienta = `${nombreClienta}, para agregar ${servicioDisplay.toLowerCase()} a tu turno, estas son las opciones:\n\n${opcionesTexto}${desgloseSena}\n\n¿Cual te queda mejor?`;
 

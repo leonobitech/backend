@@ -1,23 +1,25 @@
 // ============================================================================
-// PREPARAR SERVICIO AGREGADO BASEROW - Agente Calendario Leraysi v3
+// PREPARAR SERVICIO AGREGADO BASEROW - Agente Calendario Leraysi v4
 // ============================================================================
-// Transforma datos para UPDATE en Baserow cuando se agrega un servicio
+// Bifurca en DOS caminos según tipo de operación:
 //
-// SEPARACIÓN DE RESPONSABILIDADES (v3):
-// - Este nodo solo escribe campos "pendientes" (mp_link, estado, expira_at)
-// - Los campos definitivos (servicio, hora, precio, duracion, complejidad)
-//   se guardan en _meta.datos_definitivos para que el webhook de pago
-//   los aplique SOLO cuando la clienta pague
-// - Si NO paga, el cron expira el turno y los datos originales están intactos
+// PATH A — TURNO ADICIONAL (es_turno_adicional = true):
+//   Otra trabajadora hace SOLO el servicio nuevo → CREATE fila nueva
+//   El turno original queda INTACTO (no se modifica)
+//   La fila nueva tiene turno_padre_id para vincularlos
+//
+// PATH B — MISMA TRABAJADORA (bloque combinado):
+//   UPDATE fila existente con campos pendientes (v3: separación responsabilidades)
+//   Los datos definitivos se aplican via webhook de pago
 // ============================================================================
 // INPUT: BuscarTurnoBaserow (resultado de búsqueda con row_id)
-// OUTPUT: Campos pendientes para Baserow Update + _meta con datos definitivos
+// OUTPUT: Campos para Baserow Create o Update + _meta
 // ============================================================================
 
 // Datos del turno encontrado en Baserow (viene de BuscarTurnoBaserow / Get many rows)
 const turnoEncontrado = $input.first().json;
 
-// Datos de ParseAgentResponse (ahora con estructura igual a turno_creado)
+// Datos de ParseAgentResponse
 const data = $('ParseAgentResponse').first().json;
 
 // ============================================================================
@@ -49,39 +51,133 @@ const ahora = new Date();
 const expiraAt = new Date(ahora.getTime() + 15 * 60 * 1000); // 15 min para pagar
 
 // ============================================================================
-// DATOS DEFINITIVOS (se aplican SOLO cuando paga, via webhook)
+// PATH A: TURNO ADICIONAL — CREATE fila nueva
+// ============================================================================
+if (data.es_turno_adicional) {
+  const horaAdicional = data.hora_sugerida || '09:00';
+  const precioNuevo = Number(data.precio) || 0;
+  const senaNuevo = Math.round(precioNuevo * 0.3);
+
+  // Construir fila nueva (misma estructura que PrepararTurnoBaserow)
+  const createFields = {
+    // Fecha y hora
+    fecha: data.fecha_turno
+      ? data.fecha_turno + 'T' + horaAdicional + ':00-03:00'
+      : null,
+    hora: horaAdicional,
+
+    // Relación con Lead (del turno padre)
+    clienta_id: turnoEncontrado.clienta_id || [],
+
+    // Datos clienta (copiados del turno padre)
+    nombre_clienta: turnoEncontrado.nombre_clienta || data.nombre_clienta || '',
+    telefono: turnoEncontrado.telefono || data.telefono || '',
+    email: turnoEncontrado.email || data.email || '',
+
+    // Servicio: SOLO el nuevo (no combinado)
+    servicio: Array.isArray(data.servicio) ? data.servicio : [data.servicio],
+    servicio_detalle: data.servicio_detalle || '',
+    complejidad_maxima: data.complejidad_maxima || 'media',
+    trabajadora: data.trabajadora || 'Companera',
+    duracion_min: data.duracion_estimada || 60,
+
+    // Precio: SOLO del servicio nuevo
+    precio: precioNuevo,
+    sena_monto: senaNuevo,
+    sena_pagada: false,
+
+    // Estado
+    estado: 'pendiente_pago',
+
+    // MercadoPago
+    mp_preference_id: data.mp_preference_id || '',
+    mp_link: data.link_pago || '',
+    mp_payment_id: '',
+
+    // Timestamps
+    created_at: formatBaserowDatetime(ahora),
+    expira_at: formatBaserowDatetime(expiraAt),
+
+    // Vinculación con turno padre
+    turno_padre_id: turnoRowId,
+
+    // Odoo
+    odoo_turno_id: data.odoo_turno_id || null,
+
+    // Conversation
+    conversation_id: turnoEncontrado.conversation_id || data.conversation_id || null,
+
+    // Notas
+    notas: `Servicio adicional. Turno original: #${turnoRowId} ` +
+           `(${turnoEncontrado.trabajadora || 'Leraysi'} ${turnoEncontrado.hora || '?'} ` +
+           `${turnoEncontrado.servicio_detalle || ''}). ` +
+           `Creado el ${ahora.toLocaleDateString('es-AR')}.`,
+  };
+
+  console.log(`[PrepararServicioAgregadoBaserow] PATH A: TURNO ADICIONAL. ` +
+    `Padre: #${turnoRowId} (${turnoEncontrado.trabajadora}). ` +
+    `Nuevo: ${data.trabajadora} ${horaAdicional} ${data.servicio_detalle}`);
+
+  return [{
+    json: {
+      // Flag para que el IF node en n8n sepa que es CREATE (no UPDATE)
+      _operacion: 'crear_turno_adicional',
+
+      // Campos para Baserow Create Row
+      ...createFields,
+
+      // Metadata para FormatearRespuestaServicioAgregado
+      _meta: {
+        accion: data.accion,
+        mensaje_para_clienta: data.mensaje_para_clienta,
+        lead_row_id: data.lead_row_id,
+        odoo_turno_id: data.odoo_turno_id,
+        // Datos del turno padre (para desglose de seña en respuesta)
+        turno_padre_row_id: turnoRowId,
+        turno_precio_existente: turnoEncontrado.precio || 0,
+        turno_sena_pagada: turnoEncontrado.sena_monto || 0,
+        turno_servicio_existente: turnoEncontrado.servicio_detalle || '',
+        turno_hora_original: turnoEncontrado.hora || '',
+        turno_trabajadora_original: turnoEncontrado.trabajadora || 'Leraysi',
+        // Datos definitivos (para turno adicional son los mismos, no hay split)
+        datos_definitivos: {
+          servicio: data.servicio,
+          servicio_detalle: data.servicio_detalle || '',
+          hora: horaAdicional,
+          duracion_min: data.duracion_estimada || 60,
+          complejidad_maxima: data.complejidad_maxima || 'media',
+          precio: precioNuevo,
+          sena_monto: senaNuevo,
+        },
+      }
+    }
+  }];
+}
+
+// ============================================================================
+// PATH B: MISMA TRABAJADORA — UPDATE fila existente (v3: separación responsabilidades)
 // ============================================================================
 const horaDefinitiva = data.hora_sugerida || turnoEncontrado.hora || '09:00';
 const precioDefinitivo = data.precio;
 const senaMonto = Math.round((precioDefinitivo || 0) * 0.3);
 
 const datosDefinitivos = {
-  servicio: data.servicio,                              // Array: ["Manicura semipermanente", "Pedicura"]
-  servicio_detalle: data.servicio_detalle,               // "Manicura semipermanente + Pedicura"
-  hora: horaDefinitiva,                                  // Hora actualizada (ej: 15:00 → 09:00 para muy_compleja)
-  duracion_min: data.duracion_estimada || 60,            // Duración total en minutos
-  complejidad_maxima: data.complejidad_maxima || 'media', // Complejidad combinada
-  precio: precioDefinitivo,                              // Precio total combinado
-  sena_monto: senaMonto,                                 // 30% del precio total
+  servicio: data.servicio,
+  servicio_detalle: data.servicio_detalle,
+  hora: horaDefinitiva,
+  duracion_min: data.duracion_estimada || 60,
+  complejidad_maxima: data.complejidad_maxima || 'media',
+  precio: precioDefinitivo,
+  sena_monto: senaMonto,
 };
 
-// ============================================================================
-// CAMPOS PENDIENTES (se escriben ahora en Baserow, reversibles por cron)
-// ============================================================================
 const updateFields = {
-  // Estado pendiente de pago
   sena_pagada: false,
   estado: 'pendiente_pago',
-
-  // MercadoPago (nuevo link para la seña diferencial)
   mp_preference_id: data.mp_preference_id || '',
   mp_link: data.link_pago || '',
-
-  // Timestamps
   updated_at: formatBaserowDatetime(ahora),
   expira_at: formatBaserowDatetime(expiraAt),
-
-  // Notas informativas (no afectan lógica)
   notas: `Servicio agregado el ${ahora.toLocaleDateString('es-AR')}. ` +
          `Servicios: ${data.servicio_detalle}. ` +
          `Total: $${precioDefinitivo?.toLocaleString('es-AR') || 0}. ` +
@@ -89,28 +185,22 @@ const updateFields = {
          `Pendiente de pago.`
 };
 
-// ============================================================================
-// OUTPUT
-// ============================================================================
+console.log(`[PrepararServicioAgregadoBaserow] PATH B: UPDATE misma trabajadora. ` +
+  `Row: #${turnoRowId}. Servicios: ${data.servicio_detalle}`);
+
 return [{
   json: {
-    // Row ID para el Update
+    _operacion: 'actualizar_turno_existente',
     row_id: turnoRowId,
-
-    // Campos pendientes para Baserow Update (SOLO estos se escriben ahora)
     ...updateFields,
-
-    // Metadata para FormatearRespuestaServicioAgregado + webhook de pago
     _meta: {
       accion: data.accion,
       mensaje_para_clienta: data.mensaje_para_clienta,
       lead_row_id: data.lead_row_id,
       odoo_turno_id: data.odoo_turno_id,
-      // Datos del turno original (para desglose de seña en respuesta)
       turno_precio_existente: turnoEncontrado.precio || 0,
       turno_sena_pagada: turnoEncontrado.sena_monto || 0,
       turno_servicio_existente: turnoEncontrado.servicio_detalle || '',
-      // Datos definitivos: el webhook aplica estos campos cuando confirma pago
       datos_definitivos: datosDefinitivos,
     }
   }

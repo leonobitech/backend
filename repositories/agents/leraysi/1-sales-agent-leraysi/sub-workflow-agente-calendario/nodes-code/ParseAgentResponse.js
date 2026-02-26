@@ -31,6 +31,7 @@ const llmResponse = extractJSON(agentOutput);
 
 const ESTADO_A_ACCION = {
   turno_creado: "turno_creado",
+  turno_adicional_creado: "servicio_agregado", // Rutea al mismo branch; IF_TurnoAdicional bifurca después
   fecha_no_disponible: "sin_disponibilidad",
   turno_reprogramado: "turno_reprogramado",
   servicio_agregado: "servicio_agregado",
@@ -108,6 +109,42 @@ if (llmResponse.estado === "turno_reprogramado") {
     calendario_actualizado: true,
     calendar_accept_url: llmResponse.calendar_accept_url || null,
     motivo_reprogramacion: llmResponse.motivo || "Solicitud de la clienta",
+  };
+}
+
+// CASO: TURNO ADICIONAL CREADO (otra trabajadora, fila nueva en Baserow)
+if (llmResponse.estado === "turno_adicional_creado") {
+  const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || "").split(" ");
+  const mpPreferenceId =
+    llmResponse.mp_preference_id ||
+    llmResponse.link_pago?.match(/preference-id=([^&\s]+)/)?.[1] ||
+    "";
+  // Solo el servicio nuevo (NO combinado con el existente)
+  const precioNuevo = Number(llmResponse.precio) || Number(input.precio) || 0;
+  resultado = {
+    ...resultado,
+    odoo_turno_id: llmResponse.turno_id,
+    // Para buscar el turno PADRE en Baserow (BuscarTurnoServicioAgregado filtra por odoo_turno_id)
+    odoo_turno_id_padre: llmResponse.turno_id_padre || input._precalculado?.turno_id_padre || null,
+    turno_id_padre: llmResponse.turno_id_padre || input._precalculado?.turno_id_padre || null,
+    fecha_turno: fechaTurno || input.fecha_solicitada,
+    hora_sugerida: horaTurno || input.hora_deseada || "09:00",
+    // Solo servicio nuevo (no combinado)
+    servicio: llmResponse.servicio || input.servicio,
+    servicio_detalle: llmResponse.servicio_detalle || input.servicio_detalle || "",
+    precio: precioNuevo,
+    duracion_estimada: llmResponse.duracion_estimada || input.duracion_estimada || 60,
+    complejidad_maxima: llmResponse.complejidad_maxima || input.complejidad_maxima || "media",
+    sena_monto: llmResponse.sena || Math.round(precioNuevo * 0.3),
+    mp_preference_id: mpPreferenceId,
+    link_pago: llmResponse.link_pago || "",
+    estado_turno: "pendiente_pago",
+    trabajadora: llmResponse.trabajadora || input._precalculado?.trabajadora || "Companera",
+    // Datos del turno padre (para contexto)
+    turno_servicio_existente: input.turno_servicio_existente || "",
+    turno_trabajadora_existente: input.turno_trabajadora_existente || "Leraysi",
+    turno_precio_existente: input.turno_precio_existente || 0,
+    es_turno_adicional: true,
   };
 }
 
