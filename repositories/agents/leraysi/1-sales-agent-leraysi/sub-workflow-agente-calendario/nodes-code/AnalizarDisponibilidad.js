@@ -24,6 +24,23 @@ const STEP = 15;              // Granularidad de busqueda en minutos
 // Fases estandar para todos los servicios muy_compleja
 const FASES_MUY_COMPLEJA = { activo_inicio: 180, proceso: 300, activo_fin: 120 };
 
+// Lookup: base_min por servicio (para calcular tiempo comprometido en ventana de proceso)
+const SERVICIOS_BASE_MIN = {
+  'Corte mujer': 60,
+  'Alisado brasileño': 600, 'Alisado keratina': 600,
+  'Mechas completas': 600, 'Tintura completa': 600, 'Balayage': 600,
+  'Tintura raíz': 60,
+  'Manicura simple': 120, 'Manicura semipermanente': 180, 'Pedicura': 120,
+  'Depilación cera piernas': 120, 'Depilación cera axilas': 60, 'Depilación cera bikini': 60,
+  'Depilación láser piernas': 120, 'Depilación láser axilas': 60,
+};
+
+// Servicios muy_compleja (NO consumen ventana de proceso — son la fuente de la ventana)
+const SERVICIOS_MUY_COMPLEJA = new Set([
+  'Alisado brasileño', 'Alisado keratina', 'Mechas completas',
+  'Tintura completa', 'Balayage'
+]);
+
 // ============================================================================
 // HELPERS
 // ============================================================================
@@ -68,6 +85,15 @@ function inicializarDia(fecha) {
   }
 }
 
+// Normalizar nombre de trabajadora al valor exacto en TRABAJADORAS
+function normalizarTrabajadora(raw) {
+  if (!raw) return 'Leraysi';
+  const val = (typeof raw === 'object' ? raw.value : raw) || 'Leraysi';
+  // Buscar coincidencia case-insensitive
+  const match = TRABAJADORAS.find(t => t.toLowerCase() === val.toLowerCase().trim());
+  return match || 'Leraysi';
+}
+
 turnos.forEach(turno => {
   const fecha = turno.fecha?.split('T')[0];
   if (!fecha) return;
@@ -84,7 +110,7 @@ turnos.forEach(turno => {
 
   inicializarDia(fecha);
 
-  const trabajadora = turno.trabajadora?.value || turno.trabajadora || 'Leraysi';
+  const trabajadora = normalizarTrabajadora(turno.trabajadora);
   const horaInicio = horaToMinutos(turno.hora || '09:00');
   const duracion = Number(turno.duracion_min) || 60;
   const complejidad = turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';
@@ -109,6 +135,34 @@ turnos.forEach(turno => {
       fin: horaInicio + ai + pr,
       turno_id: turnoId
     });
+
+    // Sub-servicios comprometidos en ventana de proceso
+    // Si el turno combina servicios (ej: "Balayage + Manicura semipermanente"),
+    // los sub-servicios no-quimicos ocupan tiempo dentro de la ventana.
+    // Se crea un bloque al INICIO de la ventana para reservar ese tiempo.
+    let subServicios = [];
+    if (turno.servicio_detalle && turno.servicio_detalle.includes('+')) {
+      subServicios = turno.servicio_detalle.split('+').map(s => s.trim());
+    } else if (Array.isArray(turno.servicio) && turno.servicio.length > 1) {
+      subServicios = turno.servicio.map(s => s?.value || s);
+    }
+
+    if (subServicios.length > 1) {
+      let tiempoComprometido = 0;
+      for (const srv of subServicios) {
+        if (!SERVICIOS_MUY_COMPLEJA.has(srv)) {
+          tiempoComprometido += (SERVICIOS_BASE_MIN[srv] || 60);
+        }
+      }
+      if (tiempoComprometido > 0) {
+        const procesoInicio = horaInicio + ai;
+        bloquesPorDiaTrabajadora[fecha][trabajadora].push({
+          start: procesoInicio,
+          end: Math.min(procesoInicio + tiempoComprometido, procesoInicio + pr),
+          turno_id: turnoId
+        });
+      }
+    }
   } else {
     // Bloque continuo
     bloquesPorDiaTrabajadora[fecha][trabajadora].push({
@@ -237,7 +291,7 @@ if (input.turno_agendado && input.lead_row_id) {
     turnoDuracionExistente = turnoUsuaria.duracion_min ? Number(turnoUsuaria.duracion_min) : null;
     turnoComplejidadExistente = turnoUsuaria.complejidad_maxima?.value || turnoUsuaria.complejidad_maxima || null;
     turnoSenaPagada = turnoUsuaria.sena_monto ? Number(turnoUsuaria.sena_monto) : null;
-    turnoTrabajadoraExistente = turnoUsuaria.trabajadora?.value || turnoUsuaria.trabajadora || 'Leraysi';
+    turnoTrabajadoraExistente = normalizarTrabajadora(turnoUsuaria.trabajadora);
     turnoHoraExistente = turnoUsuaria.hora || null;
   }
 }
@@ -293,8 +347,10 @@ for (const dia of diasBusqueda) {
       // +2 cercania a hora deseada (<=60min de distancia)
       if (horaDeseada !== null && Math.abs(startMin - horaDeseada) <= 60) score += 2;
 
-      // +1 Leraysi tiene prioridad (desempate)
-      if (trabajadora === 'Leraysi') score += 1;
+      // Balanceo de carga: penalizar trabajadora con mas bloques en el dia
+      // Esto evita sobrecargar a una sola trabajadora
+      const cargaDia = (bloquesDia[trabajadora] || []).length;
+      score -= cargaDia * 2;
 
       // Hora fin para display (tiempo total de la clienta en el salon)
       const horaFinMin = esMuyCompleja
@@ -477,6 +533,93 @@ if (input.agregar_a_turno_existente && turnoIdExistente) {
         }
       }
     }
+  } else if (turnoComplejidadExistente === 'muy_compleja') {
+    // ── ESTRATEGIA C: existente muy_compleja, nuevo servicio en ventana de proceso ──
+    // El turno existente ocupa la jornada completa (3 fases).
+    // El nuevo servicio (NO muy_compleja) se realiza durante la ventana de proceso [12:00-17:00].
+    // CUALQUIER trabajadora disponible puede atender el nuevo servicio.
+
+    const ventanaInicioC = JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio; // 720 = 12:00
+    const ventanaFinC = ventanaInicioC + FASES_MUY_COMPLEJA.proceso; // 1020 = 17:00
+
+    for (const dia of diasBusquedaAgregar) {
+      if (candidatos.length >= 6) break;
+      inicializarDia(dia.fecha);
+      const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
+      const esMismoDia = dia.fecha === turnoFechaExistente;
+
+      if (esMismoDia) {
+        // Mismo dia: buscar espacio en la ventana de proceso con cualquier trabajadora
+        for (const trabajadora of TRABAJADORAS) {
+          const bloquesExistentes = bloquesDia[trabajadora] || [];
+
+          for (let start = ventanaInicioC; start + duracionNueva <= ventanaFinC; start += STEP) {
+            const nuevoBloque = [{ start, end: start + duracionNueva }];
+            if (sinConflictos(nuevoBloque, bloquesExistentes)) {
+              candidatos.push({
+                trabajadora,
+                fecha: dia.fecha,
+                hora_inicio: minutosToHora(JORNADA_INICIO), // 09:00
+                hora_fin: minutosToHora(JORNADA_FIN), // 19:00
+                nombre_dia: dia.nombre_dia,
+                duracion_min: 600, // Jornada completa se mantiene
+                score: 20 + (trabajadora === trabajadoraActual ? 5 : 0),
+                es_fecha_alternativa: false,
+                en_proceso: true,
+                es_agregar_servicio: true,
+                hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
+                servicio_reubicado: false,
+                servicio_en_proceso: true,
+                hora_servicio_existente: minutosToHora(start)
+              });
+              break; // Primer hueco libre para esta trabajadora
+            }
+          }
+        }
+      } else {
+        // Otro dia: verificar que muy_compleja cabe a las 09:00, luego buscar espacio
+        // para el nuevo servicio en la ventana con cualquier trabajadora
+        const trabajadorasOrdenadas = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
+
+        for (const trabajadoraMC of trabajadorasOrdenadas) {
+          const bloquesMC = [
+            { start: JORNADA_INICIO, end: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio },
+            { start: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio + FASES_MUY_COMPLEJA.proceso,
+              end: JORNADA_FIN }
+          ];
+
+          if (!sinConflictos(bloquesMC, bloquesDia[trabajadoraMC] || [])) continue;
+
+          // Buscar espacio para nuevo servicio con cualquier trabajadora
+          for (const trabajadora of TRABAJADORAS) {
+            const bloquesT = bloquesDia[trabajadora] || [];
+            for (let s = ventanaInicioC; s + duracionNueva <= ventanaFinC; s += STEP) {
+              if (sinConflictos([{ start: s, end: s + duracionNueva }], bloquesT)) {
+                candidatos.push({
+                  trabajadora,
+                  fecha: dia.fecha,
+                  hora_inicio: minutosToHora(JORNADA_INICIO),
+                  hora_fin: minutosToHora(JORNADA_FIN),
+                  nombre_dia: dia.nombre_dia,
+                  duracion_min: 600,
+                  score: (trabajadoraMC === trabajadoraActual ? 5 : 0),
+                  es_fecha_alternativa: true,
+                  en_proceso: true,
+                  es_agregar_servicio: true,
+                  hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
+                  servicio_reubicado: false,
+                  servicio_en_proceso: true,
+                  hora_servicio_existente: minutosToHora(s)
+                });
+                break;
+              }
+            }
+            if (candidatos.some(c => c.fecha === dia.fecha)) break;
+          }
+          if (candidatos.some(c => c.fecha === dia.fecha)) break;
+        }
+      }
+    }
   } else {
     // ── ESTRATEGIA A: bloque continuo combinado ──
     // Fusionar servicios en un bloque sin tiempos muertos
@@ -541,13 +684,18 @@ if (input.agregar_a_turno_existente && turnoIdExistente) {
 // PASO 7: DEDUPLICAR Y SELECCIONAR TOP 3
 // ============================================================================
 // No repetir misma fecha+hora (quedarse con el de mayor score)
-const vistos = new Set();
+const vistos = new Map();
 const candidatosUnicos = [];
 for (const c of candidatos) {
   const key = `${c.fecha}-${c.hora_inicio}`;
   if (!vistos.has(key)) {
-    vistos.add(key);
+    vistos.set(key, candidatosUnicos.length);
     candidatosUnicos.push(c);
+  } else {
+    const idx = vistos.get(key);
+    if (c.score > candidatosUnicos[idx].score) {
+      candidatosUnicos[idx] = c;
+    }
   }
 }
 
