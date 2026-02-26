@@ -263,6 +263,10 @@ let turnoHoraExistente = null;
 
 if (input.turno_agendado && input.lead_row_id) {
   const turnoUsuaria = turnos.find(t => {
+    // Ignorar turnos cancelados/expirados — no son el turno activo de la clienta
+    const estadoT = t.estado?.value || t.estado || '';
+    if (estadoT === 'cancelado' || estadoT === 'expirado') return false;
+
     let turnoClientaRowId = null;
     if (Array.isArray(t.clienta_id) && t.clienta_id.length > 0) {
       turnoClientaRowId = t.clienta_id[0]?.id;
