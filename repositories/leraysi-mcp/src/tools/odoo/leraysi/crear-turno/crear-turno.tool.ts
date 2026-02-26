@@ -179,9 +179,33 @@ export class CrearTurnoLeraysiTool
     }
 
     // Avanzar lead de Calificado → Propuesta + setear expected_revenue y tags
-    // SKIP para turno adicional: el lead ya está en turno_confirmado y no debe tocarse
-    // hasta que se confirme el pago del turno adicional (confirmar-pago-completo lo actualiza)
-    if (!params.es_turno_adicional) {
+    // SKIP si: (1) es_turno_adicional flag, O (2) lead ya está en stage posterior a Proposition
+    // Esto protege contra downgrade del lead cuando el LLM no pasa el flag
+    let skipLeadUpdate = !!params.es_turno_adicional;
+
+    if (!skipLeadUpdate) {
+      try {
+        // Leer stage actual del lead para evitar downgrade
+        const leads = await this.odooClient.read("crm.lead", [params.lead_id], ["stage_id"]);
+        if (leads.length > 0) {
+          const currentStage = leads[0].stage_id;
+          const stageName = Array.isArray(currentStage) ? currentStage[1] : String(currentStage);
+          // Stages que NO deben retroceder a Proposition
+          const protectedStages = ["Won", "Ganado", "turno_confirmado", "Turno Confirmado"];
+          if (protectedStages.some(s => stageName.toLowerCase().includes(s.toLowerCase()))) {
+            skipLeadUpdate = true;
+            logger.info(
+              { lead_id: params.lead_id, currentStage: stageName },
+              "[CrearTurnoLeraysi] Lead already in advanced stage, skipping update to avoid downgrade"
+            );
+          }
+        }
+      } catch (e) {
+        logger.warn({ error: e, lead_id: params.lead_id }, "[CrearTurnoLeraysi] Could not read lead stage");
+      }
+    }
+
+    if (!skipLeadUpdate) {
       try {
         await this.odooClient.updateDealStage(params.lead_id, "Proposition");
 
@@ -203,7 +227,7 @@ export class CrearTurnoLeraysiTool
     } else {
       logger.info(
         { lead_id: params.lead_id },
-        "[CrearTurnoLeraysi] Turno adicional: skipping lead update (lead stays in current stage until payment)"
+        "[CrearTurnoLeraysi] Skipping lead update (turno adicional or advanced stage)"
       );
     }
 

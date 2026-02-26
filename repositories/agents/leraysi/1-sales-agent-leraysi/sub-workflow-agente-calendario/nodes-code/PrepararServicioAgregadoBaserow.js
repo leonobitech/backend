@@ -85,7 +85,9 @@ if (data.es_turno_adicional) {
       : (turnoEncontrado.email || data.email || ''),
 
     // Servicio: SOLO el nuevo (no combinado)
-    servicio: Array.isArray(data.servicio) ? data.servicio : [data.servicio],
+    // Baserow multi-select espera array de display names: ["Pedicura"]
+    // servicio_detalle es string ("Pedicura" o "Manicura simple + Pedicura")
+    servicio: (data.servicio_detalle || '').split(' + ').filter(s => s.trim()),
     servicio_detalle: data.servicio_detalle || '',
     complejidad_maxima: data.complejidad_maxima || 'media',
     trabajadora: data.trabajadora || 'Companera',
