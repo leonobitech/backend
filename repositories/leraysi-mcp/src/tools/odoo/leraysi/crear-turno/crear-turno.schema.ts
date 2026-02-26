@@ -34,6 +34,7 @@ export const crearTurnoSchema = z.object({
 
   // === Campos opcionales ===
   notas: z.string().optional(),
+  es_turno_adicional: z.boolean().optional(),
 });
 
 export type CrearTurnoInput = z.infer<typeof crearTurnoSchema>;

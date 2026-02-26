@@ -67,12 +67,22 @@ if (data.es_turno_adicional) {
     hora: horaAdicional,
 
     // Relación con Lead (del turno padre)
-    clienta_id: turnoEncontrado.clienta_id || [],
+    // Baserow link row fields vienen como [{id, value, ...}] → extraer solo IDs [219]
+    clienta_id: Array.isArray(turnoEncontrado.clienta_id)
+      ? turnoEncontrado.clienta_id.map(c => typeof c === 'object' ? c.id : c)
+      : [],
 
     // Datos clienta (copiados del turno padre)
-    nombre_clienta: turnoEncontrado.nombre_clienta || data.nombre_clienta || '',
-    telefono: turnoEncontrado.telefono || data.telefono || '',
-    email: turnoEncontrado.email || data.email || '',
+    // Pueden ser lookup fields (array de objetos) o texto plano
+    nombre_clienta: Array.isArray(turnoEncontrado.nombre_clienta)
+      ? (turnoEncontrado.nombre_clienta[0]?.value || data.nombre_clienta || '')
+      : (turnoEncontrado.nombre_clienta || data.nombre_clienta || ''),
+    telefono: Array.isArray(turnoEncontrado.telefono)
+      ? (turnoEncontrado.telefono[0]?.value || data.telefono || '')
+      : (turnoEncontrado.telefono || data.telefono || ''),
+    email: Array.isArray(turnoEncontrado.email)
+      ? (turnoEncontrado.email[0]?.value || data.email || '')
+      : (turnoEncontrado.email || data.email || ''),
 
     // Servicio: SOLO el nuevo (no combinado)
     servicio: Array.isArray(data.servicio) ? data.servicio : [data.servicio],
@@ -109,7 +119,8 @@ if (data.es_turno_adicional) {
 
     // Notas
     notas: `Servicio adicional. Turno original: #${turnoRowId} ` +
-           `(${turnoEncontrado.trabajadora || 'Leraysi'} ${turnoEncontrado.hora || '?'} ` +
+           `(${typeof turnoEncontrado.trabajadora === 'object' ? (turnoEncontrado.trabajadora?.value || 'Leraysi') : (turnoEncontrado.trabajadora || 'Leraysi')} ` +
+           `${turnoEncontrado.hora || '?'} ` +
            `${turnoEncontrado.servicio_detalle || ''}). ` +
            `Creado el ${ahora.toLocaleDateString('es-AR')}.`,
   };

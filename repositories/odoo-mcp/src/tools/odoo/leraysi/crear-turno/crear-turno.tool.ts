@@ -179,23 +179,32 @@ export class CrearTurnoLeraysiTool
     }
 
     // Avanzar lead de Calificado → Propuesta + setear expected_revenue y tags
-    try {
-      await this.odooClient.updateDealStage(params.lead_id, "Proposition");
+    // SKIP para turno adicional: el lead ya está en turno_confirmado y no debe tocarse
+    // hasta que se confirme el pago del turno adicional (confirmar-pago-completo lo actualiza)
+    if (!params.es_turno_adicional) {
+      try {
+        await this.odooClient.updateDealStage(params.lead_id, "Proposition");
 
-      // Resolver tags CRM: categoría del servicio + complejidad
-      const tagIds = await this.resolveLeadTags(
-        params.servicio,
-        complejidadFinal,
-        params.servicio_detalle
+        // Resolver tags CRM: categoría del servicio + complejidad
+        const tagIds = await this.resolveLeadTags(
+          params.servicio,
+          complejidadFinal,
+          params.servicio_detalle
+        );
+        const tagCommands = tagIds.map((id: number) => [4, id]); // link tags
+
+        await this.odooClient.write("crm.lead", [params.lead_id], {
+          expected_revenue: params.precio,
+          tag_ids: tagCommands,
+        });
+      } catch (e) {
+        logger.warn({ error: e, lead_id: params.lead_id }, "[CrearTurnoLeraysi] Could not advance lead to Proposition");
+      }
+    } else {
+      logger.info(
+        { lead_id: params.lead_id },
+        "[CrearTurnoLeraysi] Turno adicional: skipping lead update (lead stays in current stage until payment)"
       );
-      const tagCommands = tagIds.map((id: number) => [4, id]); // link tags
-
-      await this.odooClient.write("crm.lead", [params.lead_id], {
-        expected_revenue: params.precio,
-        tag_ids: tagCommands,
-      });
-    } catch (e) {
-      logger.warn({ error: e, lead_id: params.lead_id }, "[CrearTurnoLeraysi] Could not advance lead to Proposition");
     }
 
     // Calcular seña (30%)
@@ -446,6 +455,10 @@ export class CrearTurnoLeraysiTool
           notas: {
             type: "string",
             description: "Notas adicionales sobre el turno (opcional)",
+          },
+          es_turno_adicional: {
+            type: "boolean",
+            description: "True si es un turno adicional (otra trabajadora). Evita modificar el lead/CRM (se actualiza al confirmar pago).",
           },
         },
         required: [
