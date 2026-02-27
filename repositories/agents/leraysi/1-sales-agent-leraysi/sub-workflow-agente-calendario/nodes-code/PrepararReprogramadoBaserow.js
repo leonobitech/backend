@@ -48,8 +48,13 @@ const ahora = new Date();
 const updateFields = {
   // Nueva fecha y hora
   // Fecha+hora con timezone Argentina para que Baserow muestre correctamente
-  fecha: data.fecha_turno ? data.fecha_turno + 'T' + (data.hora_sugerida || '09:00') + ':00-03:00' : null,
-  hora: data.hora_sugerida || '09:00',
+  // hora_sugerida puede venir como "15:00" o "15:00:00" — normalizar a HH:MM
+  fecha: (() => {
+    if (!data.fecha_turno) return null;
+    const hora = (data.hora_sugerida || '09:00').split(':').slice(0, 2).join(':');
+    return `${data.fecha_turno}T${hora}:00-03:00`;
+  })(),
+  hora: (data.hora_sugerida || '09:00').split(':').slice(0, 2).join(':'),
 
   // Actualizar odoo_turno_id (puede ser nuevo si era pendiente_pago)
   odoo_turno_id: data.odoo_turno_id,
