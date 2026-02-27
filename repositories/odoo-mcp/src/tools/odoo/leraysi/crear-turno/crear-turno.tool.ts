@@ -215,7 +215,7 @@ export class CrearTurnoLeraysiTool
           complejidadFinal,
           params.servicio_detalle
         );
-        const tagCommands = tagIds.map((id: number) => [4, id]); // link tags
+        const tagCommands = [[6, 0, tagIds]]; // replace all tags
 
         await this.odooClient.write("crm.lead", [params.lead_id], {
           expected_revenue: params.precio,
