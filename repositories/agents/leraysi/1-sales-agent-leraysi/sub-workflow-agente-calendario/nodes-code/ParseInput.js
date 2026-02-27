@@ -78,8 +78,15 @@ const input = {
   turno_fecha: state.turno_fecha || null,
 
   // Para agregar servicio a turno existente
-  agregar_a_turno_existente: state.agregar_a_turno_existente || llmOutput.agregar_a_turno_existente || false,
-  turno_id_existente: state.odoo_turno_id || state.turno_id_existente || llmOutput.turno_id_existente || null,
+  // Derivar de: boolean explícito, accion del LLM, o modo del LLM
+  agregar_a_turno_existente: state.agregar_a_turno_existente || llmOutput.agregar_a_turno_existente || llmOutput.accion === 'agregar_a_turno_existente' || llmOutput.modo === 'agregar_servicio' || false,
+  // turno_id: priorizar state (numérico), validar que LLM envíe numérico
+  turno_id_existente: state.odoo_turno_id || state.turno_id_existente || (() => {
+    const llmId = llmOutput.turno_id_existente;
+    // Solo aceptar si es numérico (evitar basura como "turno_andrea_figueroa")
+    if (llmId && !isNaN(Number(llmId))) return llmId;
+    return null;
+  })(),
   turno_precio_existente: state.turno_precio_existente || llmOutput.turno_precio_existente || 0,
 
   // Largo del cabello (solo para servicios de cabello, null para manicure/pedicure/etc)

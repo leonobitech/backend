@@ -137,7 +137,10 @@ if (esReprogramacion && data.fecha_disponible) {
 } else if (esAgregarServicio && data.fecha_disponible) {
   // Detectar si la opción elegida es turno adicional (otra trabajadora, fila nueva)
   const opcionElegida = (data.opciones || data.slots_recomendados || [])[0];
-  const esTurnoAdicionalFlag = opcionElegida?.es_turno_adicional === true;
+  const trabajadoraExistente = (data.turno_trabajadora_existente || 'Leraysi').toLowerCase().trim();
+  const trabajadoraOpcion = (opcionElegida?.trabajadora || '').toLowerCase().trim();
+  const esTurnoAdicionalFlag = opcionElegida?.es_turno_adicional === true ||
+    (trabajadoraOpcion && trabajadoraExistente && trabajadoraOpcion !== trabajadoraExistente);
 
   const precioExistente = data.turno_precio_existente || 0;
   const precioNuevo = data.precio || 0;
@@ -209,7 +212,12 @@ return [
       _precalculado: (() => {
         // Detectar turno adicional para usar valores SOLO del servicio nuevo
         const _opcion = (data.opciones || data.slots_recomendados || [])[0];
-        const _esTurnoAdicional = esAgregarServicio && _opcion?.es_turno_adicional === true;
+        const _trabExist = (data.turno_trabajadora_existente || 'Leraysi').toLowerCase().trim();
+        const _trabOpcion = (_opcion?.trabajadora || '').toLowerCase().trim();
+        const _esTurnoAdicional = esAgregarServicio && (
+          _opcion?.es_turno_adicional === true ||
+          (_trabOpcion && _trabExist && _trabOpcion !== _trabExist)
+        );
 
         if (_esTurnoAdicional) {
           // TURNO ADICIONAL: solo servicio nuevo (fila independiente)

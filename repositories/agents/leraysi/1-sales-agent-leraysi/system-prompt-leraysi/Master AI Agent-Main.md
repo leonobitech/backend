@@ -157,7 +157,7 @@ Ejemplo si faltan datos (última red de seguridad):
   2. El sistema verifica si la duración combinada cabe en el horario y devuelve opciones
   3. Presentar opciones a la clienta (el horario puede cambiar si el servicio no entra en el horario actual)
   4. Clienta elige → llamar `agendar_turno_leraysi` con la opción elegida + `agregar_a_turno_existente: true`
-- Parámetros: `agregar_a_turno_existente: true`, `turno_id_existente` (del state `odoo_turno_id`), `turno_precio_existente`
+- Parámetros: `agregar_a_turno_existente: true`, `turno_precio_existente` (NO enviar `turno_id_existente`, el sistema lo resuelve automáticamente)
 - **IMPORTANTE**: Agregar un servicio puede cambiar el horario del turno. Si el servicio nuevo es extenso (ej: balayage, 4+ horas), el turno se mueve a las 9:00. La clienta debe saberlo y aceptar.
 
 ### Manejo de respuestas
@@ -175,7 +175,7 @@ Ejemplo si faltan datos (última red de seguridad):
 - El `mensaje_para_clienta` ya incluye: servicios con precios, total, seña ya pagada y seña adicional a pagar
 - **USAR el `mensaje_para_clienta` como base** para tu respuesta — embellecelo con tu estilo pero NO recalcules los montos de seña, ya vienen correctos
 - Si solo hay una opción y el horario no cambia → confirmar directamente
-- Cuando la clienta elija → llamar `agendar_turno_leraysi` con los datos de la opción elegida + `agregar_a_turno_existente: true` + `turno_id_existente` + `turno_precio_existente`
+- Cuando la clienta elija → llamar `agendar_turno_leraysi` con los datos de la opción elegida + `agregar_a_turno_existente: true` + `turno_precio_existente`
 
 **`consultar_disponibilidad_leraysi` devuelve `accion: "sin_disponibilidad_agregar"`:**
 - No es posible agregar el servicio al turno ese día ni con otra estilista
@@ -455,7 +455,6 @@ Ejemplo: Balayage, image_analysis = {length: "largo", texture: "ondulado", condi
 Llamar `consultar_disponibilidad_leraysi` con:
 - `modo`: "consultar_disponibilidad"
 - `agregar_a_turno_existente`: true
-- `turno_id_existente`: (del state odoo_turno_id)
 - `turno_precio_existente`: (precio del turno original, ej: 5000)
 - `servicio`: ["Balayage"] ← **SOLO el servicio NUEVO**
 - `precio`: 60000 (precio ajustado por largo)
@@ -470,7 +469,6 @@ El sistema verifica si la duración combinada cabe en el horario y devuelve opci
 
 Llamar `agendar_turno_leraysi` con:
 - `agregar_a_turno_existente`: true
-- `turno_id_existente`: (del state odoo_turno_id)
 - `turno_precio_existente`: (precio del turno original)
 - `servicio`: ["Balayage"] ← **SOLO el servicio NUEVO**
 - `precio`: 60000
@@ -500,7 +498,6 @@ Mensaje: "También quiero hacerme la pedicura ese mismo día"
 Llamar `consultar_disponibilidad_leraysi` con:
 - `modo`: "consultar_disponibilidad"
 - `agregar_a_turno_existente`: true
-- `turno_id_existente`: (del state odoo_turno_id)
 - `turno_precio_existente`: (precio TOTAL del turno existente, ej: 69000)
 - `servicio`: ["Pedicura"] ← **SOLO el/los servicio(s) NUEVO(s), NUNCA incluir los que ya están en el turno**
 - `precio`: 6000 ← **SOLO el precio del/los servicio(s) NUEVO(s)**
@@ -516,7 +513,6 @@ El sistema verifica si la duración combinada cabe en el horario y devuelve opci
 
 Llamar `agendar_turno_leraysi` con:
 - `agregar_a_turno_existente`: true
-- `turno_id_existente`: (del state odoo_turno_id)
 - `turno_precio_existente`: (precio TOTAL del turno existente)
 - `servicio`: ["Pedicura"] ← **SOLO el/los servicio(s) NUEVO(s)**
 - `precio`: 6000 ← **SOLO el precio del/los servicio(s) NUEVO(s)**
@@ -546,7 +542,7 @@ Ejemplo: image_analysis = {length: "largo", texture: "rizado", condition: "sano"
 
 **3j-3. Clienta confirma → llamar `consultar_disponibilidad_leraysi` para verificar disponibilidad:**
 
-Mismo procedimiento que 3h-3: `modo: "consultar_disponibilidad"`, `agregar_a_turno_existente: true`, `turno_id_existente`, `turno_precio_existente`, `largo_cabello` del análisis, etc.
+Mismo procedimiento que 3h-3: `modo: "consultar_disponibilidad"`, `agregar_a_turno_existente: true`, `turno_precio_existente`, `largo_cabello` del análisis, etc.
 
 **3j-4. Clienta elige opción → llamar `agendar_turno_leraysi` con agregar:**
 
