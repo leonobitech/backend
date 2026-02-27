@@ -34,18 +34,12 @@ const state = typeof data.state === 'string' ? JSON.parse(data.state) : (data.st
 // State llena los campos que el LLM no puede extraer
 
 const input = {
-  // === MODO DE OPERACIÓN ===
-  // "consultar_disponibilidad" = solo buscar slots disponibles (sin crear turno)
-  // "agendar" = confirmar turno (crear/reprogramar/agregar servicio)
-  // null/undefined = flujo normal
-  modo: llmOutput.modo || ((!llmOutput.modo && llmOutput.agregar_a_turno_existente) ? 'agendar' : null),
-  preferencia_horario: llmOutput.preferencia_horario || null, // "manana", "tarde", null
-
-  // === ACCIÓN EXPLÍCITA ===
-  // "reprogramar" = reprogramar turno existente (BuildAgentPrompt genera TAREA de reprogramación)
-  // "agregar_servicio" = agregar servicio a turno existente
-  // null = flujo automático (crear turno nuevo)
-  accion: llmOutput.accion || (llmOutput.agregar_a_turno_existente ? 'agregar_servicio' : null),
+  // === MODO Y ACCIÓN ===
+  // ParseInput solo pasa lo que la LLM envió (raw).
+  // RouteDecision (post-analyzer) decide el modo y acción definitivos.
+  modo: llmOutput.modo || null,
+  preferencia_horario: llmOutput.preferencia_horario || null,
+  accion: llmOutput.accion || null,
 
   // === Del LLM_OUTPUT (lo que el LLM extrajo del mensaje) ===
   nombre_clienta: llmOutput.full_name || llmOutput.nombre_clienta || state.full_name || state.nick_name,
@@ -338,12 +332,8 @@ if (gate_bloqueado) {
   console.log(`[ParseInput] 🛡️ GATE BLOQUEADO: faltan ${gate_datos_faltantes.join(', ')}`);
 }
 
-// Forzar modo consultar para rutear a FormatearRespuestaOpciones (bypass LLM):
-// - gate_bloqueado: faltan datos → respuesta determinística
-// - agregar_a_turno_existente CON modo EXPLÍCITO "consultar_disponibilidad": validar disponibilidad
-//   (segunda llamada: LLM no envía modo → null → NO forzar, deja pasar al agente calendario)
-const forzarConsulta = gate_bloqueado || (input.agregar_a_turno_existente && input.modo === 'consultar_disponibilidad');
-const modoOutput = forzarConsulta ? 'consultar_disponibilidad' : input.modo;
+// RouteDecision (post-analyzer) maneja gate_bloqueado y fuerza modo/accion.
+// ParseInput ya no necesita forzar modo — solo pasa datos.
 
 // ============================================================================
 // EXTRAER FASES DEL SERVICIO MUY_COMPLEJA (si aplica)
@@ -408,8 +398,8 @@ return [{
     turno_id_existente: input.turno_id_existente,
     turno_precio_existente: input.turno_precio_existente,
 
-    // Modo de operación (override a consultar si gate bloqueado)
-    modo: modoOutput,
+    // Modo de operación (raw de LLM, RouteDecision decide el definitivo)
+    modo: input.modo,
     preferencia_horario: input.preferencia_horario,
     accion: input.accion,
 

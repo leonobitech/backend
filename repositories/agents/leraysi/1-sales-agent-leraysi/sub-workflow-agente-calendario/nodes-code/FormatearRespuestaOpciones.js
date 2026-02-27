@@ -36,11 +36,26 @@ const servicioDisplay = data.servicio_detalle || (Array.isArray(data.servicio) ?
 const nombreClienta = data.nombre_clienta || 'Reina';
 const esAgregarServicio = data.agregar_a_turno_existente === true;
 const horaOriginal = data.turno_hora_original || null;
+const esSlotNoDisponible = data.accion === 'slot_no_disponible';
+const horaDeseada = data.hora_deseada || null;
 
 let accion;
 let mensajeParaClienta;
 
-if (esAgregarServicio && slots.length > 0) {
+// ── SLOT YA NO DISPONIBLE: race condition, presentar alternativas con contexto ──
+if (esSlotNoDisponible && slots.length > 0) {
+  accion = 'opciones_disponibles';
+
+  const opcionesTexto = slots.map(s => {
+    if (s.duracion_min >= 600) {
+      return `* ${s.fecha_humana} - jornada completa (${s.hora_inicio} a ${s.hora_fin})`;
+    }
+    return `* ${s.fecha_humana} a las ${s.hora_inicio}`;
+  }).join('\n');
+
+  mensajeParaClienta = `${nombreClienta}, disculpa, el horario de las ${horaDeseada || '?'} ya no esta disponible. Te puedo ofrecer estas alternativas:\n\n${opcionesTexto}\n\n¿Cual te queda mejor?`;
+
+} else if (esAgregarServicio && slots.length > 0) {
   // ── AGREGAR SERVICIO: opciones con contexto de cambio horario + desglose seña ──
   accion = 'opciones_agregar_servicio';
 
