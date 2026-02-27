@@ -1,3 +1,4 @@
+import json
 import logging
 from odoo import models, fields, api
 
@@ -113,6 +114,17 @@ class SalonTurnoPago(models.Model):
         # Determinar monto del pago
         monto = payment_data.get('transaction_amount', 0)
 
+        # Determinar servicio_detalle: usar pending_changes si existen
+        # (para agregar servicio, pending_changes tiene el detalle combinado
+        #  pero aún no se aplicó al turno — se aplica post-pago)
+        servicio_detalle = turno.servicio_detalle or turno.servicio
+        if turno.pending_changes:
+            try:
+                changes = json.loads(turno.pending_changes)
+                servicio_detalle = changes.get('servicio_detalle', servicio_detalle)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         # Crear registro de pago
         pago = self.create({
             'turno_id': turno.id,
@@ -123,7 +135,7 @@ class SalonTurnoPago(models.Model):
             'estado': payment_data.get('status', 'approved'),
             'payer_email': payment_data.get('payer', {}).get('email'),
             'status_detail': payment_data.get('status_detail'),
-            'descripcion': f'{tipo.replace("_", " ").title()} - {turno.servicio_detalle or turno.servicio}',
+            'descripcion': f'{tipo.replace("_", " ").title()} - {servicio_detalle}',
         })
 
         _logger.info(f'Pago {payment_id} registrado para turno {turno.id}: ${monto} ({tipo})')
