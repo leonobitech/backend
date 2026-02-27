@@ -105,6 +105,7 @@ export class AgregarServicioTurnoLeraysiTool
       "sena",
       "total_pagado",
       "lead_id",
+      "link_pago",
       "mp_preference_id",
     ]);
 
@@ -116,6 +117,7 @@ export class AgregarServicioTurnoLeraysiTool
     const estadoAnterior = turnoExistente.estado as string;
     // Usar total_pagado (computed desde pago_ids) en vez de sena (computed = precio*0.30)
     const totalPagado = (turnoExistente.total_pagado as number) || 0;
+    const linkPagoAnterior = (turnoExistente.link_pago as string) || "";
     const mpPreferenceAnterior = (turnoExistente.mp_preference_id as string) || "";
 
     logger.info(
@@ -193,6 +195,9 @@ export class AgregarServicioTurnoLeraysiTool
       precio: precioTotal,
       duracion: duracionTotal,
       complejidad_maxima: complejidadFinal,
+      // Guardar originales para restaurar si el pago expira (revert exacto)
+      _original_link_pago: linkPagoAnterior,
+      _original_mp_preference_id: mpPreferenceAnterior,
     };
 
     // Incluir nueva fecha_hora si cambió (ej: jornada completa cambia 15:00 → 09:00)

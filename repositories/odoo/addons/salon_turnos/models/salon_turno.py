@@ -536,11 +536,22 @@ class SalonTurno(models.Model):
             )
             return {'success': False, 'message': f'Turno not in pendiente_pago state'}
 
+        # Restaurar link_pago y mp_preference_id originales desde pending_changes
+        original_link_pago = False
+        original_mp_preference_id = False
+        if turno.pending_changes:
+            try:
+                changes = json.loads(turno.pending_changes)
+                original_link_pago = changes.get('_original_link_pago') or False
+                original_mp_preference_id = changes.get('_original_mp_preference_id') or False
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         turno.write({
             'estado': 'confirmado',
             'monto_pago_pendiente': 0,
-            'link_pago': False,
-            'mp_preference_id': False,
+            'link_pago': original_link_pago,
+            'mp_preference_id': original_mp_preference_id,
             'pending_changes': False,
         })
 
