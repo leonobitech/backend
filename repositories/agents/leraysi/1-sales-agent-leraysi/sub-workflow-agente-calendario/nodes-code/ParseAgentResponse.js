@@ -2,6 +2,7 @@
 // PARSE AGENT RESPONSE - Agente Calendario Leraysi
 // ============================================================================
 const input = $("AnalizarDisponibilidad").first().json;
+const buildPrompt = $("BuildAgentPrompt").first().json;
 const agentOutput = $input.first().json.output;
 
 function extractJSON(text) {
@@ -52,7 +53,7 @@ let resultado = {
   servicio_detalle: input.servicio_detalle || "",
   duracion_estimada: input.duracion_estimada || 60,
   complejidad_maxima: input.complejidad_maxima || "media",
-  trabajadora: input._precalculado?.trabajadora || input.turno_trabajadora_existente || 'Leraysi',
+  trabajadora: buildPrompt._precalculado?.trabajadora || input.turno_trabajadora_existente || 'Leraysi',
   accion: accion,
   mensaje_para_clienta: llmResponse.mensaje_para_clienta,
   alternativas: llmResponse.alternativas || [],
@@ -125,8 +126,8 @@ if (llmResponse.estado === "turno_adicional_creado") {
     ...resultado,
     odoo_turno_id: llmResponse.turno_id,
     // Para buscar el turno PADRE en Baserow (BuscarTurnoServicioAgregado filtra por odoo_turno_id)
-    odoo_turno_id_padre: llmResponse.turno_id_padre || input._precalculado?.turno_id_padre || null,
-    turno_id_padre: llmResponse.turno_id_padre || input._precalculado?.turno_id_padre || null,
+    odoo_turno_id_padre: llmResponse.turno_id_padre || buildPrompt._precalculado?.turno_id_padre || null,
+    turno_id_padre: llmResponse.turno_id_padre || buildPrompt._precalculado?.turno_id_padre || null,
     fecha_turno: fechaTurno || input.fecha_solicitada,
     hora_sugerida: horaTurno || input.hora_deseada || "09:00",
     // Solo servicio nuevo (no combinado)
@@ -139,7 +140,7 @@ if (llmResponse.estado === "turno_adicional_creado") {
     mp_preference_id: mpPreferenceId,
     link_pago: llmResponse.link_pago || "",
     estado_turno: "pendiente_pago",
-    trabajadora: llmResponse.trabajadora || input._precalculado?.trabajadora || "Companera",
+    trabajadora: llmResponse.trabajadora || buildPrompt._precalculado?.trabajadora || "Companera",
     // Datos del turno padre (para contexto)
     turno_servicio_existente: input.turno_servicio_existente || "",
     turno_trabajadora_existente: input.turno_trabajadora_existente || "Leraysi",
