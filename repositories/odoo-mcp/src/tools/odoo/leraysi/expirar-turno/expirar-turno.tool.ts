@@ -89,31 +89,50 @@ export class ExpirarTurnoTool
       ]
     );
 
-    // 4. Revertir CRM lead si existe
+    // 4. Revertir CRM lead si existe Y no tiene otros turnos activos
     let leadReverted = false;
     const leadId = turno.lead_id ? turno.lead_id[0] : null;
 
     if (leadId) {
       try {
-        // Buscar stage "Qualified" (Calificado)
-        const stages = await this.odooClient.search(
-          "crm.stage",
-          [["name", "ilike", "Qualified"]],
-          { fields: ["id", "name"], limit: 1 }
+        // Verificar si el lead tiene otros turnos activos (confirmado o pendiente_pago)
+        // Si tiene → NO revertir el lead (ej: turno adicional expiró pero el original sigue)
+        const otrosTurnosActivos = await this.odooClient.search(
+          "salon.turno",
+          [
+            ["lead_id", "=", leadId],
+            ["id", "!=", params.turno_id],
+            ["estado", "in", ["confirmado", "pendiente_pago"]],
+          ],
+          { fields: ["id"], limit: 1 }
         );
 
-        if (stages.length > 0) {
-          const qualifiedStageId = stages[0].id;
-          await this.odooClient.write("crm.lead", [leadId], {
-            stage_id: qualifiedStageId,
-            expected_revenue: 0,
-          });
-          leadReverted = true;
-
+        if (otrosTurnosActivos.length > 0) {
           logger.info(
-            { turnoId: params.turno_id, leadId, stageId: qualifiedStageId },
-            "[ExpirarTurno] CRM lead reverted to Qualified"
+            { turnoId: params.turno_id, leadId, otroTurnoId: otrosTurnosActivos[0].id },
+            "[ExpirarTurno] Lead has other active turnos, skipping CRM revert"
           );
+        } else {
+          // Sin otros turnos activos → revertir lead a Qualified
+          const stages = await this.odooClient.search(
+            "crm.stage",
+            [["name", "ilike", "Qualified"]],
+            { fields: ["id", "name"], limit: 1 }
+          );
+
+          if (stages.length > 0) {
+            const qualifiedStageId = stages[0].id;
+            await this.odooClient.write("crm.lead", [leadId], {
+              stage_id: qualifiedStageId,
+              expected_revenue: 0,
+            });
+            leadReverted = true;
+
+            logger.info(
+              { turnoId: params.turno_id, leadId, stageId: qualifiedStageId },
+              "[ExpirarTurno] CRM lead reverted to Qualified"
+            );
+          }
         }
       } catch (err) {
         logger.warn(
