@@ -317,7 +317,9 @@ services:
       - "traefik.http.services.leraysi-mcp-service.loadbalancer.server.port=8101"
 
   n8n_main:
-    image: n8nio/n8n:latest
+    build:
+      context: ./repositories/n8n
+    image: leonobitech/n8n:latest
     container_name: n8n_main
     restart: unless-stopped
 
@@ -400,7 +402,7 @@ services:
       - "traefik.http.routers.n8n_mcptest.middlewares=secure-relaxed@file"
 
   n8n_webhook_1:
-    image: n8nio/n8n:latest
+    image: leonobitech/n8n:latest
     container_name: n8n_webhook_1
     restart: unless-stopped
 
@@ -459,7 +461,7 @@ services:
       - "traefik.http.routers.n8n_mcp.middlewares=secure-basic@file"
 
   n8n_worker_1:
-    image: n8nio/n8n:latest
+    image: leonobitech/n8n:latest
     container_name: n8n_worker_1
     restart: unless-stopped
 
@@ -491,7 +493,7 @@ services:
         condition: service_healthy
 
   n8n_worker_2:
-    image: n8nio/n8n:latest
+    image: leonobitech/n8n:latest
     container_name: n8n_worker_2
     restart: unless-stopped
 
