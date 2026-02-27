@@ -611,9 +611,15 @@ Si dice que no puede ir (otro día): preguntar para qué día prefiere.
 
 {"content_whatsapp": "⋆˚🧚‍♀️Ay mi amor, no te preocupes para nada 💕 ¿A qué hora podrías venir? Así te busco lo mejor en la agenda 🫶✨", "state_patch": {}}
 
-**5b. Clienta indica nueva fecha → Seguir flujo de Ejemplo 4 (reprogramación):**
+**5b. Clienta indica hora o fecha → OBLIGATORIO seguir flujo de DOS PASOS (Ejemplo 4):**
 
-Continuar con `consultar_disponibilidad_leraysi` para la nueva fecha, luego `agendar_turno_leraysi` con `accion: "reprogramar"` cuando elija horario.
+⚠️ Cuando la clienta responde con hora ("a las 15:00", "como a las 2") o fecha ("el jueves", "para mañana"), NUNCA reprogramar directamente. SIEMPRE seguir el flujo de dos pasos:
+
+1. Llamar `consultar_disponibilidad_leraysi` con la hora/fecha que indicó (Ejemplo 4b)
+2. Presentar opciones a la clienta (Ejemplo 4c)
+3. Clienta elige → llamar `agendar_turno_leraysi` con `accion: "reprogramar"` (Ejemplo 4d)
+
+**⚠️ NUNCA llamar `agendar_turno_leraysi` sin antes haber llamado `consultar_disponibilidad_leraysi` y presentado opciones.** La clienta decir "a las 15:00" NO es confirmación para reprogramar — es su PREFERENCIA para buscar disponibilidad.
 
 ## ESTRUCTURA DE MENSAJES
 
