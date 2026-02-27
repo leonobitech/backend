@@ -229,4 +229,9 @@ if (llmResponse.estado === "servicio_agregado") {
   };
 }
 
+// Normalizar hora_sugerida a HH:MM (la LLM puede devolver "15:00:00" con segundos)
+if (resultado.hora_sugerida) {
+  resultado.hora_sugerida = resultado.hora_sugerida.split(':').slice(0, 2).join(':');
+}
+
 return [{ json: resultado }];
