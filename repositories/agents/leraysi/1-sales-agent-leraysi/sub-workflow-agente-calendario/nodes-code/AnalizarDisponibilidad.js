@@ -318,6 +318,9 @@ if (fechaSolicitada) {
 // Limitar busqueda a 14 dias
 diasBusqueda = diasBusqueda.slice(0, 14);
 
+// Reprogramacion: excluir bloques del turno propio (la clienta libera su slot)
+const esReprogramacion = input.turno_agendado && turnoIdExistente && !input.agregar_a_turno_existente;
+
 for (const dia of diasBusqueda) {
   if (candidatos.length >= 12) break;
 
@@ -332,7 +335,11 @@ for (const dia of diasBusqueda) {
 
     // Probar con cada trabajadora (A primero por prioridad de desempate)
     for (const trabajadora of TRABAJADORAS) {
-      if (!sinConflictos(bloquesNuevos, bloquesDia[trabajadora])) continue;
+      // Si es reprogramacion, excluir los bloques del turno que se esta moviendo
+      const bloquesExistentes = esReprogramacion
+        ? bloquesDia[trabajadora].filter(b => b.turno_id !== turnoIdExistente)
+        : bloquesDia[trabajadora];
+      if (!sinConflictos(bloquesNuevos, bloquesExistentes)) continue;
 
       // Slot valido - calcular score
       const esFechaDeseada = dia.fecha === fechaSolicitada;
