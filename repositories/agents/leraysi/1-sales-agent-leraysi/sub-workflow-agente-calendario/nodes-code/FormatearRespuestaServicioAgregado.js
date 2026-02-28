@@ -29,6 +29,29 @@ if (esTurnoAdicional) {
   const precioNuevo = definitivos.precio || 0;
   const senaNuevo = definitivos.sena_monto || Math.round(precioNuevo * 0.3);
 
+  // ── Hora client-facing: si hay jornada completa (padre o hijo), su hora prevalece ──
+  // La clienta llega a las 09:00 para jornada completa, sin importar si es padre o hijo.
+  const complejidadPadre = metaData.turno_complejidad_padre || 'media';
+  const complejidadHijo = definitivos.complejidad_maxima || 'media';
+  const hayJornadaCompleta = complejidadPadre === 'muy_compleja' || complejidadHijo === 'muy_compleja';
+
+  let mensajeClienteFinal = metaData.mensaje_para_clienta;
+  if (hayJornadaCompleta) {
+    // Determinar hora correcta: la del turno con jornada completa
+    const horaJornada = complejidadPadre === 'muy_compleja'
+      ? (metaData.turno_hora_original || '09:00')
+      : (definitivos.hora || '09:00');
+    const horaIncorrecta = complejidadPadre === 'muy_compleja'
+      ? (definitivos.hora || '12:00')
+      : (metaData.turno_hora_original || '09:00');
+
+    // Reemplazar hora incorrecta en el mensaje de la LLM
+    if (horaIncorrecta !== horaJornada && mensajeClienteFinal.includes(horaIncorrecta)) {
+      mensajeClienteFinal = mensajeClienteFinal.replace(horaIncorrecta, horaJornada);
+      console.log(`[FormatearRespuesta] Hora corregida: ${horaIncorrecta} → ${horaJornada} (jornada completa)`);
+    }
+  }
+
   console.log(`[FormatearRespuesta] PATH A: Turno adicional creado. ` +
     `Row nuevo: #${turnoRowId}. Padre: #${metaData.turno_padre_row_id}`);
 
@@ -38,7 +61,7 @@ if (esTurnoAdicional) {
       accion: 'turno_adicional_creado',
       turno_id: turnoRowId,
       turno_id_padre: metaData.turno_padre_row_id,
-      mensaje_para_clienta: metaData.mensaje_para_clienta,
+      mensaje_para_clienta: mensajeClienteFinal,
       lead_row_id: metaData.lead_row_id,
 
       // Datos del turno adicional (solo servicio nuevo)

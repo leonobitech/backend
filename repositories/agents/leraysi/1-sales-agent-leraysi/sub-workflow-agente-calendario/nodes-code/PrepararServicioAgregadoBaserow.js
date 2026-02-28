@@ -152,6 +152,7 @@ if (data.es_turno_adicional) {
         turno_servicio_existente: turnoEncontrado.servicio_detalle || '',
         turno_hora_original: turnoEncontrado.hora || '',
         turno_trabajadora_original: turnoEncontrado.trabajadora || 'Leraysi',
+        turno_complejidad_padre: turnoEncontrado.complejidad_maxima?.value || turnoEncontrado.complejidad_maxima || 'media',
         // Datos definitivos (para turno adicional son los mismos, no hay split)
         datos_definitivos: {
           servicio: data.servicio,
