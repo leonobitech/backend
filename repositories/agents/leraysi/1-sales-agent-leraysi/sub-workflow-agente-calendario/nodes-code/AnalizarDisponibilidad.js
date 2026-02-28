@@ -561,26 +561,33 @@ if (input.agregar_a_turno_existente && turnoIdExistente) {
 
       if (esMismoDia) {
         // Mismo dia: buscar espacio en la ventana de proceso con cualquier trabajadora
-        for (const trabajadora of TRABAJADORAS) {
+        // Priorizar trabajadora actual (en_proceso) sobre otra (turno adicional)
+        const trabajadorasOrdenadasC = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
+        for (const trabajadora of trabajadorasOrdenadasC) {
           const bloquesExistentes = bloquesDia[trabajadora] || [];
 
           for (let start = ventanaInicioC; start + duracionNueva <= ventanaFinC; start += STEP) {
             const nuevoBloque = [{ start, end: start + duracionNueva }];
             if (sinConflictos(nuevoBloque, bloquesExistentes)) {
+              const esMismaTrabajadora = trabajadora === trabajadoraActual;
               candidatos.push({
                 trabajadora,
                 fecha: dia.fecha,
-                hora_inicio: minutosToHora(JORNADA_INICIO), // 09:00
-                hora_fin: minutosToHora(JORNADA_FIN), // 19:00
+                // Misma trabajadora: jornada completa (servicio dentro de proceso)
+                // Otra trabajadora: slot real del servicio nuevo (turno adicional)
+                hora_inicio: esMismaTrabajadora ? minutosToHora(JORNADA_INICIO) : minutosToHora(start),
+                hora_fin: esMismaTrabajadora ? minutosToHora(JORNADA_FIN) : minutosToHora(start + duracionNueva),
                 nombre_dia: dia.nombre_dia,
-                duracion_min: 600, // Jornada completa se mantiene
-                score: 20 + (trabajadora === trabajadoraActual ? 5 : 0),
+                duracion_min: esMismaTrabajadora ? 600 : duracionNueva,
+                score: 20 + (esMismaTrabajadora ? 5 : 0),
                 es_fecha_alternativa: false,
-                en_proceso: true,
+                en_proceso: esMismaTrabajadora,
                 es_agregar_servicio: true,
+                es_turno_adicional: !esMismaTrabajadora,
+                trabajadora_turno_original: esMismaTrabajadora ? null : trabajadoraActual,
                 hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
                 servicio_reubicado: false,
-                servicio_en_proceso: true,
+                servicio_en_proceso: esMismaTrabajadora,
                 hora_servicio_existente: minutosToHora(start)
               });
               break; // Primer hueco libre para esta trabajadora
@@ -588,44 +595,33 @@ if (input.agregar_a_turno_existente && turnoIdExistente) {
           }
         }
       } else {
-        // Otro dia: verificar que muy_compleja cabe a las 09:00, luego buscar espacio
-        // para el nuevo servicio en la ventana con cualquier trabajadora
-        const trabajadorasOrdenadas = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
-
-        for (const trabajadoraMC of trabajadorasOrdenadas) {
-          const bloquesMC = [
-            { start: JORNADA_INICIO, end: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio },
-            { start: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio + FASES_MUY_COMPLEJA.proceso,
-              end: JORNADA_FIN }
-          ];
-
-          if (!sinConflictos(bloquesMC, bloquesDia[trabajadoraMC] || [])) continue;
-
-          // Buscar espacio para nuevo servicio con cualquier trabajadora
-          for (const trabajadora of TRABAJADORAS) {
-            const bloquesT = bloquesDia[trabajadora] || [];
-            for (let s = ventanaInicioC; s + duracionNueva <= ventanaFinC; s += STEP) {
-              if (sinConflictos([{ start: s, end: s + duracionNueva }], bloquesT)) {
-                candidatos.push({
-                  trabajadora,
-                  fecha: dia.fecha,
-                  hora_inicio: minutosToHora(JORNADA_INICIO),
-                  hora_fin: minutosToHora(JORNADA_FIN),
-                  nombre_dia: dia.nombre_dia,
-                  duracion_min: 600,
-                  score: (trabajadoraMC === trabajadoraActual ? 5 : 0),
-                  es_fecha_alternativa: true,
-                  en_proceso: true,
-                  es_agregar_servicio: true,
-                  hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
-                  servicio_reubicado: false,
-                  servicio_en_proceso: true,
-                  hora_servicio_existente: minutosToHora(s)
-                });
-                break;
-              }
+        // Otro dia: buscar slot para SOLO el servicio nuevo (turno adicional)
+        // El turno muy_compleja existente queda en su dia original
+        const trabajadorasOrdenadasAlt = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
+        for (const trabajadora of trabajadorasOrdenadasAlt) {
+          const bloquesT = bloquesDia[trabajadora] || [];
+          for (let s = JORNADA_INICIO; s + duracionNueva <= JORNADA_FIN; s += STEP) {
+            if (sinConflictos([{ start: s, end: s + duracionNueva }], bloquesT)) {
+              candidatos.push({
+                trabajadora,
+                fecha: dia.fecha,
+                hora_inicio: minutosToHora(s),
+                hora_fin: minutosToHora(s + duracionNueva),
+                nombre_dia: dia.nombre_dia,
+                duracion_min: duracionNueva,
+                score: (trabajadora === trabajadoraActual ? 3 : 0),
+                es_fecha_alternativa: true,
+                en_proceso: false,
+                es_agregar_servicio: true,
+                es_turno_adicional: true,
+                trabajadora_turno_original: trabajadoraActual,
+                hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
+                servicio_reubicado: false,
+                servicio_en_proceso: false,
+                hora_servicio_existente: null
+              });
+              break; // Primer slot disponible para esta trabajadora
             }
-            if (candidatos.some(c => c.fecha === dia.fecha)) break;
           }
           if (candidatos.some(c => c.fecha === dia.fecha)) break;
         }

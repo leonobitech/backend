@@ -55,6 +55,37 @@ if (esSlotNoDisponible && slots.length > 0) {
 
   mensajeParaClienta = `${nombreClienta}, disculpa, el horario de las ${horaDeseada || '?'} ya no esta disponible. Te puedo ofrecer estas alternativas:\n\n${opcionesTexto}\n\n¿Cual te queda mejor?`;
 
+} else if (esAgregarServicio && data.turno_complejidad_existente === 'muy_compleja') {
+  // ── AGREGAR SERVICIO A JORNADA COMPLETA: confirmar directo sin opciones ──
+  // La clienta ya va a estar todo el día — no tiene sentido ofrecer opciones de horario.
+  const slotMismoDia = slots.find(s => !s.es_fecha_alternativa);
+
+  if (slotMismoDia) {
+    accion = 'confirmar_agregar_servicio_directo';
+
+    const precioExistente = data.turno_precio_existente || 0;
+    const precioNuevo = data.precio || 0;
+    const precioTotal = precioExistente + precioNuevo;
+    const senaPagada = data.turno_sena_pagada || Math.round(precioExistente * 0.3);
+    const senaTotalNueva = Math.round(precioTotal * 0.3);
+    const senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);
+    const servicioExistente = data.turno_servicio_existente || 'servicio actual';
+    const fechaSlot = slotMismoDia.fecha_humana || 'tu turno';
+
+    mensajeParaClienta = `⋆˚🧚‍♀️¡Genial mi vida! 💅 Voy a agregar ${servicioDisplay.toLowerCase()} a tu turno del ${fechaSlot} - Jornada completa.\n\n` +
+      `📋 Resumen:\n` +
+      `* ${servicioExistente}: $${precioExistente.toLocaleString('es-AR')}\n` +
+      `* ${servicioDisplay}: $${precioNuevo.toLocaleString('es-AR')}\n` +
+      `* Total: $${precioTotal.toLocaleString('es-AR')}\n\n` +
+      `💰 Seña ya pagada: $${senaPagada.toLocaleString('es-AR')}\n` +
+      `💰 Seña adicional a pagar: $${senaDiferencial.toLocaleString('es-AR')}\n\n` +
+      `¿Me confirmas, reina? 🫶✨`;
+  } else {
+    // No cabe el mismo día — mensaje breve sin opciones
+    accion = 'sin_disponibilidad_agregar';
+    mensajeParaClienta = `${nombreClienta}, lamentablemente no podemos agregar ${servicioDisplay.toLowerCase()} a tu turno 😔 La agenda está completa ese día. ¿Querés agendarlo para otro día por separado?`;
+  }
+
 } else if (esAgregarServicio && slots.length > 0) {
   // ── AGREGAR SERVICIO: opciones con contexto de cambio horario + desglose seña ──
   accion = 'opciones_agregar_servicio';
@@ -154,7 +185,9 @@ return [{
     success: true,
     accion,
     mensaje_para_clienta: mensajeParaClienta,
-    opciones: slots,
+    opciones: accion === 'confirmar_agregar_servicio_directo'
+      ? slots.filter(s => !s.es_fecha_alternativa)
+      : slots,
     lead_row_id: data.lead_row_id || null,
     // Precio determinístico para que Master Agent cotice correctamente
     precio: data.precio || 0,
