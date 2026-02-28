@@ -158,11 +158,20 @@ if (pendienteRestante > 0) {
   mensajeContent += `\n✨ *Pago completo*`;
 }
 
-// Link de confirmación de asistencia
-if (calendarAcceptUrl) {
-  mensajeContent += `
+// Correos enviados
+const emailClienta = mcpTurno.email || '';
+mensajeContent += `
 
 ━━━━━━━━━━━━━━━━━━
+  📧 *Correos enviados*
+━━━━━━━━━━━━━━━━━━
+
+Te enviamos a *${emailClienta}*:
+• 🧾 Recibo con el detalle de tu pago
+• 📅 Invitación al calendario con tu turno`;
+
+if (calendarAcceptUrl) {
+  mensajeContent += `
 
 👉 *Confirmá tu asistencia:*
 ${calendarAcceptUrl}`;
@@ -170,7 +179,7 @@ ${calendarAcceptUrl}`;
 
 mensajeContent += `
 
-¡Te esperamos en *Estilos Leraysi*! 💅`;
+¡Te esperamos en *Estilos Leraysi*! 💅✨`;
 
 // ============================================================================
 // CONSTRUIR NOTA ACTUALIZADA
