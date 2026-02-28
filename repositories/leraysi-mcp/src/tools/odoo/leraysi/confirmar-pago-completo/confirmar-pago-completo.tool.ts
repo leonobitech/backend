@@ -286,8 +286,28 @@ export class ConfirmarPagoCompletoTool
     let tagCommands: any[];
 
     if (esTurnoConHermanos) {
-      // REPLACE: reemplazar todos los tags con el set completo fusionado
-      tagCommands = [[6, 0, tagIds]];
+      // REPLACE servicio + complejidad, pero PRESERVAR tags existentes (canal, etc.)
+      try {
+        const leadData = await this.odooClient.read("crm.lead", [params.lead_id], ["tag_ids"]);
+        if (leadData.length > 0 && leadData[0].tag_ids?.length > 0) {
+          // Obtener nombres de tags de servicio y complejidad para identificarlos
+          const servicioComplejidadTags = await this.odooClient.search(
+            "crm.tag",
+            [["id", "in", leadData[0].tag_ids], ["name", "in", complexityNames]],
+            { fields: ["id"] }
+          );
+          const servicioComplejidadIds = new Set(servicioComplejidadTags.map((t: any) => t.id));
+          // Tags a preservar = existentes - (complejidad vieja) + nuevos fusionados
+          const preservedTagIds = leadData[0].tag_ids.filter((id: number) => !servicioComplejidadIds.has(id));
+          const allTagIds = [...new Set([...preservedTagIds, ...tagIds])];
+          tagCommands = [[6, 0, allTagIds]];
+        } else {
+          tagCommands = [[6, 0, tagIds]];
+        }
+      } catch (error) {
+        logger.warn({ error }, "[ConfirmarPagoCompleto] Could not read existing lead tags for merge");
+        tagCommands = [[6, 0, tagIds]];
+      }
     } else {
       // APPEND + reemplazar complejidad (comportamiento original para turno standalone)
       tagCommands = tagIds.map((id: number) => [4, id]);
