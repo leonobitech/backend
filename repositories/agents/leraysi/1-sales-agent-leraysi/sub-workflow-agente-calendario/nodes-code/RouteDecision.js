@@ -88,7 +88,29 @@ else if (slotExactoDisponible) {
   motivo = `Slot ${horaDeseada} en ${fechaSoloParte} disponible`;
 }
 
-// 5. SLOT NO DISPONIBLE + HAY ALTERNATIVAS: presentar opciones
+// 5. JORNADA COMPLETA + AGREGAR SERVICIO + AGENDAR: auto-seleccionar slot mismo día
+//    En jornada completa la clienta está TODO el día (09:00-19:00).
+//    El LLM envía hora 09:00 (llegada) pero el slot real es otro (ej: 12:00 Companera).
+//    No hace falta que la clienta elija hora — auto-agendar con el slot del mismo día.
+else if (modoLLM === 'agendar' && agregarATurnoExistente &&
+         data.turno_complejidad_existente === 'muy_compleja') {
+  const slotMismoDia = opciones.find(o => o.fecha === fechaSoloParte && !o.es_fecha_alternativa);
+  if (slotMismoDia) {
+    // Override hora_deseada con la del slot real para que SwitchModo/Agendar lo use
+    data.hora_deseada = slotMismoDia.hora_inicio;
+    data.fecha_deseada = slotMismoDia.fecha;
+    modo = 'agendar';
+    accion = 'agregar_servicio';
+    motivo = `Jornada completa: auto-seleccionado slot ${slotMismoDia.hora_inicio} (${slotMismoDia.trabajadora}) mismo día`;
+  } else {
+    // No hay slot mismo día → mostrar alternativas (otros días)
+    modo = 'consultar_disponibilidad';
+    accion = 'slot_no_disponible';
+    motivo = `Jornada completa: sin slot mismo día. ${opciones.length} alternativas`;
+  }
+}
+
+// 6. SLOT NO DISPONIBLE + HAY ALTERNATIVAS: presentar opciones
 //    Este es el caso de race condition (slot se ocupó entre consulta y confirmación)
 else {
   modo = 'consultar_disponibilidad';
