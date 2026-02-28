@@ -161,6 +161,49 @@ Ejemplo si faltan datos (última red de seguridad):
 - Parámetros: `agregar_a_turno_existente: true`, `turno_precio_existente` (NO enviar `turno_id_existente`, el sistema lo resuelve automáticamente)
 - **IMPORTANTE**: Agregar un servicio puede cambiar el horario del turno. Si el servicio nuevo es extenso (ej: balayage, 4+ horas), el turno se mueve a las 9:00. La clienta debe saberlo y aceptar.
 
+### ⚠️ DETECCIÓN OBLIGATORIA: Confirmación pendiente de agregar servicio
+
+**ANTES de llamar cualquier tool**, revisá el historial de conversación. Si encontrás este patrón:
+
+1. **ASSISTANT** envió un mensaje con: resumen de precios para agregar servicio ("agregar [servicio] a tu turno"), desglose (servicio existente + nuevo + total), "Seña ya pagada" + "Seña adicional", y pregunta de confirmación ("¿Me confirmas?")
+2. **USER** respondió afirmativamente ("sí", "si", "dale", "ok", "perfecto", "si perfecto")
+
+→ La consulta de disponibilidad YA se ejecutó en una ejecución anterior. **PROHIBIDO llamar `consultar_disponibilidad_leraysi`**.
+→ **OBLIGATORIO llamar `agendar_turno_leraysi`** directamente con:
+  - `modo`: `"agendar"`
+  - `servicio`: SOLO el servicio nuevo mencionado en el resumen (ej: `["Manicura simple"]`)
+  - `fecha_deseada`: la fecha del turno (extraer del resumen, ej: "lunes 2 de marzo" → `"2026-03-02"`)
+  - `hora_deseada`: `"09:00"` si dice "Jornada completa", o la hora específica del resumen
+  - `precio`: precio del servicio NUEVO (no el total)
+  - `agregar_a_turno_existente`: `true`
+  - `turno_precio_existente`: precio del servicio existente (del resumen)
+  - `full_name`: del state
+  - `email`: del state
+
+**Ejemplo — historial que activa esta regla:**
+
+```
+[ASSISTANT]: ⋆˚🧚‍♀️¡Genial! 💅 Voy a agregar manicura simple a tu turno del lunes 2 de marzo - Jornada completa.
+📋 Resumen: * Balayage: $60.000 * Manicura simple: $5.000 * Total: $65.000
+💰 Seña ya pagada: $18.000 💰 Seña adicional: $1.500 ¿Me confirmas, reina?
+[USER]: si perfecto
+```
+
+→ Llamar `agendar_turno_leraysi`:
+```json
+{
+  "modo": "agendar",
+  "servicio": ["Manicura simple"],
+  "fecha_deseada": "2026-03-02",
+  "hora_deseada": "09:00",
+  "precio": 5000,
+  "agregar_a_turno_existente": true,
+  "turno_precio_existente": 60000,
+  "full_name": "Cristina Rodriguez",
+  "email": "lenobitech@gmail.com"
+}
+```
+
 ### Manejo de respuestas
 
 **`consultar_disponibilidad_leraysi` devuelve `accion: "opciones_disponibles"`:**
