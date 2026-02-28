@@ -88,15 +88,90 @@ export class ConfirmarPagoCompletoTool
     });
 
     // =========================================================================
+    // PASO 1a: FUSIÓN TURNO ADICIONAL — buscar hermanos confirmados del mismo lead
+    // =========================================================================
+    // Cuando se paga un turno adicional (otra trabajadora, fila separada en Odoo),
+    // el CRM, calendario y emails deben reflejar TODOS los servicios combinados.
+    // Buscamos otros turnos del mismo lead_id en estado "confirmado" para fusionar.
+    let turnosHermanos: any[] = [];
+    let servicioDisplayFusionado = servicioDisplay;
+    let precioFusionado = turno.precio;
+    let complejidadFusionada = turno.complejidad_maxima;
+    let servicioDetalleFusionado = turno.servicio_detalle || servicioDisplay;
+    let esTurnoConHermanos = false;
+
+    try {
+      const hermanos = await this.odooClient.search(
+        "salon.turno",
+        [
+          ["lead_id", "=", params.lead_id],
+          ["estado", "=", "confirmado"],
+          ["id", "!=", params.turno_id],
+        ],
+        { fields: ["id", "servicio", "servicio_detalle", "precio", "complejidad_maxima", "fecha_hora", "duracion", "total_pagado", "sena", "monto_pago_pendiente"] }
+      );
+
+      if (hermanos.length > 0) {
+        turnosHermanos = hermanos;
+        esTurnoConHermanos = true;
+
+        // Fusionar servicio_detalle: "Manicura semipermanente" + "Pedicura"
+        const todosDetalles: string[] = [];
+        const todosServicios: string[] = [];
+        let precioTotal = 0;
+        let compMax = turno.complejidad_maxima || "media";
+
+        // Agregar el turno actual
+        todosDetalles.push(turno.servicio_detalle || this.getServicioLabel(turno.servicio) || turno.servicio);
+        todosServicios.push(turno.servicio);
+        precioTotal += turno.precio || 0;
+
+        // Agregar cada hermano
+        const COMP_ORDER: Record<string, number> = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
+        for (const h of hermanos) {
+          const hDetalle = h.servicio_detalle || this.getServicioLabel(h.servicio) || h.servicio;
+          todosDetalles.push(hDetalle);
+          todosServicios.push(h.servicio);
+          precioTotal += h.precio || 0;
+          if ((COMP_ORDER[h.complejidad_maxima] || 0) > (COMP_ORDER[compMax] || 0)) {
+            compMax = h.complejidad_maxima;
+          }
+        }
+
+        servicioDetalleFusionado = todosDetalles.join(" + ");
+        servicioDisplayFusionado = servicioDetalleFusionado;
+        precioFusionado = precioTotal;
+        complejidadFusionada = compMax;
+
+        logger.info(
+          { turnoId: params.turno_id, hermanos: hermanos.map((h: any) => h.id), servicioFusionado: servicioDetalleFusionado, precioFusionado },
+          "[ConfirmarPagoCompleto] FUSIÓN: turno con hermanos confirmados del mismo lead"
+        );
+      }
+    } catch (error) {
+      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not search for sibling turnos");
+    }
+
+    // =========================================================================
     // PASO 1b: Leer historial de pagos (salon.turno.pago)
     // =========================================================================
     let pagosInfo: PagoInfo[] = [];
     let totalPagadoAcumulado: number = turno.total_pagado || 0;
 
     try {
-      const pagoIds = turno.pago_ids as number[];
-      if (pagoIds && pagoIds.length > 0) {
-        const pagosRaw = await this.odooClient.read("salon.turno.pago", pagoIds, [
+      // Recolectar pago_ids de este turno + hermanos (si hay fusión)
+      const allPagoIds: number[] = [...((turno.pago_ids as number[]) || [])];
+      if (esTurnoConHermanos) {
+        for (const h of turnosHermanos) {
+          const hTurnos = await this.odooClient.read("salon.turno", [h.id], ["pago_ids"]);
+          if (hTurnos.length > 0 && hTurnos[0].pago_ids) {
+            allPagoIds.push(...(hTurnos[0].pago_ids as number[]));
+          }
+        }
+      }
+
+      if (allPagoIds.length > 0) {
+        const pagosRaw = await this.odooClient.read("salon.turno.pago", allPagoIds, [
           "mp_payment_id",
           "monto",
           "tipo",
@@ -116,7 +191,7 @@ export class ConfirmarPagoCompletoTool
             descripcion: p.descripcion || "",
           }));
 
-        // Recalculate total from actual payments
+        // Recalculate total from actual payments (all turnos combined)
         if (pagosInfo.length > 0) {
           totalPagadoAcumulado = pagosInfo.reduce((sum, p) => sum + p.monto, 0);
         }
@@ -181,50 +256,60 @@ export class ConfirmarPagoCompletoTool
     // =========================================================================
     // PASO 3: Vincular contacto al Lead
     // =========================================================================
-    // Resolver tags CRM: categorías de TODOS los servicios + complejidad
+    // Resolver tags CRM: usar datos FUSIONADOS (todos los servicios del lead)
+    // servicioDetalleFusionado ya tiene "Servicio A + Servicio B" cuando hay hermanos
     const tagIds = await this.resolveLeadTags(
       turno.servicio,
-      turno.complejidad_maxima,
-      turno.servicio_detalle
+      complejidadFusionada,
+      esTurnoConHermanos ? servicioDetalleFusionado : turno.servicio_detalle
     );
 
-    // Leer tags actuales del lead para reemplazar complejidad (en vez de acumular)
+    // Cuando hay fusión: REPLACE todos los tags (no append) para reflejar estado completo
+    // Cuando es turno solo: append nuevos + reemplazar complejidad (comportamiento original)
     const complexityNames = ["Simple", "Media", "Compleja", "Muy Compleja"];
-    let tagCommands: any[] = tagIds.map((id: number) => [4, id]); // link new tags
+    let tagCommands: any[];
 
-    try {
-      const leadData = await this.odooClient.read("crm.lead", [params.lead_id], ["tag_ids"]);
-      if (leadData.length > 0 && leadData[0].tag_ids?.length > 0) {
-        // Buscar tags de complejidad existentes para removerlos
-        const existingComplexityTags = await this.odooClient.search(
-          "crm.tag",
-          [["id", "in", leadData[0].tag_ids], ["name", "in", complexityNames]],
-          { fields: ["id"] }
-        );
-        // Unlink old complexity tags antes de agregar el nuevo
-        const unlinkCommands = existingComplexityTags.map((t: any) => [3, t.id]);
-        tagCommands = [...unlinkCommands, ...tagCommands];
+    if (esTurnoConHermanos) {
+      // REPLACE: reemplazar todos los tags con el set completo fusionado
+      tagCommands = [[6, 0, tagIds]];
+    } else {
+      // APPEND + reemplazar complejidad (comportamiento original para turno standalone)
+      tagCommands = tagIds.map((id: number) => [4, id]);
+
+      try {
+        const leadData = await this.odooClient.read("crm.lead", [params.lead_id], ["tag_ids"]);
+        if (leadData.length > 0 && leadData[0].tag_ids?.length > 0) {
+          const existingComplexityTags = await this.odooClient.search(
+            "crm.tag",
+            [["id", "in", leadData[0].tag_ids], ["name", "in", complexityNames]],
+            { fields: ["id"] }
+          );
+          const unlinkCommands = existingComplexityTags.map((t: any) => [3, t.id]);
+          tagCommands = [...unlinkCommands, ...tagCommands];
+        }
+      } catch (error) {
+        logger.warn({ error }, "[ConfirmarPagoCompleto] Could not read existing lead tags");
       }
-    } catch (error) {
-      logger.warn({ error }, "[ConfirmarPagoCompleto] Could not read existing lead tags");
     }
 
     await this.odooClient.write("crm.lead", [params.lead_id], {
       partner_id: partnerId,
-      expected_revenue: turno.precio,
+      expected_revenue: precioFusionado,
       tag_ids: tagCommands,
     });
 
     // Registrar en el chatter del Lead
+    const chatterServicio = esTurnoConHermanos ? servicioDisplayFusionado : servicioDisplay;
     await this.odooClient.postMessageToChatter({
       model: "crm.lead",
       resId: params.lead_id,
       body: `
-        <p><strong>Pago de seña confirmado</strong></p>
+        <p><strong>Pago de seña confirmado${esTurnoConHermanos ? " (servicio adicional)" : ""}</strong></p>
         <ul>
           <li><strong>Clienta:</strong> ${turno.clienta}</li>
-          <li><strong>Servicio:</strong> ${servicioDisplay}</li>
+          <li><strong>Servicios:</strong> ${chatterServicio}</li>
           <li><strong>Monto pagado:</strong> $${montoPagado.toLocaleString()}</li>
+          <li><strong>Precio total combinado:</strong> $${precioFusionado.toLocaleString()}</li>
           <li><strong>MP Payment ID:</strong> ${params.mp_payment_id}</li>
         </ul>
         <p>Contacto vinculado automáticamente.</p>
@@ -286,12 +371,16 @@ export class ConfirmarPagoCompletoTool
         eventPartnerIds.push(users[0].partner_id[0]);
       }
 
+      // Usar datos fusionados para nombre y descripción del evento
+      const calServicio = esTurnoConHermanos ? servicioDisplayFusionado : servicioDisplay;
+      const calPrecio = esTurnoConHermanos ? precioFusionado : turno.precio;
+
       const eventValues: Record<string, any> = {
-        name: `Turno: ${servicioDisplay} - ${turno.clienta}`,
+        name: `Turno: ${calServicio} - ${turno.clienta}`,
         start: startUTC,
         stop: stopUTC,
         duration: turno.duracion || 1,
-        description: `Servicio: ${servicioDisplay}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${turno.precio}\nSeña pagada: $${montoPagado}`,
+        description: `Servicio: ${calServicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${calPrecio}\nSeña pagada: $${montoPagado}\nTotal pagado: $${totalPagadoAcumulado}`,
         partner_ids: [[6, 0, eventPartnerIds]],
         opportunity_id: params.lead_id,
         user_id: effectiveUserId,
@@ -334,7 +423,7 @@ export class ConfirmarPagoCompletoTool
         const deadlineDate = turno.fecha_hora.split(" ")[0];
         activityId = await this.odooClient.createActivity({
           activityType: "meeting",
-          summary: `Turno: ${servicioDisplay} - ${turno.clienta}`,
+          summary: `Turno: ${calServicio} - ${turno.clienta}`,
           resModel: "crm.lead",
           resId: params.lead_id,
           dateDeadline: deadlineDate,
@@ -342,6 +431,25 @@ export class ConfirmarPagoCompletoTool
           note: `Turno confirmado para ${turno.clienta}`,
           calendarEventId: eventId,
         });
+      }
+
+      // FUSIÓN: Actualizar también el evento del turno hermano (padre) para reflejar servicios combinados
+      if (esTurnoConHermanos) {
+        for (const h of turnosHermanos) {
+          const hEventId = h.odoo_event_id as number;
+          if (hEventId) {
+            try {
+              const hDetalle = h.servicio_detalle || this.getServicioLabel(h.servicio) || h.servicio;
+              await this.odooClient.write("calendar.event", [hEventId], {
+                name: `Turno: ${calServicio} - ${turno.clienta}`,
+                description: `Servicio: ${hDetalle} (parte de: ${calServicio})\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total combinado: $${calPrecio}`,
+              }, { mail_notrack: true });
+              logger.info({ hEventId, hermanoId: h.id }, "[ConfirmarPagoCompleto] Updated sibling calendar event with fused info");
+            } catch (hErr) {
+              logger.warn({ hErr, hermanoId: h.id }, "[ConfirmarPagoCompleto] Could not update sibling calendar event");
+            }
+          }
+        }
       }
     } catch (error) {
       logger.warn({ error }, "[ConfirmarPagoCompleto] Could not create calendar event/activity");
@@ -510,18 +618,23 @@ export class ConfirmarPagoCompletoTool
           timeZone: "UTC",
         });
 
+        // Usar datos fusionados en email cuando hay hermanos
+        const emailServicio = esTurnoConHermanos ? servicioDisplayFusionado : servicioDisplay;
+        const emailServicioDetalle = esTurnoConHermanos ? servicioDetalleFusionado : turno.servicio_detalle;
+        const emailPrecio = esTurnoConHermanos ? precioFusionado : turno.precio;
+
         const emailHtml = getTurnoConfirmadoEmailTemplate({
           clienta: turno.clienta,
-          servicio: servicioDisplay,
-          servicio_detalle: turno.servicio_detalle,
+          servicio: emailServicio,
+          servicio_detalle: emailServicioDetalle,
           fecha: fechaFormateada,
           hora: horaFormateada,
-          precio: turno.precio,
+          precio: emailPrecio,
           sena: montoPagado,
-          monto_restante: turno.precio - totalPagadoAcumulado,
+          monto_restante: emailPrecio - totalPagadoAcumulado,
           mp_payment_id: params.mp_payment_id,
           direccion: "Yerbal 513, Caballito, Buenos Aires - Argentina",
-          // Detailed payment breakdown
+          // Detailed payment breakdown (includes all sibling payments when fused)
           pagos: pagosInfo.length > 0 ? pagosInfo : undefined,
           total_pagado_acumulado: totalPagadoAcumulado,
           pago_actual_mp_id: params.mp_payment_id,
@@ -586,14 +699,17 @@ export class ConfirmarPagoCompletoTool
             timeZone: "UTC",
           });
 
+          const vendorServicio = esTurnoConHermanos ? servicioDisplayFusionado : servicioDisplay;
+          const vendorPrecio = esTurnoConHermanos ? precioFusionado : turno.precio;
+
           const notificationBody = getVendorNotificacionTemplate({
             vendorName,
             clienta: turno.clienta,
             telefono: turno.telefono,
-            servicio: servicioDisplay,
+            servicio: vendorServicio,
             fecha: fechaFormateadaNotif,
             hora: horaFormateadaNotif,
-            precio: turno.precio,
+            precio: vendorPrecio,
             montoPagado,
             mp_payment_id: params.mp_payment_id,
             pagos: pagosInfo.length > 0 ? pagosInfo : undefined,
@@ -602,7 +718,7 @@ export class ConfirmarPagoCompletoTool
           });
 
           await this.odooClient.create("mail.mail", {
-            subject: `Pago Confirmado: ${servicioDisplay} - ${turno.clienta}`,
+            subject: `Pago Confirmado: ${vendorServicio} - ${turno.clienta}`,
             body_html: notificationBody,
             email_to: vendorEmail,
             auto_delete: false,
@@ -643,9 +759,11 @@ export class ConfirmarPagoCompletoTool
       timeZone: "UTC",
     });
 
+    const waServicio = esTurnoConHermanos ? servicioDisplayFusionado : servicioDisplay;
+
     const mensajeWhatsapp = this.buildWhatsAppMessage({
       clienta: turno.clienta,
-      servicio: servicioDisplay,
+      servicio: waServicio,
       fecha: fechaFormateada,
       hora: horaFormateada,
       sena: montoPagado,
@@ -656,8 +774,11 @@ export class ConfirmarPagoCompletoTool
     // =========================================================================
     // RETORNAR RESULTADO
     // =========================================================================
+    const resultServicio = esTurnoConHermanos ? servicioDisplayFusionado : servicioDisplay;
+    const resultPrecio = esTurnoConHermanos ? precioFusionado : turno.precio;
+
     logger.info(
-      { turnoId: params.turno_id, eventId, invoiceId },
+      { turnoId: params.turno_id, eventId, invoiceId, esTurnoConHermanos, hermanos: turnosHermanos.map((h: any) => h.id) },
       "[ConfirmarPagoCompleto] Completed"
     );
 
@@ -669,9 +790,9 @@ export class ConfirmarPagoCompletoTool
         telefono: turno.telefono,
         email: emailToUse || null,
         servicio: turno.servicio,
-        servicio_detalle: turno.servicio_detalle || null,
+        servicio_detalle: esTurnoConHermanos ? servicioDetalleFusionado : (turno.servicio_detalle || null),
         fecha_hora: turno.fecha_hora,
-        precio: turno.precio,
+        precio: resultPrecio,
         sena: montoPagado,
         estado: "confirmado",
       },
@@ -682,7 +803,7 @@ export class ConfirmarPagoCompletoTool
       invoice_name: invoiceName,
       invoice_pdf_base64: invoicePdfBase64,
       mensaje_whatsapp: mensajeWhatsapp,
-      message: `Pago confirmado exitosamente para ${turno.clienta}. Turno para ${servicioDisplay} el ${fechaFormateada} a las ${horaFormateada}.${invoiceName ? ` Factura: ${invoiceName}` : ""}`,
+      message: `Pago confirmado exitosamente para ${turno.clienta}. Turno para ${resultServicio} el ${fechaFormateada} a las ${horaFormateada}.${invoiceName ? ` Factura: ${invoiceName}` : ""}`,
     };
   }
 
