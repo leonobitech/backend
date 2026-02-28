@@ -2045,6 +2045,10 @@
             {
               "name": "anthropic-version",
               "value": "2023-06-01"
+            },
+            {
+              "name": "anthropic-beta",
+              "value": "prompt-caching-2024-07-31"
             }
           ]
         },
