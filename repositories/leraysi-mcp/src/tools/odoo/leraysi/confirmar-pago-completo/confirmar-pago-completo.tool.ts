@@ -646,7 +646,15 @@ export class ConfirmarPagoCompletoTool
     if (emailToUse) {
       try {
         // turno.fecha_hora viene en UTC desde Odoo API, convertir a Argentina para mostrar
-        const fechaHoraArgentina = this.utcToArgentinaDate(turno.fecha_hora);
+        // Para turno adicional: usar la hora más temprana (la del padre) para que la clienta
+        // sepa a qué hora llegar — no confundir con la hora del servicio adicional.
+        let fechaHoraParaEmail = turno.fecha_hora;
+        if (esTurnoConHermanos) {
+          const todasFechas = [turno.fecha_hora, ...turnosHermanos.map((h: any) => h.fecha_hora)];
+          todasFechas.sort(); // ISO/UTC string sort — la más temprana primero
+          fechaHoraParaEmail = todasFechas[0];
+        }
+        const fechaHoraArgentina = this.utcToArgentinaDate(fechaHoraParaEmail);
         const fechaFormateada = fechaHoraArgentina.toLocaleDateString("es-AR", {
           weekday: "long",
           year: "numeric",
