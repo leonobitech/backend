@@ -117,6 +117,14 @@ const pendienteRestante = pagos.pendiente_restante != null
 // URL de confirmación de asistencia
 const calendarAcceptUrl = mcpData.calendar_accept_url || null;
 
+// Detectar turno adicional con jornada completa → hora display = 09:00
+const servicioDetalleMcp = mcpTurno.servicio_detalle || '';
+const esServicioFusionado = servicioDetalleMcp.includes(' + ');
+const SERVICIOS_JORNADA = ['balayage', 'alisado', 'mechas', 'tintura completa'];
+const tieneJornadaCompleta = esServicioFusionado &&
+  SERVICIOS_JORNADA.some(s => servicioDetalleMcp.toLowerCase().includes(s));
+const horaDisplay = tieneJornadaCompleta ? '09:00' : horaTurno;
+
 // ============================================================================
 // CONSTRUIR MENSAJE PARA LA CLIENTA
 // ============================================================================
@@ -133,7 +141,7 @@ let mensajeContent = `⋆˚🧚‍♀️ ¡${primerNombre}, tu pago fue recibido
 
 💇 *Servicio:* ${servicios}
 📆 *Fecha:* ${nombreDiaCap} ${fechaLegible}
-🕐 *Hora:* ${horaTurno} hs`;
+🕐 *Hora:* ${horaDisplay} hs`;
 
 if (duracionTexto) {
   mensajeContent += `\n⏱️ *Duración:* ${duracionTexto}`;
