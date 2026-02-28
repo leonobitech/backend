@@ -675,8 +675,9 @@ if (input.agregar_a_turno_existente && turnoIdExistente) {
           }
 
           // Calcular score
+          // Agregar servicio: mismo dia es FUERTEMENTE preferido (clienta ya tiene turno ese dia)
           let score = 0;
-          if (esMismoDia) score += 8;
+          if (esMismoDia) score += 20;
 
           if (esMismaTrabajadora) {
             // Bloque combinado: bonus por mismo horario original
