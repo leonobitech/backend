@@ -487,10 +487,10 @@ export class ConfirmarPagoCompletoTool
         logger.warn("[ConfirmarPagoCompleto] No sales journal found, skipping invoice creation");
       } else {
         const invoiceDate = new Date().toISOString().split("T")[0];
-        const servicioLabel = servicioDisplay;
+        const servicioLabel = esTurnoConHermanos ? servicioDisplayFusionado : servicioDisplay;
 
-        // Buscar factura borrador existente para este turno
-        const existingInvoices = await this.odooClient.search(
+        // Buscar factura borrador existente: primero este turno, luego hermanos
+        let existingInvoices = await this.odooClient.search(
           "account.move",
           [
             ["move_type", "=", "out_invoice"],
@@ -500,6 +500,30 @@ export class ConfirmarPagoCompletoTool
           ],
           { fields: ["id", "name", "narration"], limit: 1 }
         );
+
+        // FUSIÓN: Si no hay factura propia pero hay hermanos, buscar factura del hermano
+        if (existingInvoices.length === 0 && esTurnoConHermanos) {
+          for (const h of turnosHermanos) {
+            const hInvoices = await this.odooClient.search(
+              "account.move",
+              [
+                ["move_type", "=", "out_invoice"],
+                ["partner_id", "=", partnerId],
+                ["state", "=", "draft"],
+                ["invoice_origin", "ilike", `Turno #${h.id}`],
+              ],
+              { fields: ["id", "name", "narration"], limit: 1 }
+            );
+            if (hInvoices.length > 0) {
+              existingInvoices = hInvoices;
+              logger.info(
+                { siblingInvoiceId: hInvoices[0].id, hermanoId: h.id },
+                "[ConfirmarPagoCompleto] Found sibling's draft invoice, will add line"
+              );
+              break;
+            }
+          }
+        }
 
         if (existingInvoices.length > 0) {
           // ===== AGREGAR LÍNEA A FACTURA EXISTENTE =====
