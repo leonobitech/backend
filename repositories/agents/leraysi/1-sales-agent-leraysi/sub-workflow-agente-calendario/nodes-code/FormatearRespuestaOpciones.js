@@ -86,6 +86,38 @@ if (esSlotNoDisponible && slots.length > 0) {
     mensajeParaClienta = `${nombreClienta}, lamentablemente no podemos agregar ${servicioDisplay.toLowerCase()} a tu turno 😔 La agenda está completa ese día. ¿Querés agendarlo para otro día por separado?`;
   }
 
+} else if (esAgregarServicio && slots.length > 0 && data.fecha_disponible === false && slots.every(s => s.servicio_reubicado && s.es_fecha_alternativa)) {
+  // ── AGREGAR SERVICIO NO DISPONIBLE MISMO DÍA: ofrecer opciones claras ──
+  // Caso: servicio muy_compleja (jornada completa) no cabe el día del turno existente.
+  // NO forzar reprogramación — dar control a la clienta.
+  accion = 'opciones_agregar_no_disponible';
+
+  const servicioExistente = data.turno_servicio_existente || 'servicio actual';
+
+  // Formatear fecha solicitada
+  const fechaSolStr = data.fecha_solicitada || data.fecha_deseada || '';
+  let fechaSolHumana = fechaSolStr;
+  if (fechaSolStr) {
+    const _dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+    const _meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const fObj = new Date(fechaSolStr + 'T12:00:00');
+    fechaSolHumana = `${_dias[fObj.getDay()]} ${fObj.getDate()} de ${_meses[fObj.getMonth()]}`;
+  }
+
+  // Fechas alternativas compactas: "martes 3, miércoles 4 o jueves 5"
+  const fechasAlt = slots.map(s => {
+    const parts = s.fecha_humana.split(' ');
+    return `${parts[0]} ${parts[1]}`;
+  }).join(', ').replace(/, ([^,]+)$/, ' o $1');
+
+  mensajeParaClienta = `${nombreClienta}, no es posible agregar ${servicioDisplay.toLowerCase()} a tu turno del ${fechaSolHumana} 😔\n\n` +
+    `${servicioDisplay} requiere jornada completa (09:00 a 19:00) y ese día la agenda está llena.\n\n` +
+    `¿Qué preferís hacer?\n\n` +
+    `1️⃣ Mantener tu ${servicioExistente} el ${fechaSolHumana} a las ${horaOriginal} como está\n` +
+    `2️⃣ Reprogramar todo junto en jornada completa (${fechasAlt})\n` +
+    `3️⃣ Agendar ${servicioDisplay.toLowerCase()} por separado en otro día\n\n` +
+    `Decime y lo coordinamos 💅`;
+
 } else if (esAgregarServicio && slots.length > 0) {
   // ── AGREGAR SERVICIO: opciones con contexto de cambio horario + desglose seña ──
   accion = 'opciones_agregar_servicio';
