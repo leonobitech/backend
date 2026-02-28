@@ -295,6 +295,30 @@ function calcularPrecio(servicios, largo) {
   return precioTotal;
 }
 
+// ============================================================================
+// DEFENSA: Filtrar servicio existente cuando agregar_a_turno_existente
+// ============================================================================
+// Si el LLM envía accidentalmente el servicio existente junto con el nuevo
+// (ej: ["Manicura semipermanente", "Pedicura"] cuando debería ser solo ["Pedicura"]),
+// la duración se duplica en AnalizarDisponibilidad (duracionExistente + duracionNueva
+// donde duracionNueva ya incluye el existente).
+// Solución: filtrar servicios que coincidan con servicio_interes del state.
+if (input.agregar_a_turno_existente && servicio.length > 1) {
+  const servicioExistente = (state.servicio_interes || '').toLowerCase().trim();
+  if (servicioExistente) {
+    const serviciosFiltrados = servicio.filter(
+      s => s.toLowerCase().trim() !== servicioExistente
+    );
+    // Solo filtrar si quedan servicios después (nunca dejar vacío)
+    if (serviciosFiltrados.length > 0 && serviciosFiltrados.length < servicio.length) {
+      console.log(`[ParseInput] 🛡️ DEFENSA agregar_servicio: filtrado "${servicioExistente}" del array. ` +
+                  `Original: [${servicio.join(', ')}] → Filtrado: [${serviciosFiltrados.join(', ')}]`);
+      servicio.length = 0;
+      serviciosFiltrados.forEach(s => servicio.push(s));
+    }
+  }
+}
+
 const duracion_estimada = calcularDuracion(servicio, largo_cabello);
 const complejidad_maxima = obtenerComplejidadMaxima(servicio, largo_cabello);
 const servicio_detalle = servicio.join(' + ');
