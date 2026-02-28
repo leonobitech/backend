@@ -108,7 +108,7 @@ export class ConfirmarPagoCompletoTool
           ["estado", "=", "confirmado"],
           ["id", "!=", params.turno_id],
         ],
-        { fields: ["id", "servicio", "servicio_detalle", "precio", "complejidad_maxima", "fecha_hora", "duracion", "total_pagado", "sena", "monto_pago_pendiente"] }
+        { fields: ["id", "servicio", "servicio_detalle", "precio", "complejidad_maxima", "fecha_hora", "duracion", "total_pagado", "sena", "monto_pago_pendiente", "odoo_event_id"] }
       );
 
       if (hermanos.length > 0) {
@@ -389,11 +389,49 @@ export class ConfirmarPagoCompletoTool
       // Verificar si ya existe un evento de calendario para este turno
       const existingEventId = turno.odoo_event_id as number;
 
-      if (existingEventId) {
-        // ACTUALIZAR evento existente - NO re-enviar partner_ids para evitar duplicados
-        // Los attendees ya están seteados de la creación original.
-        // Re-setearlos hace que Odoo envíe nuevas invitaciones de calendario (duplicados).
-        // Solo actualizamos: nombre, horarios, duración, descripción.
+      if (esTurnoConHermanos) {
+        // ── TURNO ADICIONAL: reutilizar evento del hermano (padre) ──
+        // Un solo evento por clienta en el calendario.
+        // Actualizar título y descripción del evento padre con servicios fusionados.
+        // NO cambiar start/stop/duration — la clienta llega a la hora del turno padre.
+        const hermanoConEvento = turnosHermanos.find((h: any) => h.odoo_event_id);
+        const hermanoEventId = hermanoConEvento?.odoo_event_id as number;
+
+        if (hermanoEventId) {
+          try {
+            await this.odooClient.write("calendar.event", [hermanoEventId], {
+              name: `Turno: ${calServicio} - ${turno.clienta}`,
+              description: `Servicios: ${calServicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${calPrecio}\nSeña total pagada: $${totalPagadoAcumulado}`,
+            }, { mail_notrack: true });
+
+            // Ambos turnos apuntan al mismo evento de calendario
+            await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: hermanoEventId });
+            eventId = hermanoEventId;
+
+            logger.info(
+              { eventId: hermanoEventId, turnoId: params.turno_id, hermanoId: hermanoConEvento.id },
+              "[ConfirmarPagoCompleto] Turno adicional: updated parent calendar event (single event per client)"
+            );
+          } catch (updateError) {
+            // Fallback: si falla la actualización del padre, crear evento nuevo
+            logger.warn({ updateError, hermanoEventId }, "[ConfirmarPagoCompleto] Could not update parent event, creating new");
+            eventId = await this.odooClient.create("calendar.event", eventValues);
+            await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: eventId });
+          }
+        } else {
+          // Hermano sin evento de calendario → crear nuevo con datos fusionados
+          eventId = await this.odooClient.create("calendar.event", eventValues);
+          await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: eventId });
+          logger.info(
+            { eventId, turnoId: params.turno_id },
+            "[ConfirmarPagoCompleto] Turno adicional: hermano sin evento, created new with fused data"
+          );
+        }
+        // NO crear actividad para turno adicional (ya existe la del padre)
+
+      } else if (existingEventId) {
+        // ── TURNO NORMAL con evento existente: ACTUALIZAR ──
+        // NO re-enviar partner_ids para evitar invitaciones duplicadas.
         try {
           const { partner_ids, ...updateValues } = eventValues;
           await this.odooClient.write("calendar.event", [existingEventId], updateValues, { mail_notrack: true });
@@ -403,13 +441,12 @@ export class ConfirmarPagoCompletoTool
             "[ConfirmarPagoCompleto] Updated existing calendar event"
           );
         } catch (updateError) {
-          // Si falla la actualización (evento borrado?), crear uno nuevo
           logger.warn({ updateError, existingEventId }, "[ConfirmarPagoCompleto] Could not update event, creating new");
           eventId = await this.odooClient.create("calendar.event", eventValues);
           await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: eventId });
         }
       } else {
-        // CREAR nuevo evento y guardar el ID en el turno
+        // ── TURNO NORMAL sin evento: CREAR ──
         eventId = await this.odooClient.create("calendar.event", eventValues);
         await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: eventId });
         logger.info(
@@ -418,8 +455,8 @@ export class ConfirmarPagoCompletoTool
         );
       }
 
-      // Crear actividad vinculada (solo si es evento nuevo, no en actualización)
-      if (!existingEventId) {
+      // Crear actividad vinculada (solo para turnos normales con evento nuevo)
+      if (!existingEventId && !esTurnoConHermanos) {
         const deadlineDate = turno.fecha_hora.split(" ")[0];
         activityId = await this.odooClient.createActivity({
           activityType: "meeting",
@@ -431,25 +468,6 @@ export class ConfirmarPagoCompletoTool
           note: `Turno confirmado para ${turno.clienta}`,
           calendarEventId: eventId,
         });
-      }
-
-      // FUSIÓN: Actualizar también el evento del turno hermano (padre) para reflejar servicios combinados
-      if (esTurnoConHermanos) {
-        for (const h of turnosHermanos) {
-          const hEventId = h.odoo_event_id as number;
-          if (hEventId) {
-            try {
-              const hDetalle = h.servicio_detalle || this.getServicioLabel(h.servicio) || h.servicio;
-              await this.odooClient.write("calendar.event", [hEventId], {
-                name: `Turno: ${calServicio} - ${turno.clienta}`,
-                description: `Servicio: ${hDetalle} (parte de: ${calServicio})\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total combinado: $${calPrecio}`,
-              }, { mail_notrack: true });
-              logger.info({ hEventId, hermanoId: h.id }, "[ConfirmarPagoCompleto] Updated sibling calendar event with fused info");
-            } catch (hErr) {
-              logger.warn({ hErr, hermanoId: h.id }, "[ConfirmarPagoCompleto] Could not update sibling calendar event");
-            }
-          }
-        }
       }
     } catch (error) {
       logger.warn({ error }, "[ConfirmarPagoCompleto] Could not create calendar event/activity");
