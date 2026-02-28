@@ -157,8 +157,14 @@ if (esReprogramacion && data.fecha_disponible) {
     // Usar leraysi_crear_turno (crear fila nueva en Baserow, turno original intacto)
     const senaServicioNuevo = Math.round(precioNuevo * 0.3);
     const trabajadoraAdicional = opcionElegida?.trabajadora || 'Companera';
-    const mensajeClientaTurnoAdicional = `Listo ${data.nombre_clienta || "reina"}! Agregamos ${servicioNuevo.toLowerCase()} a tu visita del ${fechaHumana}. ${trabajadoraAdicional} te atiende a las ${horaDeseada}. Sena: $${senaServicioNuevo.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
-    instruccionTarea = `## TURNO ADICIONAL — SERVICIO CON OTRA TRABAJADORA\n\nLa clienta ya tiene turno de ${servicioExistenteDisplay} con ${data.turno_trabajadora_existente || 'Leraysi'}. El nuevo servicio lo hace ${trabajadoraAdicional}.\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.nombre_clienta || ""}",\n  "telefono": "${data.telefono || ""}",\n  "servicio": "${servicioNuevoCodigo}",\n  "fecha_hora": "${fechaHoraCompleta}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "lead_id": ${data.lead_id || "null"},\n  "es_turno_adicional": true${data.email ? `,\n  "email": "${data.email}"` : ""}${`,\n  "servicio_detalle": "${servicioNuevo}"`}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_adicional_creado",\n  "turno_id": {turnoId de la respuesta},\n  "turno_id_padre": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicio": "${servicioNuevoCodigo}",\n  "servicio_detalle": "${servicioNuevo}",\n  "trabajadora": "${trabajadoraAdicional}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaTurnoAdicional}"\n}\n\`\`\``;
+    // Hora interna: usar hora_inicio del slot (ej: 12:00 Compañera), NO hora_deseada (09:00 llegada)
+    const horaInternaSlot = opcionElegida?.hora_inicio || horaDeseada;
+    const fechaHoraInterna = `${fechaSoloParte} ${horaInternaSlot}`;
+    // Hora cliente: para jornada completa usa hora de llegada (09:00), otros usan hora del slot
+    const esJornadaCompleta = data.turno_complejidad_existente === 'muy_compleja';
+    const horaClienteFacing = esJornadaCompleta ? (data.turno_hora_original || horaDeseada) : horaInternaSlot;
+    const mensajeClientaTurnoAdicional = `Listo ${data.nombre_clienta || "reina"}! Agregamos ${servicioNuevo.toLowerCase()} a tu visita del ${fechaHumana} a las ${horaClienteFacing}. Sena: $${senaServicioNuevo.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
+    instruccionTarea = `## TURNO ADICIONAL — SERVICIO CON OTRA TRABAJADORA\n\nLa clienta ya tiene turno de ${servicioExistenteDisplay} con ${data.turno_trabajadora_existente || 'Leraysi'}. El nuevo servicio lo hace ${trabajadoraAdicional}.\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.nombre_clienta || ""}",\n  "telefono": "${data.telefono || ""}",\n  "servicio": "${servicioNuevoCodigo}",\n  "fecha_hora": "${fechaHoraInterna}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "lead_id": ${data.lead_id || "null"},\n  "es_turno_adicional": true${data.email ? `,\n  "email": "${data.email}"` : ""}${`,\n  "servicio_detalle": "${servicioNuevo}"`}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_adicional_creado",\n  "turno_id": {turnoId de la respuesta},\n  "turno_id_padre": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraInterna}",\n  "servicio": "${servicioNuevoCodigo}",\n  "servicio_detalle": "${servicioNuevo}",\n  "trabajadora": "${trabajadoraAdicional}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaTurnoAdicional}"\n}\n\`\`\``;
   } else {
     // ── AGREGAR SERVICIO MISMA TRABAJADORA: bloque combinado (UPDATE fila existente) ──
     const precioTotal = precioExistente + precioNuevo;
@@ -220,13 +226,14 @@ return [
         );
 
         if (_esTurnoAdicional) {
-          // TURNO ADICIONAL: solo servicio nuevo (fila independiente)
+          // TURNO ADICIONAL: hora interna del slot (ej: 12:00), NO hora de llegada (09:00)
+          const _horaSlot = _opcion?.hora_inicio || horaDeseada;
           return {
-            hora: horaDeseada,
+            hora: _horaSlot,
             duracion_estimada: data.duracion_estimada || 60,
             complejidad_maxima: data.complejidad_maxima || "media",
             sena: Math.round((data.precio || 0) * 0.3),
-            fecha_hora_completa: fechaHoraCompleta,
+            fecha_hora_completa: `${fechaSoloParte} ${_horaSlot}`,
             fecha_humana: fechaHumana,
             servicio_display: servicioDisplay,
             trabajadora: _opcion?.trabajadora || 'Companera',

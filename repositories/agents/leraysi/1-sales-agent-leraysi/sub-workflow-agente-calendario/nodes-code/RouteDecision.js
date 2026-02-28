@@ -88,26 +88,16 @@ else if (slotExactoDisponible) {
   motivo = `Slot ${horaDeseada} en ${fechaSoloParte} disponible`;
 }
 
-// 5. JORNADA COMPLETA + AGREGAR SERVICIO + AGENDAR: auto-seleccionar slot mismo día
-//    En jornada completa la clienta está TODO el día (09:00-19:00).
-//    El LLM envía hora 09:00 (llegada) pero el slot real es otro (ej: 12:00 Companera).
-//    No hace falta que la clienta elija hora — auto-agendar con el slot del mismo día.
+// 5. JORNADA COMPLETA + AGREGAR SERVICIO + AGENDAR: rutear directo
+//    LLM envía hora 09:00 (llegada) pero el slot real es otro (ej: 12:00 Compañera).
+//    El slot exacto no matchea (09:00 ≠ 12:00) pero HAY slot mismo día → agendar.
+//    NO mutar hora_deseada — downstream ya maneja 09:00 (cliente) vs 12:00 (interno).
 else if (modoLLM === 'agendar' && agregarATurnoExistente &&
-         data.turno_complejidad_existente === 'muy_compleja') {
-  const slotMismoDia = opciones.find(o => o.fecha === fechaSoloParte && !o.es_fecha_alternativa);
-  if (slotMismoDia) {
-    // Override hora_deseada con la del slot real para que SwitchModo/Agendar lo use
-    data.hora_deseada = slotMismoDia.hora_inicio;
-    data.fecha_deseada = slotMismoDia.fecha;
-    modo = 'agendar';
-    accion = 'agregar_servicio';
-    motivo = `Jornada completa: auto-seleccionado slot ${slotMismoDia.hora_inicio} (${slotMismoDia.trabajadora}) mismo día`;
-  } else {
-    // No hay slot mismo día → mostrar alternativas (otros días)
-    modo = 'consultar_disponibilidad';
-    accion = 'slot_no_disponible';
-    motivo = `Jornada completa: sin slot mismo día. ${opciones.length} alternativas`;
-  }
+         data.turno_complejidad_existente === 'muy_compleja' &&
+         opciones.some(o => o.fecha === fechaSoloParte && !o.es_fecha_alternativa)) {
+  modo = 'agendar';
+  accion = 'agregar_servicio';
+  motivo = `Jornada completa: slot mismo día disponible, ruteo directo a agendar`;
 }
 
 // 6. SLOT NO DISPONIBLE + HAY ALTERNATIVAS: presentar opciones

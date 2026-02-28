@@ -20,6 +20,7 @@ const webhook = $('WebhookPagoConfirmado').first().json;
 
 const odooTurno = webhook.body?.turno || {};
 const payment = webhook.body?.payment || {};
+const mcpData = webhook.body?.mcp?.data || {};
 
 // ============================================================================
 // MAPEO DE SERVICIO: código Odoo → display name Baserow
@@ -100,5 +101,8 @@ return [{
     // sena_monto: usar monto_pago_pendiente de Odoo si existe (agregar servicio = diferencial),
     // sino calcular 30% del precio total
     sena_monto: odooTurno.monto_pago_pendiente || Math.round(precio * 0.3),
+
+    // odoo_event_id: ID del evento de calendario creado por confirmar_pago_completo
+    odoo_event_id: mcpData.event_id || null,
   }
 }];
