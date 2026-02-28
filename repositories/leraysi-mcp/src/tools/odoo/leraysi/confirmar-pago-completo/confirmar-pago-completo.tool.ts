@@ -152,6 +152,22 @@ export class ConfirmarPagoCompletoTool
       logger.warn({ error }, "[ConfirmarPagoCompleto] Could not search for sibling turnos");
     }
 
+    // ── Hora para la clienta (client-facing): si hay jornada completa, su hora prevalece ──
+    // La clienta llega a las 09:00 para jornada completa, sin importar si es padre o hijo.
+    // Baserow/Odoo mantienen la hora real del turno adicional (control interno).
+    let fechaHoraClienteFacing = turno.fecha_hora;
+    if (esTurnoConHermanos) {
+      const allTurnos = [turno, ...turnosHermanos];
+      const turnoJornada = allTurnos.find((t: any) => t.complejidad_maxima === "muy_compleja");
+      if (turnoJornada) {
+        fechaHoraClienteFacing = turnoJornada.fecha_hora;
+      } else {
+        // Sin jornada completa: la más temprana (hora de llegada)
+        const todasFechas = allTurnos.map((t: any) => t.fecha_hora).sort();
+        fechaHoraClienteFacing = todasFechas[0];
+      }
+    }
+
     // =========================================================================
     // PASO 1b: Leer historial de pagos (salon.turno.pago)
     // =========================================================================
@@ -390,31 +406,41 @@ export class ConfirmarPagoCompletoTool
       const existingEventId = turno.odoo_event_id as number;
 
       if (esTurnoConHermanos) {
-        // ── TURNO ADICIONAL: reutilizar evento del hermano (padre) ──
-        // Un solo evento por clienta en el calendario.
-        // Actualizar título y descripción del evento padre con servicios fusionados.
-        // NO cambiar start/stop/duration — la clienta llega a la hora del turno padre.
+        // ── TURNO CON HERMANOS: un solo evento por clienta ──
+        // Reutilizar evento existente del hermano. Actualizar título/descripción.
+        // Si hay jornada completa (muy_compleja), sus horarios prevalecen en el evento.
         const hermanoConEvento = turnosHermanos.find((h: any) => h.odoo_event_id);
         const hermanoEventId = hermanoConEvento?.odoo_event_id as number;
+        const currentEsJornada = turno.complejidad_maxima === "muy_compleja";
 
         if (hermanoEventId) {
           try {
-            await this.odooClient.write("calendar.event", [hermanoEventId], {
+            const eventUpdateData: Record<string, any> = {
               name: `Turno: ${calServicio} - ${turno.clienta}`,
               description: `Servicios: ${calServicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${calPrecio}\nSeña total pagada: $${totalPagadoAcumulado}`,
-            }, { mail_notrack: true });
+            };
+
+            // Si el turno actual es jornada completa y el evento pertenece a un hermano
+            // no-jornada, actualizar también start/stop/duration para reflejar 09:00-19:00
+            if (currentEsJornada) {
+              eventUpdateData.start = startUTC;
+              eventUpdateData.stop = stopUTC;
+              eventUpdateData.duration = turno.duracion || 1;
+            }
+
+            await this.odooClient.write("calendar.event", [hermanoEventId], eventUpdateData, { mail_notrack: true });
 
             // Ambos turnos apuntan al mismo evento de calendario
             await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: hermanoEventId });
             eventId = hermanoEventId;
 
             logger.info(
-              { eventId: hermanoEventId, turnoId: params.turno_id, hermanoId: hermanoConEvento.id },
-              "[ConfirmarPagoCompleto] Turno adicional: updated parent calendar event (single event per client)"
+              { eventId: hermanoEventId, turnoId: params.turno_id, hermanoId: hermanoConEvento.id, updatedTimes: currentEsJornada },
+              "[ConfirmarPagoCompleto] Turno con hermanos: updated calendar event (single event per client)"
             );
           } catch (updateError) {
-            // Fallback: si falla la actualización del padre, crear evento nuevo
-            logger.warn({ updateError, hermanoEventId }, "[ConfirmarPagoCompleto] Could not update parent event, creating new");
+            // Fallback: crear evento nuevo con datos fusionados
+            logger.warn({ updateError, hermanoEventId }, "[ConfirmarPagoCompleto] Could not update sibling event, creating new");
             eventId = await this.odooClient.create("calendar.event", eventValues);
             await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: eventId });
           }
@@ -424,10 +450,10 @@ export class ConfirmarPagoCompletoTool
           await this.odooClient.write("salon.turno", [params.turno_id], { odoo_event_id: eventId });
           logger.info(
             { eventId, turnoId: params.turno_id },
-            "[ConfirmarPagoCompleto] Turno adicional: hermano sin evento, created new with fused data"
+            "[ConfirmarPagoCompleto] Turno con hermanos: no sibling event, created new with fused data"
           );
         }
-        // NO crear actividad para turno adicional (ya existe la del padre)
+        // NO crear actividad para turno adicional (ya existe la del hermano)
 
       } else if (existingEventId) {
         // ── TURNO NORMAL con evento existente: ACTUALIZAR ──
@@ -646,15 +672,8 @@ export class ConfirmarPagoCompletoTool
     if (emailToUse) {
       try {
         // turno.fecha_hora viene en UTC desde Odoo API, convertir a Argentina para mostrar
-        // Para turno adicional: usar la hora más temprana (la del padre) para que la clienta
-        // sepa a qué hora llegar — no confundir con la hora del servicio adicional.
-        let fechaHoraParaEmail = turno.fecha_hora;
-        if (esTurnoConHermanos) {
-          const todasFechas = [turno.fecha_hora, ...turnosHermanos.map((h: any) => h.fecha_hora)];
-          todasFechas.sort(); // ISO/UTC string sort — la más temprana primero
-          fechaHoraParaEmail = todasFechas[0];
-        }
-        const fechaHoraArgentina = this.utcToArgentinaDate(fechaHoraParaEmail);
+        // Para turno con hermanos: usar fechaHoraClienteFacing (jornada completa prevalece)
+        const fechaHoraArgentina = this.utcToArgentinaDate(esTurnoConHermanos ? fechaHoraClienteFacing : turno.fecha_hora);
         const fechaFormateada = fechaHoraArgentina.toLocaleDateString("es-AR", {
           weekday: "long",
           year: "numeric",
@@ -796,7 +815,8 @@ export class ConfirmarPagoCompletoTool
     // PASO 9: Construir mensaje para WhatsApp
     // =========================================================================
     // turno.fecha_hora está en UTC, convertir a Argentina para mostrar
-    const fechaHoraWA = this.utcToArgentinaDate(turno.fecha_hora);
+    // Para turno con hermanos: usar fechaHoraClienteFacing (jornada completa prevalece)
+    const fechaHoraWA = this.utcToArgentinaDate(esTurnoConHermanos ? fechaHoraClienteFacing : turno.fecha_hora);
     const fechaFormateada = fechaHoraWA.toLocaleDateString("es-AR", {
       weekday: "long",
       day: "numeric",
