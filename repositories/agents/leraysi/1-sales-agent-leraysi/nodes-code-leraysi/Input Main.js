@@ -67,7 +67,7 @@ if (state.image_analysis) {
     'Depilación cera bikini': 6000, 'Depilación láser piernas': 25000,
     'Depilación láser axilas': 12000
   };
-  const MULT = { 'corto': 1.0, 'medio': 1.1, 'largo': 1.2 };
+  const MULT = { 'corto': 1.0, 'medio': 1.1, 'largo': 1.2, 'muy_largo': 1.2 };
   const mult = MULT[ia.length] || 1.0;
 
   const tablaCabello = Object.entries(PRECIOS_BASE)

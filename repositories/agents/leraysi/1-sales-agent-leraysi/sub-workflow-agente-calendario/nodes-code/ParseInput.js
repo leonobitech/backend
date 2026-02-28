@@ -133,7 +133,8 @@ const SERVICIOS_CONFIG = {
 const DURACION_EXTRA_LARGO = {
   'corto': 0,
   'medio': 60,
-  'largo': 120
+  'largo': 120,
+  'muy_largo': 120
 };
 
 // Mapeo largo_cabello → complejidad para servicios de cabello (máximo: compleja)
@@ -141,7 +142,8 @@ const DURACION_EXTRA_LARGO = {
 const COMPLEJIDAD_POR_LARGO = {
   'corto': 'media',
   'medio': 'compleja',
-  'largo': 'compleja'
+  'largo': 'compleja',
+  'muy_largo': 'compleja'
 };
 
 // Multiplicador de precio según largo del cabello
@@ -150,7 +152,8 @@ const COMPLEJIDAD_POR_LARGO = {
 const PRECIO_MULTIPLICADOR_LARGO = {
   'corto': 1.0,
   'medio': 1.1,
-  'largo': 1.2
+  'largo': 1.2,
+  'muy_largo': 1.2
 };
 
 // ============================================================================

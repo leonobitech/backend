@@ -397,6 +397,7 @@ export class ConfirmarPagoCompletoTool
         stop: stopUTC,
         duration: turno.duracion || 1,
         description: `Servicio: ${calServicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${calPrecio}\nSeña pagada: $${montoPagado}\nTotal pagado: $${totalPagadoAcumulado}`,
+        location: "Yerbal 513, CABA",
         partner_ids: [[6, 0, eventPartnerIds]],
         opportunity_id: params.lead_id,
         user_id: effectiveUserId,
@@ -418,6 +419,7 @@ export class ConfirmarPagoCompletoTool
             const eventUpdateData: Record<string, any> = {
               name: `Turno: ${calServicio} - ${turno.clienta}`,
               description: `Servicios: ${calServicio}\nClienta: ${turno.clienta}\nTeléfono: ${turno.telefono}\nPrecio total: $${calPrecio}\nSeña total pagada: $${totalPagadoAcumulado}`,
+              location: "Yerbal 513, CABA",
             };
 
             // Si el turno actual es jornada completa y el evento pertenece a un hermano
