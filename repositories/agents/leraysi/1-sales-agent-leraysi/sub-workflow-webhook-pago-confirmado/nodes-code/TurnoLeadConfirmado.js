@@ -97,14 +97,15 @@ const duracionTexto = formatearDuracion(duracionMin);
 const mcpData = webhook.body?.mcp?.data || webhook.body?.mcp || {};
 const pagos = mcpData.pagos || {};
 
-// Precio total desde Baserow (fuente de verdad para precio)
-const precioTotal = parseFloat(turno.precio) || 0;
+// Monto del pago reciente (este pago específico)
+const mcpTurno = mcpData.turno || {};
+
+// Precio total: MCP envía precio fusionado (hermanos combinados), Baserow tiene precio individual
+// Para turno adicional (Mani semi $8.000 + Balayage $60.000), MCP envía $68.000
+const precioTotal = parseFloat(mcpTurno.precio) || parseFloat(turno.precio) || 0;
 
 // Seña recién pagada (monto de este pago)
 const senaMontoNum = parseFloat(turno.sena_monto) || 0;
-
-// Monto del pago reciente (este pago específico)
-const mcpTurno = mcpData.turno || {};
 const pagoReciente = parseFloat(mcpTurno.sena) || senaMontoNum;
 
 // Datos acumulados del MCP (si están disponibles)
