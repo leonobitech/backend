@@ -124,6 +124,9 @@ const SERVICIOS_JORNADA = ['balayage', 'alisado', 'mechas', 'tintura completa'];
 const tieneJornadaCompleta = esServicioFusionado &&
   SERVICIOS_JORNADA.some(s => servicioDetalleMcp.toLowerCase().includes(s));
 const horaDisplay = tieneJornadaCompleta ? '09:00' : horaTurno;
+const duracionDisplay = tieneJornadaCompleta ? 'Jornada completa (09:00 a 19:00)' : duracionTexto;
+// Servicios fusionados del MCP (ej: "Pedicura + Balayage + Manicura semipermanente")
+const serviciosDisplay = esServicioFusionado ? servicioDetalleMcp.replace(/ \+ /g, ' y ') : servicios;
 
 // ============================================================================
 // CONSTRUIR MENSAJE PARA LA CLIENTA
@@ -139,12 +142,12 @@ let mensajeContent = `⋆˚🧚‍♀️ ¡${primerNombre}, tu pago fue recibido
   📅 *Turno Reservado*
 ━━━━━━━━━━━━━━━━━━
 
-💇 *Servicio:* ${servicios}
+💇 *Servicio:* ${serviciosDisplay}
 📆 *Fecha:* ${nombreDiaCap} ${fechaLegible}
 🕐 *Hora:* ${horaDisplay} hs`;
 
-if (duracionTexto) {
-  mensajeContent += `\n⏱️ *Duración:* ${duracionTexto}`;
+if (duracionDisplay) {
+  mensajeContent += `\n⏱️ *Duración:* ${duracionDisplay}`;
 }
 
 mensajeContent += `\n📍 *Dirección:* Yerbal 513, CABA`;
