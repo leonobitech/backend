@@ -38,6 +38,8 @@ for (const item of items) {
     // CASO 3: Turno adicional sin pagar.
     // Fila hija creada para otra trabajadora. El turno padre (fila original)
     // está intacto — nunca se modificó. Solo expirar/borrar esta fila hija.
+    // Si el hijo tiene hora_pre_reubicacion, el padre fue reubicado y necesita revert
+    const horaPreReubicacion = turno.hora_pre_reubicacion || '';
     expirados.push({
       json: {
         turno_row_id: turno.id,
@@ -48,6 +50,11 @@ for (const item of items) {
         servicio: turno.servicio_detalle || turno.servicio || "",
         expira_at: turno.expira_at,
         tipo: 'expirar_turno_adicional',
+        // Revert hora padre si fue reubicado al crear este turno adicional
+        revertir_hora_padre: horaPreReubicacion ? {
+          row_id: turno.turno_padre_id,
+          hora_original: horaPreReubicacion,
+        } : null,
       },
     });
   } else if (turno.mp_payment_id) {

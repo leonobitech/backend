@@ -146,6 +146,10 @@ if (llmResponse.estado === "turno_adicional_creado") {
     turno_trabajadora_existente: input.turno_trabajadora_existente || "Leraysi",
     turno_precio_existente: input.turno_precio_existente || 0,
     es_turno_adicional: true,
+    // Reubicación padre (Estrategia B: agregar JC a cortos existentes, misma trabajadora)
+    hora_servicio_reubicado: buildPrompt._precalculado?.hora_servicio_existente || null,
+    servicio_reubicado: buildPrompt._precalculado?.servicio_reubicado || false,
+    hora_original_padre: buildPrompt._precalculado?.hora_original || null,
   };
 }
 

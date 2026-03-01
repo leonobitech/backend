@@ -54,9 +54,17 @@ const expiraAt = new Date(ahora.getTime() + 15 * 60 * 1000); // 15 min para paga
 // PATH A: TURNO ADICIONAL — CREATE fila nueva
 // ============================================================================
 if (data.es_turno_adicional) {
-  const horaAdicional = data.hora_sugerida || '09:00';
+  // hora_servicio_reubicado = hora real en ventana de proceso calculada por AnalizarDisponibilidad
+  // hora_sugerida = hora del LLM (puede ser 09:00 = inicio JC, no es la ventana real)
+  const horaAdicional = data.hora_servicio_reubicado || data.hora_sugerida || '09:00';
   const precioNuevo = Number(data.precio) || 0;
   const senaNuevo = Math.round(precioNuevo * 0.3);
+
+  // ── REUBICACIÓN PADRE (Caso C: agregar JC a servicio corto, misma trabajadora) ──
+  // Si Estrategia B calculó una hora reubicada para el servicio existente,
+  // incluir update del padre en _meta para que n8n lo aplique pre-pago (holdea el slot)
+  const horaReubicadaPadre = data.hora_servicio_reubicado || null;
+  const padreNecesitaReubicacion = horaReubicadaPadre && data.servicio_reubicado === true;
 
   // Construir fila nueva (misma estructura que PrepararTurnoBaserow)
   const createFields = {
@@ -112,6 +120,8 @@ if (data.es_turno_adicional) {
 
     // Vinculación con turno padre
     turno_padre_id: turnoRowId,
+    // hora_pre_reubicacion: SOLO cuando el padre fue reubicado (Caso C) → usado por FiltrarExpirados para revert
+    hora_pre_reubicacion: padreNecesitaReubicacion ? (data.hora_original_padre || turnoEncontrado.hora || '') : '',
 
     // Odoo
     odoo_turno_id: data.odoo_turno_id || null,
@@ -124,12 +134,14 @@ if (data.es_turno_adicional) {
            `(${typeof turnoEncontrado.trabajadora === 'object' ? (turnoEncontrado.trabajadora?.value || 'Leraysi') : (turnoEncontrado.trabajadora || 'Leraysi')} ` +
            `${turnoEncontrado.hora || '?'} ` +
            `${turnoEncontrado.servicio_detalle || ''}). ` +
-           `Creado el ${ahora.toLocaleDateString('es-AR')}.`,
+           `Creado el ${ahora.toLocaleDateString('es-AR')}.` +
+           (padreNecesitaReubicacion ? ` Hora padre reubicada: ${turnoEncontrado.hora} → ${horaReubicadaPadre}.` : ''),
   };
 
   console.log(`[PrepararServicioAgregadoBaserow] PATH A: TURNO ADICIONAL. ` +
     `Padre: #${turnoRowId} (${turnoEncontrado.trabajadora}). ` +
-    `Nuevo: ${data.trabajadora} ${horaAdicional} ${data.servicio_detalle}`);
+    `Nuevo: ${data.trabajadora} ${horaAdicional} ${data.servicio_detalle}` +
+    (padreNecesitaReubicacion ? `. Reubicar padre: ${turnoEncontrado.hora} → ${horaReubicadaPadre}` : ''));
 
   return [{
     json: {
@@ -153,6 +165,12 @@ if (data.es_turno_adicional) {
         turno_hora_original: turnoEncontrado.hora || '',
         turno_trabajadora_original: turnoEncontrado.trabajadora || 'Leraysi',
         turno_complejidad_padre: turnoEncontrado.complejidad_maxima?.value || turnoEncontrado.complejidad_maxima || 'media',
+        // Reubicación padre (Caso C: agregar JC a servicio corto, misma trabajadora)
+        reubicar_padre: padreNecesitaReubicacion ? {
+          row_id: turnoRowId,
+          hora_nueva: horaReubicadaPadre,
+          hora_original: data.hora_original_padre || turnoEncontrado.hora || '',
+        } : null,
         // Datos definitivos (para turno adicional son los mismos, no hay split)
         datos_definitivos: {
           servicio: data.servicio,

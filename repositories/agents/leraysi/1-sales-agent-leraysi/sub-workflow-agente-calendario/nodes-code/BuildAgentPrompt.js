@@ -281,6 +281,10 @@ return [
             trabajadora: _opcion?.trabajadora || 'Companera',
             es_turno_adicional: true,
             turno_id_padre: turnoIdExistente,
+            // Reubicación padre (Estrategia B: agregar JC a cortos existentes)
+            hora_servicio_existente: _opcion?.hora_servicio_existente || null,
+            servicio_reubicado: _opcion?.servicio_reubicado || false,
+            hora_original: _opcion?.hora_original || null,
           };
         }
 
