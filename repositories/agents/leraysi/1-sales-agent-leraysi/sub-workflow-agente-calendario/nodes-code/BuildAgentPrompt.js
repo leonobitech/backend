@@ -181,8 +181,12 @@ if (esReprogramacion && data.fecha_disponible) {
   const opcionElegida = (data.opciones || data.slots_recomendados || [])[0];
   const trabajadoraExistente = (data.turno_trabajadora_existente || 'Leraysi').toLowerCase().trim();
   const trabajadoraOpcion = (opcionElegida?.trabajadora || '').toLowerCase().trim();
-  const esTurnoAdicionalFlag = opcionElegida?.es_turno_adicional === true ||
+  const _esTurnoAdicionalDetectado = opcionElegida?.es_turno_adicional === true ||
     (trabajadoraOpcion && trabajadoraExistente && trabajadoraOpcion !== trabajadoraExistente);
+  // Jornada completa (existente O nuevo): SIEMPRE turno adicional (fila nueva).
+  // El servicio corto se absorbe en la ventana de proceso y queda invisible si no tiene su propia fila.
+  const forzarTurnoAdicional = _compExistente === "muy_compleja" || _compNueva === "muy_compleja";
+  const esTurnoAdicionalFlag = _esTurnoAdicionalDetectado || forzarTurnoAdicional;
 
   // precioExistente, precioNuevo, servicioNuevo ya en scope global
   const servicioNuevoCodigo = DISPLAY_TO_CODE[servicioNuevo] || servicioNuevo;
@@ -256,7 +260,9 @@ return [
         const _opcion = (data.opciones || data.slots_recomendados || [])[0];
         const _trabExist = (data.turno_trabajadora_existente || 'Leraysi').toLowerCase().trim();
         const _trabOpcion = (_opcion?.trabajadora || '').toLowerCase().trim();
+        const _forzarAdicional = _compExistente === "muy_compleja" || _compNueva === "muy_compleja";
         const _esTurnoAdicional = esAgregarServicio && (
+          _forzarAdicional ||
           _opcion?.es_turno_adicional === true ||
           (_trabOpcion && _trabExist && _trabOpcion !== _trabExist)
         );
