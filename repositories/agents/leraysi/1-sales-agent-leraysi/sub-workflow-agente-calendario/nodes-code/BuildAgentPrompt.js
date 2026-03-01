@@ -33,6 +33,35 @@ const DISPLAY_TO_CODE = {
   'Depilación láser piernas': 'depilacion_laser_piernas',
   'Depilación láser axilas': 'depilacion_laser_axilas',
 };
+// Precios base por servicio — safety net contra inconsistencia del LLM Master
+// ParseInput calcula precio desde SERVICIOS_CONFIG pero se contamina si el LLM
+// manda servicio/precio incorrectos. BuildAgentPrompt recalcula determinísticamente.
+const SERVICIOS_PRECIO = {
+  'Corte mujer': { precio_base: 8000, requiere_largo: true },
+  'Alisado brasileño': { precio_base: 45000, requiere_largo: true },
+  'Alisado keratina': { precio_base: 55000, requiere_largo: true },
+  'Mechas completas': { precio_base: 35000, requiere_largo: true },
+  'Tintura raíz': { precio_base: 15000, requiere_largo: true },
+  'Tintura completa': { precio_base: 25000, requiere_largo: true },
+  'Balayage': { precio_base: 50000, requiere_largo: true },
+  'Manicura simple': { precio_base: 5000, requiere_largo: false },
+  'Manicura semipermanente': { precio_base: 8000, requiere_largo: false },
+  'Pedicura': { precio_base: 6000, requiere_largo: false },
+  'Depilación cera piernas': { precio_base: 10000, requiere_largo: false },
+  'Depilación cera axilas': { precio_base: 4000, requiere_largo: false },
+  'Depilación cera bikini': { precio_base: 6000, requiere_largo: false },
+  'Depilación láser piernas': { precio_base: 25000, requiere_largo: false },
+  'Depilación láser axilas': { precio_base: 12000, requiere_largo: false },
+};
+const PRECIO_MULT_LARGO = { 'corto': 1.0, 'medio': 1.1, 'largo': 1.2, 'muy_largo': 1.2 };
+
+function calcularPrecioDet(servicioNombre, largoCabello) {
+  const config = SERVICIOS_PRECIO[servicioNombre];
+  if (!config) return null;
+  const mult = (config.requiere_largo && largoCabello) ? (PRECIO_MULT_LARGO[largoCabello] || 1.0) : 1.0;
+  return Math.round(config.precio_base * mult);
+}
+
 // Convertir servicio(s) de display name a código Odoo
 const servicioRaw = Array.isArray(data.servicio) ? data.servicio[0] : data.servicio;
 const servicioCodigo = DISPLAY_TO_CODE[servicioRaw] || servicioRaw || 'otro';
@@ -128,6 +157,19 @@ if (data.agregar_a_turno_existente && turnoIdExistente) {
 const _compNueva = data.complejidad_maxima || "media";
 const _compExistente = data.turno_complejidad_existente || "media";
 
+// Variables de agregar servicio — scope global para instruccionTarea Y _precalculado
+const precioExistente = data.turno_precio_existente || 0;
+const _serviciosArray = Array.isArray(data.servicio) ? data.servicio : [data.servicio];
+const _servicioExistenteNorm = (data.turno_servicio_existente || "").toLowerCase().trim();
+const servicioNuevo = _serviciosArray.find(
+  (s) => s && s.toLowerCase().trim() !== _servicioExistenteNorm
+) || _serviciosArray[_serviciosArray.length - 1] || "otro";
+// SAFETY NET: precio del servicio nuevo calculado determinísticamente
+const _precioDet = calcularPrecioDet(servicioNuevo, data.largo_cabello);
+const precioNuevo = esAgregarServicio
+  ? (_precioDet !== null ? _precioDet : (data.precio || 0))
+  : (data.precio || 0);
+
 let instruccionTarea = "";
 let jsonRespuestaEsperada = "";
 
@@ -142,13 +184,7 @@ if (esReprogramacion && data.fecha_disponible) {
   const esTurnoAdicionalFlag = opcionElegida?.es_turno_adicional === true ||
     (trabajadoraOpcion && trabajadoraExistente && trabajadoraOpcion !== trabajadoraExistente);
 
-  const precioExistente = data.turno_precio_existente || 0;
-  const precioNuevo = data.precio || 0;
-  const serviciosArray = Array.isArray(data.servicio) ? data.servicio : [data.servicio];
-  const servicioExistenteNorm = (data.turno_servicio_existente || "").toLowerCase().trim();
-  const servicioNuevo = serviciosArray.find(
-    (s) => s && s.toLowerCase().trim() !== servicioExistenteNorm
-  ) || serviciosArray[serviciosArray.length - 1] || "otro";
+  // precioExistente, precioNuevo, servicioNuevo ya en scope global
   const servicioNuevoCodigo = DISPLAY_TO_CODE[servicioNuevo] || servicioNuevo;
   const servicioExistenteDisplay = data.turno_servicio_existente || "servicio existente";
 
@@ -232,7 +268,7 @@ return [
             hora: _horaSlot,
             duracion_estimada: data.duracion_estimada || 60,
             complejidad_maxima: data.complejidad_maxima || "media",
-            sena: Math.round((data.precio || 0) * 0.3),
+            sena: Math.round(precioNuevo * 0.3),
             fecha_hora_completa: `${fechaSoloParte} ${_horaSlot}`,
             fecha_humana: fechaHumana,
             servicio_display: servicioDisplay,
@@ -264,7 +300,7 @@ return [
               })()
             : (data.complejidad_maxima || "media"),
           sena: esAgregarServicio
-            ? Math.round(((data.turno_precio_existente || 0) + (data.precio || 0)) * 0.3)
+            ? Math.round((precioExistente + precioNuevo) * 0.3)
             : senaCalculada,
           fecha_hora_completa: fechaHoraCompleta,
           fecha_humana: fechaHumana,
