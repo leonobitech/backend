@@ -233,6 +233,42 @@ if (llmResponse.estado === "servicio_agregado") {
   };
 }
 
+// ── OVERRIDE: _precalculado.es_turno_adicional es la autoridad (no el LLM) ──
+// SIEMPRE que _precalculado marque turno adicional, forzar datos correctos:
+// - es_turno_adicional = true (para PATH A en PrepararServicioAgregadoBaserow)
+// - servicio/precio = solo el servicio NUEVO (el LLM contamina con datos combinados de la tool)
+// - hora = la del _precalculado (ventana de proceso), no la del LLM
+if (buildPrompt._precalculado?.es_turno_adicional === true) {
+  console.log(`[ParseAgentResponse] 🔧 Override turno adicional: forzando datos del servicio nuevo (LLM estado="${llmResponse.estado}")`);
+  resultado.es_turno_adicional = true;
+
+  // Reset servicio/precio al servicio NUEVO solamente (LLM/tool devuelven combinados)
+  resultado.servicio = input.servicio;
+  resultado.servicio_detalle = input.servicio_detalle || '';
+  const _precioNuevoOverride = Number(input.precio) || 0;
+  resultado.precio = _precioNuevoOverride;
+  resultado.sena_monto = Math.round(_precioNuevoOverride * 0.3);
+  resultado.duracion_estimada = input.duracion_estimada || 60;
+  resultado.complejidad_maxima = input.complejidad_maxima || 'media';
+
+  // Hora: usar _precalculado (ventana de proceso real), no la del LLM
+  resultado.hora_sugerida = buildPrompt._precalculado?.hora || resultado.hora_sugerida;
+
+  // Propagar campos de reubicación
+  resultado.hora_servicio_reubicado = resultado.hora_servicio_reubicado || buildPrompt._precalculado?.hora_servicio_existente || null;
+  if (resultado.servicio_reubicado === undefined) {
+    resultado.servicio_reubicado = buildPrompt._precalculado?.servicio_reubicado || false;
+  }
+  resultado.hora_original_padre = resultado.hora_original_padre || buildPrompt._precalculado?.hora_original || null;
+
+  // Datos del turno padre
+  resultado.turno_id_padre = resultado.turno_id_padre || buildPrompt._precalculado?.turno_id_padre || null;
+  resultado.odoo_turno_id_padre = resultado.turno_id_padre;
+
+  // Trabajadora del _precalculado (más confiable que LLM)
+  resultado.trabajadora = buildPrompt._precalculado?.trabajadora || resultado.trabajadora || input.turno_trabajadora_existente || "Leraysi";
+}
+
 // Normalizar hora_sugerida a HH:MM (la LLM puede devolver "15:00:00" con segundos)
 if (resultado.hora_sugerida) {
   resultado.hora_sugerida = resultado.hora_sugerida.split(':').slice(0, 2).join(':');

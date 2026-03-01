@@ -107,6 +107,7 @@ export class AgregarServicioTurnoLeraysiTool
       "lead_id",
       "link_pago",
       "mp_preference_id",
+      "complejidad_maxima",
     ]);
 
     if (turnos.length === 0) {
@@ -149,8 +150,14 @@ export class AgregarServicioTurnoLeraysiTool
     if (totalServicios >= 3) floorPorCantidad = "muy_compleja";
     else if (totalServicios >= 2) floorPorCantidad = "compleja";
 
+    // Incluir complejidad del turno existente (clave para JC: si existente es muy_compleja, mantenerla)
+    const complejidadExistente = (turnoExistente.complejidad_maxima as string) || "media";
     const complejidadFinal = ORDER_TO_COMP[
-      Math.max(COMP_ORDER[params.complejidad_maxima] || 2, COMP_ORDER[floorPorCantidad] || 1)
+      Math.max(
+        COMP_ORDER[complejidadExistente] || 2,
+        COMP_ORDER[params.complejidad_maxima] || 2,
+        COMP_ORDER[floorPorCantidad] || 1
+      )
     ] || params.complejidad_maxima;
 
     // 3. Sumar precios y calcular duración

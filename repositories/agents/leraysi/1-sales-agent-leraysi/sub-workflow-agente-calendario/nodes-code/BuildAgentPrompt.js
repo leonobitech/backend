@@ -192,19 +192,28 @@ if (esReprogramacion && data.fecha_disponible) {
   const servicioNuevoCodigo = DISPLAY_TO_CODE[servicioNuevo] || servicioNuevo;
   const servicioExistenteDisplay = data.turno_servicio_existente || "servicio existente";
 
-  if (esTurnoAdicionalFlag) {
-    // ── TURNO ADICIONAL: otra trabajadora hace SOLO el servicio nuevo ──
-    // Usar leraysi_crear_turno (crear fila nueva en Baserow, turno original intacto)
+  if (esTurnoAdicionalFlag && _esTurnoAdicionalDetectado) {
+    // ── TURNO ADICIONAL: OTRA TRABAJADORA hace el servicio nuevo ──
+    // Usar leraysi_crear_turno (nuevo registro Odoo justificado + fila nueva Baserow)
     const senaServicioNuevo = Math.round(precioNuevo * 0.3);
     const trabajadoraAdicional = opcionElegida?.trabajadora || 'Companera';
-    // Hora interna: usar hora_inicio del slot (ej: 12:00 Compañera), NO hora_deseada (09:00 llegada)
-    const horaInternaSlot = opcionElegida?.hora_inicio || horaDeseada;
+    const horaInternaSlot = opcionElegida?.hora_servicio_existente || opcionElegida?.hora_inicio || horaDeseada;
     const fechaHoraInterna = `${fechaSoloParte} ${horaInternaSlot}`;
-    // Hora cliente: para jornada completa usa hora de llegada (09:00), otros usan hora del slot
     const esJornadaCompleta = data.turno_complejidad_existente === 'muy_compleja';
     const horaClienteFacing = esJornadaCompleta ? (data.turno_hora_original || horaDeseada) : horaInternaSlot;
     const mensajeClientaTurnoAdicional = `Listo ${data.nombre_clienta || "reina"}! Agregamos ${servicioNuevo.toLowerCase()} a tu visita del ${fechaHumana} a las ${horaClienteFacing}. Sena: $${senaServicioNuevo.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
     instruccionTarea = `## TURNO ADICIONAL — SERVICIO CON OTRA TRABAJADORA\n\nLa clienta ya tiene turno de ${servicioExistenteDisplay} con ${data.turno_trabajadora_existente || 'Leraysi'}. El nuevo servicio lo hace ${trabajadoraAdicional}.\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.nombre_clienta || ""}",\n  "telefono": "${data.telefono || ""}",\n  "servicio": "${servicioNuevoCodigo}",\n  "fecha_hora": "${fechaHoraInterna}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "lead_id": ${data.lead_id || "null"},\n  "es_turno_adicional": true${data.email ? `,\n  "email": "${data.email}"` : ""}${`,\n  "servicio_detalle": "${servicioNuevo}"`}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_adicional_creado",\n  "turno_id": {turnoId de la respuesta},\n  "turno_id_padre": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraInterna}",\n  "servicio": "${servicioNuevoCodigo}",\n  "servicio_detalle": "${servicioNuevo}",\n  "trabajadora": "${trabajadoraAdicional}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaTurnoAdicional}"\n}\n\`\`\``;
+  } else if (esTurnoAdicionalFlag && !_esTurnoAdicionalDetectado) {
+    // ── MISMA TRABAJADORA + JC: agregar servicio al turno Odoo existente ──
+    // Usar leraysi_agregar_servicio_turno (no crear phantom en Odoo)
+    // Baserow: fila nueva (via es_turno_adicional en _precalculado)
+    const senaServicioNuevo = Math.round(precioNuevo * 0.3);
+    const trabajadoraMisma = opcionElegida?.trabajadora || data.turno_trabajadora_existente || 'Leraysi';
+    const horaInternaSlot = opcionElegida?.hora_servicio_existente || opcionElegida?.hora_inicio || horaDeseada;
+    const fechaHoraInterna = `${fechaSoloParte} ${horaInternaSlot}`;
+    const horaClienteFacing = data.turno_hora_original || horaDeseada;
+    const mensajeClientaJC = `Listo ${data.nombre_clienta || "reina"}! Agregamos ${servicioNuevo.toLowerCase()} a tu visita del ${fechaHumana} a las ${horaClienteFacing}. Sena: $${senaServicioNuevo.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
+    instruccionTarea = `## AGREGAR SERVICIO — MISMA TRABAJADORA (JORNADA COMPLETA)\n\nLa clienta ya tiene turno de ${servicioExistenteDisplay} con ${trabajadoraMisma}. Agregamos ${servicioNuevo} al mismo turno.\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${turnoIdExistente},\n  "nuevo_servicio": "${servicioNuevoCodigo}",\n  "nuevo_servicio_detalle": "${servicioNuevo}",\n  "nuevo_precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "nueva_hora": "${data.turno_hora_original || horaDeseada}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_adicional_creado",\n  "turno_id": ${turnoIdExistente},\n  "turno_id_padre": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraInterna}",\n  "servicio": "${servicioNuevoCodigo}",\n  "servicio_detalle": "${servicioNuevo}",\n  "trabajadora": "${trabajadoraMisma}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaJC}"\n}\n\`\`\``;
   } else {
     // ── AGREGAR SERVICIO MISMA TRABAJADORA: bloque combinado (UPDATE fila existente) ──
     const precioTotal = precioExistente + precioNuevo;
@@ -268,8 +277,8 @@ return [
         );
 
         if (_esTurnoAdicional) {
-          // TURNO ADICIONAL: hora interna del slot (ej: 12:00), NO hora de llegada (09:00)
-          const _horaSlot = _opcion?.hora_inicio || horaDeseada;
+          // TURNO ADICIONAL: hora real en ventana de proceso, sino hora_inicio, sino hora_deseada
+          const _horaSlot = _opcion?.hora_servicio_existente || _opcion?.hora_inicio || horaDeseada;
           return {
             hora: _horaSlot,
             duracion_estimada: data.duracion_estimada || 60,
