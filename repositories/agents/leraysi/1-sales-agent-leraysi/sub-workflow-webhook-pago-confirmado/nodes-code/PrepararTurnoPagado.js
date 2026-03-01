@@ -71,9 +71,30 @@ if (servicioDetalle && servicioDetalle.includes('+')) {
 const hora = odooTurno.hora_argentina || turnoBaserow.hora || '09:00';
 
 // ============================================================================
+// DETECTAR TURNO CON SERVICIO FUSIONADO (padre de turno adicional)
+// ============================================================================
+// Cuando Odoo envía datos combinados ("Balayage + Manicura simple"), este turno
+// es el PADRE de un turno adicional. En Baserow cada fila mantiene su servicio
+// individual, así que NO sobreescribimos los campos de servicio del padre.
+// También detectamos si este row ES un hijo (tiene turno_padre_id).
+const esFusionado = servicioDetalle.includes('+');
+const esHijo = turnoBaserow.turno_padre_id != null
+  && turnoBaserow.turno_padre_id !== ''
+  && turnoBaserow.turno_padre_id !== 0;
+const noSobreescribirServicio = esFusionado || esHijo;
+
+// ============================================================================
 // OUTPUT: Todos los campos para Baserow Update Row
 // ============================================================================
-const precio = odooTurno.precio || parseFloat(turnoBaserow.precio) || 0;
+const precio = noSobreescribirServicio
+  ? parseFloat(turnoBaserow.precio) || 0
+  : (odooTurno.precio || parseFloat(turnoBaserow.precio) || 0);
+
+// Extraer servicio original de Baserow (puede ser array de objetos {id, value} o strings)
+const servicioBaserow = Array.isArray(turnoBaserow.servicio)
+  ? turnoBaserow.servicio.map(s => s.value || s)
+  : [turnoBaserow.servicio || ''];
+const servicioDetalleBaserow = turnoBaserow.servicio_detalle || servicioBaserow.join(' + ');
 
 return [{
   json: {
@@ -86,21 +107,25 @@ return [{
     mp_payment_id: payment.mp_payment_id || '',
     confirmado_at: payment.confirmado_at || new Date().toISOString(),
 
-    // Campos definitivos (del turno de Odoo, fuente de verdad)
-    // Baserow recibe UTC puro y convierte a timezone configurado (-03:00 AR) automáticamente
-    // Patrón: hora Argentina → construir con -03:00 → .toISOString() → UTC
+    // Campos de servicio: usar Baserow (original) si fusionado/hijo, sino Odoo (fuente de verdad)
     fecha: turnoBaserow.fecha
-      ? new Date(`${turnoBaserow.fecha.split('T')[0]}T${hora}:00-03:00`).toISOString()
+      ? new Date(`${turnoBaserow.fecha.split('T')[0]}T${noSobreescribirServicio ? (turnoBaserow.hora || '09:00') : hora}:00-03:00`).toISOString()
       : null,
-    servicio: servicioArray,
-    servicio_detalle: servicioDetalle,
-    hora: hora,
-    duracion_min: odooTurno.duracion_min || (odooTurno.duracion ? Math.round(odooTurno.duracion * 60) : null) || parseInt(turnoBaserow.duracion_min) || 60,
-    complejidad_maxima: odooTurno.complejidad_maxima || turnoBaserow.complejidad_maxima?.value || turnoBaserow.complejidad_maxima || 'media',
+    servicio: noSobreescribirServicio ? servicioBaserow : servicioArray,
+    servicio_detalle: noSobreescribirServicio ? servicioDetalleBaserow : servicioDetalle,
+    hora: noSobreescribirServicio ? (turnoBaserow.hora || '09:00') : hora,
+    duracion_min: noSobreescribirServicio
+      ? (parseInt(turnoBaserow.duracion_min) || 60)
+      : (odooTurno.duracion_min || (odooTurno.duracion ? Math.round(odooTurno.duracion * 60) : null) || parseInt(turnoBaserow.duracion_min) || 60),
+    complejidad_maxima: noSobreescribirServicio
+      ? (turnoBaserow.complejidad_maxima?.value || turnoBaserow.complejidad_maxima || 'media')
+      : (odooTurno.complejidad_maxima || turnoBaserow.complejidad_maxima?.value || turnoBaserow.complejidad_maxima || 'media'),
     precio: precio,
-    // sena_monto: usar monto_pago_pendiente de Odoo si existe (agregar servicio = diferencial),
-    // sino calcular 30% del precio total
-    sena_monto: odooTurno.monto_pago_pendiente || Math.round(precio * 0.3),
+    // sena_monto: si fusionado/hijo, mantener valor existente de Baserow (cada fila tiene su seña)
+    // sino usar monto_pago_pendiente de Odoo (diferencial) o calcular 30%
+    sena_monto: noSobreescribirServicio
+      ? (parseFloat(turnoBaserow.sena_monto) || Math.round(precio * 0.3))
+      : (odooTurno.monto_pago_pendiente || Math.round(precio * 0.3)),
 
     // odoo_event_id: ID del evento de calendario creado por confirmar_pago_completo
     odoo_event_id: mcpData.event_id || null,

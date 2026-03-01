@@ -266,16 +266,30 @@ const servicioOdoo = webhookTurno.servicio || turno.servicio;
 const servicioDetalleOdoo = webhookTurno.servicio_detalle || turno.servicio_detalle || '';
 
 // turno_update: campos definitivos para Baserow TurnosLeraysi (tabla 855)
+// NO sobreescribir servicio/precio/duracion/complejidad cuando:
+// 1. Es hijo (tiene turno_padre_id) — cada fila Baserow mantiene su servicio individual
+// 2. Odoo envía datos fusionados (servicio_detalle con "+") — este es el padre de un turno adicional
+// En ambos casos, Baserow ya tiene los datos correctos pre-pago.
+const esTurnoAdicionalBaserow = turno.turno_padre_id != null && turno.turno_padre_id !== '' && turno.turno_padre_id !== 0;
+const noSobreescribirServicio = esTurnoAdicionalBaserow || esServicioFusionado;
+
 const turno_update = {
-  row_id: turno.id,                                                 // Row ID del turno en Baserow
-  servicio: Array.isArray(servicioOdoo) ? servicioOdoo : turno.servicio, // Multi-select (array de Baserow)
-  servicio_detalle: servicioDetalleOdoo,                             // "Manicura semipermanente + Pedicura"
-  hora: horaDefinitiva,                                              // HH:MM en Argentina
-  duracion_min: webhookTurno.duracion_min || (webhookTurno.duracion ? Math.round(webhookTurno.duracion * 60) : null) || parseInt(turno.duracion_min) || 60,
-  complejidad_maxima: webhookTurno.complejidad_maxima || turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media',
-  precio: webhookTurno.precio || parseFloat(turno.precio) || 0,
-  sena_monto: Math.round((webhookTurno.precio || parseFloat(turno.precio) || 0) * 0.3),
+  row_id: turno.id,
+  // Campos de pago: mantener valor existente de Baserow si fusionado/hijo
+  sena_monto: noSobreescribirServicio
+    ? parseFloat(turno.sena_monto) || Math.round((parseFloat(turno.precio) || 0) * 0.3)
+    : Math.round((webhookTurno.precio || parseFloat(turno.precio) || 0) * 0.3),
 };
+
+// Solo sobreescribir datos del servicio en turnos standalone (sin fusión ni hijo)
+if (!noSobreescribirServicio) {
+  turno_update.servicio = Array.isArray(servicioOdoo) ? servicioOdoo : turno.servicio;
+  turno_update.servicio_detalle = servicioDetalleOdoo;
+  turno_update.hora = horaDefinitiva;
+  turno_update.duracion_min = webhookTurno.duracion_min || (webhookTurno.duracion ? Math.round(webhookTurno.duracion * 60) : null) || parseInt(turno.duracion_min) || 60;
+  turno_update.complejidad_maxima = webhookTurno.complejidad_maxima || turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';
+  turno_update.precio = webhookTurno.precio || parseFloat(turno.precio) || 0;
+}
 
 // ============================================================================
 // CONSTRUIR state (estado completo del lead)
