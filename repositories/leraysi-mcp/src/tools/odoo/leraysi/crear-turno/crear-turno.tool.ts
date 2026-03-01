@@ -215,7 +215,31 @@ export class CrearTurnoLeraysiTool
           complejidadFinal,
           params.servicio_detalle
         );
-        const tagCommands = [[6, 0, tagIds]]; // replace all tags
+
+        // REPLACE solo tags de negocio, PRESERVAR tags existentes (canal: telegram, whatsapp, etc.)
+        let tagCommands: any[];
+        try {
+          const leadData = await this.odooClient.read("crm.lead", [params.lead_id], ["tag_ids"]);
+          if (leadData.length > 0 && leadData[0].tag_ids?.length > 0) {
+            // Identificar tags de negocio existentes (servicio + complejidad) para reemplazarlos
+            const businessTagNames = ["Simple", "Media", "Compleja", "Muy Compleja"];
+            const existingBusinessTags = await this.odooClient.search(
+              "crm.tag",
+              [["id", "in", leadData[0].tag_ids], ["name", "in", businessTagNames]],
+              { fields: ["id"] }
+            );
+            const businessTagIds = new Set(existingBusinessTags.map((t: any) => t.id));
+            // Preservar tags que NO son de negocio (canal, etc.)
+            const preservedTagIds = leadData[0].tag_ids.filter((id: number) => !businessTagIds.has(id));
+            const allTagIds = [...new Set([...preservedTagIds, ...tagIds])];
+            tagCommands = [[6, 0, allTagIds]];
+          } else {
+            tagCommands = [[6, 0, tagIds]];
+          }
+        } catch (readError) {
+          logger.warn({ error: readError }, "[CrearTurnoLeraysi] Could not read existing lead tags, replacing all");
+          tagCommands = [[6, 0, tagIds]];
+        }
 
         await this.odooClient.write("crm.lead", [params.lead_id], {
           expected_revenue: params.precio,

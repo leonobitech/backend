@@ -129,6 +129,12 @@ const duracionDisplay = tieneJornadaCompleta ? 'Jornada completa (09:00 a 19:00)
 // Servicios fusionados del MCP (ej: "Pedicura + Balayage + Manicura semipermanente")
 const serviciosDisplay = esServicioFusionado ? servicioDetalleMcp.replace(/ \+ /g, ' y ') : servicios;
 
+// Override turno_fecha para jornada completa → siempre 09:00 (hora de llegada de la clienta)
+// Evita que turno adicional (ej: Mani semi 12:00) sobreescriba con hora interna en LeadsLeraysi
+if (tieneJornadaCompleta && fechaTurno) {
+  turnoFechaISO = new Date(`${fechaTurno}T09:00:00-03:00`).toISOString();
+}
+
 // ============================================================================
 // CONSTRUIR MENSAJE PARA LA CLIENTA
 // ============================================================================
