@@ -197,7 +197,7 @@ if (esReprogramacion && data.fecha_disponible) {
     // Usar leraysi_crear_turno (nuevo registro Odoo justificado + fila nueva Baserow)
     const senaServicioNuevo = Math.round(precioNuevo * 0.3);
     const trabajadoraAdicional = opcionElegida?.trabajadora || 'Companera';
-    const horaInternaSlot = opcionElegida?.hora_servicio_existente || opcionElegida?.hora_inicio || horaDeseada;
+    const horaInternaSlot = opcionElegida?.hora_inicio || horaDeseada;
     const fechaHoraInterna = `${fechaSoloParte} ${horaInternaSlot}`;
     const esJornadaCompleta = data.turno_complejidad_existente === 'muy_compleja';
     const horaClienteFacing = esJornadaCompleta ? (data.turno_hora_original || horaDeseada) : horaInternaSlot;
@@ -209,7 +209,7 @@ if (esReprogramacion && data.fecha_disponible) {
     // Baserow: fila nueva (via es_turno_adicional en _precalculado)
     const senaServicioNuevo = Math.round(precioNuevo * 0.3);
     const trabajadoraMisma = opcionElegida?.trabajadora || data.turno_trabajadora_existente || 'Leraysi';
-    const horaInternaSlot = opcionElegida?.hora_servicio_existente || opcionElegida?.hora_inicio || horaDeseada;
+    const horaInternaSlot = opcionElegida?.hora_inicio || horaDeseada;
     const fechaHoraInterna = `${fechaSoloParte} ${horaInternaSlot}`;
     const horaClienteFacing = data.turno_hora_original || horaDeseada;
     const mensajeClientaJC = `Listo ${data.nombre_clienta || "reina"}! Agregamos ${servicioNuevo.toLowerCase()} a tu visita del ${fechaHumana} a las ${horaClienteFacing}. Sena: $${senaServicioNuevo.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
@@ -277,8 +277,8 @@ return [
         );
 
         if (_esTurnoAdicional) {
-          // TURNO ADICIONAL: hora real en ventana de proceso, sino hora_inicio, sino hora_deseada
-          const _horaSlot = _opcion?.hora_servicio_existente || _opcion?.hora_inicio || horaDeseada;
+          // TURNO ADICIONAL: hora_inicio del slot elegido (09:00 para JC), sino hora_deseada
+          const _horaSlot = _opcion?.hora_inicio || horaDeseada;
           return {
             hora: _horaSlot,
             duracion_estimada: data.duracion_estimada || 60,

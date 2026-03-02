@@ -54,6 +54,7 @@ for (const item of items) {
         revertir_hora_padre: horaPreReubicacion ? {
           row_id: turno.turno_padre_id,
           hora_original: horaPreReubicacion,
+          fecha_original: turno.fecha_pre_reubicacion || null,
         } : null,
       },
     });

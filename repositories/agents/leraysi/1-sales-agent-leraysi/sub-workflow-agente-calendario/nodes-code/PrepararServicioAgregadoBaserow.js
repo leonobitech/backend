@@ -54,9 +54,9 @@ const expiraAt = new Date(ahora.getTime() + 15 * 60 * 1000); // 15 min para paga
 // PATH A: TURNO ADICIONAL — CREATE fila nueva
 // ============================================================================
 if (data.es_turno_adicional) {
-  // hora_servicio_reubicado = hora real en ventana de proceso calculada por AnalizarDisponibilidad
-  // hora_sugerida = hora del LLM (puede ser 09:00 = inicio JC, no es la ventana real)
-  const horaAdicional = data.hora_servicio_reubicado || data.hora_sugerida || '09:00';
+  // hora_sugerida = hora del slot elegido (09:00 para JC, hora real del nuevo servicio)
+  // hora_servicio_reubicado = hora reubicada del PADRE (servicio existente), NO del nuevo
+  const horaAdicional = data.hora_sugerida || '09:00';
   const precioNuevo = Number(data.precio) || 0;
   const senaNuevo = Math.round(precioNuevo * 0.3);
 
@@ -120,8 +120,10 @@ if (data.es_turno_adicional) {
 
     // Vinculación con turno padre
     turno_padre_id: turnoRowId,
-    // hora_pre_reubicacion: SOLO cuando el padre fue reubicado (Caso C) → usado por FiltrarExpirados para revert
+    // hora_pre_reubicacion: SOLO cuando el padre fue reubicado (Caso C/D) → usado por FiltrarExpirados para revert
     hora_pre_reubicacion: padreNecesitaReubicacion ? (data.hora_original_padre || turnoEncontrado.hora || '') : '',
+    // fecha_pre_reubicacion: datetime original del padre antes de reubicación → para revert directo sin reconstruir
+    fecha_pre_reubicacion: padreNecesitaReubicacion ? (turnoEncontrado.fecha || '') : '',
 
     // Odoo
     odoo_turno_id: data.odoo_turno_id || null,
@@ -169,6 +171,9 @@ if (data.es_turno_adicional) {
         reubicar_padre: padreNecesitaReubicacion ? {
           row_id: turnoRowId,
           hora_nueva: horaReubicadaPadre,
+          fecha_nueva: data.fecha_turno
+            ? data.fecha_turno + 'T' + horaReubicadaPadre + ':00-03:00'
+            : null,
           hora_original: data.hora_original_padre || turnoEncontrado.hora || '',
         } : null,
         // Datos definitivos (para turno adicional son los mismos, no hay split)
