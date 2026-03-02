@@ -47,39 +47,13 @@ class SalonMessagingAPI(http.Controller):
         methods=['POST'],
         csrf=False,
     )
-    def receive_message(self, **kwargs):
-        """
-        Receive a Telegram message from n8n and post it to Discuss.
-
-        Body JSON:
-        {
-            "chat_id": "123456789",
-            "username": "maria_garcia",
-            "first_name": "María",
-            "text": "Hola, quiero un turno",
-            "lead_id": 42  // optional, Odoo CRM lead ID
-        }
-
-        Returns:
-        {
-            "success": true,
-            "channel_id": 7,
-            "message_id": 123,
-            "partner_id": 15
-        }
-        """
+    def receive_message(self, chat_id=None, first_name='Unknown', username='', text='', lead_id=None, **kwargs):
+        """Receive a Telegram message from n8n and post it to Discuss.
+        Params arrive as kwargs via JSON-RPC (Odoo 19)."""
         if not self._check_api_key():
             return {'success': False, 'error': 'Invalid API key'}
 
         try:
-            data = request.jsonrequest
-
-            chat_id = data.get('chat_id')
-            first_name = data.get('first_name', 'Unknown')
-            username = data.get('username', '')
-            text = data.get('text', '')
-            lead_id = data.get('lead_id')
-
             if not chat_id:
                 return {'success': False, 'error': 'chat_id is required'}
 
@@ -134,32 +108,13 @@ class SalonMessagingAPI(http.Controller):
         methods=['POST'],
         csrf=False,
     )
-    def bot_response(self, **kwargs):
-        """
-        Post the bot's AI response to Discuss so Felix sees full conversation.
-
-        Body JSON:
-        {
-            "chat_id": "123456789",
-            "text": "¡Hola María! Tenemos turnos disponibles..."
-        }
-
-        Returns:
-        {
-            "success": true,
-            "channel_id": 7,
-            "message_id": 124
-        }
-        """
+    def bot_response(self, chat_id=None, text='', **kwargs):
+        """Post the bot's AI response to Discuss so Felix sees full conversation.
+        Params arrive as kwargs via JSON-RPC (Odoo 19)."""
         if not self._check_api_key():
             return {'success': False, 'error': 'Invalid API key'}
 
         try:
-            data = request.jsonrequest
-
-            chat_id = data.get('chat_id')
-            text = data.get('text', '')
-
             if not chat_id:
                 return {'success': False, 'error': 'chat_id is required'}
 
