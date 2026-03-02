@@ -262,11 +262,24 @@ export class ConfirmarPagoCompletoTool
         name: turno.clienta,
         is_company: false,
         phone: turno.telefono,
+        tz: 'America/Argentina/Buenos_Aires',
       };
       if (emailToUse) partnerData.email = emailToUse;
 
       partnerId = await this.odooClient.create("res.partner", partnerData);
       logger.info({ partnerId }, "[ConfirmarPagoCompleto] Created contact as fallback (Fase 1 may have failed)");
+    }
+
+    // Ensure partner has Argentina timezone (for calendar accept page display)
+    if (partnerId) {
+      try {
+        const partnerData = await this.odooClient.read("res.partner", [partnerId], ["tz"]);
+        if (partnerData.length > 0 && !partnerData[0].tz) {
+          await this.odooClient.write("res.partner", [partnerId], { tz: "America/Argentina/Buenos_Aires" });
+        }
+      } catch (error) {
+        logger.warn({ error }, "[ConfirmarPagoCompleto] Could not set partner timezone");
+      }
     }
 
     // =========================================================================
