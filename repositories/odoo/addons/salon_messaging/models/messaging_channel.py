@@ -19,8 +19,17 @@ class DiscussChannel(models.Model):
         """Override to detect manual replies in Telegram channels."""
         message = super().message_post(**kwargs)
 
-        # Only trigger for Telegram channels, and only when NOT called from our API
-        if self.is_telegram and not self.env.context.get('from_telegram_api'):
+        # Only forward if ALL conditions met:
+        # 1. Telegram channel
+        # 2. NOT called from our API (context flag)
+        # 3. Author is a real user, NOT a tg: partner or system
+        # 4. Has actual body content (not a system notification)
+        if (self.is_telegram
+                and not self.env.context.get('from_telegram_api')
+                and message.body
+                and message.author_id
+                and not (message.author_id.ref or '').startswith('tg:')
+                and message.message_type == 'comment'):
             self._forward_manual_reply(message)
 
         return message
