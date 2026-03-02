@@ -978,7 +978,7 @@ export class ConfirmarPagoCompletoTool
     const servicioLabels: Record<string, string> = {
       corte_mujer: "Corte mujer",
       alisado_brasileno: "Alisado brasileño",
-      alisado_keratina: "Alisado con keratina",
+      alisado_keratina: "Alisado keratina",
       mechas_completas: "Mechas completas",
       tintura_raiz: "Tintura raíz",
       tintura_completa: "Tintura completa",
@@ -997,14 +997,14 @@ export class ConfirmarPagoCompletoTool
 
   /**
    * Reverse lookup: nombre display → código Odoo.
-   * Ej: "Alisado con keratina" → "alisado_keratina"
+   * Ej: "Alisado keratina" → "alisado_keratina"
    */
   private findServicioCode(displayName: string): string | null {
     const normalized = displayName.toLowerCase().trim();
     const servicioLabels: Record<string, string> = {
       corte_mujer: "corte mujer",
       alisado_brasileno: "alisado brasileño",
-      alisado_keratina: "alisado con keratina",
+      alisado_keratina: "alisado keratina",
       mechas_completas: "mechas completas",
       tintura_raiz: "tintura raíz",
       tintura_completa: "tintura completa",
