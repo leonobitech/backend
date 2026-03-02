@@ -1,9 +1,12 @@
 import logging
+import re
 import threading
 import requests as http_requests
 from odoo import models, fields, api
 
 _logger = logging.getLogger(__name__)
+
+TELEGRAM_API_URL = 'https://api.telegram.org/bot{token}/sendMessage'
 
 
 class DiscussChannel(models.Model):
@@ -35,32 +38,39 @@ class DiscussChannel(models.Model):
         return message
 
     def _forward_manual_reply(self, message):
-        """Send manual reply to n8n webhook so it forwards to Telegram."""
-        webhook_url = self.env['ir.config_parameter'].sudo().get_param(
-            'salon_messaging.n8n_webhook_url'
+        """Send manual reply directly to Telegram via Bot API."""
+        bot_token = self.env['ir.config_parameter'].sudo().get_param(
+            'salon_messaging.telegram_bot_token'
         )
-        if not webhook_url:
-            _logger.warning('salon_messaging.n8n_webhook_url not configured, skipping forward')
+        if not bot_token:
+            _logger.warning('salon_messaging.telegram_bot_token not configured, skipping forward')
             return
 
+        # Strip HTML tags from Odoo message body
+        plain_text = re.sub(r'<[^>]*>', '', message.body or '')
+        plain_text = plain_text.replace('&nbsp;', ' ').replace('&amp;', '&')
+        plain_text = plain_text.replace('&lt;', '<').replace('&gt;', '>').strip()
+
+        if not plain_text:
+            return
+
+        chat_id = self.telegram_chat_id
+        url = TELEGRAM_API_URL.format(token=bot_token)
         payload = {
-            'type': 'manual_reply',
-            'telegram_chat_id': self.telegram_chat_id,
-            'message': message.body or '',
-            'channel_id': self.id,
-            'author_name': message.author_id.name if message.author_id else 'Unknown',
+            'chat_id': chat_id,
+            'text': plain_text,
         }
 
         # Fire-and-forget in a thread to avoid blocking the UI
         def _send():
             try:
-                resp = http_requests.post(webhook_url, json=payload, timeout=10)
+                resp = http_requests.post(url, json=payload, timeout=10)
                 _logger.info(
-                    'Manual reply forwarded to n8n: channel=%s, status=%s',
-                    self.id, resp.status_code
+                    'Manual reply sent to Telegram: channel=%s, chat_id=%s, status=%s',
+                    self.id, chat_id, resp.status_code
                 )
             except Exception as e:
-                _logger.error('Failed to forward manual reply to n8n: %s', e)
+                _logger.error('Failed to send manual reply to Telegram: %s', e)
 
         thread = threading.Thread(target=_send)
         thread.daemon = True
