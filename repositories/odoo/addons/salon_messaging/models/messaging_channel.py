@@ -83,6 +83,12 @@ class DiscussChannel(models.Model):
                 'telegram_first_name': name,
                 'is_telegram': True,
             })
+            # Add all internal users as channel members so they see it in Discuss
+            internal_partners = self.env['res.users'].sudo().search([
+                ('share', '=', False),
+            ]).mapped('partner_id')
+            if internal_partners:
+                channel.add_members(internal_partners.ids)
             _logger.info('Created Telegram channel %s for chat_id %s', channel.id, chat_id)
 
         return channel
