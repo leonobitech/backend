@@ -35,24 +35,6 @@ http:
           - "clientKey"
           - "clientMeta"
 
-    # -------------------------------------------------------------------------
-    # 🔐 User Auth – delegates to Core but only requires authenticated user (not admin)
-    # -------------------------------------------------------------------------
-    user-auth:
-      forwardAuth:
-        address: "https://core.leonobitech.com/security/verify-user"
-        trustForwardHeader: true
-        authRequestHeaders:
-          - "Cookie"
-          - "X-Forwarded-For"
-        authResponseHeaders:
-          - "X-User-Id"
-          - "X-User-Role"
-        addAuthCookiesToResponse:
-          - "accessKey"
-          - "clientKey"
-          - "clientMeta"
-
     # 🔒 APIs: sin cache + aisladas por sesión
     api-nostore-vary:
       headers:

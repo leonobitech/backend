@@ -40,9 +40,7 @@ export default function cleanCookies(
   const rawCookies = req.headers.cookie?.split(";") || [];
 
   // Agregamos extras si estamos en cualquier ruta ForwardAuth
-  const isForwardAuth =
-    req.path === "/security/verify-admin" ||
-    req.path === "/security/verify-user";
+  const isForwardAuth = req.path === "/security/verify-admin";
   const allowedCookies = isForwardAuth
     ? [...baseAllowedCookies, ...forwardAuthExtras]
     : baseAllowedCookies;
