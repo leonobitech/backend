@@ -1,6 +1,6 @@
 import json
 import logging
-from odoo import http
+from odoo import http, SUPERUSER_ID
 from odoo.http import request, Response
 
 _logger = logging.getLogger(__name__)
@@ -57,7 +57,9 @@ class SalonMessagingAPI(http.Controller):
             if not chat_id:
                 return {'success': False, 'error': 'chat_id is required'}
 
-            ChannelModel = request.env['discuss.channel'].sudo()
+            # Use SUPERUSER env so message_post has a valid env.user
+            env = request.env(user=SUPERUSER_ID)
+            ChannelModel = env['discuss.channel']
 
             # Get or create channel
             channel = ChannelModel.get_or_create_telegram_channel(
@@ -69,7 +71,7 @@ class SalonMessagingAPI(http.Controller):
 
             # Link to CRM lead if provided
             if lead_id and not channel.lead_id:
-                lead = request.env['crm.lead'].sudo().browse(int(lead_id))
+                lead = env['crm.lead'].browse(int(lead_id))
                 if lead.exists():
                     channel.lead_id = lead.id
 
@@ -118,9 +120,10 @@ class SalonMessagingAPI(http.Controller):
             if not chat_id:
                 return {'success': False, 'error': 'chat_id is required'}
 
-            ChannelModel = request.env['discuss.channel'].sudo()
+            env = request.env(user=SUPERUSER_ID)
+            ChannelModel = env['discuss.channel']
 
-            channel = ChannelModel.sudo().search([
+            channel = ChannelModel.search([
                 ('telegram_chat_id', '=', str(chat_id)),
                 ('is_telegram', '=', True),
             ], limit=1)
@@ -150,7 +153,7 @@ class SalonMessagingAPI(http.Controller):
 
     def _get_bot_partner(self):
         """Get or create the bot partner used as author for bot messages."""
-        Partner = request.env['res.partner'].sudo()
+        Partner = request.env(user=SUPERUSER_ID)['res.partner']
         bot = Partner.search([('ref', '=', 'tg:leraysi_bot')], limit=1)
         if not bot:
             bot = Partner.create({
@@ -176,7 +179,7 @@ class SalonMessagingAPI(http.Controller):
         if not self._check_api_key():
             return self._json_response({'success': False, 'error': 'Invalid API key'}, 403)
 
-        channels = request.env['discuss.channel'].sudo().search([
+        channels = request.env(user=SUPERUSER_ID)['discuss.channel'].search([
             ('is_telegram', '=', True),
         ])
 
