@@ -42,7 +42,7 @@ class SalonMessagingAPI(http.Controller):
     # ─────────────────────────────────────────────
     @http.route(
         '/salon_messaging/receive',
-        type='json',
+        type='jsonrpc',
         auth='none',
         methods=['POST'],
         csrf=False,
@@ -129,7 +129,7 @@ class SalonMessagingAPI(http.Controller):
     # ─────────────────────────────────────────────
     @http.route(
         '/salon_messaging/bot_response',
-        type='json',
+        type='jsonrpc',
         auth='none',
         methods=['POST'],
         csrf=False,
