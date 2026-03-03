@@ -5,24 +5,24 @@
 const leadId = $("UpdateLeadWithLead_Id").first().json.lead_id || 0;
 
 // ── Mensaje de bienvenida ──
-const welcome = `⋆˚🧚‍♀️Leraysi:
-Hola hermosa! Bienvenida a *Estilos Leraysi* ✨
+const welcome = `
+¡Hola hermosa! 🦋
 
-Soy la asistente virtual de Leraysi y estoy aquí para que agendar tu cita sea fácil y rápido, mi amor 💕
+Bienvenida a *Estilos Leraysi* ⋆˚🧚‍♀️
 
-Preguntame lo que necesites, estoy disponible 24/7 para ti ✅
+Los Creadores de tu Propio Estilo ✨
 
-_Estilos Leraysi — Los Creadores de tu Propio Estilo_ 💫`;
+En qué te puedo ayudar, mi amor? 💕`;
 
 // Telegram (sin * bold)
-const contentTelegram = welcome.replace(/\*(.+?)\*/g, '$1');
+const contentTelegram = welcome.replace(/\*(.+?)\*/g, "$1");
 
 // HTML para Odoo Discuss
-const htmlBody = `<p><b>Leraysi⋆˚🧚‍♀️:</b></p>
-<p>Hola hermosa! Bienvenida a <b>Estilos Leraysi</b> ✨</p>
-<p>Soy la asistente virtual de Leraysi y estoy aquí para que agendar tu cita sea fácil y rápido, mi amor 💕</p>
-<p>Preguntame lo que necesites, estoy disponible 24/7 para ti ✅</p>
-<p><i>Estilos Leraysi — Los Creadores de tu Propio Estilo</i> 💫</p>`;
+const htmlBody = `
+<p>¡Hola hermosa! 🦋</p>
+<p>Bienvenida a <strong>Estilos Leraysi</strong> ⋆˚🧚‍♀️</p>
+<p>Los Creadores de tu Propio Estilo ✨</p>
+<p>En qué te puedo ayudar, mi amor? 💕</p>`;
 
 return [
   {
