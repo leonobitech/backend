@@ -342,11 +342,31 @@ function sanitizeText(str, maxLength = 3500) {
 
 const whatsappContent = sanitizeText(contentWhatsapp);
 
-// Telegram: sin *bold* ni _italic_ (parse mode None), bullets * → •
-const contentTelegram = whatsappContent
-  .replace(/\*(.+?)\*/g, '$1')
-  .replace(/_(.+?)_/g, '$1')
-  .replace(/^\* /gm, '• ');
+// Telegram: HTML parse_mode — formato seguro sin riesgo de "can't parse entities"
+// Telegram soporta: <b>, <strong>, <i>, <em>, <a href="">, <code>, <pre>
+// NO soporta: <p>, <br>, <h1> — usa \n para saltos de línea
+function whatsappToTelegramHtml(text) {
+  if (!text) return "";
+  let html = escapeHtml(text);
+  // [texto](url) → <a href="url">texto</a>
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  // **bold** → <b>bold</b>
+  html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  // *bold* → <b>bold</b> (formato WhatsApp)
+  html = html.replace(/\*(.+?)\*/g, '<b>$1</b>');
+  // _italic_ → <i>italic</i> (no tocar URLs con underscores)
+  html = html.replace(/(?<=\s|^)_([^_]+)_(?=\s|$|[.,!?])/g, '<i>$1</i>');
+  // ```code``` → <pre>code</pre>
+  html = html.replace(/`{3}([\s\S]*?)`{3}/g, '<pre>$1</pre>');
+  // `inline` → <code>inline</code>
+  html = html.replace(/`(.+?)`/g, '<code>$1</code>');
+  // * bullet al inicio de línea → •
+  html = html.replace(/^\* /gm, '• ');
+  // ### headers → bold
+  html = html.replace(/^#+\s*(.+)$/gm, '<b>$1</b>');
+  return html;
+}
+const contentTelegram = whatsappToTelegramHtml(whatsappContent);
 
 // Odoo Discuss: convertir formato WhatsApp → HTML (Odoo usa <p> por párrafo)
 function whatsappToHtml(text) {
@@ -355,8 +375,14 @@ function whatsappToHtml(text) {
   const paragraphs = text.split(/\n\n+/);
   return paragraphs.map(p => {
     let html = escapeHtml(p);
+    // [texto](url) → <a href="url">texto</a>
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
     // **bold** → <b>bold</b>
     html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    // *bold* → <strong>bold</strong> (formato WhatsApp)
+    html = html.replace(/\*(.+?)\*/g, '<strong>$1</strong>');
+    // _italic_ → <em>italic</em>
+    html = html.replace(/(?<=\s|^)_([^_]+)_(?=\s|$|[.,!?])/g, '<em>$1</em>');
     // * bullet al inicio de línea → • bullet
     html = html.replace(/^\* /gm, '• ');
     // saltos de línea simples → <br>
