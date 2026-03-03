@@ -342,8 +342,11 @@ function sanitizeText(str, maxLength = 3500) {
 
 const whatsappContent = sanitizeText(contentWhatsapp);
 
-// Telegram: reemplazar bullets * → • (parse mode None)
-const contentTelegram = whatsappContent.replace(/^\* /gm, '• ');
+// Telegram: sin *bold* ni _italic_ (parse mode None), bullets * → •
+const contentTelegram = whatsappContent
+  .replace(/\*(.+?)\*/g, '$1')
+  .replace(/_(.+?)_/g, '$1')
+  .replace(/^\* /gm, '• ');
 
 // Odoo Discuss: convertir formato WhatsApp → HTML (Odoo usa <p> por párrafo)
 function whatsappToHtml(text) {
