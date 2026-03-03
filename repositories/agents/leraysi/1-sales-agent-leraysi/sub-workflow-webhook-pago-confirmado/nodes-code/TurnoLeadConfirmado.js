@@ -339,20 +339,41 @@ if (lead.image_analysis) {
 }
 
 // ============================================================================
+// MULTI-CHANNEL OUTPUT
+// ============================================================================
+
+// Telegram: sin *bold* ni _italic_ (parse mode None)
+const contentTelegram = mensajeContent
+  .replace(/\*(.+?)\*/g, '$1')
+  .replace(/_(.+?)_/g, '$1');
+
+// HTML para Odoo Discuss/Chatter: *bold* → <b>, _italic_ → <i>
+const bodyHtml = '<p>' + mensajeContent
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/\*(.+?)\*/g, '<b>$1</b>')
+  .replace(/_(.+?)_/g, '<i>$1</i>')
+  .replace(/\n/g, '<br>') + '</p>';
+
+// ============================================================================
 // OUTPUT
 // ============================================================================
 
 return [{
   json: {
-    // Mensaje para WhatsApp/Chatwoot
+    // Mensaje para WhatsApp (con *bold* markdown)
     content_whatsapp: {
       content: mensajeContent,
       message_type: 'outgoing',
       content_type: 'text'
     },
 
-    // HTML para Odoo chatter
-    body_html: `<p>${mensajeContent.replace(/\n/g, '<br>')}</p>`,
+    // Telegram (plain text, sin markdown)
+    content_telegram: contentTelegram,
+
+    // HTML para Odoo Discuss/Chatter
+    body_html: bodyHtml,
 
     // IDs importantes
     lead_id: parseInt(lead.lead_id),
