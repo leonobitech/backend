@@ -75,6 +75,8 @@ class SalonMessagingAPI(http.Controller):
                 lead = env['crm.lead'].browse(int(lead_id))
                 if lead.exists():
                     channel.lead_id = lead.id
+                    if not lead.partner_id:
+                        lead.partner_id = partner.id
 
             # Post message to Discuss channel (with context flag to skip webhook loop)
             # Markup() tells Odoo the body is safe HTML (prevents auto-escaping)
