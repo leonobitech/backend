@@ -34,6 +34,9 @@ export class ConsultarTurnosDiaTool
     if (params.estado && params.estado !== "todos") {
       domain.push(["estado", "=", params.estado]);
     }
+    if (params.trabajadora) {
+      domain.push(["trabajadora", "=", params.trabajadora]);
+    }
 
     const turnos = await this.odooClient.search("salon.turno", domain, {
       fields: [
@@ -45,6 +48,7 @@ export class ConsultarTurnosDiaTool
         "duracion",
         "precio",
         "sena_pagada",
+        "trabajadora",
         "estado",
       ],
       order: "fecha_hora asc",
@@ -72,6 +76,7 @@ export class ConsultarTurnosDiaTool
         duracion: turno.duracion,
         precio: turno.precio,
         sena_pagada: turno.sena_pagada,
+        trabajadora: turno.trabajadora || "leraysi",
         estado: turno.estado,
       };
     });
@@ -121,6 +126,11 @@ export class ConsultarTurnosDiaTool
             ],
             description:
               "Filtrar por estado específico. Default: todos los estados.",
+          },
+          trabajadora: {
+            type: "string",
+            enum: ["leraysi", "companera"],
+            description: "Filtrar por trabajadora específica (opcional)",
           },
         },
         required: ["fecha"],

@@ -182,6 +182,17 @@ class SalonTurno(models.Model):
         help='Nivel de complejidad del turno (determina capacidad del salón)',
     )
 
+    # Trabajadora
+    trabajadora = fields.Selection(
+        selection=[
+            ('leraysi', 'Leraysi'),
+            ('companera', 'Compañera'),
+        ],
+        string='Trabajadora',
+        default='leraysi',
+        tracking=True,
+    )
+
     # Cambios pendientes (staging para agregar servicio - separación de responsabilidades)
     pending_changes = fields.Text(
         string='Cambios Pendientes',
@@ -406,6 +417,10 @@ class SalonTurno(models.Model):
         if data.get('complejidad_maxima'):
             turno_vals['complejidad_maxima'] = data['complejidad_maxima']
 
+        # Agregar trabajadora si se proporciona
+        if data.get('trabajadora'):
+            turno_vals['trabajadora'] = data['trabajadora']
+
         turno = self.create(turno_vals)
 
         # Generar link de pago si se solicita
@@ -449,6 +464,8 @@ class SalonTurno(models.Model):
                 domain.append(('estado', '=', filtros['estado']))
             if filtros.get('servicio'):
                 domain.append(('servicio', '=', filtros['servicio']))
+            if filtros.get('trabajadora'):
+                domain.append(('trabajadora', '=', filtros['trabajadora']))
 
         turnos = self.search(domain, order='fecha_hora desc', limit=100)
         return [turno._to_dict() for turno in turnos]
@@ -620,6 +637,7 @@ class SalonTurno(models.Model):
             } for p in self.pago_ids],
             'odoo_event_id': self.odoo_event_id,
             'complejidad_maxima': self.complejidad_maxima,
+            'trabajadora': self.trabajadora,
             'estado': self.estado,
             'notas': self.notas,
             'create_date': self.create_date.isoformat() if self.create_date else None,

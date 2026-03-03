@@ -29,12 +29,17 @@ export class ConsultarDisponibilidadTool
     const fechaInicio = `${params.fecha} 00:00:00`;
     const fechaFin = `${params.fecha} 23:59:59`;
 
-    const turnos = await this.odooClient.search("salon.turno", [
+    const domain: any[] = [
       ["fecha_hora", ">=", fechaInicio],
       ["fecha_hora", "<=", fechaFin],
       ["estado", "!=", "cancelado"],
-    ], {
-      fields: ["id", "clienta", "servicio", "fecha_hora", "fecha_fin", "duracion"],
+    ];
+    if (params.trabajadora) {
+      domain.push(["trabajadora", "=", params.trabajadora]);
+    }
+
+    const turnos = await this.odooClient.search("salon.turno", domain, {
+      fields: ["id", "clienta", "servicio", "fecha_hora", "fecha_fin", "duracion", "trabajadora"],
       order: "fecha_hora asc",
     });
 
@@ -58,6 +63,7 @@ export class ConsultarDisponibilidadTool
         hora_fin: horaFin,
         servicio: turno.servicio,
         clienta: turno.clienta,
+        trabajadora: turno.trabajadora || "leraysi",
       };
     });
 
@@ -171,6 +177,11 @@ export class ConsultarDisponibilidadTool
             type: "number",
             description:
               "Duración del servicio en horas para verificar disponibilidad (default: 1)",
+          },
+          trabajadora: {
+            type: "string",
+            enum: ["leraysi", "companera"],
+            description: "Filtrar disponibilidad por trabajadora específica (opcional, sin filtro muestra todos)",
           },
         },
         required: ["fecha"],

@@ -33,6 +33,7 @@ export const crearTurnoSchema = z.object({
   lead_id: z.number().positive("ID del Lead es requerido para vincular el turno"),
 
   // === Campos opcionales ===
+  trabajadora: z.enum(["leraysi", "companera"]).optional().default("leraysi"),
   notas: z.string().optional(),
   es_turno_adicional: z.boolean().optional(),
 });
@@ -50,6 +51,7 @@ export interface CrearTurnoResponse {
   sena: number;
   link_pago: string;
   mp_preference_id: string;
+  trabajadora: string;
   estado: string;
   message: string;
 }

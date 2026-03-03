@@ -141,6 +141,7 @@ export class CrearTurnoLeraysiTool
       complejidad_maxima: complejidadFinal,
       monto_pago_pendiente: senaInicial, // Monto real a cobrar (usado por action_generar_link_pago)
       lead_id: params.lead_id,
+      trabajadora: params.trabajadora || "leraysi",
       estado: "pendiente_pago",
     };
 
@@ -266,6 +267,7 @@ export class CrearTurnoLeraysiTool
       precio: params.precio,
       duracion_estimada: params.duracion_estimada,
       complejidad_maxima: complejidadFinal,
+      trabajadora: params.trabajadora || "leraysi",
       sena,
       link_pago: linkPago,
       mp_preference_id: mpPreferenceId,
@@ -499,6 +501,11 @@ export class CrearTurnoLeraysiTool
           lead_id: {
             type: "number",
             description: "ID del Lead en CRM (crítico para flujo post-pago)",
+          },
+          trabajadora: {
+            type: "string",
+            enum: ["leraysi", "companera"],
+            description: "Trabajadora asignada al turno (default: leraysi)",
           },
           notas: {
             type: "string",

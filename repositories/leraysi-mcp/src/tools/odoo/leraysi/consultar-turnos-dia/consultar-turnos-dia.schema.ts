@@ -12,6 +12,7 @@ export const consultarTurnosDiaSchema = z.object({
     "cancelado",
     "todos",
   ]).optional().default("todos"),
+  trabajadora: z.enum(["leraysi", "companera"]).optional(),
 });
 
 export type ConsultarTurnosDiaInput = z.infer<typeof consultarTurnosDiaSchema>;
@@ -25,6 +26,7 @@ export interface TurnoResumen {
   duracion: number;
   precio: number;
   sena_pagada: boolean;
+  trabajadora: string;
   estado: string;
 }
 

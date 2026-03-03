@@ -171,6 +171,8 @@ class SalonTurnosAPI(http.Controller):
                 filtros['estado'] = kwargs['estado']
             if kwargs.get('servicio'):
                 filtros['servicio'] = kwargs['servicio']
+            if kwargs.get('trabajadora'):
+                filtros['trabajadora'] = kwargs['trabajadora']
 
             turno_model = request.env['salon.turno'].sudo()
             turnos = turno_model.api_buscar_turnos(filtros)
@@ -281,11 +283,14 @@ class SalonTurnosAPI(http.Controller):
 
             # Buscar turnos del día (no cancelados)
             turno_model = request.env['salon.turno'].sudo()
-            turnos = turno_model.search([
+            domain = [
                 ('fecha_hora', '>=', datetime.combine(fecha, time(0, 0))),
                 ('fecha_hora', '<', datetime.combine(fecha + timedelta(days=1), time(0, 0))),
                 ('estado', '!=', 'cancelado'),
-            ])
+            ]
+            if kwargs.get('trabajadora'):
+                domain.append(('trabajadora', '=', kwargs['trabajadora']))
+            turnos = turno_model.search(domain)
 
             turnos_ocupados = []
             for turno in turnos:
@@ -294,6 +299,7 @@ class SalonTurnosAPI(http.Controller):
                     'hora_fin': turno.fecha_fin.strftime('%H:%M') if turno.fecha_fin else None,
                     'servicio': turno.servicio,
                     'clienta': turno.clienta,
+                    'trabajadora': turno.trabajadora,
                 })
 
             # Calcular horarios disponibles (9:00 - 19:00)

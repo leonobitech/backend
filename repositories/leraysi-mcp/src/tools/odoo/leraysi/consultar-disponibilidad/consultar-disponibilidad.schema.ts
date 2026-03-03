@@ -6,6 +6,7 @@ export const consultarDisponibilidadSchema = z.object({
     "Formato de fecha inválido. Use: YYYY-MM-DD"
   ),
   duracion: z.number().positive().optional().default(1),
+  trabajadora: z.enum(["leraysi", "companera"]).optional(),
 });
 
 export type ConsultarDisponibilidadInput = z.infer<typeof consultarDisponibilidadSchema>;
@@ -15,6 +16,7 @@ export interface TurnoOcupado {
   hora_fin: string;
   servicio: string;
   clienta: string;
+  trabajadora: string;
 }
 
 export interface ConsultarDisponibilidadResponse {
