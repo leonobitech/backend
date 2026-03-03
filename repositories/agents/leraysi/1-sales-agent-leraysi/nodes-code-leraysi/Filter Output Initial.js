@@ -1,45 +1,34 @@
-const input = $input.first().json;
+// ============================================================================
+// Filter Output Initial — Mensaje de Bienvenida Hardcodeado
+// ============================================================================
 
-const output = input.output || "";
 const leadId = $("UpdateLeadWithLead_Id").first().json.lead_id || 0;
 
-// Texto plano para WhatsApp
-let plainText = output.replace(/\\n/g, "\n");
-plainText = plainText.replace(/\*\*(.*?)\*\*/g, "*$1*");
-plainText = plainText.replace(/\n\* /g, "\n• ");
-plainText = plainText.trim();
-plainText = `⋆˚🧚‍♀️Leraysi:\n${plainText}`;
+// ── Mensaje de bienvenida ──
+const welcome = `⋆˚🧚‍♀️Leraysi:
+Hola hermosa! Bienvenida a *Estilos Leraysi* ✨
 
-// Telegram: sin * como bullets (parse mode None)
-const contentTelegram = plainText.replace(/^\* /gm, '• ');
+Soy la asistente virtual de Leraysi y estoy aquí para que agendar tu cita sea fácil y rápido, mi amor 💕
 
-// HTML para Odoo Discuss (párrafos separados + bold + bullets)
-function escapeHtml(str) {
-  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+Preguntame lo que necesites, estoy disponible 24/7 para ti ✅
 
-function whatsappToHtml(text) {
-  if (!text) return "";
-  const paragraphs = text.split(/\n\n+/);
-  return paragraphs.map(p => {
-    let html = escapeHtml(p);
-    html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-    html = html.replace(/\*(.+?)\*/g, '<b>$1</b>');
-    html = html.replace(/^\• /gm, '• ');
-    html = html.replace(/\n/g, '<br>');
-    return `<p>${html}</p>`;
-  }).join('');
-}
+_Estilos Leraysi — Los Creadores de tu Propio Estilo_ 💫`;
 
-const prefix = `<p><b>Leraysi⋆˚🧚‍♀️:</b></p>`;
-const bodyContent = output.replace(/\\n/g, "\n").trim();
-const htmlBody = prefix + whatsappToHtml(bodyContent);
+// Telegram (sin * bold)
+const contentTelegram = welcome.replace(/\*(.+?)\*/g, '$1');
+
+// HTML para Odoo Discuss
+const htmlBody = `<p><b>Leraysi⋆˚🧚‍♀️:</b></p>
+<p>Hola hermosa! Bienvenida a <b>Estilos Leraysi</b> ✨</p>
+<p>Soy la asistente virtual de Leraysi y estoy aquí para que agendar tu cita sea fácil y rápido, mi amor 💕</p>
+<p>Preguntame lo que necesites, estoy disponible 24/7 para ti ✅</p>
+<p><i>Estilos Leraysi — Los Creadores de tu Propio Estilo</i> 💫</p>`;
 
 return [
   {
     json: {
       body_html: htmlBody,
-      content_whatsapp: plainText,
+      content_whatsapp: welcome,
       content_telegram: contentTelegram,
       lead_id: leadId,
     },
