@@ -168,6 +168,42 @@ class SalonMessagingAPI(http.Controller):
         return bot
 
     # ─────────────────────────────────────────────
+    # POST /salon_messaging/lead_partner
+    # n8n gets partner_id linked to a CRM lead
+    # ─────────────────────────────────────────────
+    @http.route(
+        '/salon_messaging/lead_partner',
+        type='jsonrpc',
+        auth='none',
+        methods=['POST'],
+        csrf=False,
+    )
+    def lead_partner(self, lead_id=None, **kwargs):
+        """Return the partner_id linked to a CRM lead."""
+        if not self._check_api_key():
+            return {'success': False, 'error': 'Invalid API key'}
+
+        try:
+            if not lead_id:
+                return {'success': False, 'error': 'lead_id is required'}
+
+            env = request.env(user=SUPERUSER_ID)
+            lead = env['crm.lead'].browse(int(lead_id))
+            if not lead.exists():
+                return {'success': False, 'error': f'Lead {lead_id} not found'}
+
+            return {
+                'success': True,
+                'lead_id': lead.id,
+                'partner_id': lead.partner_id.id if lead.partner_id else None,
+                'partner_name': lead.partner_id.name if lead.partner_id else None,
+            }
+
+        except Exception as e:
+            _logger.error('Error getting lead partner: %s', e)
+            return {'success': False, 'error': str(e)}
+
+    # ─────────────────────────────────────────────
     # GET /salon_messaging/channels
     # Debug: list active Telegram channels
     # ─────────────────────────────────────────────
