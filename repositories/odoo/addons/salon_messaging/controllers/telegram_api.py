@@ -1,5 +1,6 @@
 import json
 import logging
+from markupsafe import Markup
 from odoo import http, SUPERUSER_ID
 from odoo.http import request, Response
 
@@ -76,8 +77,9 @@ class SalonMessagingAPI(http.Controller):
                     channel.lead_id = lead.id
 
             # Post message to Discuss channel (with context flag to skip webhook loop)
+            # Markup() tells Odoo the body is safe HTML (prevents auto-escaping)
             message = channel.with_context(from_telegram_api=True).message_post(
-                body=text,
+                body=Markup(text),
                 author_id=partner.id,
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment',
@@ -135,7 +137,7 @@ class SalonMessagingAPI(http.Controller):
             bot_partner = self._get_bot_partner()
 
             message = channel.with_context(from_telegram_api=True).message_post(
-                body=text,
+                body=Markup(text),
                 author_id=bot_partner.id,
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment',

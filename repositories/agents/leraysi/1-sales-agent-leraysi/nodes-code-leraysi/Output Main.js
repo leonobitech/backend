@@ -1,11 +1,11 @@
 // ============================================================================
-// OUTPUT MAIN LERAYSI v3.2 - Simplificado (pagos van a TurnosLeraysi, no aquí)
+// OUTPUT MAIN LERAYSI v3.3 - Multi-canal (WhatsApp + Telegram + Odoo Discuss)
 // ============================================================================
 // Recibe: LLM output (content_whatsapp + state_patch) + state original
-// Output: Mensaje para Chatwoot + Update para Baserow
+// Output: Mensaje para WhatsApp/Telegram/Discuss + Update para Baserow
 // ============================================================================
 
-console.log("[OutputMain v3.2] Starting...");
+console.log("[OutputMain v3.3] Starting...");
 
 // ============================================================================
 // 1. OBTENER STATE ORIGINAL (desde Input Main, pasado por el workflow)
@@ -25,7 +25,7 @@ if (!originalState) {
   throw new Error("[OutputMain] Missing original state from Input Main");
 }
 
-console.log("[OutputMain v3.2] Original state loaded, row_id:", originalState.row_id);
+console.log("[OutputMain v3.3] Original state loaded, row_id:", originalState.row_id);
 
 // ============================================================================
 // 2. PARSING DEL OUTPUT DEL LLM (ROBUSTO)
@@ -63,7 +63,7 @@ function extractJson(text) {
   try {
     return JSON.parse(text);
   } catch (e) {
-    console.log("[OutputMain v3.2] Parse intento 1 falló");
+    console.log("[OutputMain v3.3] Parse intento 1 falló");
   }
 
   // Intento 2: Limpiar y parsear
@@ -71,7 +71,7 @@ function extractJson(text) {
   try {
     return JSON.parse(cleaned);
   } catch (e) {
-    console.log("[OutputMain v3.2] Parse intento 2 falló");
+    console.log("[OutputMain v3.3] Parse intento 2 falló");
   }
 
   // Intento 3: Extraer primer JSON completo (bracket-counting)
@@ -96,7 +96,7 @@ function extractJson(text) {
       try {
         return JSON.parse(matched);
       } catch (e) {
-        console.log("[OutputMain v3.2] Parse intento 3 falló");
+        console.log("[OutputMain v3.3] Parse intento 3 falló");
       }
     }
   }
@@ -106,7 +106,7 @@ function extractJson(text) {
 
 if (llmData.output) {
   llmOutput = extractJson(llmData.output);
-  console.log("[OutputMain v3.2] ✅ LLM JSON parsed");
+  console.log("[OutputMain v3.3] ✅ LLM JSON parsed");
 } else {
   llmOutput = llmData;
 }
@@ -122,7 +122,7 @@ let statePatch = llmOutput.state_patch || {};
 // Caso típico: el LLM escribió el texto directo con state_patch pegado al final
 // Raw luce así: "texto...💕", "state_patch": {"stage": "presupuesto"}}
 if (!contentWhatsapp && llmData.output) {
-  console.log("[OutputMain v3.2] ⚠️ Recovery: content_whatsapp faltante, reconstruyendo...");
+  console.log("[OutputMain v3.3] ⚠️ Recovery: content_whatsapp faltante, reconstruyendo...");
   const raw = String(llmData.output);
   const spMarker = '"state_patch"';
   const spIdx = raw.lastIndexOf(spMarker);
@@ -143,12 +143,12 @@ if (!contentWhatsapp && llmData.output) {
         statePatch = llmOutput;
       }
 
-      console.log("[OutputMain v3.2] ✅ Recovery exitoso, content length:", recovered.length);
+      console.log("[OutputMain v3.3] ✅ Recovery exitoso, content length:", recovered.length);
     }
   } else if (raw.trim()) {
     // No hay state_patch en el texto → usar todo como contenido
     contentWhatsapp = raw.replace(/\\n/g, '\n').trim();
-    console.log("[OutputMain v3.2] 🔧 Recovery: usando raw output completo como content");
+    console.log("[OutputMain v3.3] 🔧 Recovery: usando raw output completo como content");
   }
 }
 
@@ -156,7 +156,7 @@ if (!contentWhatsapp) {
   throw new Error("[OutputMain] Missing content_whatsapp from LLM");
 }
 
-console.log("[OutputMain v3.2] state_patch keys:", Object.keys(statePatch));
+console.log("[OutputMain v3.3] state_patch keys:", Object.keys(statePatch));
 
 // ============================================================================
 // 4. APLICAR PATCH AL STATE (protegiendo campos)
@@ -173,7 +173,7 @@ if (statePatch.stage && !STAGES_VALIDOS.includes(statePatch.stage)) {
   } else {
     delete statePatch.stage;
   }
-  console.log(`[OutputMain v3.2] 🛡️ Stage inválido "${stageOriginal}" → ${statePatch.stage || '(eliminado)'}`);
+  console.log(`[OutputMain v3.3] 🛡️ Stage inválido "${stageOriginal}" → ${statePatch.stage || '(eliminado)'}`);
 }
 
 const mergedState = { ...originalState };
@@ -185,7 +185,7 @@ const mergedState = { ...originalState };
 // consultas de disponibilidad para reprogramación.
 const turnoConfirmadoPagado = originalState.turno_agendado === true && originalState.sena_pagada === true;
 if (turnoConfirmadoPagado && statePatch.stage && statePatch.stage !== "turno_confirmado") {
-  console.log(`[OutputMain v3.2] 🛡️ Protección turno confirmado+pagado: bloqueando stage "${statePatch.stage}" → manteniendo "turno_confirmado"`);
+  console.log(`[OutputMain v3.3] 🛡️ Protección turno confirmado+pagado: bloqueando stage "${statePatch.stage}" → manteniendo "turno_confirmado"`);
   delete statePatch.stage;
 }
 
@@ -193,7 +193,7 @@ if (turnoConfirmadoPagado && statePatch.stage && statePatch.stage !== "turno_con
 // Cuando se agrega un servicio, la LLM envía la fecha/hora nueva antes del pago.
 // Delegamos la actualización de turno_fecha al webhook de pago (TurnoLeadConfirmado).
 if (turnoConfirmadoPagado && statePatch.turno_fecha) {
-  console.log(`[OutputMain v3.2] 🛡️ Protección turno confirmado+pagado: bloqueando turno_fecha "${statePatch.turno_fecha}" → manteniendo original "${originalState.turno_fecha}"`);
+  console.log(`[OutputMain v3.3] 🛡️ Protección turno confirmado+pagado: bloqueando turno_fecha "${statePatch.turno_fecha}" → manteniendo original "${originalState.turno_fecha}"`);
   delete statePatch.turno_fecha;
 }
 
@@ -201,14 +201,14 @@ if (turnoConfirmadoPagado && statePatch.turno_fecha) {
 // Si ya tenemos image_analysis y foto_recibida, el LLM no debería setear waiting_image=true.
 // Esto previene que el bot pida foto de nuevo cuando la clienta pregunta por otro servicio de cabello.
 if (originalState.foto_recibida === true && originalState.image_analysis && statePatch.waiting_image === true) {
-  console.log(`[OutputMain v3.2] 🛡️ Protección foto_recibida: bloqueando waiting_image=true (ya tenemos image_analysis)`);
+  console.log(`[OutputMain v3.3] 🛡️ Protección foto_recibida: bloqueando waiting_image=true (ya tenemos image_analysis)`);
   statePatch.waiting_image = false;
 }
 
 for (const [key, value] of Object.entries(statePatch)) {
   // Saltar campos protegidos
   if (protectedFields.includes(key)) {
-    console.log(`[OutputMain v3.2] ⚠️ Ignorando campo protegido: ${key}`);
+    console.log(`[OutputMain v3.3] ⚠️ Ignorando campo protegido: ${key}`);
     continue;
   }
 
@@ -219,7 +219,7 @@ for (const [key, value] of Object.entries(statePatch)) {
     // Si el patch es mayor, usar el patch (asume que LLM incrementó)
     // Si no, mantener el original
     mergedState[key] = Math.max(currentVal, patchVal);
-    console.log(`[OutputMain v3.2] Contador ${key}: ${currentVal} → ${mergedState[key]}`);
+    console.log(`[OutputMain v3.3] Contador ${key}: ${currentVal} → ${mergedState[key]}`);
     continue;
   }
 
@@ -228,7 +228,7 @@ for (const [key, value] of Object.entries(statePatch)) {
     const currentArr = Array.isArray(mergedState.interests) ? mergedState.interests : [];
     const merged = [...new Set([...currentArr, ...value])];
     mergedState.interests = merged;
-    console.log(`[OutputMain v3.2] Interests merged:`, merged);
+    console.log(`[OutputMain v3.3] Interests merged:`, merged);
     continue;
   }
 
@@ -236,7 +236,7 @@ for (const [key, value] of Object.entries(statePatch)) {
   if ((key === "email_ask_ts" || key === "fullname_ask_ts") && typeof value === 'boolean') {
     if (value === false) {
       // LLM dice "ya no preguntar" → mantener timestamp existente como registro histórico
-      console.log(`[OutputMain v3.2] ${key} → preservado (LLM envió false, manteniendo timestamp original)`);
+      console.log(`[OutputMain v3.3] ${key} → preservado (LLM envió false, manteniendo timestamp original)`);
       continue;
     }
     // value === true → convertir a timestamp
@@ -253,7 +253,7 @@ for (const [key, value] of Object.entries(statePatch)) {
     const seconds = String(argentinaTime.getUTCSeconds()).padStart(2, '0');
     const timestamp = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offset}`;
     mergedState[key] = timestamp;
-    console.log(`[OutputMain v3.2] ${key} convertido a timestamp:`, timestamp);
+    console.log(`[OutputMain v3.3] ${key} convertido a timestamp:`, timestamp);
     continue;
   }
 
@@ -265,11 +265,11 @@ for (const [key, value] of Object.entries(statePatch)) {
 // Cubre tanto LLM enviando waiting_image:true (ya bloqueado arriba) como datos
 // preexistentes en Baserow donde waiting_image quedó true por error.
 if (mergedState.foto_recibida === true && mergedState.image_analysis && mergedState.waiting_image === true) {
-  console.log(`[OutputMain v3.2] 🛡️ Normalización post-merge: waiting_image=true → false (foto_recibida + image_analysis existen)`);
+  console.log(`[OutputMain v3.3] 🛡️ Normalización post-merge: waiting_image=true → false (foto_recibida + image_analysis existen)`);
   mergedState.waiting_image = false;
 }
 
-console.log("[OutputMain v3.2] Merged state:");
+console.log("[OutputMain v3.3] Merged state:");
 console.log("  - stage:", mergedState.stage);
 console.log("  - servicio_interes:", mergedState.servicio_interes);
 console.log("  - waiting_image:", mergedState.waiting_image);
@@ -337,11 +337,32 @@ function sanitizeText(str, maxLength = 3500) {
 }
 
 // ============================================================================
-// 7. CONSTRUIR CONTENIDO HTML
+// 7. CONSTRUIR CONTENIDO MULTI-CANAL (WhatsApp + Telegram + Odoo Discuss)
 // ============================================================================
 
 const whatsappContent = sanitizeText(contentWhatsapp);
-const bodyHtml = `<p>${escapeHtml(whatsappContent)}</p>`;
+
+// Telegram: reemplazar bullets * → • (parse mode None)
+const contentTelegram = whatsappContent.replace(/^\* /gm, '• ');
+
+// Odoo Discuss: convertir formato WhatsApp → HTML (Odoo usa <p> por párrafo)
+function whatsappToHtml(text) {
+  if (!text) return "";
+  // Separar por doble salto de línea → párrafos
+  const paragraphs = text.split(/\n\n+/);
+  return paragraphs.map(p => {
+    let html = escapeHtml(p);
+    // **bold** → <b>bold</b>
+    html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    // * bullet al inicio de línea → • bullet
+    html = html.replace(/^\* /gm, '• ');
+    // saltos de línea simples → <br>
+    html = html.replace(/\n/g, '<br>');
+    return `<p>${html}</p>`;
+  }).join('');
+}
+
+const bodyHtml = whatsappToHtml(whatsappContent);
 
 // ============================================================================
 // 8. CONSTRUIR BASEROW UPDATE (estructura unificada)
@@ -401,7 +422,7 @@ const baserowUpdate = {
     : null,
 };
 
-console.log("[OutputMain v3.2] Notes generado:", baserowUpdate.notes);
+console.log("[OutputMain v3.3] Notes generado:", baserowUpdate.notes);
 
 // ============================================================================
 // 9. OUTPUT FINAL
@@ -413,6 +434,7 @@ const output = {
     message_type: "outgoing",
     content_type: "text",
   },
+  content_telegram: contentTelegram,
   body_html: bodyHtml,
   lead_id: mergedState.lead_id,
   row_id: mergedState.row_id,
@@ -420,11 +442,11 @@ const output = {
   state: mergedState,
   meta: {
     timestamp: new Date().toISOString(),
-    version: "leraysi-output@3.1",
+    version: "leraysi-output@3.3",
     patch_applied: Object.keys(statePatch),
   },
 };
 
-console.log("[OutputMain v3.2] ✅ Done");
+console.log("[OutputMain v3.3] ✅ Done");
 
 return [{ json: output }];
