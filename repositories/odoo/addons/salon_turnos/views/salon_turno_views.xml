@@ -150,33 +150,20 @@
         <field name="name">salon.turno.kanban</field>
         <field name="model">salon.turno</field>
         <field name="arch" type="xml">
-            <kanban default_group_by="trabajadora" class="o_kanban_small_column">
+            <kanban default_group_by="trabajadora">
                 <templates>
                     <t t-name="card">
-                        <div class="d-flex justify-content-between mb-1">
-                            <strong t-out="record.clienta.value"/>
-                            <field name="estado" widget="badge"
-                                decoration-danger="estado == 'cancelado'"
-                                decoration-success="estado == 'confirmado'"
-                                decoration-info="estado == 'completado'"
-                                decoration-warning="estado == 'pendiente_pago'"/>
-                        </div>
-                        <div class="text-muted small mb-1">
-                            <field name="fecha_hora" widget="datetime"/>
-                        </div>
-                        <div class="mb-1">
-                            <field name="servicio"/>
-                        </div>
+                        <field name="clienta" bold="True"/>
+                        <field name="estado" widget="badge"
+                            decoration-danger="estado == 'cancelado'"
+                            decoration-success="estado == 'confirmado'"
+                            decoration-info="estado == 'completado'"
+                            decoration-warning="estado == 'pendiente_pago'"/>
+                        <field name="fecha_hora"/>
+                        <field name="servicio"/>
                         <div class="d-flex justify-content-between">
-                            <span>
-                                <i class="fa fa-clock-o"/> <field name="duracion"/>h
-                            </span>
-                            <strong class="text-success">
-                                $<field name="precio"/>
-                            </strong>
-                        </div>
-                        <div t-if="record.sena_pagada.raw_value" class="text-success small mt-1">
-                            <i class="fa fa-check"/> Seña pagada
+                            <span title="Duración"><field name="duracion"/>h</span>
+                            <strong>$<field name="precio"/></strong>
                         </div>
                     </t>
                 </templates>
