@@ -1,0 +1,130 @@
+{
+  "name": "Leraysi - Setup Test Data",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "setup-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// DATOS DE PRUEBA PARA TurnosPrueba (tabla 870)\n// ============================================================================\n// Ejecutar una sola vez para poblar la tabla con datos fake.\n// Después usar \"Leraysi - Test Disponibilidad\" para correr los tests.\n// ============================================================================\n\nreturn [\n  {\n    json: {\n      descripcion: 'Row 1: Leraysi manicura lunes',\n      fecha: '2026-03-02T00:00:00-03:00',\n      hora: '09:00',\n      trabajadora: 'Leraysi',\n      servicio: 'Manicura simple',\n      duracion_min: 120,\n      complejidad_maxima: 'media',\n      estado: 'pendiente_pago'\n    }\n  },\n  {\n    json: {\n      descripcion: 'Row 2: Leraysi alisado martes (ambas ocupadas)',\n      fecha: '2026-03-03T00:00:00-03:00',\n      hora: '09:00',\n      trabajadora: 'Leraysi',\n      servicio: 'Alisado brasileño',\n      duracion_min: 600,\n      complejidad_maxima: 'muy_compleja',\n      estado: 'pendiente_pago'\n    }\n  },\n  {\n    json: {\n      descripcion: 'Row 3: Compañera balayage martes (ambas ocupadas)',\n      fecha: '2026-03-03T00:00:00-03:00',\n      hora: '09:00',\n      trabajadora: 'Compañera',\n      servicio: 'Balayage',\n      duracion_min: 600,\n      complejidad_maxima: 'muy_compleja',\n      estado: 'pendiente_pago'\n    }\n  },\n  {\n    json: {\n      descripcion: 'Row 4: Leraysi alisado miércoles (ventana proceso libre)',\n      fecha: '2026-03-04T00:00:00-03:00',\n      hora: '09:00',\n      trabajadora: 'Leraysi',\n      servicio: 'Alisado brasileño',\n      duracion_min: 600,\n      complejidad_maxima: 'muy_compleja',\n      estado: 'pendiente_pago'\n    }\n  },\n  {\n    json: {\n      descripcion: 'Row 5: Leraysi alisado jueves (ventana parcial)',\n      fecha: '2026-03-05T00:00:00-03:00',\n      hora: '09:00',\n      trabajadora: 'Leraysi',\n      servicio: 'Alisado brasileño',\n      duracion_min: 600,\n      complejidad_maxima: 'muy_compleja',\n      estado: 'pendiente_pago'\n    }\n  },\n  {\n    json: {\n      descripcion: 'Row 6: Leraysi manicura en ventana proceso jueves',\n      fecha: '2026-03-05T12:00:00-03:00',\n      hora: '12:00',\n      trabajadora: 'Leraysi',\n      servicio: 'Manicura simple',\n      duracion_min: 120,\n      complejidad_maxima: 'media',\n      estado: 'pendiente_pago'\n    }\n  }\n];"
+      },
+      "id": "setup-datos",
+      "name": "GenerarDatos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "databaseId": 212,
+        "tableId": 870,
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": 8697,
+              "fieldValue": "={{ $json.fecha }}"
+            },
+            {
+              "fieldId": 8710,
+              "fieldValue": "={{ $json.hora }}"
+            },
+            {
+              "fieldId": 8721,
+              "fieldValue": "={{ $json.trabajadora }}"
+            },
+            {
+              "fieldId": 8701,
+              "fieldValue": "={{ $json.servicio }}"
+            },
+            {
+              "fieldId": 8703,
+              "fieldValue": "={{ $json.duracion_min }}"
+            },
+            {
+              "fieldId": 8702,
+              "fieldValue": "={{ $json.complejidad_maxima }}"
+            },
+            {
+              "fieldId": 8706,
+              "fieldValue": "={{ $json.estado }}"
+            }
+          ]
+        }
+      },
+      "id": "setup-crear",
+      "name": "CrearFilaBaserow",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        304,
+        0
+      ],
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow Account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "GenerarDatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenerarDatos": {
+      "main": [
+        [
+          {
+            "node": "CrearFilaBaserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "931c266b-f45d-47c0-a790-90afd5d322af",
+  "meta": {
+    "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
+  },
+  "id": "wWV45FPMKXomNz9N",
+  "tags": [
+    {
+      "updatedAt": "2026-02-04T17:36:59.816Z",
+      "createdAt": "2025-11-22T14:50:50.701Z",
+      "id": "TbLp68InL21vTdmh",
+      "name": "leraysi-agent"
+    }
+  ]
+}

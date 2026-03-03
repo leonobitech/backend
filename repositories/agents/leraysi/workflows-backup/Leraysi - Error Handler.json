@@ -1,0 +1,179 @@
+{
+  "name": "Leraysi - Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-error",
+      "name": "On Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract error details and conversation info\nconst execution = $input.first().json;\nconst error = execution.execution?.error || {};\nconst workflowName = execution.workflow?.name || 'Unknown';\n\n// Try to find conversation_id from the execution data\nlet conversationId = null;\nlet contactId = null;\nlet accountId = null;\n\n// Search through the execution data for Chatwoot info\nconst executionData = execution.execution?.data?.resultData?.runData || {};\n\nfor (const nodeName of Object.keys(executionData)) {\n  const nodeRuns = executionData[nodeName];\n  if (nodeRuns && nodeRuns[0]?.data?.main?.[0]) {\n    for (const item of nodeRuns[0].data.main[0]) {\n      if (item.json?.conversation?.id) {\n        conversationId = item.json.conversation.id;\n        accountId = item.json.account?.id || 1;\n      }\n      if (item.json?.sender?.id) {\n        contactId = item.json.sender.id;\n      }\n      if (conversationId) break;\n    }\n  }\n  if (conversationId) break;\n}\n\nreturn {\n  json: {\n    errorMessage: error.message || 'Unknown error',\n    errorStack: error.stack || '',\n    workflowName,\n    conversationId,\n    contactId,\n    accountId: accountId || 1,\n    timestamp: new Date().toISOString(),\n    canNotify: !!conversationId\n  }\n};"
+      },
+      "id": "extract-info",
+      "name": "Extract Error Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.canNotify }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-can-notify",
+      "name": "Can Notify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.leonobitech.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "Disculpá, tuve un problemita técnico 😅 ¿Podés repetirme lo que me decías? Si sigue pasando, contactá a soporte."
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-fallback",
+      "name": "Send Fallback Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        -96
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4CCgRLgHR96JW4Ue",
+          "name": "Chatwoot Auth account "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log the error for debugging\nconsole.error('=== LERAYSI ERROR ===');\nconsole.error('Workflow:', $json.workflowName);\nconsole.error('Error:', $json.errorMessage);\nconsole.error('Conversation:', $json.conversationId || 'N/A');\nconsole.error('Timestamp:', $json.timestamp);\nconsole.error('Stack:', $json.errorStack);\nconsole.error('=====================');\n\nreturn $input.all();"
+      },
+      "id": "log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        112
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On Error": {
+      "main": [
+        [
+          {
+            "node": "Extract Error Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Error Info": {
+      "main": [
+        [
+          {
+            "node": "Can Notify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Notify?": {
+      "main": [
+        [
+          {
+            "node": "Send Fallback Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "14a72a35-2f9e-42a6-ad82-357b8f8512d9",
+  "meta": {
+    "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
+  },
+  "id": "sNNc2VUXCSt9nDER",
+  "tags": [
+    {
+      "updatedAt": "2026-02-04T17:36:59.816Z",
+      "createdAt": "2025-11-22T14:50:50.701Z",
+      "id": "TbLp68InL21vTdmh",
+      "name": "leraysi-agent"
+    }
+  ]
+}

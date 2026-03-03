@@ -105,7 +105,7 @@
     {
       "parameters": {
         "databaseId": 4,
-        "tableId": 850,
+        "tableId": 720,
         "returnAll": true,
         "additionalOptions": {}
       },
@@ -120,7 +120,7 @@
       "credentials": {
         "baserowApi": {
           "id": "Uy274LWj78wGDPVF",
-          "name": "Baserow account"
+          "name": "Baserow Account"
         }
       }
     },
@@ -230,7 +230,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "2e277cc3-2b72-4fa8-af56-5eadda6787d8",
+  "versionId": "d193c6cf-eabc-4dc8-9563-9e55e7bfe60c",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
@@ -238,10 +238,10 @@
   "id": "xANuydj39gbbYkpU",
   "tags": [
     {
-      "updatedAt": "2026-02-04T17:41:38.546Z",
-      "createdAt": "2026-02-04T17:41:38.546Z",
-      "id": "3k3hEzile9Jwmnjs",
-      "name": "RAG-baserow"
+      "updatedAt": "2025-11-22T15:13:00.214Z",
+      "createdAt": "2025-11-22T15:13:00.214Z",
+      "id": "ku5el3bYAu2jt3sK",
+      "name": "leonobitech"
     }
   ]
 }

@@ -1,0 +1,679 @@
+{
+  "name": "Leraysi - Expirar Turnos Pendientes",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-1",
+      "name": "Cada 5 Minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        80,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "databaseId": 212,
+        "tableId": 855,
+        "returnAll": true,
+        "additionalOptions": {
+          "filters": {
+            "fields": [
+              {
+                "field": 8452,
+                "operator": "single_select_equal",
+                "value": "3714"
+              }
+            ]
+          }
+        }
+      },
+      "id": "baserow-list-1",
+      "name": "ListarTurnosPendientes",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        272,
+        208
+      ],
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FILTRAR TURNOS EXPIRADOS v3\n// Recibe turnos con estado=pendiente_pago, filtra los que tienen expira_at < now\n//\n// TRES TIPOS DE EXPIRACIÓN:\n// 1. Turno nuevo sin pagar (mp_payment_id = null) → expirar completamente\n// 2. Servicio agregado sin pagar (mp_payment_id existe, sin turno_padre_id) → revertir a confirmado\n//    (los datos originales están intactos gracias a separación de responsabilidades v3)\n// 3. Turno adicional sin pagar (turno_padre_id existe) → expirar fila hija, padre intacto\n//    (fila independiente creada para otra trabajadora, el turno original no se tocó)\n// ============================================================================\n\nconst items = $input.all();\nconst ahora = new Date();\nconst expirados = [];\n\nfor (const item of items) {\n  const turno = item.json;\n\n  if (!turno.expira_at) continue;\n\n  const expiraAt = new Date(turno.expira_at);\n  if (isNaN(expiraAt.getTime())) continue;\n  if (expiraAt >= ahora) continue;\n\n  // Extraer lead_row_id del campo clienta_id (link_row en Baserow)\n  let leadRowId = null;\n  let nombreClienta = \"\";\n  if (Array.isArray(turno.clienta_id) && turno.clienta_id.length > 0) {\n    leadRowId = turno.clienta_id[0].id;\n    nombreClienta = turno.clienta_id[0].value || \"\";\n  }\n\n  // Detectar turno_padre_id (puede ser número, string, o link_row)\n  const tieneTurnoPadre = turno.turno_padre_id != null && turno.turno_padre_id !== '' && turno.turno_padre_id !== 0;\n\n  if (tieneTurnoPadre) {\n    // CASO 3: Turno adicional sin pagar.\n    // Fila hija creada para otra trabajadora. El turno padre (fila original)\n    // está intacto — nunca se modificó. Solo expirar/borrar esta fila hija.\n    // Si el hijo tiene hora_pre_reubicacion, el padre fue reubicado y necesita revert\n    const horaPreReubicacion = turno.hora_pre_reubicacion || '';\n    expirados.push({\n      json: {\n        turno_row_id: turno.id,\n        lead_row_id: leadRowId,\n        odoo_turno_id: turno.odoo_turno_id ? Number(turno.odoo_turno_id) : null,\n        turno_padre_id: turno.turno_padre_id,\n        nombre_clienta: nombreClienta,\n        servicio: turno.servicio_detalle || turno.servicio || \"\",\n        expira_at: turno.expira_at,\n        tipo: 'expirar_turno_adicional',\n        // Revert hora padre si fue reubicado al crear este turno adicional\n        revertir_hora_padre: horaPreReubicacion ? {\n          row_id: turno.turno_padre_id,\n          hora_original: horaPreReubicacion,\n          fecha_original: turno.fecha_pre_reubicacion || null,\n        } : null,\n      },\n    });\n  } else if (turno.mp_payment_id) {\n    // CASO 2: Servicio agregado sin pagar (misma trabajadora, UPDATE).\n    // El turno ya fue pagado antes (mp_payment_id existe).\n    // Con la separación de responsabilidades v3, los datos originales\n    // (servicio, hora, precio, duracion, complejidad) están intactos en Baserow.\n    // Solo necesitamos revertir el estado pendiente → confirmado.\n    expirados.push({\n      json: {\n        turno_row_id: turno.id,\n        lead_row_id: leadRowId,\n        odoo_turno_id: turno.odoo_turno_id ? Number(turno.odoo_turno_id) : null,\n        nombre_clienta: nombreClienta,\n        servicio: turno.servicio_detalle || turno.servicio || \"\",\n        expira_at: turno.expira_at,\n        tipo: 'revertir_servicio_agregado',\n        revertir: {\n          estado: 'confirmado',\n          sena_pagada: true,\n          mp_link: '',\n          mp_preference_id: '',\n          expira_at: '',\n          notas: `Seña adicional expirada el ${ahora.toLocaleDateString('es-AR')}. Turno original mantenido.`,\n        }\n      },\n    });\n  } else {\n    // CASO 1: Turno nuevo sin pagar → expirar completamente\n    expirados.push({\n      json: {\n        turno_row_id: turno.id,\n        lead_row_id: leadRowId,\n        odoo_turno_id: turno.odoo_turno_id ? Number(turno.odoo_turno_id) : null,\n        nombre_clienta: nombreClienta,\n        servicio: turno.servicio_detalle || turno.servicio || \"\",\n        expira_at: turno.expira_at,\n        tipo: 'expirar_turno_nuevo',\n      },\n    });\n  }\n}\n\nif (expirados.length === 0) {\n  return [];\n}\n\nconst nuevos = expirados.filter(e => e.json.tipo === 'expirar_turno_nuevo').length;\nconst revertidos = expirados.filter(e => e.json.tipo === 'revertir_servicio_agregado').length;\nconst adicionales = expirados.filter(e => e.json.tipo === 'expirar_turno_adicional').length;\nconsole.log(`[ExpirarTurnos] ${expirados.length} turno(s) expirado(s): ${nuevos} nuevos, ${revertidos} servicio agregado, ${adicionales} turno adicional`);\nreturn expirados;\n"
+      },
+      "id": "code-filter-1",
+      "name": "FiltrarExpirados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "databaseId": 212,
+        "tableId": 855,
+        "rowId": "={{ $json.turno_row_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": 8452,
+              "fieldValue": "expirado"
+            }
+          ]
+        }
+      },
+      "id": "baserow-update-1",
+      "name": "MarcarTurnoExpirado",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        208
+      ],
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.lead_row_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-lead-1",
+      "name": "IF_TieneLead",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond_odoo",
+              "leftValue": "={{ $json.odoo_turno_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-odoo-1",
+      "name": "IF_TieneOdoo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://leraysi_mcp:8101/internal/mcp/call-tool",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tool: 'leraysi_expirar_turno', arguments: { turno_id: $json.odoo_turno_id } }) }}",
+        "options": {}
+      },
+      "id": "http-odoo-1",
+      "name": "ExpirarTurnoOdoo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        48
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tHbNRkK41qVMSRDA",
+          "name": "leraysi-mcp"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "databaseId": 212,
+        "tableId": 854,
+        "rowId": "={{ $json.lead_row_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": 8427,
+              "fieldValue": "consulta"
+            },
+            {
+              "fieldId": 8433,
+              "fieldValue": "false"
+            },
+            {
+              "fieldId": 8434,
+              "fieldValue": "={{ null }}"
+            },
+            {
+              "fieldId": 8435,
+              "fieldValue": "false"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        -112
+      ],
+      "id": "38c91722-94f7-48e2-94f1-4e519be844f4",
+      "name": "Update a row",
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tipo }}",
+                    "rightValue": "expirar_turno_nuevo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "tipo-nuevo"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "expirar_turno_nuevo"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tipo }}",
+                    "rightValue": "revertir_servicio_agregado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "tipo-revertir"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "revertir_servicio_agregado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tipo }}",
+                    "rightValue": "expirar_turno_adicional",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "tipo-adicional"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "expirar_turno_adicional"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-tipo-1",
+      "name": "SwitchTipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        624,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "databaseId": 212,
+        "tableId": 855,
+        "rowId": "={{ $json.turno_row_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": 8452,
+              "fieldValue": "confirmado"
+            },
+            {
+              "fieldId": 8451,
+              "fieldValue": "true"
+            },
+            {
+              "fieldId": 8458,
+              "fieldValue": "={{ null }}"
+            },
+            {
+              "fieldId": 8462,
+              "fieldValue": "={{ null }}"
+            },
+            {
+              "fieldId": 8460,
+              "fieldValue": "={{ null }}"
+            },
+            {
+              "fieldId": 8455,
+              "fieldValue": "={{ $json.revertir.notas }}"
+            }
+          ]
+        }
+      },
+      "id": "baserow-revertir-1",
+      "name": "RevertirTurnoBaserow",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        800
+      ],
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond_odoo_rev",
+              "leftValue": "={{ $json.odoo_turno_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "if-odoo-revertir-1",
+      "name": "IF_TieneOdoo_Revertir",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://leraysi_mcp:8101/internal/mcp/call-tool",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tool: 'leraysi_expirar_turno', arguments: { turno_id: $json.odoo_turno_id } }) }}",
+        "options": {}
+      },
+      "id": "http-odoo-revertir-1",
+      "name": "RevertirOdoo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1632,
+        640
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tHbNRkK41qVMSRDA",
+          "name": "leraysi-mcp"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## //-==>// Agrega Servico a turno Existente",
+        "height": 384,
+        "width": 672,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1200,
+        576
+      ],
+      "typeVersion": 1,
+      "id": "1db4f04d-4c08-4ce4-ab94-b4b4ca45f90f",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## //===-->Turno Padre Nuevo | Turno  Hijo  Nuevo",
+        "height": 720,
+        "width": 672,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1200,
+        -176
+      ],
+      "typeVersion": 1,
+      "id": "bdb41382-3aae-4bf1-ab7e-7d1f2a097523",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "databaseId": 212,
+        "tableId": 855,
+        "rowId": "={{ $('IF_RevertirHoraPadre').first().json.revertir_hora_padre.row_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": 8456,
+              "fieldValue": "={{ $('IF_RevertirHoraPadre').first().json.revertir_hora_padre.hora_original }}"
+            },
+            {
+              "fieldId": 8445,
+              "fieldValue": "={{ $('IF_RevertirHoraPadre').first().json.revertir_hora_padre.fecha_original }}"
+            }
+          ]
+        }
+      },
+      "id": "baserow-revertir-hora-padre-01",
+      "name": "RevertirHoraPadre",
+      "type": "n8n-nodes-base.baserow",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        368
+      ],
+      "credentials": {
+        "baserowApi": {
+          "id": "Uy274LWj78wGDPVF",
+          "name": "Baserow Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "revert-hora-check",
+              "leftValue": "={{ $json.revertir_hora_padre }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-revertir-hora-padre-01",
+      "name": "IF_RevertirHoraPadre",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        384
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cada 5 Minutos": {
+      "main": [
+        [
+          {
+            "node": "ListarTurnosPendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ListarTurnosPendientes": {
+      "main": [
+        [
+          {
+            "node": "FiltrarExpirados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FiltrarExpirados": {
+      "main": [
+        [
+          {
+            "node": "SwitchTipo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SwitchTipo": {
+      "main": [
+        [
+          {
+            "node": "MarcarTurnoExpirado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_TieneLead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_TieneOdoo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "RevertirTurnoBaserow",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_TieneOdoo_Revertir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MarcarTurnoExpirado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_TieneOdoo",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_RevertirHoraPadre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_TieneOdoo": {
+      "main": [
+        [
+          {
+            "node": "ExpirarTurnoOdoo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_TieneLead": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_TieneOdoo_Revertir": {
+      "main": [
+        [
+          {
+            "node": "RevertirOdoo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_RevertirHoraPadre": {
+      "main": [
+        [
+          {
+            "node": "RevertirHoraPadre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Argentina/Buenos_Aires",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "6452a504-dbe2-4fca-bc64-f36cbb4f4d35",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
+  },
+  "id": "hnmlPLIiklscTgQj",
+  "tags": []
+}

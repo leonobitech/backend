@@ -4,7 +4,7 @@
     {
       "parameters": {
         "inputSource": "jsonExample",
-        "jsonExample": "{\n  \"turno_id\": 123,\n  \"nuevo_servicio\": \"manicura_simple\",\n  \"nuevo_servicio_detalle\": \"Manicura simple\",\n  \"nuevo_precio\": 8000,\n  \"duracion_estimada\": 600,\n  \"complejidad_maxima\": \"muy_compleja\",\n  \"nueva_hora\": \"09:00\"\n}"
+        "jsonExample": "{\n  \"turno_id\": 123,\n  \"nuevo_servicio\": \"manicura_simple\",\n  \"nuevo_servicio_detalle\": \"Manicura simple\",\n  \"nuevo_precio\": 8000,\n  \"duracion_estimada\": 600,\n  \"complejidad_maxima\": \"muy_compleja\",\n  \"nueva_hora\": \"09:00\"\n}\n"
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
@@ -31,7 +31,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://odoo_mcp:8100/internal/mcp/call-tool",
+        "url": "http://leraysi_mcp:8101/internal/mcp/call-tool",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -49,8 +49,8 @@
       "name": "HTTP Request",
       "credentials": {
         "httpHeaderAuth": {
-          "id": "O6mz2TMAB8RUn2lr",
-          "name": "odoo-mcp"
+          "id": "tHbNRkK41qVMSRDA",
+          "name": "leraysi-mcp"
         }
       }
     }
@@ -84,9 +84,10 @@
   "settings": {
     "executionOrder": "v1",
     "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "errorWorkflow": "sNNc2VUXCSt9nDER"
   },
-  "versionId": "ce3b6ac8-f1e7-433c-89c0-1e1386208f1f",
+  "versionId": "6edf9ccf-0ba7-49bb-b149-1891e2623d8a",
   "meta": {
     "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
   },

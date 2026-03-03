@@ -1,0 +1,7 @@
+﻿id,fecha,hora,servicio,servicio_detalle,complejidad_maxima,duracion_min,trabajadora,precio,sena_monto,sena_pagada,estado,mp_payment_id,mp_link,mp_preference_id,odoo_event_id,conversation_id,odoo_turno_id,created_at,expira_at,confirmado_at,updated_at,notas
+2,02/03/2026 03:00,09:00,Manicura simple,,media,120,Leraysi,,0.00,False,pendiente_pago,,,,,,,23/02/2026 16:54,,,,
+3,03/03/2026 03:00,09:00,Alisado brasileño,,muy_compleja,600,Leraysi,,0.00,False,pendiente_pago,,,,,,,23/02/2026 16:54,,,,
+4,03/03/2026 03:00,09:00,Balayage,,muy_compleja,600,Compañera,,0.00,False,pendiente_pago,,,,,,,23/02/2026 16:54,,,,
+5,04/03/2026 03:00,09:00,Alisado brasileño,,muy_compleja,600,Leraysi,,0.00,False,pendiente_pago,,,,,,,23/02/2026 16:54,,,,
+6,05/03/2026 03:00,09:00,Alisado brasileño,,muy_compleja,600,Leraysi,,0.00,False,pendiente_pago,,,,,,,23/02/2026 16:54,,,,
+7,05/03/2026 15:00,12:00,Manicura simple,,media,120,Leraysi,,0.00,False,pendiente_pago,,,,,,,23/02/2026 16:54,,,,

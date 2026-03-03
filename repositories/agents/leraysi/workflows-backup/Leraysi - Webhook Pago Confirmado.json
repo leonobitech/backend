@@ -3,14 +3,14 @@
   "nodes": [
     {
       "parameters": {
-        "databaseId": 4,
-        "tableId": 852,
+        "databaseId": 212,
+        "tableId": 855,
         "returnAll": true,
         "additionalOptions": {
           "filters": {
             "fields": [
               {
-                "field": 8403,
+                "field": 8462,
                 "value": "={{ $json.body.payment.mp_preference_id }}"
               }
             ]
@@ -20,7 +20,7 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        448,
+        432,
         -112
       ],
       "id": "cbf17606-2568-4771-8700-5f13820be15a",
@@ -28,7 +28,7 @@
       "credentials": {
         "baserowApi": {
           "id": "Uy274LWj78wGDPVF",
-          "name": "Baserow account"
+          "name": "Baserow Account"
         }
       }
     },
@@ -42,7 +42,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        224,
+        240,
         -112
       ],
       "id": "a227f4ff-8266-4838-aa8b-2f8362b8cd9a",
@@ -58,54 +58,58 @@
     {
       "parameters": {
         "operation": "update",
-        "databaseId": 4,
-        "tableId": 852,
+        "databaseId": 212,
+        "tableId": 855,
         "rowId": "={{ $json.row_id }}",
         "fieldsUi": {
           "fieldValues": [
             {
-              "fieldId": 8390,
+              "fieldId": 8445,
+              "fieldValue": "={{ $json.fecha }}"
+            },
+            {
+              "fieldId": 8451,
               "fieldValue": "={{ $json.sena_pagada }}"
             },
             {
-              "fieldId": 8391,
+              "fieldId": 8452,
               "fieldValue": "={{ $json.estado }}"
             },
             {
-              "fieldId": 8398,
+              "fieldId": 8457,
               "fieldValue": "={{ $json.mp_payment_id }}"
             },
             {
-              "fieldId": 8402,
+              "fieldId": 8461,
               "fieldValue": "={{ $json.confirmado_at }}"
             },
             {
-              "fieldId": 8385,
+              "fieldId": 8447,
               "fieldValue": "={{ $json.servicio }}"
             },
             {
-              "fieldId": 8406,
+              "fieldId": 8465,
               "fieldValue": "={{ $json.servicio_detalle }}"
             },
             {
-              "fieldId": 8396,
+              "fieldId": 8456,
               "fieldValue": "={{ $json.hora }}"
             },
             {
-              "fieldId": 8387,
+              "fieldId": 8449,
               "fieldValue": "={{ $json.duracion_min }}"
             },
             {
-              "fieldId": 8386,
+              "fieldId": 8448,
               "fieldValue": "={{ $json.complejidad_maxima }}"
             },
             {
-              "fieldId": 8388,
+              "fieldId": 8450,
               "fieldValue": "={{ $json.precio }}"
             },
             {
-              "fieldId": 8389,
-              "fieldValue": "={{ $json.sena_monto }}"
+              "fieldId": 8453,
+              "fieldValue": "={{ $json.odoo_event_id }}"
             }
           ]
         }
@@ -113,7 +117,7 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        808,
+        816,
         -112
       ],
       "id": "d6be1039-bc8c-421e-b635-548ee054d765",
@@ -121,28 +125,15 @@
       "credentials": {
         "baserowApi": {
           "id": "Uy274LWj78wGDPVF",
-          "name": "Baserow account"
+          "name": "Baserow Account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================================\n// PREPARAR TURNO PAGADO - Webhook Pago Confirmado\n// ============================================================================\n// Combina datos del webhook (Odoo) con datos del turno (Baserow) para preparar\n// la actualización definitiva de TurnosLeraysi.\n// ============================================================================\n\nconst turnoBaserow = $input.first().json;\nconst webhook = $('WebhookPagoConfirmado').first().json;\n\nconst odooTurno = webhook.body?.turno || {};\nconst payment = webhook.body?.payment || {};\n\n// Mapeo código Odoo → display name Baserow\nconst CODE_TO_DISPLAY = {\n  corte_mujer: 'Corte mujer',\n  alisado_brasileno: 'Alisado brasileño',\n  alisado_keratina: 'Alisado keratina',\n  mechas_completas: 'Mechas completas',\n  tintura_raiz: 'Tintura raíz',\n  tintura_completa: 'Tintura completa',\n  balayage: 'Balayage',\n  manicura_simple: 'Manicura simple',\n  manicura_semipermanente: 'Manicura semipermanente',\n  pedicura: 'Pedicura',\n  depilacion_cera_piernas: 'Depilación cera piernas',\n  depilacion_cera_axilas: 'Depilación cera axilas',\n  depilacion_cera_bikini: 'Depilación cera bikini',\n  depilacion_laser_piernas: 'Depilación láser piernas',\n  depilacion_laser_axilas: 'Depilación láser axilas',\n};\n\n// Resolver servicio (multi-select para Baserow)\nlet servicioArray;\nconst servicioDetalle = odooTurno.servicio_detalle || '';\n\nif (servicioDetalle && servicioDetalle.includes('+')) {\n  servicioArray = servicioDetalle.split('+').map(s => s.trim());\n} else if (servicioDetalle) {\n  servicioArray = [servicioDetalle];\n} else {\n  const code = odooTurno.servicio || '';\n  servicioArray = [CODE_TO_DISPLAY[code] || code];\n}\n\n// Resolver hora (UTC de Odoo → Argentina)\nlet hora = turnoBaserow.hora || '09:00';\nif (odooTurno.fecha_hora) {\n  try {\n    const d = new Date(odooTurno.fecha_hora);\n    d.setHours(d.getHours() - 3);\n    hora = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');\n  } catch (e) {}\n}\n\nconst precio = odooTurno.precio || parseFloat(turnoBaserow.precio) || 0;\n\nreturn [{\n  json: {\n    row_id: turnoBaserow.id,\n    sena_pagada: true,\n    estado: odooTurno.estado || 'confirmado',\n    mp_payment_id: payment.mp_payment_id || '',\n    confirmado_at: payment.confirmado_at || new Date().toISOString(),\n    servicio: servicioArray,\n    servicio_detalle: servicioDetalle,\n    hora: hora,\n    duracion_min: odooTurno.duracion_min || parseInt(turnoBaserow.duracion_min) || 60,\n    complejidad_maxima: odooTurno.complejidad_maxima || turnoBaserow.complejidad_maxima || 'media',\n    precio: precio,\n    sena_monto: Math.round(precio * 0.3),\n  }\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        568,
-        -112
-      ],
-      "id": "preparar-turno-pagado",
-      "name": "PrepararTurnoPagado"
-    },
-    {
-      "parameters": {
         "operation": "get",
-        "databaseId": 4,
-        "tableId": 851,
+        "databaseId": 212,
+        "tableId": 854,
         "rowId": "={{ $('BuscarTurnoPorMP').item.json.clienta_id[0].id }}"
       },
       "type": "n8n-nodes-base.baserow",
@@ -156,36 +147,36 @@
       "credentials": {
         "baserowApi": {
           "id": "Uy274LWj78wGDPVF",
-          "name": "Baserow account"
+          "name": "Baserow Account"
         }
       }
     },
     {
       "parameters": {
         "operation": "update",
-        "databaseId": 4,
-        "tableId": 851,
+        "databaseId": 212,
+        "tableId": 854,
         "rowId": "={{ $json.baserow_update.row_id }}",
         "fieldsUi": {
           "fieldValues": [
             {
-              "fieldId": 8362,
+              "fieldId": 8427,
               "fieldValue": "={{ $json.baserow_update.stage }}"
             },
             {
-              "fieldId": 8368,
+              "fieldId": 8433,
               "fieldValue": "={{ $json.baserow_update.turno_agendado }}"
             },
             {
-              "fieldId": 8369,
+              "fieldId": 8434,
               "fieldValue": "={{ $json.baserow_update.turno_fecha }}"
             },
             {
-              "fieldId": 8370,
+              "fieldId": 8435,
               "fieldValue": "={{ $json.baserow_update.sena_pagada }}"
             },
             {
-              "fieldId": 8361,
+              "fieldId": 8426,
               "fieldValue": "={{ $json.baserow_update.notes }}"
             }
           ]
@@ -194,7 +185,7 @@
       "type": "n8n-nodes-base.baserow",
       "typeVersion": 1,
       "position": [
-        688,
+        816,
         128
       ],
       "id": "25bebfb5-b761-4079-955f-94595ecac0c5",
@@ -202,18 +193,18 @@
       "credentials": {
         "baserowApi": {
           "id": "Uy274LWj78wGDPVF",
-          "name": "Baserow account"
+          "name": "Baserow Account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================================\n// TURNO LEAD CONFIRMADO - Webhook Pago Confirmado\n// ============================================================================\n// Prepara los datos para actualizar LeadsLeraysi después de pago confirmado\n// y construye el mensaje de confirmación para la clienta\n// ============================================================================\n// NODO: TurnoLeadConfirmado (Code)\n// INPUT: ObtenerLead (datos del lead actual)\n// ACCESO: WebhookPagoConfirmado, ActualizarTurnoPagado\n// OUTPUT: Formato compatible con Output Main (content_whatsapp, baserow_update, state)\n// ============================================================================\n\nconst lead = $input.first().json;\nconst turno = $('ActualizarTurnoPagado').first().json;\nconst webhook = $('WebhookPagoConfirmado').first().json;\n\n// ============================================================================\n// EXTRAER DATOS DEL TURNO\n// ============================================================================\n\n// Servicios como string\nconst servicios = turno.servicio\n  .map(s => s.value)\n  .join(' y ');\n\nconst serviciosLista = turno.servicio.map(s => s.value);\n\n// Fecha y hora del turno\nconst fechaTurno = turno.fecha ? turno.fecha.split('T')[0] : null;\nconst horaTurno = turno.hora || '09:00';\n\n// Construir fecha completa para turno_fecha (ISO 8601)\nlet turnoFechaISO = null;\nif (fechaTurno) {\n  turnoFechaISO = `${fechaTurno}T${horaTurno}:00-03:00`;\n}\n\n// Formatear fecha legible para el mensaje (DD/MM/YYYY)\nfunction formatearFechaLegible(fechaISO) {\n  if (!fechaISO) return 'fecha por confirmar';\n  const fecha = new Date(fechaISO);\n  const dia = String(fecha.getDate()).padStart(2, '0');\n  const mes = String(fecha.getMonth() + 1).padStart(2, '0');\n  const anio = fecha.getFullYear();\n  return `${dia}/${mes}/${anio}`;\n}\n\n// Nombre del día en español\nfunction getNombreDia(fechaISO) {\n  if (!fechaISO) return '';\n  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\n  const fecha = new Date(fechaISO);\n  return dias[fecha.getDay()];\n}\n\nconst fechaLegible = formatearFechaLegible(fechaTurno);\nconst nombreDia = getNombreDia(fechaTurno);\n\n// Datos de pago\nconst senaMontoNum = parseFloat(turno.sena_monto) || 0;\nconst senaMonto = senaMontoNum.toLocaleString('es-AR', {\n  minimumFractionDigits: 0,\n  maximumFractionDigits: 0\n});\n\n// ============================================================================\n// CONSTRUIR MENSAJE PARA LA CLIENTA\n// ============================================================================\n\nconst nombreClienta = lead.full_name || turno.nombre_clienta?.[0]?.value || 'clienta';\nconst primerNombre = nombreClienta.split(' ')[0];\n\nconst mensajeContent = `⋆˚🧚‍♀️ ¡${primerNombre}, tu pago de $${senaMonto} fue recibido! ✨\n\n✅ *Turno confirmado*\n📅 ${nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)} ${fechaLegible}\n🕐 ${horaTurno} hs\n💇 ${servicios}\n\n¡Te esperamos en Estilos Leraysi! 💅`;\n\n// ============================================================================\n// CONSTRUIR NOTA ACTUALIZADA\n// ============================================================================\n\nconst notaActualizada = `Seña pagada ✓ - ${servicios} (${nombreDia} ${fechaLegible} ${horaTurno})`;\n\n// ============================================================================\n// EXTRAER VALORES DE CAMPOS CON ESTRUCTURA BASEROW\n// ============================================================================\n\nconst extractValue = (field) => {\n  if (Array.isArray(field) && field.length > 0) return field[0].value;\n  if (field && typeof field === 'object' && 'value' in field) return field.value;\n  return field;\n};\n\nconst extractValues = (field) => {\n  if (Array.isArray(field)) return field.map(f => f.value || f);\n  return field ? [field] : [];\n};\n\n// ============================================================================\n// CONSTRUIR baserow_update (campos a actualizar en LeadsLeraysi)\n// ============================================================================\n\nconst baserow_update = {\n  row_id: lead.id,\n  stage: 'turno_confirmado',\n  turno_agendado: true,\n  turno_fecha: turnoFechaISO,\n  sena_pagada: true,\n  notes: notaActualizada,\n  last_activity_iso: new Date().toISOString()\n};\n\n// ============================================================================\n// CONSTRUIR state (estado completo del lead)\n// ============================================================================\n\nconst state = {\n  row_id: lead.id,\n  nick_name: lead.nick_name || '',\n  full_name: lead.full_name || nombreClienta,\n  phone: lead.phone_number,\n  email: extractValue(lead.email) || '',\n  channel: extractValue(lead.channel) || 'whatsapp',\n  country: extractValue(lead.country) || 'Argentina',\n  tz: lead.tz || '-03:00',\n  stage: 'turno_confirmado',\n  priority: extractValue(lead.priority) || 'normal',\n  servicio_interes: lead.servicio_interes || serviciosLista[0] || '',\n  interests: extractValues(lead.interests),\n  foto_recibida: lead.foto_recibida || false,\n  presupuesto_dado: lead.presupuesto_dado || false,\n  turno_agendado: true,\n  turno_fecha: turnoFechaISO,\n  sena_pagada: true,\n  waiting_image: lead.waiting_image || false,\n  services_seen: parseInt(lead.services_seen) || 0,\n  prices_asked: parseInt(lead.prices_asked) || 0,\n  deep_interest: parseInt(lead.deep_interest) || 0,\n  lead_id: parseInt(lead.lead_id),\n  chatwoot_id: parseInt(lead.chatwoot_id),\n  chatwoot_inbox_id: parseInt(lead.chatwoot_inbox_id),\n  conversation_id: parseInt(lead.conversation_id || turno.conversation_id),\n  last_message: lead.last_message || '',\n  last_message_id: lead.last_message_id || '',\n  last_activity_iso: new Date().toISOString(),\n  description: `Seña pagada ✓ • Turno: ${nombreDia} ${fechaLegible} ${horaTurno} • ${servicios}`\n};\n\n// Parsear image_analysis si existe\nif (lead.image_analysis) {\n  try {\n    state.image_analysis = typeof lead.image_analysis === 'string'\n      ? JSON.parse(lead.image_analysis)\n      : lead.image_analysis;\n  } catch (e) {\n    state.image_analysis = null;\n  }\n}\n\n// ============================================================================\n// OUTPUT\n// ============================================================================\n\nreturn [{\n  json: {\n    // Mensaje para WhatsApp/Chatwoot\n    content_whatsapp: {\n      content: mensajeContent,\n      message_type: 'outgoing',\n      content_type: 'text'\n    },\n\n    // HTML para Odoo chatter\n    body_html: `<p>${mensajeContent.replace(/\\n/g, '<br>')}</p>`,\n\n    // IDs importantes\n    lead_id: parseInt(lead.lead_id),\n    row_id: lead.id,\n\n    // Campos a actualizar en Baserow\n    baserow_update,\n\n    // Estado completo del lead\n    state,\n\n    // Metadata\n    meta: {\n      timestamp: new Date().toISOString(),\n      version: 'leraysi-pago-confirmado@1.0',\n      turno_id: turno.id,\n      odoo_turno_id: turno.odoo_turno_id,\n      mp_payment_id: turno.mp_payment_id\n    }\n  }\n}];\n"
+        "jsCode": "// ============================================================================\n// TURNO LEAD CONFIRMADO - Webhook Pago Confirmado v2\n// ============================================================================\n// Prepara los datos para actualizar LeadsLeraysi después de pago confirmado\n// y construye el mensaje de confirmación para la clienta\n//\n// v2: Incluye turno_update con campos definitivos (servicio, hora, precio,\n//     duracion_min, complejidad_maxima, sena_monto) para que el nodo\n//     ActualizarTurnoPagadoDefinitivo los escriba a Baserow.\n//     Separación de responsabilidades: PrepararServicioAgregadoBaserow solo\n//     escribe campos \"pendientes\", los definitivos se aplican aquí post-pago.\n// ============================================================================\n// NODO: TurnoLeadConfirmado (Code)\n// INPUT: ObtenerLead (datos del lead actual)\n// ACCESO: WebhookPagoConfirmado, ActualizarTurnoPagado\n// OUTPUT: Formato compatible con Output Main (content_whatsapp, baserow_update, state)\n//         + turno_update con campos definitivos para TurnosLeraysi\n// ============================================================================\n\nconst lead = $input.first().json;\nconst turno = $('ActualizarTurnoPagado').first().json;\nconst webhook = $('WebhookPagoConfirmado').first().json;\n\n// ============================================================================\n// EXTRAER DATOS DEL TURNO (Baserow)\n// ============================================================================\n\n// Servicios como string\nconst servicios = turno.servicio\n  .map(s => s.value)\n  .join(' y ');\n\nconst serviciosLista = turno.servicio.map(s => s.value);\n\n// Fecha y hora del turno\nconst fechaTurno = turno.fecha ? turno.fecha.split('T')[0] : null;\n// Normalizar hora a HH:MM (Baserow puede enviar HH:MM:SS)\nconst horaTurnoRaw = turno.hora || '09:00';\nconst horaTurno = horaTurnoRaw.split(':').slice(0, 2).join(':');\n\n// Construir fecha completa para turno_fecha (convertir Argentina → UTC para Baserow)\nlet turnoFechaISO = null;\nif (fechaTurno) {\n  const d = new Date(`${fechaTurno}T${horaTurno}:00-03:00`);\n  turnoFechaISO = d.toISOString();\n}\n\n// Formatear fecha legible para el mensaje (DD/MM/YYYY)\nfunction formatearFechaLegible(fechaISO) {\n  if (!fechaISO) return 'fecha por confirmar';\n  const fecha = new Date(fechaISO);\n  const dia = String(fecha.getDate()).padStart(2, '0');\n  const mes = String(fecha.getMonth() + 1).padStart(2, '0');\n  const anio = fecha.getFullYear();\n  return `${dia}/${mes}/${anio}`;\n}\n\n// Nombre del día en español\nfunction getNombreDia(fechaISO) {\n  if (!fechaISO) return '';\n  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\n  const fecha = new Date(fechaISO);\n  return dias[fecha.getDay()];\n}\n\n// Formatear duración en texto legible\nfunction formatearDuracion(minutos) {\n  if (!minutos || minutos <= 0) return null;\n  const horas = Math.floor(minutos / 60);\n  const mins = minutos % 60;\n  if (horas === 0) return `${mins} min`;\n  if (mins === 0) return horas === 1 ? '1 hora' : `${horas} horas`;\n  return `${horas}h ${mins}min`;\n}\n\n// Formatear monto en pesos argentinos\nfunction formatearMonto(monto) {\n  return (monto || 0).toLocaleString('es-AR', {\n    minimumFractionDigits: 0,\n    maximumFractionDigits: 0\n  });\n}\n\nconst fechaLegible = formatearFechaLegible(fechaTurno);\nconst nombreDia = getNombreDia(fechaTurno);\nconst nombreDiaCap = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1);\n\n// Duración desde Baserow (minutos)\nconst duracionMin = parseInt(turno.duracion_min) || 0;\nconst duracionTexto = formatearDuracion(duracionMin);\n\n// ============================================================================\n// EXTRAER DATOS DE PAGO (MCP result vía webhook)\n// ============================================================================\n\n// MCP data: webhook.body.mcp.data (estructura real del endpoint /internal/mcp/call-tool)\nconst mcpData = webhook.body?.mcp?.data || webhook.body?.mcp || {};\nconst pagos = mcpData.pagos || {};\n\n// Monto del pago reciente (este pago específico)\nconst mcpTurno = mcpData.turno || {};\n\n// Precio total: MCP envía precio fusionado (hermanos combinados), Baserow tiene precio individual\n// Para turno adicional (Mani semi $8.000 + Balayage $60.000), MCP envía $68.000\nconst precioTotal = parseFloat(mcpTurno.precio) || parseFloat(turno.precio) || 0;\n\n// Seña recién pagada (monto de este pago)\nconst senaMontoNum = parseFloat(turno.sena_monto) || 0;\nconst pagoReciente = parseFloat(mcpTurno.sena) || senaMontoNum;\n\n// Datos acumulados del MCP (si están disponibles)\nconst totalPagado = pagos.total_pagado || senaMontoNum;\nconst cantidadPagos = pagos.cantidad_pagos || 1;\nconst pendienteRestante = pagos.pendiente_restante != null\n  ? pagos.pendiente_restante\n  : Math.max(0, precioTotal - totalPagado);\n\n// URL de confirmación de asistencia\nconst calendarAcceptUrl = mcpData.calendar_accept_url || null;\n\n// Detectar turno adicional con jornada completa → hora display = 09:00\nconst servicioDetalleMcp = mcpTurno.servicio_detalle || '';\nconst esServicioFusionado = servicioDetalleMcp.includes(' + ');\nconst SERVICIOS_JORNADA = ['balayage', 'alisado', 'mechas', 'tintura completa'];\nconst tieneJornadaCompleta = esServicioFusionado &&\n  SERVICIOS_JORNADA.some(s => servicioDetalleMcp.toLowerCase().includes(s));\nconst horaDisplay = tieneJornadaCompleta ? '09:00' : horaTurno;\nconst duracionDisplay = tieneJornadaCompleta ? 'Jornada completa (09:00 a 19:00)' : duracionTexto;\n// Servicios fusionados del MCP (ej: \"Pedicura + Balayage + Manicura semipermanente\")\nconst serviciosDisplay = esServicioFusionado ? servicioDetalleMcp.replace(/ \\+ /g, ' y ') : servicios;\n\n// Override turno_fecha para jornada completa → siempre 09:00 (hora de llegada de la clienta)\n// Evita que turno adicional (ej: Mani semi 12:00) sobreescriba con hora interna en LeadsLeraysi\nif (tieneJornadaCompleta && fechaTurno) {\n  turnoFechaISO = new Date(`${fechaTurno}T09:00:00-03:00`).toISOString();\n}\n\n// ============================================================================\n// CONSTRUIR MENSAJE PARA LA CLIENTA\n// ============================================================================\n\nconst nombreClienta = lead.full_name || turno.nombre_clienta?.[0]?.value || 'clienta';\nconst primerNombre = nombreClienta.split(' ')[0];\n\n// Card 1: Turno Reservado\nlet mensajeContent = `⋆˚🧚‍♀️ ¡${primerNombre}, tu pago fue recibido! ✨\n\n━━━━━━━━━━━━━━━━━━\n  📅 *Turno Reservado*\n━━━━━━━━━━━━━━━━━━\n\n💇 *Servicio:* ${serviciosDisplay}\n📆 *Fecha:* ${nombreDiaCap} ${fechaLegible}\n🕐 *Hora:* ${horaDisplay} hs`;\n\nif (duracionDisplay) {\n  mensajeContent += `\\n⏱️ *Duración:* ${duracionDisplay}`;\n}\n\nmensajeContent += `\\n📍 *Dirección:* Yerbal 513, CABA`;\n\n// Card 2: Detalle de Pago\nmensajeContent += `\n\n━━━━━━━━━━━━━━━━━━\n  💰 *Detalle de Pago*\n━━━━━━━━━━━━━━━━━━\n\n💳 *Pago recibido:* $${formatearMonto(pagoReciente)}\n✅ *Seña total pagada:* $${formatearMonto(totalPagado)}\n💲 *Precio total:* $${formatearMonto(precioTotal)}`;\n\nif (pendienteRestante > 0) {\n  mensajeContent += `\\n📌 *Pendiente:* $${formatearMonto(pendienteRestante)}`;\n} else {\n  mensajeContent += `\\n✨ *Pago completo*`;\n}\n\n// Correos enviados\nconst emailClienta = mcpTurno.email || '';\nmensajeContent += `\n\n━━━━━━━━━━━━━━━━━━\n  📧 *Correos enviados*\n━━━━━━━━━━━━━━━━━━\n\nTe enviamos a *${emailClienta}*:\n• 🧾 Recibo con el detalle de tu pago\n• 📅 Invitación al calendario con tu turno`;\n\nif (calendarAcceptUrl) {\n  mensajeContent += `\n\n👉 *Confirmá tu asistencia:*\n${calendarAcceptUrl}`;\n}\n\nmensajeContent += `\n\n¡Te esperamos en *Estilos Leraysi*! 💅✨`;\n\n// ============================================================================\n// CONSTRUIR NOTA ACTUALIZADA\n// ============================================================================\n\nconst notaActualizada = `Seña pagada ✓ - ${servicios} (${nombreDia} ${fechaLegible} ${horaTurno})`;\n\n// ============================================================================\n// EXTRAER VALORES DE CAMPOS CON ESTRUCTURA BASEROW\n// ============================================================================\n\nconst extractValue = (field) => {\n  if (Array.isArray(field) && field.length > 0) return field[0].value;\n  if (field && typeof field === 'object' && 'value' in field) return field.value;\n  return field;\n};\n\nconst extractValues = (field) => {\n  if (Array.isArray(field)) return field.map(f => f.value || f);\n  return field ? [field] : [];\n};\n\n// ============================================================================\n// CONSTRUIR baserow_update (campos a actualizar en LeadsLeraysi)\n// ============================================================================\n\nconst baserow_update = {\n  row_id: lead.id,\n  stage: 'turno_confirmado',\n  turno_agendado: true,\n  turno_fecha: turnoFechaISO,\n  sena_pagada: true,\n  notes: notaActualizada,\n  last_activity_iso: new Date().toISOString()\n};\n\n// ============================================================================\n// CONSTRUIR turno_update (campos definitivos para TurnosLeraysi)\n// ============================================================================\n// v2: El webhook de pago ahora escribe los campos definitivos a Baserow.\n// Estos datos vienen de Odoo (fuente de verdad) via el webhook body.\n// Antes de pagar, PrepararServicioAgregadoBaserow solo escribió campos\n// pendientes (mp_link, estado, expira_at). Ahora aplicamos los definitivos.\n// ============================================================================\n\nconst webhookTurno = webhook.body?.turno || {};\n\n// Extraer hora del turno de Odoo (fecha_hora viene como ISO: \"2026-02-26T12:00:00\")\nlet horaDefinitiva = horaTurno; // fallback a la hora de Baserow\nif (webhookTurno.fecha_hora) {\n  try {\n    // fecha_hora de Odoo viene en UTC, convertir a Argentina para extraer hora local\n    const fechaOdoo = new Date(webhookTurno.fecha_hora);\n    // Restar 3 horas (UTC → Argentina)\n    fechaOdoo.setHours(fechaOdoo.getHours() - 3);\n    const h = String(fechaOdoo.getHours()).padStart(2, '0');\n    const m = String(fechaOdoo.getMinutes()).padStart(2, '0');\n    horaDefinitiva = `${h}:${m}`;\n  } catch (e) {\n    // mantener fallback\n  }\n}\n\n// servicio de Odoo puede ser string (código) o puede venir servicio_detalle\nconst servicioOdoo = webhookTurno.servicio || turno.servicio;\nconst servicioDetalleOdoo = webhookTurno.servicio_detalle || turno.servicio_detalle || '';\n\n// turno_update: campos definitivos para Baserow TurnosLeraysi (tabla 855)\n// NO sobreescribir servicio/precio/duracion/complejidad cuando:\n// 1. Es hijo (tiene turno_padre_id) — cada fila Baserow mantiene su servicio individual\n// 2. Odoo envía datos fusionados (servicio_detalle con \"+\") — este es el padre de un turno adicional\n// En ambos casos, Baserow ya tiene los datos correctos pre-pago.\nconst esTurnoAdicionalBaserow = turno.turno_padre_id != null && turno.turno_padre_id !== '' && turno.turno_padre_id !== 0;\nconst noSobreescribirServicio = esTurnoAdicionalBaserow || esServicioFusionado;\n\nconst turno_update = {\n  row_id: turno.id,\n  // Campos de pago: mantener valor existente de Baserow si fusionado/hijo\n  sena_monto: noSobreescribirServicio\n    ? parseFloat(turno.sena_monto) || Math.round((parseFloat(turno.precio) || 0) * 0.3)\n    : Math.round((webhookTurno.precio || parseFloat(turno.precio) || 0) * 0.3),\n};\n\n// Solo sobreescribir datos del servicio en turnos standalone (sin fusión ni hijo)\nif (!noSobreescribirServicio) {\n  turno_update.servicio = Array.isArray(servicioOdoo) ? servicioOdoo : turno.servicio;\n  turno_update.servicio_detalle = servicioDetalleOdoo;\n  turno_update.hora = horaDefinitiva;\n  turno_update.duracion_min = webhookTurno.duracion_min || (webhookTurno.duracion ? Math.round(webhookTurno.duracion * 60) : null) || parseInt(turno.duracion_min) || 60;\n  turno_update.complejidad_maxima = webhookTurno.complejidad_maxima || turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';\n  turno_update.precio = webhookTurno.precio || parseFloat(turno.precio) || 0;\n}\n\n// ============================================================================\n// CONSTRUIR state (estado completo del lead)\n// ============================================================================\n\nconst state = {\n  row_id: lead.id,\n  nick_name: lead.nick_name || '',\n  full_name: lead.full_name || nombreClienta,\n  phone: lead.phone_number,\n  email: extractValue(lead.email) || '',\n  channel: extractValue(lead.channel) || 'whatsapp',\n  country: extractValue(lead.country) || 'Argentina',\n  tz: lead.tz || '-03:00',\n  stage: 'turno_confirmado',\n  priority: extractValue(lead.priority) || 'normal',\n  servicio_interes: lead.servicio_interes || serviciosLista[0] || '',\n  interests: extractValues(lead.interests),\n  foto_recibida: lead.foto_recibida || false,\n  presupuesto_dado: lead.presupuesto_dado || false,\n  turno_agendado: true,\n  turno_fecha: turnoFechaISO,\n  sena_pagada: true,\n  waiting_image: lead.waiting_image || false,\n  services_seen: parseInt(lead.services_seen) || 0,\n  prices_asked: parseInt(lead.prices_asked) || 0,\n  deep_interest: parseInt(lead.deep_interest) || 0,\n  lead_id: parseInt(lead.lead_id),\n  chatwoot_id: parseInt(lead.chatwoot_id),\n  chatwoot_inbox_id: parseInt(lead.chatwoot_inbox_id),\n  conversation_id: parseInt(lead.conversation_id || turno.conversation_id),\n  last_message: lead.last_message || '',\n  last_message_id: lead.last_message_id || '',\n  last_activity_iso: new Date().toISOString(),\n  description: `Seña pagada ✓ • Turno: ${nombreDia} ${fechaLegible} ${horaTurno} • ${servicios}`\n};\n\n// Parsear image_analysis si existe\nif (lead.image_analysis) {\n  try {\n    state.image_analysis = typeof lead.image_analysis === 'string'\n      ? JSON.parse(lead.image_analysis)\n      : lead.image_analysis;\n  } catch (e) {\n    state.image_analysis = null;\n  }\n}\n\n// ============================================================================\n// OUTPUT\n// ============================================================================\n\nreturn [{\n  json: {\n    // Mensaje para WhatsApp/Chatwoot\n    content_whatsapp: {\n      content: mensajeContent,\n      message_type: 'outgoing',\n      content_type: 'text'\n    },\n\n    // HTML para Odoo chatter\n    body_html: `<p>${mensajeContent.replace(/\\n/g, '<br>')}</p>`,\n\n    // IDs importantes\n    lead_id: parseInt(lead.lead_id),\n    row_id: lead.id,\n\n    // Campos a actualizar en Baserow LeadsLeraysi\n    baserow_update,\n\n    // Campos definitivos a actualizar en Baserow TurnosLeraysi\n    turno_update,\n\n    // Estado completo del lead\n    state,\n\n    // Metadata\n    meta: {\n      timestamp: new Date().toISOString(),\n      version: 'leraysi-pago-confirmado@2.0',\n      turno_id: turno.id,\n      odoo_turno_id: turno.odoo_turno_id,\n      mp_payment_id: turno.mp_payment_id\n    }\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        464,
+        528,
         128
       ],
       "id": "cfd4d65c-2064-4d1a-8847-6a681418e93c",
@@ -251,15 +242,15 @@
       "type": "n8n-nodes-base.odoo",
       "typeVersion": 1,
       "position": [
-        256,
+        240,
         352
       ],
       "id": "4513f9be-e445-414d-9dbd-382455d8dc9f",
       "name": "UpdateChatterLead",
       "credentials": {
         "odooApi": {
-          "id": "DHBH1iLumuDr9deF",
-          "name": "Odoo-Felix"
+          "id": "K1fZH9y5iy3WyNVm",
+          "name": "Odoo Leraysi"
         }
       }
     },
@@ -283,7 +274,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        688,
+        816,
         352
       ],
       "id": "3a0708bf-db61-4568-9efc-de36226b7a8b",
@@ -294,32 +285,23 @@
           "name": "Chatwoot Auth account "
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PREPARAR TURNO PAGADO - Webhook Pago Confirmado\n// ============================================================================\n// Combina datos del webhook (Odoo) con datos del turno (Baserow) para preparar\n// la actualización definitiva de TurnosLeraysi.\n//\n// SEPARACIÓN DE RESPONSABILIDADES:\n// - PrepararServicioAgregadoBaserow solo escribió campos pendientes (mp_link, estado)\n// - Este nodo prepara los campos DEFINITIVOS (servicio, hora, precio, etc.)\n//   que se aplican a Baserow SOLO cuando se confirma el pago.\n// ============================================================================\n// NODO: PrepararTurnoPagado (Code)\n// INPUT: BuscarTurnoPorMP (turno actual de Baserow)\n// ACCESO: WebhookPagoConfirmado (datos de Odoo via webhook)\n// OUTPUT: Campos listos para ActualizarTurnoPagado (Baserow Update)\n// ============================================================================\n\nconst turnoBaserow = $input.first().json;\nconst webhook = $('WebhookPagoConfirmado').first().json;\n\nconst odooTurno = webhook.body?.turno || {};\nconst payment = webhook.body?.payment || {};\nconst mcpData = webhook.body?.mcp?.data || {};\n\n// ============================================================================\n// MAPEO DE SERVICIO: código Odoo → display name Baserow\n// ============================================================================\nconst CODE_TO_DISPLAY = {\n  corte_mujer: 'Corte mujer',\n  alisado_brasileno: 'Alisado brasileño',\n  alisado_keratina: 'Alisado keratina',\n  mechas_completas: 'Mechas completas',\n  tintura_raiz: 'Tintura raíz',\n  tintura_completa: 'Tintura completa',\n  balayage: 'Balayage',\n  manicura_simple: 'Manicura simple',\n  manicura_semipermanente: 'Manicura semipermanente',\n  pedicura: 'Pedicura',\n  depilacion_cera_piernas: 'Depilación cera piernas',\n  depilacion_cera_axilas: 'Depilación cera axilas',\n  depilacion_cera_bikini: 'Depilación cera bikini',\n  depilacion_laser_piernas: 'Depilación láser piernas',\n  depilacion_laser_axilas: 'Depilación láser axilas',\n};\n\n// ============================================================================\n// RESOLVER SERVICIO (multi-select para Baserow)\n// ============================================================================\n// Odoo envía servicio_detalle como \"Manicura semipermanente + Pedicura\"\n// y servicio como código (\"manicura_semipermanente\")\nlet servicioArray;\nconst servicioDetalle = odooTurno.servicio_detalle || '';\n\nif (servicioDetalle && servicioDetalle.includes('+')) {\n  // Múltiples servicios: split por \"+\"\n  servicioArray = servicioDetalle.split('+').map(s => s.trim());\n} else if (servicioDetalle) {\n  // Un solo servicio con display name\n  servicioArray = [servicioDetalle];\n} else {\n  // Fallback: convertir código Odoo a display name\n  const code = odooTurno.servicio || '';\n  servicioArray = [CODE_TO_DISPLAY[code] || code];\n}\n\n// ============================================================================\n// RESOLVER HORA\n// ============================================================================\n// El webhook envía hora_argentina (HH:MM) ya convertida desde UTC en Python.\n// Fallback: turnoBaserow.hora (valor pre-pago de Baserow).\nconst hora = odooTurno.hora_argentina || turnoBaserow.hora || '09:00';\n\n// ============================================================================\n// DETECTAR TURNO CON SERVICIO FUSIONADO (padre de turno adicional)\n// ============================================================================\n// Cuando Odoo envía datos combinados (\"Balayage + Manicura simple\"), este turno\n// es el PADRE de un turno adicional. En Baserow cada fila mantiene su servicio\n// individual, así que NO sobreescribimos los campos de servicio del padre.\n// También detectamos si este row ES un hijo (tiene turno_padre_id).\nconst esFusionado = servicioDetalle.includes('+');\nconst esHijo = turnoBaserow.turno_padre_id != null\n  && turnoBaserow.turno_padre_id !== ''\n  && turnoBaserow.turno_padre_id !== 0;\nconst noSobreescribirServicio = esFusionado || esHijo;\n\n// ============================================================================\n// OUTPUT: Todos los campos para Baserow Update Row\n// ============================================================================\nconst precio = noSobreescribirServicio\n  ? parseFloat(turnoBaserow.precio) || 0\n  : (odooTurno.precio || parseFloat(turnoBaserow.precio) || 0);\n\n// Extraer servicio original de Baserow (puede ser array de objetos {id, value} o strings)\nconst servicioBaserow = Array.isArray(turnoBaserow.servicio)\n  ? turnoBaserow.servicio.map(s => s.value || s)\n  : [turnoBaserow.servicio || ''];\nconst servicioDetalleBaserow = turnoBaserow.servicio_detalle || servicioBaserow.join(' + ');\n\nreturn [{\n  json: {\n    // ID del row en Baserow para el UPDATE\n    row_id: turnoBaserow.id,\n\n    // Campos de estado (siempre se escriben)\n    sena_pagada: true,\n    estado: odooTurno.estado || 'confirmado',\n    mp_payment_id: payment.mp_payment_id || '',\n    confirmado_at: payment.confirmado_at || new Date().toISOString(),\n\n    // Campos de servicio: usar Baserow (original) si fusionado/hijo, sino Odoo (fuente de verdad)\n    fecha: turnoBaserow.fecha\n      ? new Date(`${turnoBaserow.fecha.split('T')[0]}T${noSobreescribirServicio ? (turnoBaserow.hora || '09:00') : hora}:00-03:00`).toISOString()\n      : null,\n    servicio: noSobreescribirServicio ? servicioBaserow : servicioArray,\n    servicio_detalle: noSobreescribirServicio ? servicioDetalleBaserow : servicioDetalle,\n    hora: noSobreescribirServicio ? (turnoBaserow.hora || '09:00') : hora,\n    duracion_min: noSobreescribirServicio\n      ? (parseInt(turnoBaserow.duracion_min) || 60)\n      : (odooTurno.duracion_min || (odooTurno.duracion ? Math.round(odooTurno.duracion * 60) : null) || parseInt(turnoBaserow.duracion_min) || 60),\n    complejidad_maxima: noSobreescribirServicio\n      ? (turnoBaserow.complejidad_maxima?.value || turnoBaserow.complejidad_maxima || 'media')\n      : (odooTurno.complejidad_maxima || turnoBaserow.complejidad_maxima?.value || turnoBaserow.complejidad_maxima || 'media'),\n    precio: precio,\n    // sena_monto: si fusionado/hijo, mantener valor existente de Baserow (cada fila tiene su seña)\n    // sino usar monto_pago_pendiente de Odoo (diferencial) o calcular 30%\n    sena_monto: noSobreescribirServicio\n      ? (parseFloat(turnoBaserow.sena_monto) || Math.round(precio * 0.3))\n      : (odooTurno.monto_pago_pendiente || Math.round(precio * 0.3)),\n\n    // odoo_event_id: ID del evento de calendario creado por confirmar_pago_completo\n    odoo_event_id: mcpData.event_id || null,\n  }\n}];\n"
+      },
+      "id": "preparar-turno-pagado",
+      "name": "PrepararTurnoPagado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -112
+      ]
     }
   ],
   "pinData": {},
   "connections": {
-    "BuscarTurnoPorMP": {
-      "main": [
-        [
-          {
-            "node": "PrepararTurnoPagado",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "PrepararTurnoPagado": {
-      "main": [
-        [
-          {
-            "node": "ActualizarTurnoPagado",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "WebhookPagoConfirmado": {
       "main": [
         [
@@ -385,26 +367,42 @@
           }
         ]
       ]
+    },
+    "BuscarTurnoPorMP": {
+      "main": [
+        [
+          {
+            "node": "PrepararTurnoPagado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PrepararTurnoPagado": {
+      "main": [
+        [
+          {
+            "node": "ActualizarTurnoPagado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
   "settings": {
     "executionOrder": "v1",
     "availableInMCP": false,
-    "callerPolicy": "workflowsFromSameOwner"
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "sNNc2VUXCSt9nDER"
   },
-  "versionId": "ded3912f-c648-4902-ae3d-f4c4ba3af86a",
+  "versionId": "bf349985-34e9-4cf8-84c4-4036ccce3b95",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
   },
   "id": "mlVG31koSK-Tdz7Csy0Wq",
-  "tags": [
-    {
-      "updatedAt": "2026-02-04T17:36:59.816Z",
-      "createdAt": "2025-11-22T14:50:50.701Z",
-      "id": "TbLp68InL21vTdmh",
-      "name": "leraysi-agent"
-    }
-  ]
+  "tags": []
 }

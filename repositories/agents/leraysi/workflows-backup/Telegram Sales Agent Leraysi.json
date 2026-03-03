@@ -1,0 +1,544 @@
+{
+  "name": "Telegram Sales Agent Leraysi",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram-leraysi-bot",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "tg-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        0
+      ],
+      "webhookId": "d2517dce-c972-4dcc-a4a1-ff2d4dfa2071",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ilArNHBdtnZ1XpLK",
+          "name": "Telegram Webhook Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "cond-text",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              },
+              "leftValue": "={{ $json.body.message.text }}"
+            },
+            {
+              "id": "cond-voice",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              },
+              "leftValue": "={{ $json.body.message.voice }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "filter-msg",
+      "name": "Filter Message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = $input.first().json.body.message;\nconst chat = msg.chat;\nconst from = msg.from;\nconst profile_base = {\n  phone_e164: String(chat.id),\n  nick_name: from.first_name || 'Unknown',\n  canal: 'telegram',\n  telegram_chat_id: String(chat.id),\n  telegram_username: from.username || '',\n  chatwoot_id: '',\n};\nconst event = {\n  message_text: msg.text || '[audio]',\n  message_id: String(msg.message_id),\n  now_iso_local: new Date().toISOString(),\n  has_voice: !!msg.voice,\n  has_photo: !!msg.photo,\n};\nreturn [{ json: { profile_base, event } }];"
+      },
+      "id": "normalize",
+      "name": "Normalize Inbound",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'tg_buf:' + $json.profile_base.telegram_chat_id }}",
+        "messageData": "={{ JSON.stringify($json.event) }}",
+        "tail": true
+      },
+      "id": "redis-push",
+      "name": "PushBufferEvent",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        592,
+        -16
+      ],
+      "credentials": {
+        "redis": {
+          "id": "GgQvbCjEYsUxvMUo",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "buf_raw",
+        "key": "={{ 'tg_buf:' + $('Normalize Inbound').first().json.profile_base.telegram_chat_id }}",
+        "options": {}
+      },
+      "id": "redis-get",
+      "name": "Buf_FetchAll",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        -16
+      ],
+      "credentials": {
+        "redis": {
+          "id": "GgQvbCjEYsUxvMUo",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 8
+      },
+      "id": "wait-silence",
+      "name": "Wait 8s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1328,
+        -16
+      ],
+      "webhookId": "a2f272da-c7a5-4421-a0e5-1b04387f1cc5"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "buf_raw",
+        "key": "={{ 'tg_buf:' + $('Normalize Inbound').first().json.profile_base.telegram_chat_id }}",
+        "options": {}
+      },
+      "id": "redis-get2",
+      "name": "Buf_FetchAfterWait",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        208
+      ],
+      "credentials": {
+        "redis": {
+          "id": "GgQvbCjEYsUxvMUo",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const bufRaw = $input.first().json.buf_raw;\nconst currentEvent = $('Normalize Inbound').first().json.event;\n\nlet events = [];\ntry {\n  if (Array.isArray(bufRaw)) {\n    events = bufRaw.map(e => typeof e === 'string' ? JSON.parse(e) : e);\n  } else if (typeof bufRaw === 'string') {\n    try { const parsed = JSON.parse(bufRaw); events = Array.isArray(parsed) ? parsed : [parsed]; }\n    catch { events = []; }\n  }\n} catch(e) { events = []; }\n\nconst lastEvent = events.length > 0 ? events[events.length - 1] : null;\n\nif (!lastEvent || lastEvent.message_id !== currentEvent.message_id) {\n  return [{ json: { action: 'discard' } }];\n}\n\nconst concatenatedText = events.map(e => e.message_text).join(' ');\nreturn [{ json: { action: 'process', concatenated_text: concatenatedText, event_count: events.length, profile_base: $('Normalize Inbound').first().json.profile_base } }];"
+      },
+      "id": "window-decision",
+      "name": "WindowDecision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-proc",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "process"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-process",
+      "name": "Should Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ 'tg_buf:' + $json.profile_base.telegram_chat_id }}"
+      },
+      "id": "redis-flush",
+      "name": "Buf_Flush",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        416,
+        192
+      ],
+      "credentials": {
+        "redis": {
+          "id": "GgQvbCjEYsUxvMUo",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://leraysi.leonobitech.com/salon_messaging/receive",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "e503eb9c1736aa868d658a2e8089914fd09c45bd171c242da7114835587eb3cd"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"call\",\n  \"params\": {\n    \"chat_id\": {{ JSON.stringify($('Should Process?').first().json.profile_base?.telegram_chat_id) }},\n    \"first_name\": {{ JSON.stringify($('Should Process?').first().json.profile_base?.nick_name) }},\n    \"username\": {{ JSON.stringify($('Should Process?').first().json.profile_base?.telegram_username) }},\n    \"text\": {{ JSON.stringify($('Should Process?').first().json.concatenated_text) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "post-discuss",
+      "name": "Post to Discuss",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        592,
+        192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KMNArELaV7dSfNB9",
+          "name": "Odoo Salon Messaging API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Should Process?').first().json.concatenated_text }}",
+        "options": {
+          "systemMessage": "Sos Lera, la asistente virtual de Estilos Leraysi, un salón de belleza.\n\nTu personalidad:\n- Venezolana, cálida, cercana\n- Usás \"mi amor\", \"bella\", \"corazón\" naturalmente\n- Respondés siempre en español\n- Respuestas cortas y directas (2-3 oraciones máximo)\n\nServicios del salón:\n- Corte de cabello\n- Alisado (keratina, progresivo)\n- Coloración (mechas, balayage, tintura)\n- Manicura y pedicura\n- Maquillaje\n- Cejas y pestañas\n\nPor ahora solo podés:\n1. Saludar y dar la bienvenida\n2. Informar sobre servicios disponibles\n3. Decir que pronto podrán agendar turnos por Telegram\n\nSi preguntan por precios, decí que depende del tipo de cabello y largo, y que pueden acercarse al salón o escribir por WhatsApp para una consulta personalizada.\n\nNUNCA inventés precios ni disponibilidad de turnos.\nNUNCA respondas en otro idioma que no sea español."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent Leraysi",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        784,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-haiku-4-5-20251001",
+          "mode": "list",
+          "cachedResultName": "Claude Haiku 4.5"
+        },
+        "options": {
+          "maxTokensToSample": 1024,
+          "temperature": 0.7
+        }
+      },
+      "id": "llm-model",
+      "name": "Claude Haiku",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        416
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "SUw0YD5b2MOCmI7u",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://leraysi.leonobitech.com/salon_messaging/bot_response",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"call\",\n  \"params\": {\n    \"chat_id\": {{ JSON.stringify($('Should Process?').first().json.profile_base?.telegram_chat_id) }},\n    \"text\": {{ JSON.stringify($('AI Agent Leraysi').first().json.output || '') }}\n  }\n}",
+        "options": {}
+      },
+      "id": "post-bot-discuss",
+      "name": "Post Bot Response to Discuss",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KMNArELaV7dSfNB9",
+          "name": "Odoo Salon Messaging API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Should Process?').first().json.profile_base?.telegram_chat_id }}",
+        "text": "={{ $json.output || $json.text || 'Lo siento, hubo un error.' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1072,
+        192
+      ],
+      "id": "4e17930f-026f-4718-8c77-05ef7498a9e2",
+      "name": "Send a text message",
+      "webhookId": "9d0fd9fc-bfb6-4e4e-84c1-0c161f0b2101",
+      "credentials": {
+        "telegramApi": {
+          "id": "upSlRDMUzAOjnVaZ",
+          "name": "Telegram @LeraysiBot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Filter Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Message": {
+      "main": [
+        [
+          {
+            "node": "Normalize Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Normalize Inbound": {
+      "main": [
+        [
+          {
+            "node": "PushBufferEvent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PushBufferEvent": {
+      "main": [
+        [
+          {
+            "node": "Buf_FetchAll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buf_FetchAll": {
+      "main": [
+        [
+          {
+            "node": "Wait 8s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 8s": {
+      "main": [
+        [
+          {
+            "node": "Buf_FetchAfterWait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buf_FetchAfterWait": {
+      "main": [
+        [
+          {
+            "node": "WindowDecision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WindowDecision": {
+      "main": [
+        [
+          {
+            "node": "Should Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Process?": {
+      "main": [
+        [
+          {
+            "node": "Buf_Flush",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Buf_Flush": {
+      "main": [
+        [
+          {
+            "node": "Post to Discuss",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Discuss": {
+      "main": [
+        [
+          {
+            "node": "AI Agent Leraysi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Haiku": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent Leraysi",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent Leraysi": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Post Bot Response to Discuss",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Argentina/Buenos_Aires",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "22969918-b9b3-4c06-a439-91a3284cfd70",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "139978cf5306b2088f2678ada72723ae1358f933aa7f201b1f1b735014d19bcf"
+  },
+  "id": "0Hj5gpSltdjjzPT0",
+  "tags": [
+    {
+      "updatedAt": "2026-02-04T17:36:59.816Z",
+      "createdAt": "2025-11-22T14:50:50.701Z",
+      "id": "TbLp68InL21vTdmh",
+      "name": "leraysi-agent"
+    }
+  ]
+}
