@@ -31,22 +31,22 @@ console.log("[LoadProfile-Image] Usando contadores de Baserow:", {
 // ============================================================================
 
 const country =
-  typeof baserowData.country === "object" && baserowData.country.value
+  typeof baserowData.country === "object" && baserowData.country && baserowData.country.value
     ? baserowData.country.value
     : baserowData.country || "Argentina";
 
 const channel =
-  typeof baserowData.channel === "object" && baserowData.channel.value
+  typeof baserowData.channel === "object" && baserowData.channel && baserowData.channel.value
     ? baserowData.channel.value
     : baserowData.channel || "whatsapp";
 
 const stage =
-  typeof baserowData.stage === "object" && baserowData.stage.value
+  typeof baserowData.stage === "object" && baserowData.stage && baserowData.stage.value
     ? baserowData.stage.value
     : baserowData.stage || "consulta";
 
 const priority =
-  typeof baserowData.priority === "object" && baserowData.priority.value
+  typeof baserowData.priority === "object" && baserowData.priority && baserowData.priority.value
     ? baserowData.priority.value
     : baserowData.priority || "normal";
 
