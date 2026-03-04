@@ -71,6 +71,11 @@ class SalonMessagingAPI(http.Controller):
             # Get or create partner for the sender (chat_id as stable ref)
             partner = ChannelModel.get_or_create_partner(first_name, chat_id, username)
 
+            # Sync channel name with partner name (covers pre-existing name updates)
+            expected_name = f'TG: {partner.name}'
+            if channel.name != expected_name:
+                channel.name = expected_name
+
             # Link to CRM lead if provided
             if lead_id and not channel.lead_id:
                 lead = env['crm.lead'].browse(int(lead_id))
