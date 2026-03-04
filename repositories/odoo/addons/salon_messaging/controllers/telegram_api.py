@@ -291,8 +291,18 @@ class SalonMessagingAPI(http.Controller):
             })
 
             # Determine author
+            lead_id = kwargs.get('lead_id')
             if author_type == 'bot':
                 author = self._get_bot_partner()
+            elif lead_id:
+                lead = env['crm.lead'].browse(int(lead_id))
+                if lead.exists() and lead.partner_id:
+                    author = lead.partner_id
+                else:
+                    author = ChannelModel.get_or_create_partner(
+                        channel.name.replace('TG: ', ''),
+                        channel.telegram_username or '',
+                    )
             else:
                 author = ChannelModel.get_or_create_partner(
                     channel.name.replace('TG: ', ''),
