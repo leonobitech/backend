@@ -1,5 +1,6 @@
 import json
 import logging
+import base64
 from markupsafe import Markup
 from odoo import http, SUPERUSER_ID
 from odoo.http import request, Response
@@ -235,3 +236,85 @@ class SalonMessagingAPI(http.Controller):
             })
 
         return self._json_response({'success': True, 'channels': result})
+
+    # ─────────────────────────────────────────────
+    # POST /salon_messaging/send_image
+    # n8n sends an image (form-data) to Discuss
+    # ─────────────────────────────────────────────
+    @http.route(
+        '/salon_messaging/send_image',
+        type='http',
+        auth='none',
+        methods=['POST'],
+        csrf=False,
+    )
+    def send_image(self, **kwargs):
+        """Post an image to a Discuss Telegram channel.
+        Accepts multipart/form-data with: chat_id, file, caption (optional), author (optional: 'client' or 'bot')."""
+        if not self._check_api_key():
+            return self._json_response({'success': False, 'error': 'Invalid API key'}, 403)
+
+        try:
+            chat_id = kwargs.get('chat_id')
+            caption = kwargs.get('caption', '')
+            author_type = kwargs.get('author', 'client')
+
+            if not chat_id:
+                return self._json_response({'success': False, 'error': 'chat_id is required'}, 400)
+
+            uploaded_file = request.httprequest.files.get('file')
+            if not uploaded_file:
+                return self._json_response({'success': False, 'error': 'file is required'}, 400)
+
+            env = request.env(user=SUPERUSER_ID)
+            ChannelModel = env['discuss.channel']
+
+            channel = ChannelModel.search([
+                ('telegram_chat_id', '=', str(chat_id)),
+                ('is_telegram', '=', True),
+            ], limit=1)
+
+            if not channel:
+                return self._json_response(
+                    {'success': False, 'error': f'No channel for chat_id {chat_id}'}, 404
+                )
+
+            # Read and encode file
+            file_content = uploaded_file.read()
+            file_name = uploaded_file.filename or 'image.jpg'
+
+            attachment = env['ir.attachment'].create({
+                'name': file_name,
+                'datas': base64.b64encode(file_content),
+                'res_model': 'discuss.channel',
+                'res_id': channel.id,
+            })
+
+            # Determine author
+            if author_type == 'bot':
+                author = self._get_bot_partner()
+            else:
+                author = ChannelModel.get_or_create_partner(
+                    channel.name.replace('TG: ', ''),
+                    channel.telegram_username or '',
+                )
+
+            body = Markup(f'<p>{caption}</p>') if caption else ''
+            message = channel.with_context(from_telegram_api=True).message_post(
+                body=body,
+                author_id=author.id,
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment',
+                attachment_ids=[(4, attachment.id)],
+            )
+
+            return self._json_response({
+                'success': True,
+                'channel_id': channel.id,
+                'message_id': message.id,
+                'attachment_id': attachment.id,
+            })
+
+        except Exception as e:
+            _logger.error('Error sending image: %s', e)
+            return self._json_response({'success': False, 'error': str(e)}, 500)
