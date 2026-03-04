@@ -305,7 +305,7 @@ class SalonMessagingAPI(http.Controller):
                 author_id=author.id,
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment',
-                attachment_ids=[(4, attachment.id)],
+                attachment_ids=[attachment.id],
             )
 
             return self._json_response({
