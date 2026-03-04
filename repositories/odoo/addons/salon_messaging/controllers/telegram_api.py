@@ -68,8 +68,8 @@ class SalonMessagingAPI(http.Controller):
                 chat_id, first_name, username
             )
 
-            # Get or create partner for the sender
-            partner = ChannelModel.get_or_create_partner(first_name, username)
+            # Get or create partner for the sender (chat_id as stable ref)
+            partner = ChannelModel.get_or_create_partner(first_name, chat_id, username)
 
             # Link to CRM lead if provided
             if lead_id and not channel.lead_id:
@@ -301,11 +301,13 @@ class SalonMessagingAPI(http.Controller):
                 else:
                     author = ChannelModel.get_or_create_partner(
                         channel.name.replace('TG: ', ''),
+                        channel.telegram_chat_id,
                         channel.telegram_username or '',
                     )
             else:
                 author = ChannelModel.get_or_create_partner(
                     channel.name.replace('TG: ', ''),
+                    channel.telegram_chat_id,
                     channel.telegram_username or '',
                 )
 

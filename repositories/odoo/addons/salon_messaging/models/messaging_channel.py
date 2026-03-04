@@ -104,30 +104,22 @@ class DiscussChannel(models.Model):
         return channel
 
     @api.model
-    def get_or_create_partner(self, name, telegram_username=False):
-        """Find or create a res.partner for a Telegram user."""
+    def get_or_create_partner(self, name, chat_id, telegram_username=False):
+        """Find or create a res.partner for a Telegram user.
+        Uses chat_id as stable ref to avoid duplicates when name changes."""
         Partner = self.env['res.partner'].sudo()
 
-        # Search by telegram ref first
-        if telegram_username:
-            partner = Partner.search([
-                ('ref', '=', f'tg:{telegram_username}'),
-            ], limit=1)
-            if partner:
-                return partner
-
-        # Search by name
+        # Search by chat_id ref (stable, never changes)
         partner = Partner.search([
-            ('name', '=', name),
-            ('ref', 'like', 'tg:'),
+            ('ref', '=', f'tg:{chat_id}'),
         ], limit=1)
 
         if not partner:
             partner = Partner.create({
                 'name': name,
-                'ref': f'tg:{telegram_username}' if telegram_username else f'tg:{name}',
+                'ref': f'tg:{chat_id}',
                 'comment': 'Created automatically from Telegram',
             })
-            _logger.info('Created partner %s for Telegram user %s', partner.id, name)
+            _logger.info('Created partner %s (chat_id=%s) for Telegram user %s', partner.id, chat_id, name)
 
         return partner
