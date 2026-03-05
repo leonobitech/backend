@@ -29,10 +29,6 @@ adminRouter.post("/baserow", (req, res) => {
   res.json({ url: "https://br.leonobitech.com", sessionId: req.sessionId });
 });
 
-adminRouter.post("/leonobit", (req, res) => {
-  res.json({ url: "https://leonobit.leonobitech.com", sessionId: req.sessionId });
-});
-
 // 📹 Upload podcast video (legacy - requires apiKeyGuard)
 adminRouter.post("/upload-podcast", uploadMiddleware, uploadPodcast);
 

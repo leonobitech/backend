@@ -87,7 +87,6 @@ show_image_info "qdrant/qdrant:latest" "🧠 Qdrant"
 show_image_info "baserow/backend:latest" "📊 Baserow Backend"
 show_image_info "baserow/web-frontend:latest" "📊 Baserow Frontend"
 show_image_info "leonobitech/core:v1.0.1" "⚙️  Core (local)"
-show_image_info "leonobitech/leonobit:latest" "🦁 Leonobit (local)"
 show_image_info "leonobitech/odoo_mcp:v2.0" "🔌 Odoo MCP (local)"
 
 # ============================================================

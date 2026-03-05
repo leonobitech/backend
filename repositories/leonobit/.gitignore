@@ -1,9 +1,0 @@
-# Rust
-/target
-Cargo.lock
-
-# Env files locales
-.env.local
-
-# Modelos de Whisper (muy grandes, no subir al repo)
-models/*.bin
