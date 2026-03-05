@@ -86,8 +86,8 @@
                         <page string="Payment History" invisible="payment_count == 0">
                             <field name="payment_ids" readonly="1">
                                 <list>
-                                    <field name="date"/>
-                                    <field name="type"/>
+                                    <field name="payment_date"/>
+                                    <field name="payment_type"/>
                                     <field name="amount"/>
                                     <field name="state" widget="badge" decoration-success="state == 'approved'" decoration-warning="state == 'pending'" decoration-danger="state in ['rejected', 'cancelled']"/>
                                     <field name="mp_payment_id"/>
