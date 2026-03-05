@@ -251,7 +251,6 @@ http:
         browserXssFilter: true
         contentTypeNosniff: true
         referrerPolicy: "no-referrer"
-        # Evita forzar frame deny en endpoints embebibles tipo Chatwoot widget
         # frameDeny: true   # <- si tienes widget embebido, mejor NO aplicarlo en WS
 
     #########################################
@@ -288,23 +287,6 @@ http:
         rejectStatusCode: 403
       # Nota: Traefik no tiene ipDenyList nativo, usamos ipAllowList invertido
       # Para bloquear IPs específicas, necesitamos otro enfoque
-
-    # -------------------------------------------------------------------------
-    # 🛡️ IP Whitelist para Chatwoot - Solo permite IPs confiables
-    # -------------------------------------------------------------------------
-    chatwoot-ip-filter:
-      ipWhiteList:
-        sourceRange:
-          # Rangos locales/privados
-          - "127.0.0.1/32"
-          - "10.0.0.0/8"
-          - "172.16.0.0/12"
-          - "192.168.0.0/16"
-          # Red de Docker
-          - "172.17.0.0/16"
-          # TODO: Añade tu IP pública aquí cuando la tengas
-          # - "TU_IP_PUBLICA/32"
-        # Rechazar 62.171.169.169 y cualquier otra IP no en la lista
 
     # -------------------------------------------------------------------------
     # 🧬 Combinado: Autenticación + headers relajados para frontends

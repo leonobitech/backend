@@ -11,7 +11,7 @@ TMP_LOG="/tmp/deploy-$(date +%Y%m%d-%H%M%S).log"
 SUBJECT="🚀 Deploy completado - Leonobitech [$NOW]"
 
 # Servicios con imágenes de DockerHub (pull latest)
-EXTERNAL_SERVICES="n8n_main n8n_webhook_1 n8n_worker_1 n8n_worker_2 odoo qdrant backend baserow baserow_celery baserow_celery_export_worker baserow_celery_beat baserow_media chatwoot chatwoot_sidekiq"
+EXTERNAL_SERVICES="n8n_main n8n_webhook_1 n8n_worker_1 n8n_worker_2 odoo qdrant backend baserow baserow_celery baserow_celery_export_worker baserow_celery_beat baserow_media"
 
 # Servicios con build local (rebuild sin cache)
 LOCAL_SERVICES="core odoo_mcp"
@@ -86,7 +86,6 @@ show_image_info "odoo:latest" "🏢 Odoo"
 show_image_info "qdrant/qdrant:latest" "🧠 Qdrant"
 show_image_info "baserow/backend:latest" "📊 Baserow Backend"
 show_image_info "baserow/web-frontend:latest" "📊 Baserow Frontend"
-show_image_info "chatwoot/chatwoot:latest" "💬 Chatwoot"
 show_image_info "leonobitech/core:v1.0.1" "⚙️  Core (local)"
 show_image_info "leonobitech/leonobit:latest" "🦁 Leonobit (local)"
 show_image_info "leonobitech/odoo_mcp:v2.0" "🔌 Odoo MCP (local)"
