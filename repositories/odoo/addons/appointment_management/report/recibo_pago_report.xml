@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Report action for generating payment receipt PDF -->
+    <record id="action_report_payment_receipt" model="ir.actions.report">
+        <field name="name">Payment Receipt - Deposit</field>
+        <field name="model">appointment.booking</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">appointment_management.report_payment_receipt_template</field>
+        <field name="report_file">appointment_management.report_payment_receipt_template</field>
+        <field name="print_report_name">'Booking_Receipt_%s_%s' % (object.client_name.replace(' ', '_'), object.id)</field>
+        <field name="binding_model_id" ref="model_appointment_booking"/>
+        <field name="binding_type">report</field>
+    </record>
+</odoo>

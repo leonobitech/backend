@@ -1,5 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_salon_turno_user,salon.turno.user,model_salon_turno,base.group_user,1,1,1,0
-access_salon_turno_manager,salon.turno.manager,model_salon_turno,base.group_system,1,1,1,1
-access_salon_turno_pago_user,salon.turno.pago.user,model_salon_turno_pago,base.group_user,1,0,0,0
-access_salon_turno_pago_manager,salon.turno.pago.manager,model_salon_turno_pago,base.group_system,1,1,1,1

@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- List View -->
+    <record id="appointment_booking_view_list" model="ir.ui.view">
+        <field name="name">appointment.booking.list</field>
+        <field name="model">appointment.booking</field>
+        <field name="arch" type="xml">
+            <list string="Bookings" decoration-danger="state == 'cancelled'" decoration-success="state == 'confirmed'" decoration-muted="state == 'completed'" decoration-warning="state == 'pending_payment'">
+                <field name="scheduled_datetime"/>
+                <field name="client_name"/>
+                <field name="phone"/>
+                <field name="worker"/>
+                <field name="service_type"/>
+                <field name="duration_hours"/>
+                <field name="total_price"/>
+                <field name="deposit_amount"/>
+                <field name="deposit_paid"/>
+                <field name="state" widget="badge" decoration-danger="state == 'cancelled'" decoration-success="state == 'confirmed'" decoration-info="state == 'completed'" decoration-warning="state == 'pending_payment'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="appointment_booking_view_form" model="ir.ui.view">
+        <field name="name">appointment.booking.form</field>
+        <field name="model">appointment.booking</field>
+        <field name="arch" type="xml">
+            <form string="Booking">
+                <header>
+                    <button name="action_generate_payment_link" type="object" string="Generate Payment Link" class="btn-primary" invisible="payment_link or state in ['completed', 'cancelled']"/>
+                    <button name="action_confirm_manual_payment" type="object" string="Confirm Manual Payment" class="btn-secondary" invisible="deposit_paid or state in ['completed', 'cancelled']"/>
+                    <button name="action_complete" type="object" string="Complete" class="btn-success" invisible="state != 'confirmed'"/>
+                    <button name="action_cancel" type="object" string="Cancel" class="btn-danger" invisible="state in ['completed', 'cancelled']"/>
+                    <button name="action_reopen" type="object" string="Reopen" invisible="state != 'cancelled'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="pending_payment,confirmed,completed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="client_name" placeholder="Client name"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Client Information">
+                            <field name="phone" widget="phone"/>
+                            <field name="email" widget="email"/>
+                        </group>
+                        <group string="Service">
+                            <field name="worker"/>
+                            <field name="service_type"/>
+                            <field name="service_detail"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Date and Time">
+                            <field name="scheduled_datetime"/>
+                            <field name="duration_hours"/>
+                            <field name="end_datetime"/>
+                        </group>
+                        <group string="Payment">
+                            <field name="total_price"/>
+                            <field name="deposit_amount"/>
+                            <field name="deposit_paid"/>
+                            <field name="remaining_amount"/>
+                        </group>
+                    </group>
+                    <group string="Pending Service Payment" invisible="not pending_changes">
+                        <field name="pending_changes" readonly="1" widget="text"/>
+                        <field name="pending_payment_amount"/>
+                    </group>
+                    <notebook>
+                        <page string="MercadoPago" invisible="not payment_link">
+                            <group>
+                                <group>
+                                    <field name="payment_link" widget="url"/>
+                                    <field name="mp_preference_id"/>
+                                    <field name="mp_payment_id"/>
+                                </group>
+                                <group>
+                                    <field name="total_paid"/>
+                                    <field name="payment_count"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Payment History" invisible="payment_count == 0">
+                            <field name="payment_ids" readonly="1">
+                                <list>
+                                    <field name="date"/>
+                                    <field name="type"/>
+                                    <field name="amount"/>
+                                    <field name="state" widget="badge" decoration-success="state == 'approved'" decoration-warning="state == 'pending'" decoration-danger="state in ['rejected', 'cancelled']"/>
+                                    <field name="mp_payment_id"/>
+                                    <field name="description"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Notes">
+                            <field name="notes" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- Calendar View -->
+    <record id="appointment_booking_view_calendar" model="ir.ui.view">
+        <field name="name">appointment.booking.calendar</field>
+        <field name="model">appointment.booking</field>
+        <field name="arch" type="xml">
+            <calendar string="Bookings" date_start="scheduled_datetime" date_stop="end_datetime" color="worker" mode="week">
+                <field name="client_name"/>
+                <field name="worker"/>
+                <field name="service_type"/>
+                <field name="state"/>
+            </calendar>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="appointment_booking_view_search" model="ir.ui.view">
+        <field name="name">appointment.booking.search</field>
+        <field name="model">appointment.booking</field>
+        <field name="arch" type="xml">
+            <search string="Search Bookings">
+                <field name="client_name"/>
+                <field name="phone"/>
+                <field name="service_type"/>
+                <field name="state"/>
+                <filter name="filter_pending_payment" string="Pending Payment" domain="[('state', '=', 'pending_payment')]"/>
+                <filter name="filter_confirmed" string="Confirmed" domain="[('state', '=', 'confirmed')]"/>
+                <filter name="filter_completed" string="Completed" domain="[('state', '=', 'completed')]"/>
+                <filter name="filter_cancelled" string="Cancelled" domain="[('state', '=', 'cancelled')]"/>
+                <separator/>
+                <filter name="filter_primary" string="Primary" domain="[('worker', '=', 'primary')]"/>
+                <filter name="filter_secondary" string="Secondary" domain="[('worker', '=', 'secondary')]"/>
+                <separator/>
+                <filter name="group_state" string="State" context="{'group_by': 'state'}"/>
+                <filter name="group_worker" string="Worker" context="{'group_by': 'worker'}"/>
+                <filter name="group_service" string="Service" context="{'group_by': 'service_type'}"/>
+                <filter name="group_date" string="Date" context="{'group_by': 'scheduled_datetime:day'}"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- Kanban View -->
+    <record id="appointment_booking_view_kanban" model="ir.ui.view">
+        <field name="name">appointment.booking.kanban</field>
+        <field name="model">appointment.booking</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="worker">
+                <templates>
+                    <t t-name="card">
+                        <field name="client_name" bold="True"/>
+                        <field name="state" widget="badge"
+                            decoration-danger="state == 'cancelled'"
+                            decoration-success="state == 'confirmed'"
+                            decoration-info="state == 'completed'"
+                            decoration-warning="state == 'pending_payment'"/>
+                        <field name="scheduled_datetime"/>
+                        <field name="service_type"/>
+                        <div class="d-flex justify-content-between">
+                            <span title="Duration"><field name="duration_hours"/>h</span>
+                            <strong>$<field name="total_price"/></strong>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- Menu Action -->
+    <record id="appointment_booking_action" model="ir.actions.act_window">
+        <field name="name">Bookings</field>
+        <field name="res_model">appointment.booking</field>
+        <field name="view_mode">kanban,list,form,calendar</field>
+        <field name="search_view_id" ref="appointment_booking_view_search"/>
+        <field name="context">{'search_default_filter_hoy': 0}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first booking
+            </p>
+            <p>
+                Manage appointment bookings with MercadoPago payment integration.
+            </p>
+        </field>
+    </record>
+
+    <!-- Root Menu -->
+    <menuitem id="appointment_menu_root" name="Appointments" sequence="10" web_icon="appointment_management,static/description/icon.png"/>
+
+    <!-- Sub-menu -->
+    <menuitem id="appointment_menu_bookings" name="Bookings" parent="appointment_menu_root" action="appointment_booking_action" sequence="10"/>
+
+</odoo>

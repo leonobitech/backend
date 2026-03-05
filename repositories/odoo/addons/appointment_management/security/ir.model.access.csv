@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_appointment_booking_user,appointment.booking.user,model_appointment_booking,base.group_user,1,1,1,0
+access_appointment_booking_manager,appointment.booking.manager,model_appointment_booking,base.group_system,1,1,1,1
+access_appointment_payment_user,appointment.payment.user,model_appointment_payment,base.group_user,1,0,0,0
+access_appointment_payment_manager,appointment.payment.manager,model_appointment_payment,base.group_system,1,1,1,1

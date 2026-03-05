@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_payment_receipt_template">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <!-- Header with company name -->
+                        <div style="text-align: center; margin-bottom: 30px;">
+                            <h1 style="color: #875A7B; margin-bottom: 5px; font-size: 28px;">
+                                <t t-esc="o.company_id.name"/>
+                            </h1>
+                            <t t-if="o.company_id.city or o.company_id.country_id">
+                                <p style="color: #666; font-size: 14px; margin: 0;">
+                                    <t t-if="o.company_id.city"><t t-esc="o.company_id.city"/></t>
+                                    <t t-if="o.company_id.city and o.company_id.country_id">, </t>
+                                    <t t-if="o.company_id.country_id"><t t-esc="o.company_id.country_id.name"/></t>
+                                </p>
+                            </t>
+                        </div>
+
+                        <!-- Receipt title -->
+                        <div style="background: linear-gradient(135deg, #875A7B 0%, #6B4F6B 100%);
+                                    color: white;
+                                    padding: 15px 20px;
+                                    border-radius: 8px;
+                                    margin-bottom: 25px;
+                                    text-align: center;">
+                            <h2 style="margin: 0; font-size: 22px;">PAYMENT RECEIPT - DEPOSIT</h2>
+                            <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">
+                                Booking reservation confirmation
+                            </p>
+                        </div>
+
+                        <!-- Receipt info -->
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 25px;">
+                            <div>
+                                <p style="margin: 0; color: #666; font-size: 12px;">Issue date</p>
+                                <p style="margin: 0; font-weight: bold;">
+                                    <t t-esc="context_timestamp(datetime.datetime.now()).strftime('%d/%m/%Y %H:%M')"/>
+                                </p>
+                            </div>
+                            <div style="text-align: right;">
+                                <p style="margin: 0; color: #666; font-size: 12px;">Booking #</p>
+                                <p style="margin: 0; font-weight: bold; font-size: 18px; color: #875A7B;">
+                                    #<t t-esc="o.id"/>
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Client information -->
+                        <div style="background-color: #f8f9fa;
+                                    padding: 20px;
+                                    border-radius: 8px;
+                                    margin-bottom: 20px;
+                                    border-left: 4px solid #875A7B;">
+                            <h3 style="margin: 0 0 15px 0; color: #875A7B; font-size: 16px;">
+                                CLIENT INFORMATION
+                            </h3>
+                            <table style="width: 100%;">
+                                <tr>
+                                    <td style="padding: 5px 0; width: 120px; color: #666;">Name:</td>
+                                    <td style="padding: 5px 0; font-weight: bold;">
+                                        <t t-esc="o.client_name"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 5px 0; color: #666;">Phone:</td>
+                                    <td style="padding: 5px 0;">
+                                        <t t-esc="o.phone"/>
+                                    </td>
+                                </tr>
+                                <t t-if="o.email">
+                                    <tr>
+                                        <td style="padding: 5px 0; color: #666;">Email:</td>
+                                        <td style="padding: 5px 0;">
+                                            <t t-esc="o.email"/>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </table>
+                        </div>
+
+                        <!-- Service details -->
+                        <div style="background-color: #f8f9fa;
+                                    padding: 20px;
+                                    border-radius: 8px;
+                                    margin-bottom: 20px;
+                                    border-left: 4px solid #17a2b8;">
+                            <h3 style="margin: 0 0 15px 0; color: #17a2b8; font-size: 16px;">
+                                SERVICE DETAILS
+                            </h3>
+                            <table style="width: 100%;">
+                                <tr>
+                                    <td style="padding: 5px 0; width: 120px; color: #666;">Service:</td>
+                                    <td style="padding: 5px 0; font-weight: bold; text-transform: capitalize;">
+                                        <t t-esc="dict(o._fields['service_type'].selection).get(o.service_type)"/>
+                                    </td>
+                                </tr>
+                                <t t-if="o.service_detail">
+                                    <tr>
+                                        <td style="padding: 5px 0; color: #666;">Detail:</td>
+                                        <td style="padding: 5px 0;">
+                                            <t t-esc="o.service_detail"/>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <tr>
+                                    <td style="padding: 5px 0; color: #666;">Date:</td>
+                                    <td style="padding: 5px 0; font-weight: bold;">
+                                        <t t-esc="o.scheduled_datetime.strftime('%A %d %B, %Y')" />
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 5px 0; color: #666;">Time:</td>
+                                    <td style="padding: 5px 0; font-weight: bold;">
+                                        <t t-esc="o.scheduled_datetime.strftime('%H:%M')"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 5px 0; color: #666;">Duration:</td>
+                                    <td style="padding: 5px 0;">
+                                        <t t-esc="o.duration_hours"/> hour(s)
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <!-- Payment details -->
+                        <div style="background-color: #d4edda;
+                                    padding: 20px;
+                                    border-radius: 8px;
+                                    margin-bottom: 20px;
+                                    border: 2px solid #28a745;">
+                            <h3 style="margin: 0 0 15px 0; color: #28a745; font-size: 16px;">
+                                PAYMENT DETAILS
+                            </h3>
+                            <table style="width: 100%;">
+                                <tr>
+                                    <td style="padding: 8px 0; color: #666;">Total service price:</td>
+                                    <td style="padding: 8px 0; text-align: right;">
+                                        $ <t t-esc="'{:,.2f}'.format(o.total_price).replace(',', '.')"/>
+                                    </td>
+                                </tr>
+                                <tr style="border-top: 1px dashed #ccc;">
+                                    <td style="padding: 8px 0; color: #666;">Deposit (30%):</td>
+                                    <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #28a745; font-size: 18px;">
+                                        $ <t t-esc="'{:,.2f}'.format(o.deposit_amount).replace(',', '.')"/>
+                                    </td>
+                                </tr>
+                                <tr style="border-top: 1px dashed #ccc;">
+                                    <td style="padding: 8px 0; color: #666;">Remaining amount due:</td>
+                                    <td style="padding: 8px 0; text-align: right;">
+                                        $ <t t-esc="'{:,.2f}'.format(o.remaining_amount).replace(',', '.')"/>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <t t-if="o.mp_payment_id">
+                                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #28a745;">
+                                    <p style="margin: 0; color: #666; font-size: 12px;">
+                                        MercadoPago Payment ID:
+                                    </p>
+                                    <p style="margin: 5px 0 0 0; font-family: monospace; font-size: 14px;">
+                                        <t t-esc="o.mp_payment_id"/>
+                                    </p>
+                                </div>
+                            </t>
+                        </div>
+
+                        <!-- Booking status -->
+                        <div style="text-align: center; margin: 30px 0;">
+                            <span style="background-color: #28a745;
+                                         color: white;
+                                         padding: 10px 30px;
+                                         border-radius: 20px;
+                                         font-weight: bold;
+                                         font-size: 16px;">
+                                BOOKING CONFIRMED
+                            </span>
+                        </div>
+
+                        <!-- Important information -->
+                        <div style="background-color: #fff3cd;
+                                    padding: 15px;
+                                    border-radius: 8px;
+                                    margin-bottom: 20px;
+                                    border: 1px solid #ffc107;">
+                            <h4 style="margin: 0 0 10px 0; color: #856404;">
+                                Important information:
+                            </h4>
+                            <ul style="margin: 0; padding-left: 20px; color: #856404; font-size: 13px;">
+                                <li>The remaining amount must be paid on the day of the appointment.</li>
+                                <li>In case of cancellation, please notify at least 24 hours in advance.</li>
+                                <li>The deposit is non-refundable in case of no-show.</li>
+                            </ul>
+                        </div>
+
+                        <!-- Footer with company data -->
+                        <div style="text-align: center;
+                                    margin-top: 30px;
+                                    padding-top: 20px;
+                                    border-top: 2px solid #875A7B;">
+                            <p style="margin: 0; font-weight: bold; color: #875A7B;">
+                                <t t-esc="o.company_id.name"/>
+                            </p>
+                            <t t-if="o.company_id.city or o.company_id.country_id">
+                                <p style="margin: 5px 0; color: #666; font-size: 13px;">
+                                    <t t-if="o.company_id.city"><t t-esc="o.company_id.city"/></t>
+                                    <t t-if="o.company_id.city and o.company_id.country_id">, </t>
+                                    <t t-if="o.company_id.country_id"><t t-esc="o.company_id.country_id.name"/></t>
+                                </p>
+                            </t>
+                            <t t-if="o.company_id.phone">
+                                <p style="margin: 5px 0; color: #666; font-size: 13px;">
+                                    Phone: <t t-esc="o.company_id.phone"/>
+                                </p>
+                            </t>
+                            <p style="margin: 15px 0 0 0; color: #999; font-size: 11px;">
+                                Document automatically generated by the appointment management system
+                            </p>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>
