@@ -1128,6 +1128,61 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  wa_signature_proxy:
+    container_name: wa_signature_proxy
+    build:
+      context: ./repositories/wa-signature-proxy
+    image: leonobitech/wa-signature-proxy:v1.0
+    restart: unless-stopped
+
+    read_only: true
+
+    security_opt:
+      - no-new-privileges:true
+
+    environment:
+      - WA_APP_SECRET=${WA_APP_SECRET}
+      - WA_VERIFY_TOKEN=${WA_VERIFY_TOKEN}
+      - N8N_TARGET=http://n8n_webhook_1:5678
+      - PORT=3100
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      traefik:
+        condition: service_started
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    cpus: 0.25
+    mem_limit: 64m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      - "traefik.enable=true"
+
+      #########################################
+      # WhatsApp Signature Proxy
+      #########################################
+      - "traefik.http.routers.wa-proxy.rule=Host(`wa.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.wa-proxy.entrypoints=websecure"
+      - "traefik.http.routers.wa-proxy.tls.certresolver=le"
+      - "traefik.http.routers.wa-proxy.service=wa-proxy"
+      - "traefik.http.routers.wa-proxy.middlewares=webhook-open@file"
+
+      - "traefik.http.services.wa-proxy.loadbalancer.server.port=3100"
+
 volumes:
   # 🔴 Redis
   redis_core_data: # Almacena los datos persistentes del Redis del Core
