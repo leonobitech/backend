@@ -338,6 +338,62 @@ class AppointmentAPI(http.Controller):
             return self._json_response({'success': False, 'error': str(e)}, 500)
 
     @http.route(
+        '/appointment/api/discuss',
+        type='jsonrpc',
+        auth='none',
+        methods=['POST'],
+        csrf=False,
+    )
+    def post_discuss_message(self, **kwargs):
+        """
+        Post a message to a CRM lead's chatter.
+        Replaces salon_messaging /receive and /bot_response endpoints.
+
+        JSON Body:
+        {
+            "lead_id": 42,
+            "text": "message content",
+            "author": "user" | "bot",    // optional, default "user"
+            "first_name": "Maria"        // optional, shown when author=user
+        }
+        """
+        if not self._check_api_key():
+            return {'success': False, 'error': 'Invalid API key'}
+
+        try:
+            from markupsafe import Markup
+            data = request.jsonrequest
+
+            lead_id = data.get('lead_id')
+            text = data.get('text', '').strip()
+            author = data.get('author', 'user')
+            first_name = data.get('first_name', '')
+
+            if not lead_id or not text:
+                return {'success': False, 'error': 'lead_id and text are required'}
+
+            lead = request.env['crm.lead'].sudo().browse(int(lead_id))
+            if not lead.exists():
+                return {'success': False, 'error': f'Lead {lead_id} not found'}
+
+            if author == 'bot':
+                body = Markup(f'<p>🤖 <strong>Bot:</strong> {text}</p>')
+            else:
+                label = f'👤 <strong>{first_name}:</strong>' if first_name else '👤'
+                body = Markup(f'<p>{label} {text}</p>')
+
+            lead.message_post(
+                body=body,
+                message_type='comment',
+                subtype_xmlid='mail.mt_note',
+            )
+            return {'success': True}
+
+        except Exception as e:
+            _logger.error(f'Error posting discuss message: {e}')
+            return {'success': False, 'error': str(e)}
+
+    @http.route(
         '/appointment/api/services',
         type='http',
         auth='none',
