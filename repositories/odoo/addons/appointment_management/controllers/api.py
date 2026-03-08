@@ -402,9 +402,9 @@ class AppointmentAPI(http.Controller):
             })
 
             # Add lead's partner and OdooBot as members
-            odoobot_partner = env.ref('base.partner_root').sudo()
+            odoobot_id = env['ir.model.data'].sudo()._xmlid_to_res_id('base.partner_root')
             channel.sudo().add_members(
-                lead.partner_id.ids + [odoobot_partner.id]
+                lead.partner_id.ids + [odoobot_id]
             )
 
             # Post first message to lead's chatter
@@ -419,7 +419,7 @@ class AppointmentAPI(http.Controller):
                     body=body,
                     message_type='comment',
                     subtype_xmlid='mail.mt_note',
-                    author_id=odoobot_partner.id,
+                    author_id=odoobot_id,
                 )
 
             return {
@@ -496,7 +496,7 @@ class AppointmentAPI(http.Controller):
                 body = Markup(f'<p>{label} {text}</p>')
 
             # Use OdooBot as author to avoid missing partner_id with auth='none'
-            odoobot_id = env.ref('base.partner_root').sudo().id
+            odoobot_id = env['ir.model.data'].sudo()._xmlid_to_res_id('base.partner_root')
             lead.sudo().message_post(
                 body=body,
                 message_type='comment',
