@@ -393,11 +393,12 @@ class AppointmentAPI(http.Controller):
                 'channel_type': 'channel',
             })
 
-            # Add lead's partner and OdooBot as members
+            # Add lead's partner and OdooBot as members directly
             odoobot_id = env['ir.model.data'].sudo()._xmlid_to_res_id('base.partner_root')
-            channel.sudo().add_members(
-                lead.partner_id.ids + [odoobot_id]
-            )
+            env['discuss.channel.member'].sudo().create([
+                {'channel_id': channel.id, 'partner_id': lead.partner_id.id},
+                {'channel_id': channel.id, 'partner_id': odoobot_id},
+            ])
 
             return {
                 'success': True,
