@@ -542,6 +542,140 @@ class AppointmentAPI(http.Controller):
             return {'success': False, 'error': str(e)}
 
     @http.route(
+        '/appointment/api/discuss/image',
+        type='http',
+        auth='none',
+        methods=['POST'],
+        csrf=False,
+    )
+    def post_discuss_image(self, **kwargs):
+        """
+        Post an image to the Discuss channel linked to a CRM lead.
+
+        Multipart form-data:
+        - file: image binary
+        - lead_id: CRM lead ID
+        - caption: optional text caption
+        - author: "user" (default) or "bot"
+        - first_name: optional, shown when author=user
+
+        Response (JSON):
+        {
+            "success": true,
+            "channel_id": 10,
+            "attachment_id": 42
+        }
+        """
+        if not self._check_api_key():
+            return self._json_response({'success': False, 'error': 'Invalid API key'}, 401)
+
+        try:
+            import base64
+            from markupsafe import Markup
+            from odoo import SUPERUSER_ID
+            from odoo.modules.registry import Registry as registry_fn
+            from odoo.api import Environment
+
+            lead_id = kwargs.get('lead_id')
+            caption = kwargs.get('caption', '').strip()
+            author = kwargs.get('author', 'user')
+            first_name = kwargs.get('first_name', '').strip()
+
+            # Get uploaded file
+            uploaded_file = request.httprequest.files.get('file')
+            if not uploaded_file or not lead_id:
+                return self._json_response({
+                    'success': False,
+                    'error': 'file and lead_id are required',
+                }, 400)
+
+            file_data = uploaded_file.read()
+            file_name = uploaded_file.filename or 'image.jpg'
+            file_b64 = base64.b64encode(file_data)
+
+            db_name = request.env.cr.dbname
+            reg = registry_fn(db_name)
+            with reg.cursor() as cr:
+                env = Environment(cr, SUPERUSER_ID, {})
+                lead = env['crm.lead'].browse(int(lead_id))
+                if not lead.exists():
+                    return self._json_response({
+                        'success': False, 'error': f'Lead {lead_id} not found',
+                    }, 404)
+
+                if not lead.partner_id:
+                    return self._json_response({
+                        'success': False,
+                        'error': 'Lead has no partner. Create channel first.',
+                    }, 400)
+
+                # Find the Discuss channel
+                channel = env['discuss.channel'].search([
+                    ('channel_member_ids.partner_id', '=', lead.partner_id.id),
+                    ('channel_type', '=', 'channel'),
+                ], limit=1)
+
+                if not channel:
+                    return self._json_response({
+                        'success': False,
+                        'error': 'No Discuss channel found for this lead',
+                    }, 404)
+
+                # Create attachment
+                attachment = env['ir.attachment'].create({
+                    'name': file_name,
+                    'datas': file_b64,
+                    'res_model': 'discuss.channel',
+                    'res_id': channel.id,
+                    'mimetype': uploaded_file.content_type or 'image/jpeg',
+                })
+
+                # Build message body
+                if caption:
+                    if author == 'user':
+                        label = f'👤 <strong>{first_name}:</strong>' if first_name else '👤'
+                        body = Markup(f'<p>{label} {caption}</p>')
+                    else:
+                        body = Markup(f'<p>{caption}</p>')
+                else:
+                    if author == 'user':
+                        label = f'👤 <strong>{first_name}</strong>' if first_name else '👤'
+                        body = Markup(f'<p>{label} sent a photo</p>')
+                    else:
+                        body = Markup('<p>📷</p>')
+
+                # Determine author_id
+                if author == 'user':
+                    author_id = lead.partner_id.id
+                else:
+                    agent_user = env['res.users'].search([
+                        ('login', '=', 'agent@leonobitech.com'),
+                    ], limit=1)
+                    author_id = (
+                        agent_user.partner_id.id if agent_user
+                        else env['ir.model.data']._xmlid_to_res_id('base.partner_root')
+                    )
+
+                channel.message_post(
+                    body=body,
+                    message_type='comment',
+                    subtype_xmlid='mail.mt_comment',
+                    author_id=author_id,
+                    attachment_ids=[attachment.id],
+                )
+
+                result = {
+                    'success': True,
+                    'channel_id': channel.id,
+                    'attachment_id': attachment.id,
+                }
+            return self._json_response(result)
+
+        except Exception as e:
+            _logger.error(f'Error posting image to discuss: {e}')
+            return self._json_response({'success': False, 'error': str(e)}, 500)
+
+    @http.route(
         '/appointment/api/services',
         type='http',
         auth='none',

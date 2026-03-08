@@ -48,16 +48,14 @@ function parseImageAnalysis(data) {
 
 // Construir description para Odoo
 const channel = pickVal(row.channel);
-const chatwootId = toNum(row.chatwoot_id);
-const inboxId = toNum(row.chatwoot_inbox_id);
+const channelUserId = row.channel_user_id || null;
 const convId = toNum(row.conversation_id);
 const tz = row.tz || "-03:00";
 const lastMsg = (row.last_message || "").slice(0, 180);
 
 const parts = [];
 if (channel) parts.push(`Canal: ${channel}`);
-if (chatwootId != null) parts.push(`Chatwoot: ${chatwootId}`);
-if (inboxId != null) parts.push(`Inbox: ${inboxId}`);
+if (channelUserId) parts.push(`ChannelUser: ${channelUserId}`);
 if (convId != null) parts.push(`Conv: ${convId}`);
 if (tz) parts.push(`TZ: ${tz}`);
 if (lastMsg) parts.push(`Último: ${lastMsg}`);
@@ -100,8 +98,7 @@ const profile = {
 
   // IDs y últimos eventos
   lead_id: toNum(row.lead_id),
-  chatwoot_id: chatwootId,
-  chatwoot_inbox_id: inboxId,
+  channel_user_id: channelUserId,
   conversation_id: convId,
   last_message: row.last_message || null,
   last_message_id: row.last_message_id || null,

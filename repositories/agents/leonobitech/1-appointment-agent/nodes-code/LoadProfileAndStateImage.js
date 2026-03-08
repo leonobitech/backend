@@ -66,8 +66,7 @@ const profile = {
   // IDs (protegidos)
   row_id: input.row_id,
   lead_id: Number(baserowData.lead_id),
-  chatwoot_id: Number(baserowData.chatwoot_id),
-  chatwoot_inbox_id: baserowData.chatwoot_inbox_id,
+  channel_user_id: baserowData.channel_user_id || null,
   conversation_id: Number(baserowData.conversation_id),
 
   // Identidad
