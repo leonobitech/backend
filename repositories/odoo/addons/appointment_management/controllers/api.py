@@ -741,7 +741,7 @@ class AppointmentAPI(http.Controller):
                 })
 
                 caption_text = f'📷 {caption}' if caption else '📷 Foto enviada'
-                body = Markup(f'<p><strong>Cliente:</strong> {caption_text}</p>')
+                body = Markup(f'<p>{caption_text}</p>')
 
                 # Use lead's partner as author (client), fallback to OdooBot
                 author_id = lead.partner_id.id if lead.partner_id else None
