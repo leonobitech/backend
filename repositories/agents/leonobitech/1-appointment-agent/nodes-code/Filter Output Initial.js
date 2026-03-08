@@ -5,8 +5,7 @@
 const leadId = $("UpdateLeadWithLead_Id").first().json.lead_id || 0;
 
 // ── Mensaje de bienvenida ──
-const welcome = `
-¡Hola hermosa! 🦋
+const welcome = `¡Hola hermosa! 🦋
 
 Bienvenida a *Estilos Leraysi* ⋆˚🧚‍♀️
 
@@ -18,8 +17,7 @@ En qué te puedo ayudar, mi amor? 💕`;
 const contentTelegram = welcome.replace(/\*(.+?)\*/g, "$1");
 
 // HTML para Odoo Discuss
-const htmlBody = `
-<p>¡Hola hermosa! 🦋</p>
+const htmlBody = `<p>¡Hola hermosa! 🦋</p>
 <p>Bienvenida a <strong>Estilos Leraysi</strong> ⋆˚🧚‍♀️</p>
 <p>Los Creadores de tu Propio Estilo ✨</p>
 <p>En qué te puedo ayudar, mi amor? 💕</p>`;
