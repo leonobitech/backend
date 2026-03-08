@@ -119,7 +119,23 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      console.log("[WA-Proxy] Signature valid, forwarding to n8n");
+      console.log("[WA-Proxy] Signature valid");
+
+      // Drop status webhooks (sent/delivered/read) — only forward actual messages
+      try {
+        const payload = JSON.parse(rawBody.toString());
+        const changes = payload?.entry?.[0]?.changes?.[0]?.value;
+        if (changes && changes.statuses && !changes.messages) {
+          console.log(`[WA-Proxy] Dropped status webhook: ${changes.statuses[0]?.status} — not forwarding`);
+          res.writeHead(200);
+          res.end("OK");
+          return;
+        }
+      } catch (_) {
+        // If JSON parse fails, forward anyway and let n8n handle it
+      }
+
+      console.log("[WA-Proxy] Forwarding message to n8n");
 
       // Signature valid — forward to n8n (same path)
       const targetUrl = new URL(req.url, N8N_TARGET);
