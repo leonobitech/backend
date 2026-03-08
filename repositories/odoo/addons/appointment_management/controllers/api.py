@@ -367,7 +367,8 @@ class AppointmentAPI(http.Controller):
             return {'success': False, 'error': 'Invalid API key'}
 
         try:
-            from odoo import SUPERUSER_ID, registry as registry_fn
+            from odoo import SUPERUSER_ID
+            from odoo.modules.registry import Registry as registry_fn
             from odoo.api import Environment
 
             lead_id = kwargs.get('lead_id')
@@ -443,7 +444,8 @@ class AppointmentAPI(http.Controller):
 
         try:
             from markupsafe import Markup
-            from odoo import SUPERUSER_ID, registry as registry_fn
+            from odoo import SUPERUSER_ID
+            from odoo.modules.registry import Registry as registry_fn
             from odoo.api import Environment
 
             lead_id = kwargs.get('lead_id')
