@@ -475,7 +475,7 @@ class AppointmentAPI(http.Controller):
 
             # Build message body
             if author == 'bot':
-                body = Markup(f'<p>🤖 <strong>Bot:</strong> {text}</p>')
+                body = Markup(text)
             else:
                 label = f'👤 <strong>{first_name}:</strong>' if first_name else '👤'
                 body = Markup(f'<p>{label} {text}</p>')
