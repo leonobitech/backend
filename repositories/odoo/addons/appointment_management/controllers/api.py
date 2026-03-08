@@ -406,6 +406,21 @@ class AppointmentAPI(http.Controller):
                     'partner_id': lead.partner_id.id,
                 })
 
+                # Add all internal users so they can see the channel in Discuss
+                internal_partners = env['res.users'].search([
+                    ('share', '=', False),
+                ]).mapped('partner_id')
+                for partner in internal_partners:
+                    existing = env['discuss.channel.member'].search([
+                        ('channel_id', '=', channel.id),
+                        ('partner_id', '=', partner.id),
+                    ], limit=1)
+                    if not existing:
+                        env['discuss.channel.member'].create({
+                            'channel_id': channel.id,
+                            'partner_id': partner.id,
+                        })
+
                 result = {
                     'success': True,
                     'channel_id': channel.id,
