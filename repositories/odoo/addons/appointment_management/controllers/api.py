@@ -421,6 +421,20 @@ class AppointmentAPI(http.Controller):
                             'partner_id': partner.id,
                         })
 
+                # Post the first user message if provided
+                text = kwargs.get('text', '').strip()
+                first_name = kwargs.get('first_name', '').strip()
+                if text:
+                    from markupsafe import Markup
+                    label = f'👤 <strong>{first_name}:</strong>' if first_name else '👤'
+                    body = Markup(f'<p>{label} {text}</p>')
+                    channel.message_post(
+                        body=body,
+                        message_type='comment',
+                        subtype_xmlid='mail.mt_comment',
+                        author_id=lead.partner_id.id,
+                    )
+
                 result = {
                     'success': True,
                     'channel_id': channel.id,
