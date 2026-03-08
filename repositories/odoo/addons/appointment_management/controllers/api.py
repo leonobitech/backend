@@ -367,35 +367,38 @@ class AppointmentAPI(http.Controller):
             return {'success': False, 'error': 'Invalid API key'}
 
         try:
+            from odoo import SUPERUSER_ID
+            from odoo.api import Environment
+
             lead_id = kwargs.get('lead_id')
             name = kwargs.get('name', '').strip()
 
             if not lead_id or not name:
                 return {'success': False, 'error': 'lead_id and name are required'}
 
-            env = request.env
-            lead = env['crm.lead'].sudo().browse(int(lead_id))
+            env = Environment(request.env.cr, SUPERUSER_ID, {})
+            lead = env['crm.lead'].browse(int(lead_id))
             if not lead.exists():
                 return {'success': False, 'error': f'Lead {lead_id} not found'}
 
             # Ensure lead has a partner (contact)
             if not lead.partner_id:
-                partner = env['res.partner'].sudo().create({
+                partner = env['res.partner'].create({
                     'name': name,
                     'phone': lead.phone or '',
                     'email': lead.email_from or '',
                 })
-                lead.sudo().write({'partner_id': partner.id})
+                lead.write({'partner_id': partner.id})
 
             # Create discuss channel
-            channel = env['discuss.channel'].sudo().create({
+            channel = env['discuss.channel'].create({
                 'name': name,
                 'channel_type': 'channel',
             })
 
             # Add lead's partner and OdooBot as members directly
-            odoobot_id = env['ir.model.data'].sudo()._xmlid_to_res_id('base.partner_root')
-            env['discuss.channel.member'].sudo().create([
+            odoobot_id = env['ir.model.data']._xmlid_to_res_id('base.partner_root')
+            env['discuss.channel.member'].create([
                 {'channel_id': channel.id, 'partner_id': lead.partner_id.id},
                 {'channel_id': channel.id, 'partner_id': odoobot_id},
             ])
@@ -436,6 +439,8 @@ class AppointmentAPI(http.Controller):
 
         try:
             from markupsafe import Markup
+            from odoo import SUPERUSER_ID
+            from odoo.api import Environment
 
             lead_id = kwargs.get('lead_id')
             text = kwargs.get('text', '').strip()
@@ -446,8 +451,8 @@ class AppointmentAPI(http.Controller):
             if not lead_id or not text:
                 return {'success': False, 'error': 'lead_id and text are required'}
 
-            env = request.env
-            lead = env['crm.lead'].sudo().browse(int(lead_id))
+            env = Environment(request.env.cr, SUPERUSER_ID, {})
+            lead = env['crm.lead'].browse(int(lead_id))
             if not lead.exists():
                 return {'success': False, 'error': f'Lead {lead_id} not found'}
 
@@ -455,7 +460,7 @@ class AppointmentAPI(http.Controller):
                 return {'success': False, 'error': 'Lead has no partner. Create channel first.'}
 
             # Find the Discuss channel where lead's partner is a member
-            channel = env['discuss.channel'].sudo().search([
+            channel = env['discuss.channel'].search([
                 ('channel_member_ids.partner_id', '=', lead.partner_id.id),
                 ('channel_type', '=', 'channel'),
             ], limit=1)
@@ -467,11 +472,11 @@ class AppointmentAPI(http.Controller):
             name_to_sync = contact_name or first_name
             if author == 'user' and name_to_sync:
                 if lead.contact_name != name_to_sync:
-                    lead.sudo().write({'contact_name': name_to_sync})
+                    lead.write({'contact_name': name_to_sync})
                 if lead.partner_id.name != name_to_sync:
-                    lead.partner_id.sudo().write({'name': name_to_sync})
+                    lead.partner_id.write({'name': name_to_sync})
                 if channel.name != name_to_sync:
-                    channel.sudo().write({'name': name_to_sync})
+                    channel.write({'name': name_to_sync})
 
             # Build message body
             if author == 'bot':
@@ -481,8 +486,8 @@ class AppointmentAPI(http.Controller):
                 body = Markup(f'<p>{label} {text}</p>')
 
             # Post to the Discuss channel (not to the lead's chatter)
-            author_id = lead.partner_id.id if author == 'user' else env['ir.model.data'].sudo()._xmlid_to_res_id('base.partner_root')
-            channel.sudo().message_post(
+            author_id = lead.partner_id.id if author == 'user' else env['ir.model.data']._xmlid_to_res_id('base.partner_root')
+            channel.message_post(
                 body=body,
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment',
