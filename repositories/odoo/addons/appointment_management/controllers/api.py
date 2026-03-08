@@ -346,17 +346,14 @@ class AppointmentAPI(http.Controller):
     )
     def create_discuss_channel(self, **kwargs):
         """
-        Create a Discuss channel for a CRM lead and post the first message.
+        Create a Discuss channel for a CRM lead.
         Called when a new lead is registered (WA or TG).
         Channel is named with nick_name initially.
 
         JSON Body:
         {
             "lead_id": 42,
-            "name": "nick_name",
-            "text": "Hola quiero una cita",
-            "author": "user",           // optional, default "user"
-            "first_name": "nick_name"   // optional, label for the message
+            "name": "nick_name"
         }
 
         Response:
@@ -370,13 +367,8 @@ class AppointmentAPI(http.Controller):
             return {'success': False, 'error': 'Invalid API key'}
 
         try:
-            from markupsafe import Markup
-
             lead_id = kwargs.get('lead_id')
             name = kwargs.get('name', '').strip()
-            text = kwargs.get('text', '').strip()
-            author = kwargs.get('author', 'user')
-            first_name = kwargs.get('first_name', name)
 
             if not lead_id or not name:
                 return {'success': False, 'error': 'lead_id and name are required'}
@@ -407,21 +399,6 @@ class AppointmentAPI(http.Controller):
                 lead.partner_id.ids + [odoobot_id]
             )
 
-            # Post first message to lead's chatter
-            if text:
-                if author == 'bot':
-                    body = Markup(f'<p>🤖 <strong>Bot:</strong> {text}</p>')
-                else:
-                    label = f'👤 <strong>{first_name}:</strong>' if first_name else '👤'
-                    body = Markup(f'<p>{label} {text}</p>')
-
-                lead.sudo().message_post(
-                    body=body,
-                    message_type='comment',
-                    subtype_xmlid='mail.mt_note',
-                    author_id=odoobot_id,
-                )
-
             return {
                 'success': True,
                 'channel_id': channel.id,
@@ -441,7 +418,8 @@ class AppointmentAPI(http.Controller):
     )
     def post_discuss_message(self, **kwargs):
         """
-        Post a message to a CRM lead's chatter and sync contact name.
+        Post a message to the Discuss channel linked to a CRM lead.
+        Also syncs contact_name on lead, partner and channel when provided.
 
         JSON Body:
         {
@@ -458,7 +436,6 @@ class AppointmentAPI(http.Controller):
         try:
             from markupsafe import Markup
 
-            # For type='jsonrpc', Odoo unpacks params into **kwargs
             lead_id = kwargs.get('lead_id')
             text = kwargs.get('text', '').strip()
             author = kwargs.get('author', 'user')
@@ -473,37 +450,44 @@ class AppointmentAPI(http.Controller):
             if not lead.exists():
                 return {'success': False, 'error': f'Lead {lead_id} not found'}
 
-            # Sync contact name on lead, partner and linked discuss channel
+            if not lead.partner_id:
+                return {'success': False, 'error': 'Lead has no partner. Create channel first.'}
+
+            # Find the Discuss channel where lead's partner is a member
+            channel = env['discuss.channel'].sudo().search([
+                ('channel_member_ids.partner_id', '=', lead.partner_id.id),
+                ('channel_type', '=', 'channel'),
+            ], limit=1)
+
+            if not channel:
+                return {'success': False, 'error': 'No Discuss channel found for this lead'}
+
+            # Sync contact name on lead, partner and channel
             name_to_sync = contact_name or first_name
             if author == 'user' and name_to_sync:
                 if lead.contact_name != name_to_sync:
                     lead.sudo().write({'contact_name': name_to_sync})
-                if lead.partner_id and lead.partner_id.name != name_to_sync:
+                if lead.partner_id.name != name_to_sync:
                     lead.partner_id.sudo().write({'name': name_to_sync})
-                # Update discuss channel where lead's partner is a member
-                if lead.partner_id:
-                    channel = env['discuss.channel'].sudo().search([
-                        ('channel_member_ids.partner_id', '=', lead.partner_id.id),
-                        ('channel_type', '=', 'channel'),
-                    ], limit=1)
-                    if channel and channel.name != name_to_sync:
-                        channel.sudo().write({'name': name_to_sync})
+                if channel.name != name_to_sync:
+                    channel.sudo().write({'name': name_to_sync})
 
+            # Build message body
             if author == 'bot':
                 body = Markup(f'<p>🤖 <strong>Bot:</strong> {text}</p>')
             else:
                 label = f'👤 <strong>{first_name}:</strong>' if first_name else '👤'
                 body = Markup(f'<p>{label} {text}</p>')
 
-            # Use OdooBot as author to avoid missing partner_id with auth='none'
-            odoobot_id = env['ir.model.data'].sudo()._xmlid_to_res_id('base.partner_root')
-            lead.sudo().message_post(
+            # Post to the Discuss channel (not to the lead's chatter)
+            author_id = lead.partner_id.id if author == 'user' else env['ir.model.data'].sudo()._xmlid_to_res_id('base.partner_root')
+            channel.sudo().message_post(
                 body=body,
                 message_type='comment',
-                subtype_xmlid='mail.mt_note',
-                author_id=odoobot_id,
+                subtype_xmlid='mail.mt_comment',
+                author_id=author_id,
             )
-            return {'success': True}
+            return {'success': True, 'channel_id': channel.id}
 
         except Exception as e:
             _logger.error(f'Error posting discuss message: {e}')
