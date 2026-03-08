@@ -16,8 +16,7 @@ const originalState = inputMainData.state;
 const protectedFields = inputMainData._protected || [
   "row_id",
   "lead_id",
-  "chatwoot_id",
-  "chatwoot_inbox_id",
+  "channel_user_id",
   "conversation_id",
 ];
 
@@ -458,11 +457,7 @@ console.log("[OutputMain v3.3] Notes generado:", baserowUpdate.notes);
 // ============================================================================
 
 const output = {
-  content_whatsapp: {
-    content: whatsappContent,
-    message_type: "outgoing",
-    content_type: "text",
-  },
+  content_whatsapp: whatsappContent,
   content_telegram: contentTelegram,
   body_html: bodyHtml,
   lead_id: mergedState.lead_id,
