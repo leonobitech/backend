@@ -509,7 +509,11 @@ class AppointmentAPI(http.Controller):
                     body = Markup(f'<p>{label} {text}</p>')
 
                 # Post to the Discuss channel (not to the lead's chatter)
-                author_id = lead.partner_id.id if author == 'user' else env['ir.model.data']._xmlid_to_res_id('base.partner_root')
+                if author == 'user':
+                    author_id = lead.partner_id.id
+                else:
+                    agent_user = env['res.users'].search([('login', '=', 'agent@leonobitech.com')], limit=1)
+                    author_id = agent_user.partner_id.id if agent_user else env['ir.model.data']._xmlid_to_res_id('base.partner_root')
                 channel.message_post(
                     body=body,
                     message_type='comment',
