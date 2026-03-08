@@ -676,6 +676,91 @@ class AppointmentAPI(http.Controller):
             return self._json_response({'success': False, 'error': str(e)}, 500)
 
     @http.route(
+        '/appointment/api/lead/image',
+        type='http',
+        auth='none',
+        methods=['POST'],
+        csrf=False,
+    )
+    def post_lead_image(self, **kwargs):
+        """
+        Post an image to the chatter of a CRM lead.
+
+        Multipart form-data:
+        - file: image binary
+        - lead_id: CRM lead ID
+        - caption: optional text caption
+
+        Response (JSON):
+        {
+            "success": true,
+            "lead_id": 42,
+            "attachment_id": 99
+        }
+        """
+        if not self._check_api_key():
+            return self._json_response({'success': False, 'error': 'Invalid API key'}, 401)
+
+        try:
+            import base64
+            from markupsafe import Markup
+            from odoo import SUPERUSER_ID
+            from odoo.modules.registry import Registry as registry_fn
+            from odoo.api import Environment
+
+            lead_id = kwargs.get('lead_id')
+            caption = kwargs.get('caption', '').strip()
+
+            uploaded_file = request.httprequest.files.get('file')
+            if not uploaded_file or not lead_id:
+                return self._json_response({
+                    'success': False,
+                    'error': 'file and lead_id are required',
+                }, 400)
+
+            file_data = uploaded_file.read()
+            file_name = uploaded_file.filename or 'image.jpg'
+            file_b64 = base64.b64encode(file_data)
+
+            db_name = request.env.cr.dbname
+            reg = registry_fn(db_name)
+            with reg.cursor() as cr:
+                env = Environment(cr, SUPERUSER_ID, {})
+                lead = env['crm.lead'].browse(int(lead_id))
+                if not lead.exists():
+                    return self._json_response({
+                        'success': False, 'error': f'Lead {lead_id} not found',
+                    }, 404)
+
+                attachment = env['ir.attachment'].create({
+                    'name': file_name,
+                    'datas': file_b64,
+                    'res_model': 'crm.lead',
+                    'res_id': lead.id,
+                    'mimetype': uploaded_file.content_type or 'image/jpeg',
+                })
+
+                body = Markup(f'<p>📷 {caption}</p>') if caption else Markup('<p>📷 Photo received</p>')
+
+                lead.message_post(
+                    body=body,
+                    message_type='comment',
+                    subtype_xmlid='mail.mt_note',
+                    attachment_ids=[attachment.id],
+                )
+
+                result = {
+                    'success': True,
+                    'lead_id': lead.id,
+                    'attachment_id': attachment.id,
+                }
+            return self._json_response(result)
+
+        except Exception as e:
+            _logger.error(f'Error posting image to lead chatter: {e}')
+            return self._json_response({'success': False, 'error': str(e)}, 500)
+
+    @http.route(
         '/appointment/api/services',
         type='http',
         auth='none',
