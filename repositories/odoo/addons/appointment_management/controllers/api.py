@@ -740,14 +740,22 @@ class AppointmentAPI(http.Controller):
                     'mimetype': uploaded_file.content_type or 'image/jpeg',
                 })
 
-                body = Markup(f'<p>📷 {caption}</p>') if caption else Markup('<p>📷 Photo received</p>')
+                caption_text = f'📷 {caption}' if caption else '📷 Foto enviada'
+                body = Markup(f'<p><strong>Cliente:</strong> {caption_text}</p>')
 
-                lead.message_post(
-                    body=body,
-                    message_type='comment',
-                    subtype_xmlid='mail.mt_note',
-                    attachment_ids=[attachment.id],
-                )
+                # Use lead's partner as author (client), fallback to OdooBot
+                author_id = lead.partner_id.id if lead.partner_id else None
+
+                post_kwargs = {
+                    'body': body,
+                    'message_type': 'comment',
+                    'subtype_xmlid': 'mail.mt_note',
+                    'attachment_ids': [attachment.id],
+                }
+                if author_id:
+                    post_kwargs['author_id'] = author_id
+
+                lead.message_post(**post_kwargs)
 
                 result = {
                     'success': True,
