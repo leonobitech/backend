@@ -519,8 +519,7 @@ class AppointmentAPI(http.Controller):
                 if author == 'bot':
                     body = Markup(text)
                 else:
-                    label = f'👤 <strong>{first_name}:</strong>' if first_name else '👤'
-                    body = Markup(f'<p>{label} {text}</p>')
+                    body = Markup(f'<p>{text}</p>')
 
                 # Post to the Discuss channel (not to the lead's chatter)
                 if author == 'user':
@@ -777,19 +776,26 @@ class AppointmentAPI(http.Controller):
     )
     def get_lead_partner(self, **kwargs):
         """
-        Get partner_id and basic partner data from a CRM lead.
+        Get/update partner data from a CRM lead.
+        If name/email/phone provided, updates partner + syncs Discuss channel name.
 
         JSON body:
         - lead_id: CRM lead ID (required)
+        - name: real client name (optional, triggers update)
+        - email: client email (optional)
+        - phone: client phone (optional)
 
         Response:
         {
-            "success": true,
-            "lead_id": 42,
-            "partner_id": 15,
-            "partner_name": "John Doe",
-            "partner_email": "john@example.com",
-            "partner_phone": "+5491112345678"
+            "result": {
+                "success": true,
+                "lead_id": 42,
+                "partner_id": 15,
+                "partner_name": "Andrea Figueroa",
+                "partner_email": "andrea@example.com",
+                "partner_phone": "+5491112345678",
+                "channel_synced": true
+            }
         }
         """
         if not self._check_api_key():
@@ -804,6 +810,9 @@ class AppointmentAPI(http.Controller):
             body = json.loads(request.httprequest.data or '{}')
             params = body.get('params', body)
             lead_id = params.get('lead_id')
+            name = params.get('name')
+            email = params.get('email')
+            phone = params.get('phone')
 
             if not lead_id:
                 return self._json_response({'success': False, 'error': 'lead_id is required'}, 400)
@@ -817,6 +826,33 @@ class AppointmentAPI(http.Controller):
                     return self._json_response({'success': False, 'error': f'Lead {lead_id} not found'}, 404)
 
                 partner = lead.partner_id
+                channel_synced = False
+
+                # Update partner if any data provided
+                if partner and (name or email or phone):
+                    partner_vals = {}
+                    if name:
+                        partner_vals['name'] = name
+                    if email:
+                        partner_vals['email'] = email
+                    if phone:
+                        partner_vals['phone'] = phone
+                    partner.write(partner_vals)
+
+                    # Sync lead contact_name
+                    if name and lead.contact_name != name:
+                        lead.write({'contact_name': name})
+
+                    # Sync Discuss channel name
+                    if name:
+                        channel = env['discuss.channel'].search([
+                            ('channel_member_ids.partner_id', '=', partner.id),
+                            ('channel_type', '=', 'channel'),
+                        ], limit=1)
+                        if channel and channel.name != name:
+                            channel.write({'name': name})
+                            channel_synced = True
+
                 result = {
                     'success': True,
                     'lead_id': lead.id,
@@ -824,6 +860,7 @@ class AppointmentAPI(http.Controller):
                     'partner_name': partner.name if partner else None,
                     'partner_email': partner.email if partner else None,
                     'partner_phone': partner.phone if partner else None,
+                    'channel_synced': channel_synced,
                 }
             return self._json_response({'result': result})
 
