@@ -115,7 +115,8 @@ ${historyFormatted}
 - Presupuesto dado: ${state.presupuesto_dado ? "SÍ" : "no"}
 - Esperando foto: ${state.waiting_image ? "SÍ" : "no"}
 - Contadores: services_seen=${state.services_seen}, prices_asked=${state.prices_asked}, deep_interest=${state.deep_interest}
-- Datos cliente: full_name=${state.full_name || "pendiente"}, email=${state.email || "pendiente"}
+- Datos cliente: full_name=${state.full_name || "pendiente"}, email=${state.email || "pendiente"}, phone=${state.phone || "pendiente"}
+- Canal: ${meta.channel}
 ${imageSection}
 ---
 

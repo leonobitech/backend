@@ -232,7 +232,7 @@ for (const [key, value] of Object.entries(statePatch)) {
   }
 
   // Manejar timestamps de solicitud (true → timestamp ISO, false → null)
-  if ((key === "email_ask_ts" || key === "fullname_ask_ts") && typeof value === 'boolean') {
+  if ((key === "email_ask_ts" || key === "fullname_ask_ts" || key === "phone_ask_ts") && typeof value === 'boolean') {
     if (value === false) {
       // LLM dice "ya no preguntar" → mantener timestamp existente como registro histórico
       console.log(`[OutputMain v3.3] ${key} → preservado (LLM envió false, manteniendo timestamp original)`);
@@ -437,9 +437,13 @@ const baserowUpdate = {
   prices_asked: mergedState.prices_asked ?? 0,
   deep_interest: mergedState.deep_interest ?? 0,
 
+  // Phone (Telegram leads)
+  phone: mergedState.phone || null,
+
   // Cooldowns (Baserow datetime: solo acepta string ISO o null, NUNCA boolean)
   email_ask_ts: typeof mergedState.email_ask_ts === 'string' ? mergedState.email_ask_ts : null,
   fullname_ask_ts: typeof mergedState.fullname_ask_ts === 'string' ? mergedState.fullname_ask_ts : null,
+  phone_ask_ts: typeof mergedState.phone_ask_ts === 'string' ? mergedState.phone_ask_ts : null,
 
   // Nota dinámica
   notes: generateContextualNote(mergedState),

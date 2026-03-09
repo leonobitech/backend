@@ -345,6 +345,8 @@ if (precio_calculado !== null && precio > 0 && precio_calculado !== precio) {
 const esTurnoNuevo = !input.turno_agendado && !input.agregar_a_turno_existente;
 const tieneFullName = !!(llmOutput.full_name || state.full_name);
 const tieneEmail = !!email;
+const tieneTelefono = !!telefono;
+const esTelegram = (state.channel || '').toLowerCase() === 'telegram';
 
 let gate_bloqueado = false;
 const gate_datos_faltantes = [];
@@ -352,6 +354,8 @@ const gate_datos_faltantes = [];
 if (esTurnoNuevo) {
   if (!tieneFullName) gate_datos_faltantes.push('nombre completo');
   if (!tieneEmail) gate_datos_faltantes.push('email');
+  // Telegram no provee teléfono automáticamente (WhatsApp sí)
+  if (esTelegram && !tieneTelefono) gate_datos_faltantes.push('teléfono');
   gate_bloqueado = gate_datos_faltantes.length > 0;
 }
 

@@ -105,8 +105,9 @@ const profile = {
   last_activity_iso: row.last_activity_iso || null,
 
   // Cooldowns
-  email_ask_ts: row.email_ask_ts || null,
   fullname_ask_ts: row.fullname_ask_ts || null,
+  phone_ask_ts: row.phone_ask_ts || null,
+  email_ask_ts: row.email_ask_ts || null,
 
   // Image Analysis (nuevo)
   image_analysis: parseImageAnalysis(row.image_analysis),

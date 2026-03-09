@@ -107,6 +107,7 @@ const profile = {
   // Cooldowns
   email_ask_ts: nul(baserowData.email_ask_ts),
   fullname_ask_ts: nul(baserowData.fullname_ask_ts),
+  phone_ask_ts: nul(baserowData.phone_ask_ts),
 
   // Análisis de imagen (incluido en profile)
   image_analysis: imageAnalysis,
