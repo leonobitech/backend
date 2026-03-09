@@ -505,15 +505,10 @@ class AppointmentAPI(http.Controller):
                 if not channel:
                     return {'success': False, 'error': 'No Discuss channel found for this lead'}
 
-                # Sync contact name on lead, partner and channel
-                name_to_sync = contact_name or first_name
-                if author == 'user' and name_to_sync:
-                    if lead.contact_name != name_to_sync:
-                        lead.write({'contact_name': name_to_sync})
-                    if lead.partner_id.name != name_to_sync:
-                        lead.partner_id.write({'name': name_to_sync})
-                    if channel.name != name_to_sync:
-                        channel.write({'name': name_to_sync})
+                # Sync channel name with current partner name
+                partner_name = lead.partner_id.name
+                if partner_name and channel.name != partner_name:
+                    channel.write({'name': partner_name})
 
                 # Build message body
                 if author == 'bot':
