@@ -825,11 +825,11 @@ class AppointmentAPI(http.Controller):
                     'partner_email': partner.email if partner else None,
                     'partner_phone': partner.phone if partner else None,
                 }
-            return self._json_response(result)
+            return self._json_response({'result': result})
 
         except Exception as e:
             _logger.error(f'Error getting lead partner: {e}')
-            return self._json_response({'success': False, 'error': str(e)}, 500)
+            return self._json_response({'result': {'success': False, 'error': str(e)}}, 500)
 
     @http.route(
         '/appointment/api/services',
