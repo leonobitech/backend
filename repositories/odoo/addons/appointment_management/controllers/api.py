@@ -770,7 +770,7 @@ class AppointmentAPI(http.Controller):
 
     @http.route(
         '/appointment/api/lead/partner',
-        type='json',
+        type='http',
         auth='none',
         methods=['POST'],
         csrf=False,
@@ -779,7 +779,7 @@ class AppointmentAPI(http.Controller):
         """
         Get partner_id and basic partner data from a CRM lead.
 
-        JSON-RPC params:
+        JSON body:
         - lead_id: CRM lead ID (required)
 
         Response:
@@ -793,17 +793,20 @@ class AppointmentAPI(http.Controller):
         }
         """
         if not self._check_api_key():
-            return {'success': False, 'error': 'Invalid API key'}
+            return self._json_response({'success': False, 'error': 'Invalid API key'}, 401)
 
         try:
+            import json
             from odoo import SUPERUSER_ID
             from odoo.modules.registry import Registry as registry_fn
             from odoo.api import Environment
 
-            lead_id = request.jsonrequest.get('lead_id')
+            body = json.loads(request.httprequest.data or '{}')
+            params = body.get('params', body)
+            lead_id = params.get('lead_id')
 
             if not lead_id:
-                return {'success': False, 'error': 'lead_id is required'}
+                return self._json_response({'success': False, 'error': 'lead_id is required'}, 400)
 
             db_name = request.env.cr.dbname
             reg = registry_fn(db_name)
@@ -811,7 +814,7 @@ class AppointmentAPI(http.Controller):
                 env = Environment(cr, SUPERUSER_ID, {})
                 lead = env['crm.lead'].browse(int(lead_id))
                 if not lead.exists():
-                    return {'success': False, 'error': f'Lead {lead_id} not found'}
+                    return self._json_response({'success': False, 'error': f'Lead {lead_id} not found'}, 404)
 
                 partner = lead.partner_id
                 result = {
@@ -822,11 +825,11 @@ class AppointmentAPI(http.Controller):
                     'partner_email': partner.email if partner else None,
                     'partner_phone': partner.phone if partner else None,
                 }
-            return result
+            return self._json_response(result)
 
         except Exception as e:
             _logger.error(f'Error getting lead partner: {e}')
-            return {'success': False, 'error': str(e)}
+            return self._json_response({'success': False, 'error': str(e)}, 500)
 
     @http.route(
         '/appointment/api/services',
