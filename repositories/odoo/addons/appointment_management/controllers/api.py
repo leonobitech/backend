@@ -800,8 +800,7 @@ class AppointmentAPI(http.Controller):
             from odoo.modules.registry import Registry as registry_fn
             from odoo.api import Environment
 
-            params = request.jsonrequest.get('params', {})
-            lead_id = params.get('lead_id')
+            lead_id = request.jsonrequest.get('lead_id')
 
             if not lead_id:
                 return {'success': False, 'error': 'lead_id is required'}
