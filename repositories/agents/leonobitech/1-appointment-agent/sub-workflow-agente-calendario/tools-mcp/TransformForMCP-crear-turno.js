@@ -1,55 +1,96 @@
 // ============================================================================
-// TRANSFORM FOR MCP - leraysi_crear_turno
+// TRANSFORM FOR MCP - appointment_create
 // ============================================================================
-// INPUT: { query: "{...}" } donde query es JSON string con los parámetros
-// OUTPUT: { tool, arguments } para el MCP de Odoo
+// INPUT: { query: "{...}" } where query is a JSON string with parameters
+// OUTPUT: { tool, arguments } for the Odoo MCP
+// ============================================================================
+// BRIDGE: Spanish field names (from code nodes) -> English (Odoo MCP schema)
 // ============================================================================
 
 const raw = $input.first().json;
 
-// Los parámetros vienen en el campo "query" como JSON string
+// Parameters come in the "query" field as a JSON string
 const params = typeof raw.query === 'string'
   ? JSON.parse(raw.query)
   : raw.query || raw;
 
-// Validar campos requeridos
-const required = [
-  'clienta',
-  'email',
-  'servicio',
-  'servicio_detalle',
-  'fecha_hora',
-  'precio',
-  'duracion_estimada',
-  'lead_id'
-];
-const missing = required.filter(f => !params[f]);
+// Resolve required fields (accept both Spanish and English names)
+const clientName = params.client_name || params.clienta;
+const email = params.email;
+const serviceType = params.service_type || params.servicio;
+const serviceDetail = params.service_detail || params.servicio_detalle;
+const scheduledDatetime = params.scheduled_datetime || params.fecha_hora;
+const totalPrice = params.total_price || params.precio;
+const estimatedDuration = params.estimated_duration || params.duracion_estimada || params.duracion;
+const leadId = params.lead_id;
+
+const requiredCheck = {
+  client_name: clientName,
+  email,
+  service_type: serviceType,
+  service_detail: serviceDetail,
+  scheduled_datetime: scheduledDatetime,
+  total_price: totalPrice,
+  estimated_duration: estimatedDuration,
+  lead_id: leadId
+};
+const missing = Object.entries(requiredCheck).filter(([k, v]) => !v).map(([k]) => k);
 
 if (missing.length > 0) {
-  throw new Error(`[leraysi_crear_turno] Faltantes: ${missing.join(', ')}`);
+  throw new Error(`[appointment_create] Missing fields: ${missing.join(', ')}`);
 }
 
-// Construir arguments (requeridos + opcionales)
+// Map complexity: Spanish -> English
+const COMPLEXITY_MAP = {
+  'simple': 'simple',
+  'media': 'medium',
+  'compleja': 'complex',
+  'muy_compleja': 'very_complex',
+  // Already English? pass through
+  'medium': 'medium',
+  'complex': 'complex',
+  'very_complex': 'very_complex'
+};
+const rawComplexity = params.max_complexity || params.complejidad_maxima || 'medium';
+const maxComplexity = COMPLEXITY_MAP[rawComplexity] || 'medium';
+
+// Map worker: accept Spanish or English
+const WORKER_MAP = {
+  'primary': 'primary',
+  'secondary': 'secondary',
+  'principal': 'primary',
+  'secundaria': 'secondary'
+};
+const rawWorker = params.worker || params.trabajadora || 'primary';
+const worker = WORKER_MAP[rawWorker] || 'primary';
+
+// Build arguments (English field names for Odoo MCP)
 const args = {
-  clienta: params.clienta,
-  email: params.email,
-  servicio: params.servicio,
-  servicio_detalle: params.servicio_detalle,
-  fecha_hora: params.fecha_hora,
-  precio: Number(params.precio),
-  duracion_estimada: Number(params.duracion_estimada || params.duracion),
-  complejidad_maxima: params.complejidad_maxima || 'media',
-  lead_id: Number(params.lead_id)
+  client_name: clientName,
+  email: email,
+  service_type: serviceType,
+  service_detail: serviceDetail,
+  scheduled_datetime: scheduledDatetime,
+  total_price: Number(totalPrice),
+  estimated_duration: Number(estimatedDuration),
+  max_complexity: maxComplexity,
+  worker: worker,
+  lead_id: Number(leadId)
 };
 
-// Campos opcionales
-if (params.telefono) args.telefono = params.telefono;
-if (params.notas) args.notas = params.notas;
+// Optional fields
+const phone = params.phone || params.telefono;
+if (phone) args.phone = phone;
 
-// Output para MCP
+const notes = params.notes || params.notas;
+if (notes) args.notes = notes;
+
+if (params.is_additional_booking) args.is_additional_booking = true;
+
+// Output for MCP
 return [{
   json: {
-    tool: "leraysi_crear_turno",
+    tool: "appointment_create",
     arguments: args
   }
 }];

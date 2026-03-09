@@ -1,21 +1,39 @@
 // ============================================================================
-// BUILD AGENT PROMPT - Construye el User Message para Agente Calendario
+// BUILD AGENT PROMPT - Builds User Message for Calendar Agent
 // ============================================================================
 const data = $input.first().json;
 
-const fechaSolicitadaRaw = data.fecha_solicitada || "";
-const fechaSoloParte = fechaSolicitadaRaw.includes("T")
-  ? fechaSolicitadaRaw.split("T")[0]
-  : fechaSolicitadaRaw.split(" ")[0];
-const horaSolicitadaParte = fechaSolicitadaRaw.includes("T")
-  ? fechaSolicitadaRaw.split("T")[1]?.slice(0, 5)
-  : fechaSolicitadaRaw.split(" ")[1]?.slice(0, 5);
+// ============================================================================
+// WORKER CONFIGURATION — Multi-tenant via environment variables
+// ============================================================================
+const WORKERS = {
+  PRIMARY: 'primary',
+  SECONDARY: 'secondary',
+};
+const WORKER_DISPLAY = {
+  primary: $env.WORKER_PRIMARY_NAME || 'Leraysi',
+  secondary: $env.WORKER_SECONDARY_NAME || 'Companera',
+};
+function getWorkerDisplay(worker) {
+  return WORKER_DISPLAY[worker] || worker;
+}
 
-const horaDeseada = horaSolicitadaParte || data.hora_deseada || "09:00";
-const senaCalculada = Math.round((data.precio || 0) * 0.3);
-const fechaHoraCompleta = `${fechaSoloParte} ${horaDeseada}`;
+// ============================================================================
+// SERVICE AND PRICE LOOKUPS
+// ============================================================================
+const requestedDateRaw = data.requested_date || "";
+const datePart = requestedDateRaw.includes("T")
+  ? requestedDateRaw.split("T")[0]
+  : requestedDateRaw.split(" ")[0];
+const timePart = requestedDateRaw.includes("T")
+  ? requestedDateRaw.split("T")[1]?.slice(0, 5)
+  : requestedDateRaw.split(" ")[1]?.slice(0, 5);
 
-// Mapeo display name → código Odoo (determinístico, no depender del LLM)
+const requestedTime = timePart || data.requested_time || "09:00";
+const depositCalculated = Math.round((data.price || 0) * 0.3);
+const fullDatetime = `${datePart} ${requestedTime}`;
+
+// Display name → Odoo code mapping (deterministic, don't rely on LLM)
 const DISPLAY_TO_CODE = {
   'Corte mujer': 'corte_mujer',
   'Alisado brasileño': 'alisado_brasileno',
@@ -33,298 +51,253 @@ const DISPLAY_TO_CODE = {
   'Depilación láser piernas': 'depilacion_laser_piernas',
   'Depilación láser axilas': 'depilacion_laser_axilas',
 };
-// Precios base por servicio — safety net contra inconsistencia del LLM Master
-// ParseInput calcula precio desde SERVICIOS_CONFIG pero se contamina si el LLM
-// manda servicio/precio incorrectos. BuildAgentPrompt recalcula determinísticamente.
-const SERVICIOS_PRECIO = {
-  'Corte mujer': { precio_base: 8000, requiere_largo: true },
-  'Alisado brasileño': { precio_base: 45000, requiere_largo: true },
-  'Alisado keratina': { precio_base: 55000, requiere_largo: true },
-  'Mechas completas': { precio_base: 35000, requiere_largo: true },
-  'Tintura raíz': { precio_base: 15000, requiere_largo: true },
-  'Tintura completa': { precio_base: 25000, requiere_largo: true },
-  'Balayage': { precio_base: 50000, requiere_largo: true },
-  'Manicura simple': { precio_base: 5000, requiere_largo: false },
-  'Manicura semipermanente': { precio_base: 8000, requiere_largo: false },
-  'Pedicura': { precio_base: 6000, requiere_largo: false },
-  'Depilación cera piernas': { precio_base: 10000, requiere_largo: false },
-  'Depilación cera axilas': { precio_base: 4000, requiere_largo: false },
-  'Depilación cera bikini': { precio_base: 6000, requiere_largo: false },
-  'Depilación láser piernas': { precio_base: 25000, requiere_largo: false },
-  'Depilación láser axilas': { precio_base: 12000, requiere_largo: false },
-};
-const PRECIO_MULT_LARGO = { 'corto': 1.0, 'medio': 1.1, 'largo': 1.2, 'muy_largo': 1.2 };
 
-function calcularPrecioDet(servicioNombre, largoCabello) {
-  const config = SERVICIOS_PRECIO[servicioNombre];
+// Base prices per service — safety net against LLM price inconsistency
+const SERVICES_PRICE = {
+  'Corte mujer': { base_price: 8000, requires_length: true },
+  'Alisado brasileño': { base_price: 45000, requires_length: true },
+  'Alisado keratina': { base_price: 55000, requires_length: true },
+  'Mechas completas': { base_price: 35000, requires_length: true },
+  'Tintura raíz': { base_price: 15000, requires_length: true },
+  'Tintura completa': { base_price: 25000, requires_length: true },
+  'Balayage': { base_price: 50000, requires_length: true },
+  'Manicura simple': { base_price: 5000, requires_length: false },
+  'Manicura semipermanente': { base_price: 8000, requires_length: false },
+  'Pedicura': { base_price: 6000, requires_length: false },
+  'Depilación cera piernas': { base_price: 10000, requires_length: false },
+  'Depilación cera axilas': { base_price: 4000, requires_length: false },
+  'Depilación cera bikini': { base_price: 6000, requires_length: false },
+  'Depilación láser piernas': { base_price: 25000, requires_length: false },
+  'Depilación láser axilas': { base_price: 12000, requires_length: false },
+};
+const PRICE_MULT_LENGTH = { 'corto': 1.0, 'medio': 1.1, 'largo': 1.2, 'muy_largo': 1.2 };
+
+function calculatePriceDet(serviceName, hairLength) {
+  const config = SERVICES_PRICE[serviceName];
   if (!config) return null;
-  const mult = (config.requiere_largo && largoCabello) ? (PRECIO_MULT_LARGO[largoCabello] || 1.0) : 1.0;
-  return Math.round(config.precio_base * mult);
+  const mult = (config.requires_length && hairLength) ? (PRICE_MULT_LENGTH[hairLength] || 1.0) : 1.0;
+  return Math.round(config.base_price * mult);
 }
 
-// Convertir servicio(s) de display name a código Odoo
-const servicioRaw = Array.isArray(data.servicio) ? data.servicio[0] : data.servicio;
-const servicioCodigo = DISPLAY_TO_CODE[servicioRaw] || servicioRaw || 'otro';
+// Convert service display name(s) to Odoo code
+const serviceRaw = Array.isArray(data.service) ? data.service[0] : data.service;
+const serviceCode = DISPLAY_TO_CODE[serviceRaw] || serviceRaw || 'otro';
 
-const formatearFechaHumana = (fechaStr) => {
-  if (!fechaStr) return "fecha no especificada";
-  const soloFecha = fechaStr.includes("T")
-    ? fechaStr.split("T")[0]
-    : fechaStr.split(" ")[0];
-  const fecha = new Date(soloFecha + "T12:00:00");
-  if (isNaN(fecha.getTime())) return "fecha invalida";
-  const dias = [
-    "domingo",
-    "lunes",
-    "martes",
-    "miercoles",
-    "jueves",
-    "viernes",
-    "sabado",
-  ];
-  const meses = [
-    "enero",
-    "febrero",
-    "marzo",
-    "abril",
-    "mayo",
-    "junio",
-    "julio",
-    "agosto",
-    "septiembre",
-    "octubre",
-    "noviembre",
-    "diciembre",
-  ];
-  return `${dias[fecha.getDay()]} ${fecha.getDate()} de ${meses[fecha.getMonth()]}`;
+const formatHumanDate = (dateStr) => {
+  if (!dateStr) return "fecha no especificada";
+  const onlyDate = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.split(" ")[0];
+  const date = new Date(onlyDate + "T12:00:00");
+  if (isNaN(date.getTime())) return "fecha invalida";
+  const days = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+  const months = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  return `${days[date.getDay()]} ${date.getDate()} de ${months[date.getMonth()]}`;
 };
 
-const fechaHumana = formatearFechaHumana(data.fecha_solicitada);
-const servicioDisplay = data.servicio_detalle || data.servicio || "servicio";
+const humanDate = formatHumanDate(data.requested_date);
+const serviceDisplay = data.service_detail || data.service || "servicio";
 
-const turnoExistente = data.turno_agendado === true;
-const serviciosSolicitados = Array.isArray(data.servicio)
-  ? data.servicio.map((s) => s.toLowerCase().trim())
-  : [(data.servicio || "").toLowerCase().trim()];
+const hasExistingBooking = data.booking_scheduled === true;
+const requestedServices = Array.isArray(data.service)
+  ? data.service.map((s) => s.toLowerCase().trim())
+  : [(data.service || "").toLowerCase().trim()];
 
-let servicioTurnoExistente = null;
-if (data.turno_servicio_existente) {
-  servicioTurnoExistente =
-    typeof data.turno_servicio_existente === "object"
-      ? (data.turno_servicio_existente.value || "").toLowerCase().trim()
-      : data.turno_servicio_existente.toLowerCase().trim();
+let existingServiceName = null;
+if (data.existing_service) {
+  existingServiceName =
+    typeof data.existing_service === "object"
+      ? (data.existing_service.value || "").toLowerCase().trim()
+      : data.existing_service.toLowerCase().trim();
 }
 
-let esReprogramacion = false;
-let esAgregarServicio = false;
-let esTurnoAdicional = false;
+let isReschedule = false;
+let isAddService = false;
+let isAdditionalBooking = false;
 
-const turnoFechaExistente = data.turno_fecha
-  ? data.turno_fecha.includes("T")
-    ? data.turno_fecha.split("T")[0]
-    : data.turno_fecha.split(" ")[0]
+const existingBookingDate = data.booking_date
+  ? data.booking_date.includes("T")
+    ? data.booking_date.split("T")[0]
+    : data.booking_date.split(" ")[0]
   : null;
-const turnoIdExistente = data.turno_id_existente || data.odoo_turno_id || null;
+const existingBookingId = data.existing_booking_id || data.odoo_booking_id || null;
 
-// Detección explícita: priorizar flags del Master Agent
-if (data.agregar_a_turno_existente && turnoIdExistente) {
-  esAgregarServicio = true;
-} else if (data.accion === "reprogramar") {
-  esReprogramacion = true;
-} else if (turnoExistente) {
-  if (servicioTurnoExistente) {
-    const servicioExistenteNorm = servicioTurnoExistente.toLowerCase().trim();
-    const tieneServicioNuevo = serviciosSolicitados.some(
-      (s) =>
-        !s.includes(servicioExistenteNorm) &&
-        !servicioExistenteNorm.includes(s),
+// Explicit detection: prioritize Master Agent flags
+if (data.add_to_existing_booking && existingBookingId) {
+  isAddService = true;
+} else if (data.action === "reprogramar" || data.action === "reschedule") {
+  isReschedule = true;
+} else if (hasExistingBooking) {
+  if (existingServiceName) {
+    const existingNorm = existingServiceName.toLowerCase().trim();
+    const hasNewService = requestedServices.some(
+      (s) => !s.includes(existingNorm) && !existingNorm.includes(s),
     );
-    const serviciosCoinciden = !tieneServicioNuevo;
-    const fechasCoinciden =
-      turnoFechaExistente &&
-      fechaSoloParte &&
-      turnoFechaExistente === fechaSoloParte;
-    if (serviciosCoinciden) esReprogramacion = true;
-    else if (!serviciosCoinciden && fechasCoinciden && turnoIdExistente)
-      esAgregarServicio = true;
-    else esTurnoAdicional = true;
+    const servicesMatch = !hasNewService;
+    const datesMatch = existingBookingDate && datePart && existingBookingDate === datePart;
+    if (servicesMatch) isReschedule = true;
+    else if (!servicesMatch && datesMatch && existingBookingId) isAddService = true;
+    else isAdditionalBooking = true;
   } else {
-    esTurnoAdicional = true;
+    isAdditionalBooking = true;
   }
 }
 
-// Complejidades para cálculos (scope global, usadas en instruccionTarea y _precalculado)
-const _compNueva = data.complejidad_maxima || "media";
-const _compExistente = data.turno_complejidad_existente || "media";
+// Complexities for calculations (global scope)
+const _compNew = data.max_complexity || "medium";
+const _compExisting = data.existing_complexity || "medium";
 
-// Variables de agregar servicio — scope global para instruccionTarea Y _precalculado
-const precioExistente = data.turno_precio_existente || 0;
-const _serviciosArray = Array.isArray(data.servicio) ? data.servicio : [data.servicio];
-const _servicioExistenteNorm = (data.turno_servicio_existente || "").toLowerCase().trim();
-const servicioNuevo = _serviciosArray.find(
-  (s) => s && s.toLowerCase().trim() !== _servicioExistenteNorm
-) || _serviciosArray[_serviciosArray.length - 1] || "otro";
-// SAFETY NET: precio del servicio nuevo calculado determinísticamente
-const _precioDet = calcularPrecioDet(servicioNuevo, data.largo_cabello);
-const precioNuevo = esAgregarServicio
-  ? (_precioDet !== null ? _precioDet : (data.precio || 0))
-  : (data.precio || 0);
+// Add service variables — global scope
+const existingPrice = data.existing_booking_price || 0;
+const _servicesArray = Array.isArray(data.service) ? data.service : [data.service];
+const _existingServiceNorm = (data.existing_service || "").toLowerCase().trim();
+const newServiceName = _servicesArray.find(
+  (s) => s && s.toLowerCase().trim() !== _existingServiceNorm
+) || _servicesArray[_servicesArray.length - 1] || "otro";
+const _priceDet = calculatePriceDet(newServiceName, data.hair_length);
+const newPrice = isAddService
+  ? (_priceDet !== null ? _priceDet : (data.price || 0))
+  : (data.price || 0);
 
-let instruccionTarea = "";
-let jsonRespuestaEsperada = "";
+let taskInstruction = "";
 
-if (esReprogramacion && data.fecha_disponible) {
-  const mensajeClientaReprogramado = `Listo ${data.nombre_clienta || "reina"}! Tu turno fue reprogramado para el ${fechaHumana} a las ${horaDeseada}. Te enviamos un email de confirmacion.`;
-  instruccionTarea = `## REPROGRAMAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_reprogramar_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "lead_id": ${data.lead_id || "null"},\n  "nueva_fecha_hora": "${fechaHoraCompleta}",\n  "motivo": "Solicitud de la clienta"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\nReemplazar los valores {ENTRE_LLAVES} con los datos de la respuesta de la tool:\n\n\`\`\`json\n{\n  "estado": "turno_reprogramado",\n  "odoo_turno_id": {turno_id_nuevo de la respuesta si existe, sino turno_id_anterior},\n  "turno_id_anterior": {turno_id_anterior de la respuesta},\n  "turno_id_nuevo": {turno_id_nuevo de la respuesta o null},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora_anterior": "{fecha_hora_anterior de la respuesta}",\n  "fecha_hora_nueva": "${fechaHoraCompleta}",\n  "servicio": "${servicioCodigo}",\n  "link_pago": "{link_pago de la respuesta si existe, o null}",\n  "mp_preference_id": "{mp_preference_id de la respuesta si existe, o null}",\n  "calendar_accept_url": "{calendar_accept_url de la respuesta si existe, o null}",\n  "mensaje_para_clienta": "${mensajeClientaReprogramado}"\n}\n\`\`\``;
-} else if (esAgregarServicio && data.fecha_disponible) {
-  // Detectar si la opción elegida es turno adicional (otra trabajadora, fila nueva)
-  const opcionElegida = (data.opciones || data.slots_recomendados || [])[0];
-  const trabajadoraExistente = (data.turno_trabajadora_existente || 'Leraysi').toLowerCase().trim();
-  const trabajadoraOpcion = (opcionElegida?.trabajadora || '').toLowerCase().trim();
-  const _esTurnoAdicionalDetectado = opcionElegida?.es_turno_adicional === true ||
-    (trabajadoraOpcion && trabajadoraExistente && trabajadoraOpcion !== trabajadoraExistente);
-  // Jornada completa (existente O nuevo): SIEMPRE turno adicional (fila nueva).
-  // El servicio corto se absorbe en la ventana de proceso y queda invisible si no tiene su propia fila.
-  const forzarTurnoAdicional = _compExistente === "muy_compleja" || _compNueva === "muy_compleja";
-  const esTurnoAdicionalFlag = _esTurnoAdicionalDetectado || forzarTurnoAdicional;
+if (isReschedule && data.date_available) {
+  const clientMsg = `Listo ${data.client_name || "reina"}! Tu turno fue reprogramado para el ${humanDate} a las ${requestedTime}. Te enviamos un email de confirmacion.`;
+  taskInstruction = `## REPROGRAMAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_reprogramar_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "lead_id": ${data.lead_id || "null"},\n  "nueva_fecha_hora": "${fullDatetime}",\n  "motivo": "Solicitud de la clienta"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "status": "booking_rescheduled",\n  "odoo_booking_id": {turno_id_nuevo de la respuesta si existe, sino turno_id_anterior},\n  "previous_booking_id": {turno_id_anterior de la respuesta},\n  "new_booking_id": {turno_id_nuevo de la respuesta o null},\n  "lead_id": ${data.lead_id || "null"},\n  "previous_datetime": "{fecha_hora_anterior de la respuesta}",\n  "new_datetime": "${fullDatetime}",\n  "service": "${serviceCode}",\n  "payment_link": "{link_pago de la respuesta si existe, o null}",\n  "mp_preference_id": "{mp_preference_id de la respuesta si existe, o null}",\n  "calendar_accept_url": "{calendar_accept_url de la respuesta si existe, o null}",\n  "client_message": "${clientMsg}"\n}\n\`\`\``;
+} else if (isAddService && data.date_available) {
+  const selectedOption = (data.options || data.recommended_slots || [])[0];
+  const existingWorkerName = (data.existing_worker || WORKERS.PRIMARY).toLowerCase().trim();
+  const optionWorker = (selectedOption?.worker || '').toLowerCase().trim();
+  const _isAdditionalDetected = selectedOption?.is_additional_booking === true ||
+    (optionWorker && existingWorkerName && optionWorker !== existingWorkerName);
+  const forceAdditional = _compExisting === "very_complex" || _compNew === "very_complex";
+  const isAdditionalFlag = _isAdditionalDetected || forceAdditional;
 
-  // precioExistente, precioNuevo, servicioNuevo ya en scope global
-  const servicioNuevoCodigo = DISPLAY_TO_CODE[servicioNuevo] || servicioNuevo;
-  const servicioExistenteDisplay = data.turno_servicio_existente || "servicio existente";
+  const newServiceCode = DISPLAY_TO_CODE[newServiceName] || newServiceName;
+  const existingServiceDisplay = data.existing_service || "servicio existente";
 
-  if (esTurnoAdicionalFlag && _esTurnoAdicionalDetectado) {
-    // ── TURNO ADICIONAL: OTRA TRABAJADORA hace el servicio nuevo ──
-    // Usar leraysi_crear_turno (nuevo registro Odoo justificado + fila nueva Baserow)
-    const senaServicioNuevo = Math.round(precioNuevo * 0.3);
-    const trabajadoraAdicional = opcionElegida?.trabajadora || 'Companera';
-    const horaInternaSlot = opcionElegida?.hora_inicio || horaDeseada;
-    const fechaHoraInterna = `${fechaSoloParte} ${horaInternaSlot}`;
-    const esJornadaCompleta = data.turno_complejidad_existente === 'muy_compleja';
-    const horaClienteFacing = esJornadaCompleta ? (data.turno_hora_original || horaDeseada) : horaInternaSlot;
-    const mensajeClientaTurnoAdicional = `Listo ${data.nombre_clienta || "reina"}! Agregamos ${servicioNuevo.toLowerCase()} a tu visita del ${fechaHumana} a las ${horaClienteFacing}. Sena: $${senaServicioNuevo.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
-    instruccionTarea = `## TURNO ADICIONAL — SERVICIO CON OTRA TRABAJADORA\n\nLa clienta ya tiene turno de ${servicioExistenteDisplay} con ${data.turno_trabajadora_existente || 'Leraysi'}. El nuevo servicio lo hace ${trabajadoraAdicional}.\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.nombre_clienta || ""}",\n  "telefono": "${data.telefono || ""}",\n  "servicio": "${servicioNuevoCodigo}",\n  "fecha_hora": "${fechaHoraInterna}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "lead_id": ${data.lead_id || "null"},\n  "es_turno_adicional": true${data.email ? `,\n  "email": "${data.email}"` : ""}${`,\n  "servicio_detalle": "${servicioNuevo}"`}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_adicional_creado",\n  "turno_id": {turnoId de la respuesta},\n  "turno_id_padre": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraInterna}",\n  "servicio": "${servicioNuevoCodigo}",\n  "servicio_detalle": "${servicioNuevo}",\n  "trabajadora": "${trabajadoraAdicional}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaTurnoAdicional}"\n}\n\`\`\``;
-  } else if (esTurnoAdicionalFlag && !_esTurnoAdicionalDetectado) {
-    // ── MISMA TRABAJADORA + JC: agregar servicio al turno Odoo existente ──
-    // Usar leraysi_agregar_servicio_turno (no crear phantom en Odoo)
-    // Baserow: fila nueva (via es_turno_adicional en _precalculado)
-    const senaServicioNuevo = Math.round(precioNuevo * 0.3);
-    const trabajadoraMisma = opcionElegida?.trabajadora || data.turno_trabajadora_existente || 'Leraysi';
-    const horaInternaSlot = opcionElegida?.hora_inicio || horaDeseada;
-    const fechaHoraInterna = `${fechaSoloParte} ${horaInternaSlot}`;
-    const horaClienteFacing = data.turno_hora_original || horaDeseada;
-    const mensajeClientaJC = `Listo ${data.nombre_clienta || "reina"}! Agregamos ${servicioNuevo.toLowerCase()} a tu visita del ${fechaHumana} a las ${horaClienteFacing}. Sena: $${senaServicioNuevo.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
-    instruccionTarea = `## AGREGAR SERVICIO — MISMA TRABAJADORA (JORNADA COMPLETA)\n\nLa clienta ya tiene turno de ${servicioExistenteDisplay} con ${trabajadoraMisma}. Agregamos ${servicioNuevo} al mismo turno.\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${turnoIdExistente},\n  "nuevo_servicio": "${servicioNuevoCodigo}",\n  "nuevo_servicio_detalle": "${servicioNuevo}",\n  "nuevo_precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "nueva_hora": "${horaInternaSlot}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_adicional_creado",\n  "turno_id": ${turnoIdExistente},\n  "turno_id_padre": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraInterna}",\n  "servicio": "${servicioNuevoCodigo}",\n  "servicio_detalle": "${servicioNuevo}",\n  "trabajadora": "${trabajadoraMisma}",\n  "precio": ${precioNuevo},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaJC}"\n}\n\`\`\``;
+  if (isAdditionalFlag && _isAdditionalDetected) {
+    // ── ADDITIONAL BOOKING: DIFFERENT WORKER ──
+    const depositNew = Math.round(newPrice * 0.3);
+    const additionalWorker = selectedOption?.worker || WORKERS.SECONDARY;
+    const slotTime = selectedOption?.start_time || requestedTime;
+    const slotDatetime = `${datePart} ${slotTime}`;
+    const isFullDay = data.existing_complexity === 'very_complex';
+    const clientFacingTime = isFullDay ? (data.existing_time || requestedTime) : slotTime;
+    const clientMsg = `Listo ${data.client_name || "reina"}! Agregamos ${newServiceName.toLowerCase()} a tu visita del ${humanDate} a las ${clientFacingTime}. Sena: $${depositNew.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
+    taskInstruction = `## TURNO ADICIONAL — SERVICIO CON OTRA TRABAJADORA\n\nLa clienta ya tiene turno de ${existingServiceDisplay} con ${getWorkerDisplay(data.existing_worker || WORKERS.PRIMARY)}. El nuevo servicio lo hace ${getWorkerDisplay(additionalWorker)}.\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.client_name || ""}",\n  "telefono": "${data.phone || ""}",\n  "servicio": "${newServiceCode}",\n  "fecha_hora": "${slotDatetime}",\n  "precio": ${newPrice},\n  "duracion_estimada": ${data.estimated_duration || 60},\n  "complejidad_maxima": "${data.max_complexity || "medium"}",\n  "lead_id": ${data.lead_id || "null"},\n  "es_turno_adicional": true${data.email ? `,\n  "email": "${data.email}"` : ""}${`,\n  "servicio_detalle": "${newServiceName}"`}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "status": "additional_booking_created",\n  "booking_id": {turnoId de la respuesta},\n  "parent_booking_id": ${existingBookingId},\n  "lead_id": ${data.lead_id || "null"},\n  "datetime": "${slotDatetime}",\n  "service": "${newServiceCode}",\n  "service_detail": "${newServiceName}",\n  "worker": "${additionalWorker}",\n  "price": ${newPrice},\n  "estimated_duration": ${data.estimated_duration || 60},\n  "max_complexity": "${data.max_complexity || "medium"}",\n  "deposit": {sena de la respuesta},\n  "payment_link": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "client_message": "${clientMsg}"\n}\n\`\`\``;
+  } else if (isAdditionalFlag && !_isAdditionalDetected) {
+    // ── SAME WORKER + FULL DAY ──
+    const depositNew = Math.round(newPrice * 0.3);
+    const sameWorker = selectedOption?.worker || data.existing_worker || WORKERS.PRIMARY;
+    const slotTime = selectedOption?.start_time || requestedTime;
+    const slotDatetime = `${datePart} ${slotTime}`;
+    const clientFacingTime = data.existing_time || requestedTime;
+    const clientMsg = `Listo ${data.client_name || "reina"}! Agregamos ${newServiceName.toLowerCase()} a tu visita del ${humanDate} a las ${clientFacingTime}. Sena: $${depositNew.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
+    taskInstruction = `## AGREGAR SERVICIO — MISMA TRABAJADORA (JORNADA COMPLETA)\n\nLa clienta ya tiene turno de ${existingServiceDisplay} con ${getWorkerDisplay(sameWorker)}. Agregamos ${newServiceName} al mismo turno.\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${existingBookingId},\n  "nuevo_servicio": "${newServiceCode}",\n  "nuevo_servicio_detalle": "${newServiceName}",\n  "nuevo_precio": ${newPrice},\n  "duracion_estimada": ${data.estimated_duration || 60},\n  "complejidad_maxima": "${data.max_complexity || "medium"}",\n  "nueva_hora": "${slotTime}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "status": "additional_booking_created",\n  "booking_id": ${existingBookingId},\n  "parent_booking_id": ${existingBookingId},\n  "lead_id": ${data.lead_id || "null"},\n  "datetime": "${slotDatetime}",\n  "service": "${newServiceCode}",\n  "service_detail": "${newServiceName}",\n  "worker": "${sameWorker}",\n  "price": ${newPrice},\n  "estimated_duration": ${data.estimated_duration || 60},\n  "max_complexity": "${data.max_complexity || "medium"}",\n  "deposit": {sena de la respuesta},\n  "payment_link": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "client_message": "${clientMsg}"\n}\n\`\`\``;
   } else {
-    // ── AGREGAR SERVICIO MISMA TRABAJADORA: bloque combinado (UPDATE fila existente) ──
-    const precioTotal = precioExistente + precioNuevo;
-    const senaTotalCalculada = Math.round(precioTotal * 0.3);
-    const senaPagadaExistente = data.turno_sena_pagada || Math.round(precioExistente * 0.3);
-    const senaDiferencial = senaTotalCalculada - senaPagadaExistente;
-    const duracionExistente = data.turno_duracion_existente || 0;
-    const duracionNueva = data.duracion_estimada || 60;
-    const duracionCombinada = (_compNueva === "muy_compleja" || _compExistente === "muy_compleja")
-      ? 600 : duracionExistente + duracionNueva;
-    const COMPLEJIDAD_ORDER = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
-    const ORDER_TO_COMP = { 1: 'simple', 2: 'media', 3: 'compleja', 4: 'muy_compleja' };
-    const complejidadExistente = data.turno_complejidad_existente || "media";
-    const complejidadNueva = data.complejidad_maxima || "media";
-    const _existSvcs = (data.turno_servicio_existente || "").split(" + ").filter(s => s.trim());
-    const _newSvcs = Array.isArray(data.servicio) ? data.servicio : [data.servicio].filter(Boolean);
+    // ── ADD SERVICE SAME WORKER: combined block ──
+    const totalPrice = existingPrice + newPrice;
+    const totalDeposit = Math.round(totalPrice * 0.3);
+    const existingDepositPaid = data.existing_deposit || Math.round(existingPrice * 0.3);
+    const differentialDeposit = totalDeposit - existingDepositPaid;
+    const existDuration = data.existing_duration || 0;
+    const newDuration = data.estimated_duration || 60;
+    const combinedDuration = (_compNew === "very_complex" || _compExisting === "very_complex")
+      ? 600 : existDuration + newDuration;
+    const COMP_ORDER = { simple: 1, medium: 2, complex: 3, very_complex: 4 };
+    const ORDER_TO_COMP = { 1: 'simple', 2: 'medium', 3: 'complex', 4: 'very_complex' };
+    const _existSvcs = (data.existing_service || "").split(" + ").filter(s => s.trim());
+    const _newSvcs = Array.isArray(data.service) ? data.service : [data.service].filter(Boolean);
     const _totalCount = _existSvcs.length + _newSvcs.length;
     let _floorComp = 'simple';
-    if (_totalCount >= 3) _floorComp = 'muy_compleja';
-    else if (_totalCount >= 2) _floorComp = 'compleja';
-    const complejidadCombinada = ORDER_TO_COMP[Math.max(
-      COMPLEJIDAD_ORDER[complejidadExistente] || 2,
-      COMPLEJIDAD_ORDER[complejidadNueva] || 2,
-      COMPLEJIDAD_ORDER[_floorComp] || 1
-    )] || "media";
-    const serviciosCombinados = `${servicioExistenteDisplay} + ${servicioNuevo}`;
-    const mensajeClientaAgregado = `Listo ${data.nombre_clienta || "reina"}! Actualice tu turno del ${fechaHumana} a las ${horaDeseada}. Ahora tenes: ${serviciosCombinados}. Total: $${precioTotal.toLocaleString("es-AR")}. Sena adicional a pagar: $${senaDiferencial.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
-    instruccionTarea = `## AGREGAR SERVICIO AL TURNO EXISTENTE\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${turnoIdExistente},\n  "nuevo_servicio": "${servicioNuevoCodigo}",\n  "nuevo_servicio_detalle": "${servicioNuevo}",\n  "nuevo_precio": ${precioNuevo},\n  "duracion_estimada": ${duracionCombinada},\n  "complejidad_maxima": "${complejidadCombinada}",\n  "nueva_hora": "${horaDeseada}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "servicio_agregado",\n  "turno_id": ${turnoIdExistente},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicios_combinados": "{servicio_detalle de la respuesta}",\n  "precio_total": {precio_total de la respuesta},\n  "duracion_estimada": ${duracionCombinada},\n  "complejidad_maxima": "${complejidadCombinada}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaAgregado}"\n}\n\`\`\``;
+    if (_totalCount >= 3) _floorComp = 'very_complex';
+    else if (_totalCount >= 2) _floorComp = 'complex';
+    const combinedComplexity = ORDER_TO_COMP[Math.max(
+      COMP_ORDER[_compExisting] || 2,
+      COMP_ORDER[_compNew] || 2,
+      COMP_ORDER[_floorComp] || 1
+    )] || "medium";
+    const combinedServices = `${existingServiceDisplay} + ${newServiceName}`;
+    const clientMsg = `Listo ${data.client_name || "reina"}! Actualice tu turno del ${humanDate} a las ${requestedTime}. Ahora tenes: ${combinedServices}. Total: $${totalPrice.toLocaleString("es-AR")}. Sena adicional a pagar: $${differentialDeposit.toLocaleString("es-AR")}. {LINK_PAGO_MSG}`;
+    taskInstruction = `## AGREGAR SERVICIO AL TURNO EXISTENTE\n\n### PASO 1: Llamar a la tool \`leraysi_agregar_servicio_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "turno_id": ${existingBookingId},\n  "nuevo_servicio": "${newServiceCode}",\n  "nuevo_servicio_detalle": "${newServiceName}",\n  "nuevo_precio": ${newPrice},\n  "duracion_estimada": ${combinedDuration},\n  "complejidad_maxima": "${combinedComplexity}",\n  "nueva_hora": "${requestedTime}"\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "status": "service_added",\n  "booking_id": ${existingBookingId},\n  "lead_id": ${data.lead_id || "null"},\n  "datetime": "${fullDatetime}",\n  "combined_services": "{servicio_detalle de la respuesta}",\n  "total_price": {precio_total de la respuesta},\n  "estimated_duration": ${combinedDuration},\n  "max_complexity": "${combinedComplexity}",\n  "deposit": {sena de la respuesta},\n  "payment_link": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "client_message": "${clientMsg}"\n}\n\`\`\``;
   }
-} else if (data.fecha_disponible) {
-  const mensajeClientaTemplate = `Listo ${data.nombre_clienta || "reina"}! Tu turno de ${servicioDisplay.toLowerCase()} esta reservado para el ${fechaHumana} a las ${horaDeseada}. Para confirmarlo, paga la sena de $${senaCalculada.toLocaleString("es-AR")} en este link: {LINK_PAGO}. Tenes 15 minutos para abonar, despues el link expira y se libera el turno.`;
-  instruccionTarea = `## FECHA DISPONIBLE - CREAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.nombre_clienta || ""}",\n  "telefono": "${data.telefono || ""}",\n  "servicio": "${servicioCodigo}",\n  "fecha_hora": "${fechaHoraCompleta}",\n  "precio": ${data.precio || 0},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "lead_id": ${data.lead_id || "null"}${data.email ? `,\n  "email": "${data.email}"` : ""}${data.servicio_detalle ? `,\n  "servicio_detalle": "${data.servicio_detalle}"` : ""}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "estado": "turno_creado",\n  "turno_id": {turnoId de la respuesta},\n  "lead_id": ${data.lead_id || "null"},\n  "fecha_hora": "${fechaHoraCompleta}",\n  "servicio": "${servicioCodigo}",\n  "servicio_detalle": "${servicioDisplay}",\n  "precio": ${data.precio || 0},\n  "duracion_estimada": ${data.duracion_estimada || 60},\n  "complejidad_maxima": "${data.complejidad_maxima || "media"}",\n  "sena": {sena de la respuesta},\n  "link_pago": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "mensaje_para_clienta": "${mensajeClientaTemplate}"\n}\n\`\`\`\n\n**IMPORTANTE:** En mensaje_para_clienta, reemplazar {LINK_PAGO} con el link_pago real de la respuesta.`;
+} else if (data.date_available) {
+  const clientMsg = `Listo ${data.client_name || "reina"}! Tu turno de ${serviceDisplay.toLowerCase()} esta reservado para el ${humanDate} a las ${requestedTime}. Para confirmarlo, paga la sena de $${depositCalculated.toLocaleString("es-AR")} en este link: {LINK_PAGO}. Tenes 15 minutos para abonar, despues el link expira y se libera el turno.`;
+  taskInstruction = `## FECHA DISPONIBLE - CREAR TURNO\n\n### PASO 1: Llamar a la tool \`leraysi_crear_turno\`\n\nUsar EXACTAMENTE estos parametros:\n\n\`\`\`json\n{\n  "clienta": "${data.client_name || ""}",\n  "telefono": "${data.phone || ""}",\n  "servicio": "${serviceCode}",\n  "fecha_hora": "${fullDatetime}",\n  "precio": ${data.price || 0},\n  "duracion_estimada": ${data.estimated_duration || 60},\n  "complejidad_maxima": "${data.max_complexity || "medium"}",\n  "lead_id": ${data.lead_id || "null"}${data.email ? `,\n  "email": "${data.email}"` : ""}${data.service_detail ? `,\n  "servicio_detalle": "${data.service_detail}"` : ""}\n}\n\`\`\`\n\n### PASO 2: Despues de llamar la tool, responder con este JSON\n\n\`\`\`json\n{\n  "status": "booking_created",\n  "booking_id": {turnoId de la respuesta},\n  "lead_id": ${data.lead_id || "null"},\n  "datetime": "${fullDatetime}",\n  "service": "${serviceCode}",\n  "service_detail": "${serviceDisplay}",\n  "price": ${data.price || 0},\n  "estimated_duration": ${data.estimated_duration || 60},\n  "max_complexity": "${data.max_complexity || "medium"}",\n  "deposit": {sena de la respuesta},\n  "payment_link": "{link_pago de la respuesta}",\n  "mp_preference_id": "{mp_preference_id de la respuesta}",\n  "client_message": "${clientMsg}"\n}\n\`\`\`\n\n**IMPORTANTE:** En client_message, reemplazar {LINK_PAGO} con el link_pago real de la respuesta.`;
 } else {
-  const alternativasTexto =
-    data.alternativas?.length > 0
-      ? data.alternativas.map((a) => `${a.nombre_dia} ${a.fecha}`).join(", ")
+  const alternativesText =
+    data.alternatives?.length > 0
+      ? data.alternatives.map((a) => `${a.day_name} ${a.date}`).join(", ")
       : "No hay disponibilidad esta semana";
-  const alternativasArray =
-    data.alternativas?.map((a) => `"${a.nombre_dia} ${a.fecha}"`) || [];
-  const mensajeClientaNoDisponible = `Disculpa, el ${fechaHumana} no tenemos disponibilidad (${(data.motivo_no_disponible || "agenda completa").toLowerCase()}). Te puedo ofrecer: ${alternativasTexto}. Cual te queda mejor?`;
-  instruccionTarea = `## FECHA NO DISPONIBLE\n\n**NO llamar ninguna tool.**\n\nResponder UNICAMENTE con este JSON:\n\n\`\`\`json\n{\n  "estado": "fecha_no_disponible",\n  "fecha_solicitada": "${data.fecha_solicitada}",\n  "motivo": "${data.motivo_no_disponible || "Sin disponibilidad"}",\n  "alternativas": [${alternativasArray.join(", ")}],\n  "mensaje_para_clienta": "${mensajeClientaNoDisponible}"\n}\n\`\`\``;
+  const alternativesArray =
+    data.alternatives?.map((a) => `"${a.day_name} ${a.date}"`) || [];
+  const clientMsg = `Disculpa, el ${humanDate} no tenemos disponibilidad (${(data.unavailable_reason || "agenda completa").toLowerCase()}). Te puedo ofrecer: ${alternativesText}. Cual te queda mejor?`;
+  taskInstruction = `## FECHA NO DISPONIBLE\n\n**NO llamar ninguna tool.**\n\nResponder UNICAMENTE con este JSON:\n\n\`\`\`json\n{\n  "status": "date_unavailable",\n  "requested_date": "${data.requested_date}",\n  "reason": "${data.unavailable_reason || "Sin disponibilidad"}",\n  "alternatives": [${alternativesArray.join(", ")}],\n  "client_message": "${clientMsg}"\n}\n\`\`\``;
 }
 
-const userMessage = `# SOLICITUD DE TURNO - Estilos Leraysi\n\n## Datos de la Solicitud\n\n| Campo | Valor |\n|-------|-------|\n| **Clienta** | ${data.nombre_clienta || "No proporcionado"} |\n| **Telefono** | ${data.telefono || "No proporcionado"} |\n| **Email** | ${data.email || "No proporcionado"} |\n| **Lead ID** | ${data.lead_id || "N/A"} |\n| **Servicio** | ${servicioDisplay} |\n| **Complejidad** | ${data.complejidad_maxima || "media"} |\n| **Duracion** | ${data.duracion_estimada || 60} min |\n| **Precio** | $${(data.precio || 0).toLocaleString("es-AR")} |\n| **Sena (30%)** | $${senaCalculada.toLocaleString("es-AR")} |\n| **Fecha solicitada** | ${data.fecha_solicitada} (${fechaHumana}) |\n| **Hora** | ${horaDeseada} |\n| **Disponibilidad** | ${data.fecha_disponible ? "DISPONIBLE" : "NO DISPONIBLE"} |\n\n## Disponibilidad de la Semana\n\n${data.resumen_disponibilidad || "No disponible"}\n\n---\n\n${instruccionTarea}`;
+const userMessage = `# SOLICITUD DE TURNO - Estilos Leraysi\n\n## Datos de la Solicitud\n\n| Campo | Valor |\n|-------|-------|\n| **Clienta** | ${data.client_name || "No proporcionado"} |\n| **Telefono** | ${data.phone || "No proporcionado"} |\n| **Email** | ${data.email || "No proporcionado"} |\n| **Lead ID** | ${data.lead_id || "N/A"} |\n| **Servicio** | ${serviceDisplay} |\n| **Complejidad** | ${data.max_complexity || "medium"} |\n| **Duracion** | ${data.estimated_duration || 60} min |\n| **Precio** | $${(data.price || 0).toLocaleString("es-AR")} |\n| **Sena (30%)** | $${depositCalculated.toLocaleString("es-AR")} |\n| **Fecha solicitada** | ${data.requested_date} (${humanDate}) |\n| **Hora** | ${requestedTime} |\n| **Disponibilidad** | ${data.date_available ? "DISPONIBLE" : "NO DISPONIBLE"} |\n\n## Disponibilidad de la Semana\n\n${data.availability_summary || "No disponible"}\n\n---\n\n${taskInstruction}`;
 
 return [
   {
     json: {
       ...data,
       userMessage,
-      _precalculado: (() => {
-        // Detectar turno adicional para usar valores SOLO del servicio nuevo
-        const _opcion = (data.opciones || data.slots_recomendados || [])[0];
-        const _trabExist = (data.turno_trabajadora_existente || 'Leraysi').toLowerCase().trim();
-        const _trabOpcion = (_opcion?.trabajadora || '').toLowerCase().trim();
-        const _forzarAdicional = _compExistente === "muy_compleja" || _compNueva === "muy_compleja";
-        const _esTurnoAdicional = esAgregarServicio && (
-          _forzarAdicional ||
-          _opcion?.es_turno_adicional === true ||
-          (_trabOpcion && _trabExist && _trabOpcion !== _trabExist)
+      _precalculated: (() => {
+        const _option = (data.options || data.recommended_slots || [])[0];
+        const _existWorker = (data.existing_worker || WORKERS.PRIMARY).toLowerCase().trim();
+        const _optionWorker = (_option?.worker || '').toLowerCase().trim();
+        const _forceAdditional = _compExisting === "very_complex" || _compNew === "very_complex";
+        const _isAdditionalBooking = isAddService && (
+          _forceAdditional ||
+          _option?.is_additional_booking === true ||
+          (_optionWorker && _existWorker && _optionWorker !== _existWorker)
         );
 
-        if (_esTurnoAdicional) {
-          // TURNO ADICIONAL: hora_inicio del slot elegido (09:00 para JC), sino hora_deseada
-          const _horaSlot = _opcion?.hora_inicio || horaDeseada;
+        if (_isAdditionalBooking) {
+          const _slotTime = _option?.start_time || requestedTime;
           return {
-            hora: _horaSlot,
-            duracion_estimada: data.duracion_estimada || 60,
-            complejidad_maxima: data.complejidad_maxima || "media",
-            sena: Math.round(precioNuevo * 0.3),
-            fecha_hora_completa: `${fechaSoloParte} ${_horaSlot}`,
-            fecha_humana: fechaHumana,
-            servicio_display: servicioDisplay,
-            trabajadora: _opcion?.trabajadora || 'Companera',
-            es_turno_adicional: true,
-            turno_id_padre: turnoIdExistente,
-            // Reubicación padre (Estrategia B: agregar JC a cortos existentes)
-            hora_servicio_existente: _opcion?.hora_servicio_existente || null,
-            servicio_reubicado: _opcion?.servicio_reubicado || false,
-            hora_original: _opcion?.hora_original || null,
+            time: _slotTime,
+            estimated_duration: data.estimated_duration || 60,
+            max_complexity: data.max_complexity || "medium",
+            deposit: Math.round(newPrice * 0.3),
+            full_datetime: `${datePart} ${_slotTime}`,
+            human_date: humanDate,
+            service_display: serviceDisplay,
+            worker: _option?.worker || WORKERS.SECONDARY,
+            is_additional_booking: true,
+            parent_booking_id: existingBookingId,
+            existing_service_time: _option?.existing_service_time || null,
+            service_relocated: _option?.service_relocated || false,
+            original_time: _option?.original_time || null,
           };
         }
 
-        // AGREGAR SERVICIO misma trabajadora o TURNO NUEVO/REPROGRAMAR
         return {
-          hora: horaDeseada,
-          duracion_estimada: esAgregarServicio
-            ? ((_compNueva === "muy_compleja" || _compExistente === "muy_compleja") ? 600 : (data.turno_duracion_existente || 0) + (data.duracion_estimada || 60))
-            : (data.duracion_estimada || 60),
-          complejidad_maxima: esAgregarServicio
+          time: requestedTime,
+          estimated_duration: isAddService
+            ? ((_compNew === "very_complex" || _compExisting === "very_complex") ? 600 : (data.existing_duration || 0) + (data.estimated_duration || 60))
+            : (data.estimated_duration || 60),
+          max_complexity: isAddService
             ? (() => {
-                const ORD = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
-                const ORD_R = { 1: 'simple', 2: 'media', 3: 'compleja', 4: 'muy_compleja' };
-                const ex = data.turno_complejidad_existente || "media";
-                const nw = data.complejidad_maxima || "media";
-                const eSvcs = (data.turno_servicio_existente || "").split(" + ").filter(s => s.trim());
-                const nSvcs = Array.isArray(data.servicio) ? data.servicio : [data.servicio].filter(Boolean);
+                const ORD = { simple: 1, medium: 2, complex: 3, very_complex: 4 };
+                const ORD_R = { 1: 'simple', 2: 'medium', 3: 'complex', 4: 'very_complex' };
+                const ex = data.existing_complexity || "medium";
+                const nw = data.max_complexity || "medium";
+                const eSvcs = (data.existing_service || "").split(" + ").filter(s => s.trim());
+                const nSvcs = Array.isArray(data.service) ? data.service : [data.service].filter(Boolean);
                 const tot = eSvcs.length + nSvcs.length;
                 let fl = 'simple';
-                if (tot >= 3) fl = 'muy_compleja';
-                else if (tot >= 2) fl = 'compleja';
-                return ORD_R[Math.max(ORD[ex] || 2, ORD[nw] || 2, ORD[fl] || 1)] || "media";
+                if (tot >= 3) fl = 'very_complex';
+                else if (tot >= 2) fl = 'complex';
+                return ORD_R[Math.max(ORD[ex] || 2, ORD[nw] || 2, ORD[fl] || 1)] || "medium";
               })()
-            : (data.complejidad_maxima || "media"),
-          sena: esAgregarServicio
-            ? Math.round((precioExistente + precioNuevo) * 0.3)
-            : senaCalculada,
-          fecha_hora_completa: fechaHoraCompleta,
-          fecha_humana: fechaHumana,
-          servicio_display: servicioDisplay,
-          trabajadora: (data.opciones || data.slots_recomendados || [])[0]?.trabajadora || data.turno_trabajadora_existente || 'Leraysi',
+            : (data.max_complexity || "medium"),
+          deposit: isAddService
+            ? Math.round((existingPrice + newPrice) * 0.3)
+            : depositCalculated,
+          full_datetime: fullDatetime,
+          human_date: humanDate,
+          service_display: serviceDisplay,
+          worker: (data.options || data.recommended_slots || [])[0]?.worker || data.existing_worker || WORKERS.PRIMARY,
         };
       })(),
     },

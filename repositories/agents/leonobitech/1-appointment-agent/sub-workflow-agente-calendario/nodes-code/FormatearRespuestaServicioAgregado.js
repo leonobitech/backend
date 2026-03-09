@@ -1,118 +1,141 @@
 // ============================================================================
-// FORMATEAR RESPUESTA SERVICIO AGREGADO - Agente Calendario Leraysi v4
+// FORMAT SERVICE ADDED RESPONSE - Calendar Agent
 // ============================================================================
-// Construye la respuesta final cuando se agrega un servicio a turno existente.
-// Bifurca entre:
-//   PATH A — TURNO ADICIONAL: fila nueva creada (Create Row response)
-//   PATH B — MISMA TRABAJADORA: fila existente actualizada (Update Row response)
+// Builds the final response when a service is added to an existing booking.
+// Branches between:
+//   PATH A — ADDITIONAL BOOKING: new row created (Create Row response)
+//   PATH B — SAME WORKER: existing row updated (Update Row response)
 // ============================================================================
-// NODO: FormatearRespuestaServicioAgregado (Code)
-// INPUT: ActualizarTurnoBaserow O CrearTurnoAdicionalBaserow (respuesta de Baserow)
-// OUTPUT: Respuesta estructurada para Return → Master Agent
+// NODE: FormatearRespuestaServicioAgregado (Code)
+// INPUT: ActualizarTurnoBaserow OR CrearTurnoAdicionalBaserow (Baserow response)
+// OUTPUT: Structured response for Return -> Master Agent
+// ============================================================================
+
+// ============================================================================
+// WORKER CONFIGURATION (multi-tenant)
+// ============================================================================
+const WORKERS = {
+  PRIMARY: 'primary',
+  SECONDARY: 'secondary',
+};
+
+const WORKER_DISPLAY = {
+  [WORKERS.PRIMARY]: $env.WORKER_PRIMARY_NAME || 'Primary',
+  [WORKERS.SECONDARY]: $env.WORKER_SECONDARY_NAME || 'Secondary',
+};
+
+function getWorkerDisplay(workerKey) {
+  if (!workerKey) return WORKER_DISPLAY[WORKERS.PRIMARY];
+  const normalized = workerKey.toLowerCase().trim();
+  return WORKER_DISPLAY[normalized] || workerKey;
+}
+
+// ============================================================================
+// INPUT
 // ============================================================================
 
 const baserowResponse = $input.first().json;
 
-// Recuperar datos del nodo PrepararServicioAgregadoBaserow
-const prepararData = $('PrepararServicioAgregadoBaserow').first().json;
-const metaData = prepararData._meta;
-const definitivos = metaData.datos_definitivos || {};
+// Retrieve data from PrepararServicioAgregadoBaserow node
+const prepData = $('PrepararServicioAgregadoBaserow').first().json;
+const metaData = prepData._meta;
+const definitiveData = metaData.definitive_data || {};
 
-// El ID de la fila en Baserow (nueva o actualizada)
-const turnoRowId = baserowResponse.id;
-const esTurnoAdicional = prepararData._operacion === 'crear_turno_adicional';
+// The Baserow row ID (new or updated)
+const bookingRowId = baserowResponse.id;
+const isAdditionalBooking = prepData._operation === 'create_additional_booking';
 
 // ============================================================================
-// PATH A: TURNO ADICIONAL — Fila nueva creada
+// PATH A: ADDITIONAL BOOKING — New row created
 // ============================================================================
-if (esTurnoAdicional) {
-  const precioNuevo = definitivos.precio || 0;
-  const senaNuevo = definitivos.sena_monto || Math.round(precioNuevo * 0.3);
+if (isAdditionalBooking) {
+  const newPrice = definitiveData.price || 0;
+  const newDeposit = definitiveData.deposit_amount || Math.round(newPrice * 0.3);
 
-  // ── Hora client-facing: si hay jornada completa (padre o hijo), su hora prevalece ──
-  // La clienta llega a las 09:00 para jornada completa, sin importar si es padre o hijo.
-  const complejidadPadre = metaData.turno_complejidad_padre || 'media';
-  const complejidadHijo = definitivos.complejidad_maxima || 'media';
-  const hayJornadaCompleta = complejidadPadre === 'muy_compleja' || complejidadHijo === 'muy_compleja';
+  // Client-facing time: if there's a full day booking (parent or child), its time prevails
+  // Client arrives at 09:00 for full day, regardless of whether it's parent or child
+  const parentComplexity = metaData.existing_complexity || 'medium';
+  const childComplexity = definitiveData.max_complexity || 'medium';
+  const hasFullDay = parentComplexity === 'very_complex' || childComplexity === 'very_complex';
 
-  let mensajeClienteFinal = metaData.mensaje_para_clienta;
-  if (hayJornadaCompleta) {
-    // Determinar hora correcta: la del turno con jornada completa
-    const horaJornada = complejidadPadre === 'muy_compleja'
-      ? (metaData.turno_hora_original || '09:00')
-      : (definitivos.hora || '09:00');
-    const horaIncorrecta = complejidadPadre === 'muy_compleja'
-      ? (definitivos.hora || '12:00')
-      : (metaData.turno_hora_original || '09:00');
+  let finalClientMessage = metaData.client_message;
+  if (hasFullDay) {
+    // Determine correct time: the one from the full day booking
+    const fullDayTime = parentComplexity === 'very_complex'
+      ? (metaData.existing_time || '09:00')
+      : (definitiveData.time || '09:00');
+    const incorrectTime = parentComplexity === 'very_complex'
+      ? (definitiveData.time || '12:00')
+      : (metaData.existing_time || '09:00');
 
-    // Reemplazar hora incorrecta en el mensaje de la LLM
-    if (horaIncorrecta !== horaJornada && mensajeClienteFinal.includes(horaIncorrecta)) {
-      mensajeClienteFinal = mensajeClienteFinal.replace(horaIncorrecta, horaJornada);
-      console.log(`[FormatearRespuesta] Hora corregida: ${horaIncorrecta} → ${horaJornada} (jornada completa)`);
+    // Replace incorrect time in the LLM message
+    if (incorrectTime !== fullDayTime && finalClientMessage.includes(incorrectTime)) {
+      finalClientMessage = finalClientMessage.replace(incorrectTime, fullDayTime);
+      console.log(`[FormatResponse] Time corrected: ${incorrectTime} -> ${fullDayTime} (full day)`);
     }
   }
 
-  console.log(`[FormatearRespuesta] PATH A: Turno adicional creado. ` +
-    `Row nuevo: #${turnoRowId}. Padre: #${metaData.turno_padre_row_id}`);
+  console.log(`[FormatResponse] PATH A: Additional booking created. ` +
+    `New row: #${bookingRowId}. Parent: #${metaData.parent_booking_row_id}`);
 
   return [{
     json: {
       success: true,
-      accion: 'turno_adicional_creado',
-      turno_id: turnoRowId,
-      turno_id_padre: metaData.turno_padre_row_id,
-      mensaje_para_clienta: mensajeClienteFinal,
+      action: 'additional_booking_created',
+      booking_id: bookingRowId,
+      parent_booking_id: metaData.parent_booking_row_id,
+      client_message: finalClientMessage,
       lead_row_id: metaData.lead_row_id,
 
-      // Datos del turno adicional (solo servicio nuevo)
-      servicio_agregado: {
-        es_turno_adicional: true,
-        odoo_turno_id: metaData.odoo_turno_id,
-        servicio_nuevo: definitivos.servicio_detalle,
-        trabajadora_nueva: prepararData.trabajadora || 'Companera',
-        precio_servicio_nuevo: precioNuevo,
-        sena_a_pagar: senaNuevo,
-        link_pago: prepararData.mp_link,
-        // Datos del turno padre (para contexto)
-        servicio_existente: metaData.turno_servicio_existente || '',
-        trabajadora_existente: metaData.turno_trabajadora_original || 'Leraysi',
-        hora_existente: metaData.turno_hora_original || '',
-        precio_existente: Number(metaData.turno_precio_existente) || 0,
+      // Additional booking data (new service only)
+      service_added: {
+        is_additional_booking: true,
+        odoo_booking_id: metaData.odoo_booking_id,
+        new_service: definitiveData.service_detail,
+        new_worker: getWorkerDisplay(prepData.worker),
+        new_service_price: newPrice,
+        deposit_to_pay: newDeposit,
+        payment_link: prepData.payment_link,
+        // Parent booking data (for context)
+        existing_service: metaData.existing_service || '',
+        existing_worker: getWorkerDisplay(metaData.existing_worker),
+        existing_time: metaData.existing_time || '',
+        existing_price: Number(metaData.existing_booking_price) || 0,
       }
     }
   }];
 }
 
 // ============================================================================
-// PATH B: MISMA TRABAJADORA — Fila existente actualizada (lógica v3 original)
+// PATH B: SAME WORKER — Existing row updated (original v3 logic)
 // ============================================================================
-const precioExistente = Number(metaData.turno_precio_existente) || 0;
-const senaPagada = Number(metaData.turno_sena_pagada) || 0;
-const precioTotal = definitivos.precio || 0;
-const senaTotalNueva = definitivos.sena_monto || Math.round(precioTotal * 0.3);
-const senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);
-const servicioExistente = metaData.turno_servicio_existente || '';
+const existingPrice = Number(metaData.existing_booking_price) || 0;
+const depositPaid = Number(metaData.existing_booking_deposit) || 0;
+const totalPrice = definitiveData.price || 0;
+const newTotalDeposit = definitiveData.deposit_amount || Math.round(totalPrice * 0.3);
+const differentialDeposit = Math.max(0, newTotalDeposit - depositPaid);
+const existingService = metaData.existing_service || '';
 
 return [{
   json: {
     success: true,
-    accion: metaData.accion,
-    turno_id: turnoRowId,
-    mensaje_para_clienta: metaData.mensaje_para_clienta,
+    action: metaData.action,
+    booking_id: bookingRowId,
+    client_message: metaData.client_message,
     lead_row_id: metaData.lead_row_id,
 
-    // Datos de servicio agregado (bloque combinado)
-    servicio_agregado: {
-      es_turno_adicional: false,
-      odoo_turno_id: metaData.odoo_turno_id,
-      servicios_combinados: definitivos.servicio_detalle,
-      precio_total: precioTotal,
-      link_pago: prepararData.mp_link,
-      sena_ya_pagada: senaPagada,
-      sena_adicional: senaDiferencial,
-      sena_total_nueva: senaTotalNueva,
-      servicio_existente: servicioExistente,
-      precio_existente: precioExistente
+    // Service added data (combined block)
+    service_added: {
+      is_additional_booking: false,
+      odoo_booking_id: metaData.odoo_booking_id,
+      combined_services: definitiveData.service_detail,
+      total_price: totalPrice,
+      payment_link: prepData.payment_link,
+      deposit_already_paid: depositPaid,
+      additional_deposit: differentialDeposit,
+      new_total_deposit: newTotalDeposit,
+      existing_service: existingService,
+      existing_price: existingPrice
     }
   }
 }];

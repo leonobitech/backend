@@ -1,26 +1,22 @@
 // ============================================================================
-// PARSE INPUT - Agente Calendario Leraysi
+// PARSE INPUT - Calendar Agent
 // ============================================================================
-// Procesa y valida el input del Master AI Agent
-// COMBINA: llm_output (del LLM) + state (de Input Main)
-// Calcula duración y PRECIO basados en servicio + largo del cabello (determinístico)
+// Processes and validates input from the Master AI Agent
+// COMBINES: llm_output (from LLM) + state (from Input Main)
+// Calculates duration and PRICE based on service + hair length (deterministic)
 // ============================================================================
 
 const raw = $input.first().json;
 
 // ============================================================================
-// PASO 1: EXTRAER LLM_OUTPUT Y STATE
+// STEP 1: EXTRACT LLM_OUTPUT AND STATE
 // ============================================================================
-// El tool puede enviar los datos de dos formas:
-// 1. Directo: { "llm_output": {...}, "state": {...} }
+// The tool can send data in two formats:
+// 1. Direct: { "llm_output": {...}, "state": {...} }
 // 2. Wrapped: { "query": { "llm_output": {...}, "state": {...} } }
-//
-// Soportamos ambos formatos para compatibilidad
 
-// Unwrap si viene dentro de "query"
 const data = raw.query || raw;
 
-// Extraer llm_output (lo que el LLM extrajo del mensaje del cliente)
 const llmOutput = typeof data.llm_output === 'string'
   ? JSON.parse(data.llm_output)
   : (data.llm_output || {});
@@ -28,128 +24,133 @@ const llmOutput = typeof data.llm_output === 'string'
 const state = typeof data.state === 'string' ? JSON.parse(data.state) : (data.state || {});
 
 // ============================================================================
-// PASO 2: COMBINAR LLM_OUTPUT + STATE
+// STEP 2: COMBINE LLM_OUTPUT + STATE
 // ============================================================================
-// llmOutput tiene prioridad (datos frescos del mensaje)
-// State llena los campos que el LLM no puede extraer
+// llmOutput has priority (fresh data from message)
+// State fills fields the LLM cannot extract
 
 const input = {
-  // === MODO Y ACCIÓN ===
-  // ParseInput solo pasa lo que la LLM envió (raw).
-  // RouteDecision (post-analyzer) decide el modo y acción definitivos.
-  modo: llmOutput.modo || null,
-  preferencia_horario: llmOutput.preferencia_horario || null,
-  accion: llmOutput.accion || null,
+  // === MODE AND ACTION ===
+  // ParseInput only passes what the LLM sent (raw).
+  // RouteDecision (post-analyzer) decides the definitive mode and action.
+  mode: llmOutput.modo || llmOutput.mode || null,
+  time_preference: llmOutput.preferencia_horario || llmOutput.time_preference || null,
+  action: llmOutput.accion || llmOutput.action || null,
 
-  // === Del LLM_OUTPUT (lo que el LLM extrajo del mensaje) ===
-  nombre_clienta: llmOutput.full_name || llmOutput.nombre_clienta || state.full_name || state.nick_name,
-  servicio: llmOutput.servicio || (state.servicio_interes ? [state.servicio_interes] : []),
-  fecha_deseada: llmOutput.fecha_deseada || llmOutput.fecha,
-  // Extraer hora de fecha_deseada si viene en formato ISO (ej: "2026-02-11T14:00:00")
-  hora_deseada: llmOutput.hora_deseada || llmOutput.hora || (() => {
-    const fecha = llmOutput.fecha_deseada || llmOutput.fecha;
+  // === FROM LLM_OUTPUT (what the LLM extracted from the message) ===
+  client_name: llmOutput.full_name || llmOutput.nombre_clienta || llmOutput.client_name || state.full_name || state.nick_name,
+  service: llmOutput.servicio || llmOutput.service || (
+    (state.service_interest || state.servicio_interes) ? [state.service_interest || state.servicio_interes] : []
+  ),
+  requested_date: llmOutput.fecha_deseada || llmOutput.requested_date || llmOutput.fecha,
+  // Extract time from requested_date if in ISO format (e.g.: "2026-02-11T14:00:00")
+  requested_time: llmOutput.hora_deseada || llmOutput.requested_time || llmOutput.hora || (() => {
+    const fecha = llmOutput.fecha_deseada || llmOutput.requested_date || llmOutput.fecha;
     if (fecha && fecha.includes('T')) {
       const timePart = fecha.split('T')[1];
-      if (timePart) {
-        return timePart.substring(0, 5); // "14:00:00" -> "14:00"
-      }
+      if (timePart) return timePart.substring(0, 5);
     }
     return null;
   })(),
-  precio: llmOutput.precio || 0,
+  price: llmOutput.precio || llmOutput.price || 0,
   email: llmOutput.email || state.email || null,
 
-  // === Del STATE (datos que el LLM no puede ver en el userPrompt) ===
-  telefono: state.phone,
-  clienta_id: state.lead_id,
-  lead_id: state.lead_id,  // Alias para uso en tools
+  // === FROM STATE (data the LLM cannot see in the userPrompt) ===
+  phone: state.phone,
+  client_id: state.lead_id,
+  lead_id: state.lead_id,
   lead_row_id: state.row_id,
   conversation_id: state.conversation_id,
   image_analysis: state.image_analysis || null,
 
-  // Estado de turno existente (para reprogramación o agregar servicio)
-  turno_agendado: state.turno_agendado || false,
-  turno_fecha: state.turno_fecha || null,
+  // Existing booking state (for reschedule or add service)
+  // Accept both new English and old Spanish field names for backwards compat
+  booking_scheduled: state.booking_scheduled ?? state.turno_agendado ?? false,
+  booking_date: state.booking_date ?? state.turno_fecha ?? null,
 
-  // Para agregar servicio a turno existente
-  // Derivar de: boolean explícito, accion del LLM, o modo del LLM
-  agregar_a_turno_existente: state.agregar_a_turno_existente || llmOutput.agregar_a_turno_existente || llmOutput.accion === 'agregar_a_turno_existente' || llmOutput.modo === 'agregar_servicio' || false,
-  // turno_id: priorizar state (numérico), validar que LLM envíe numérico
-  turno_id_existente: state.odoo_turno_id || state.turno_id_existente || (() => {
-    const llmId = llmOutput.turno_id_existente;
-    // Solo aceptar si es numérico (evitar basura como "turno_andrea_figueroa")
+  // For adding service to existing booking
+  add_to_existing_booking: state.add_to_existing_booking || state.agregar_a_turno_existente
+    || llmOutput.add_to_existing_booking || llmOutput.agregar_a_turno_existente
+    || llmOutput.accion === 'agregar_a_turno_existente' || llmOutput.action === 'add_to_existing_booking'
+    || llmOutput.modo === 'agregar_servicio' || llmOutput.mode === 'add_service'
+    || false,
+  // existing_booking_id: prioritize state (numeric), validate LLM sends numeric
+  existing_booking_id: state.odoo_booking_id || state.odoo_turno_id
+    || state.existing_booking_id || state.turno_id_existente || (() => {
+    const llmId = llmOutput.turno_id_existente || llmOutput.existing_booking_id;
     if (llmId && !isNaN(Number(llmId))) return llmId;
     return null;
   })(),
-  turno_precio_existente: state.turno_precio_existente || llmOutput.turno_precio_existente || 0,
+  existing_booking_price: state.existing_booking_price || state.turno_precio_existente
+    || llmOutput.turno_precio_existente || llmOutput.existing_booking_price || 0,
 
-  // Largo del cabello (solo para servicios de cabello, null para manicure/pedicure/etc)
-  largo_cabello_raw: state.image_analysis?.length || null
+  // Hair length (only for hair services, null for manicure/pedicure/etc)
+  hair_length_raw: state.image_analysis?.length || null
 };
 
 // ============================================================================
-// CONFIGURACIÓN DE SERVICIOS Y DURACIONES
+// SERVICE CONFIGURATION AND DURATIONS
 // ============================================================================
-// Los 15 servicios oficiales de Baserow (tabla 850 - ServiciosLeraysi)
+// The 15 official services from Baserow (table 856 - ServiciosLeraysi)
 //
-// complejidad: FIJA por servicio (determina capacidad diaria del salón)
-//   - muy_compleja: máx 2/día
-//   - compleja: máx 3/día
-//   - media: máx 4/día
-//   - simple: máx 5/día
+// complexity: FIXED per service (determines daily salon capacity)
+//   - very_complex: max 2/day
+//   - complex: max 3/day
+//   - medium: max 4/day
+//   - simple: max 5/day
 //
-// requiere_largo: true = servicio de cabello (largo afecta duración)
-//                 false = servicio sin cabello (uñas, depilación)
+// requires_length: true = hair service (length affects duration)
+//                  false = non-hair service (nails, waxing)
 //
 const SERVICIOS_CONFIG = {
-  // === CORTE (1 servicio) ===
-  'Corte mujer': { base_min: 60, complejidad: 'media', requiere_largo: true, precio_base: 8000 },
+  // === HAIRCUT (1 service) ===
+  'Corte mujer': { base_min: 60, complexity: 'medium', requires_length: true, base_price: 8000 },
 
-  // === ALISADO (2 servicios) — muy_compleja con 3 fases ===
-  'Alisado brasileño': { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 45000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
-  'Alisado keratina':  { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 55000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
+  // === STRAIGHTENING (2 services) — very_complex with 3 phases ===
+  'Alisado brasileño': { base_min: 600, complexity: 'very_complex', requires_length: true, base_price: 45000, active_start: 180, process_time: 300, active_end: 120 },
+  'Alisado keratina':  { base_min: 600, complexity: 'very_complex', requires_length: true, base_price: 55000, active_start: 180, process_time: 300, active_end: 120 },
 
-  // === COLOR (4 servicios) — muy_compleja con 3 fases (excepto Tintura raíz) ===
-  'Mechas completas':  { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 35000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
-  'Tintura raíz': { base_min: 60, complejidad: 'compleja', requiere_largo: true, precio_base: 15000 },
-  'Tintura completa':  { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 25000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
-  'Balayage':          { base_min: 600, complejidad: 'muy_compleja', requiere_largo: true, precio_base: 50000, activo_inicio: 180, proceso: 300, activo_fin: 120 },
+  // === COLOR (4 services) — very_complex with 3 phases (except root touch-up) ===
+  'Mechas completas':  { base_min: 600, complexity: 'very_complex', requires_length: true, base_price: 35000, active_start: 180, process_time: 300, active_end: 120 },
+  'Tintura raíz': { base_min: 60, complexity: 'complex', requires_length: true, base_price: 15000 },
+  'Tintura completa':  { base_min: 600, complexity: 'very_complex', requires_length: true, base_price: 25000, active_start: 180, process_time: 300, active_end: 120 },
+  'Balayage':          { base_min: 600, complexity: 'very_complex', requires_length: true, base_price: 50000, active_start: 180, process_time: 300, active_end: 120 },
 
-  // === UÑAS (3 servicios) ===
-  'Manicura simple': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 5000 },
-  'Manicura semipermanente': { base_min: 180, complejidad: 'compleja', requiere_largo: false, precio_base: 8000 },
-  'Pedicura': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 6000 },
+  // === NAILS (3 services) ===
+  'Manicura simple': { base_min: 120, complexity: 'medium', requires_length: false, base_price: 5000 },
+  'Manicura semipermanente': { base_min: 180, complexity: 'complex', requires_length: false, base_price: 8000 },
+  'Pedicura': { base_min: 120, complexity: 'medium', requires_length: false, base_price: 6000 },
 
-  // === DEPILACIÓN (5 servicios) ===
-  'Depilación cera piernas': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 10000 },
-  'Depilación cera axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 4000 },
-  'Depilación cera bikini': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 6000 },
-  'Depilación láser piernas': { base_min: 120, complejidad: 'media', requiere_largo: false, precio_base: 25000 },
-  'Depilación láser axilas': { base_min: 60, complejidad: 'simple', requiere_largo: false, precio_base: 12000 }
+  // === WAXING/LASER (5 services) ===
+  'Depilación cera piernas': { base_min: 120, complexity: 'medium', requires_length: false, base_price: 10000 },
+  'Depilación cera axilas': { base_min: 60, complexity: 'simple', requires_length: false, base_price: 4000 },
+  'Depilación cera bikini': { base_min: 60, complexity: 'simple', requires_length: false, base_price: 6000 },
+  'Depilación láser piernas': { base_min: 120, complexity: 'medium', requires_length: false, base_price: 25000 },
+  'Depilación láser axilas': { base_min: 60, complexity: 'simple', requires_length: false, base_price: 12000 }
 };
 
-// Duración extra (aditiva) según largo del cabello
-// Solo aplica a servicios con requiere_largo: true
-const DURACION_EXTRA_LARGO = {
+// Extra duration (additive) based on hair length
+// Only applies to services with requires_length: true
+const DURATION_EXTRA_LENGTH = {
   'corto': 0,
   'medio': 60,
   'largo': 120,
   'muy_largo': 120
 };
 
-// Mapeo largo_cabello → complejidad para servicios de cabello (máximo: compleja)
-// muy_compleja es EXCLUSIVA de los 5 tratamientos químicos (siempre, sin importar largo)
-const COMPLEJIDAD_POR_LARGO = {
-  'corto': 'media',
-  'medio': 'compleja',
-  'largo': 'compleja',
-  'muy_largo': 'compleja'
+// Hair length → complexity mapping for hair services (max: complex)
+// very_complex is EXCLUSIVE to the 5 chemical treatments (always, regardless of length)
+const COMPLEXITY_BY_LENGTH = {
+  'corto': 'medium',
+  'medio': 'complex',
+  'largo': 'complex',
+  'muy_largo': 'complex'
 };
 
-// Multiplicador de precio según largo del cabello
-// Solo aplica a servicios con requiere_largo: true
-// corto = precio base, medio = +10%, largo = +20%
-const PRECIO_MULTIPLICADOR_LARGO = {
+// Price multiplier based on hair length
+// Only applies to services with requires_length: true
+// short = base price, medium = +10%, long = +20%
+const PRICE_MULTIPLIER_LENGTH = {
   'corto': 1.0,
   'medio': 1.1,
   'largo': 1.2,
@@ -157,233 +158,216 @@ const PRECIO_MULTIPLICADOR_LARGO = {
 };
 
 // ============================================================================
-// HELPER: Verificar si algún servicio requiere largo de cabello
+// HELPER: Check if any service requires hair length
 // ============================================================================
-function algunServicioRequiereLargo(servicios) {
-  return servicios.some(srv => {
+function anyServiceRequiresLength(services) {
+  return services.some(srv => {
     const config = SERVICIOS_CONFIG[srv];
-    // Si el servicio no está en config, asumimos que requiere largo (por defecto)
-    return config ? config.requiere_largo !== false : true;
+    return config ? config.requires_length !== false : true;
   });
 }
 
 // ============================================================================
-// VALIDACIÓN DE CAMPOS REQUERIDOS
+// REQUIRED FIELDS VALIDATION
 // ============================================================================
-// En modo consulta solo necesitamos servicio y fecha (aún no hay datos de clienta/precio)
-const modoConsulta = input.modo === 'consultar_disponibilidad';
-const camposRequeridos = modoConsulta
-  ? ['servicio', 'fecha_deseada']
-  : ['clienta_id', 'nombre_clienta', 'servicio', 'fecha_deseada'];
-const camposFaltantes = camposRequeridos.filter(campo => !input[campo]);
+// In query mode only service and date are needed (no client data/price yet)
+const isQueryMode = input.mode === 'consultar_disponibilidad' || input.mode === 'check_availability';
+const requiredFields = isQueryMode
+  ? ['service', 'requested_date']
+  : ['client_id', 'client_name', 'service', 'requested_date'];
 
-if (camposFaltantes.length > 0) {
-  throw new Error(`[ParseInput] Campos requeridos faltantes: ${camposFaltantes.join(', ')}`);
+const fieldValues = {
+  service: input.service,
+  requested_date: input.requested_date,
+  client_id: input.client_id,
+  client_name: input.client_name
+};
+const missingFields = requiredFields.filter(field => !fieldValues[field]);
+
+if (missingFields.length > 0) {
+  throw new Error(`[ParseInput] Missing required fields: ${missingFields.join(', ')}`);
 }
 
 // ============================================================================
-// EXTRACCIÓN DE DATOS
+// DATA EXTRACTION
 // ============================================================================
 
-// Datos de la clienta
-const clienta_id = input.clienta_id;
-const nombre_clienta = input.nombre_clienta;
-const telefono = input.telefono;
+const client_id = input.client_id;
+const client_name = input.client_name;
+const phone = input.phone;
 const email = input.email || null;
 
-// Datos del turno
-const servicio = Array.isArray(input.servicio) ? input.servicio : [input.servicio];
-const fecha_deseada = input.fecha_deseada;
-const hora_deseada = input.hora_deseada || null;
-const precio = Number(input.precio) || 0;
+let service = Array.isArray(input.service) ? input.service : [input.service];
+const requested_date = input.requested_date;
+const requested_time = input.requested_time || null;
+const price = Number(input.price) || 0;
 
-// IDs de contexto
 const lead_row_id = input.lead_row_id || input.row_id;
 const conversation_id = input.conversation_id || null;
 
-// Análisis de imagen (si existe)
 const image_analysis = input.image_analysis || null;
 
-// Largo de cabello: solo aplica si algún servicio lo requiere
-// Para Manicure, Pedicure, Maquillaje → largo_cabello = null
-// Sin imagen → null (fallback a SERVICIOS_CONFIG defaults)
-const serviciosArray = Array.isArray(input.servicio) ? input.servicio : [input.servicio];
-const requiereLargo = algunServicioRequiereLargo(serviciosArray);
-const largo_cabello = requiereLargo
-  ? (image_analysis?.length || input.largo_cabello_raw || null)
+// Hair length: only applies if a service requires it
+// For Manicure, Pedicure, Waxing → hair_length = null
+// No image → null (fallback to SERVICIOS_CONFIG defaults)
+const serviceArray = Array.isArray(input.service) ? input.service : [input.service];
+const needsLength = anyServiceRequiresLength(serviceArray);
+const hair_length = needsLength
+  ? (image_analysis?.length || input.hair_length_raw || null)
   : null;
 
 // ============================================================================
-// CÁLCULO DE DURACIÓN ESTIMADA
+// ESTIMATED DURATION CALCULATION
 // ============================================================================
-function calcularDuracion(servicios, largo) {
-  let duracionTotal = 0;
+function calculateDuration(services, length) {
+  let totalDuration = 0;
 
-  for (const srv of servicios) {
+  for (const srv of services) {
     const config = SERVICIOS_CONFIG[srv];
     if (config) {
-      let duracionServicio = config.base_min;
-      // Solo agregar tiempo extra si el servicio requiere largo Y hay dato de largo
-      // NO aplica a muy_compleja (base_min 600 ya es el total real: 3h+5h+2h)
-      if (config.requiere_largo && largo && config.complejidad !== 'muy_compleja') {
-        duracionServicio += (DURACION_EXTRA_LARGO[largo] || 0);
+      let serviceDuration = config.base_min;
+      // Only add extra time if service requires length AND length data exists
+      // Does NOT apply to very_complex (base_min 600 is already total: 3h+5h+2h)
+      if (config.requires_length && length && config.complexity !== 'very_complex') {
+        serviceDuration += (DURATION_EXTRA_LENGTH[length] || 0);
       }
-      duracionTotal += duracionServicio;
+      totalDuration += serviceDuration;
     } else {
-      // Servicio no mapeado, usar 60 min por defecto
-      duracionTotal += 60;
+      totalDuration += 60; // Unknown service fallback
     }
   }
 
-  // Redondear a múltiplos de 15 minutos
-  return Math.ceil(duracionTotal / 15) * 15;
+  // Round to multiples of 15 minutes
+  return Math.ceil(totalDuration / 15) * 15;
 }
 
-// Determinar la complejidad más alta entre los servicios solicitados
-// Factor 1: complejidad individual del servicio (cabello: via COMPLEJIDAD_POR_LARGO, otros: fija)
-// Factor 2: cantidad de servicios (2 = mín compleja, 3+ = mín muy_compleja)
-// Resultado: MAX(individual_más_alta, floor_por_cantidad)
-function obtenerComplejidadMaxima(servicios, largo) {
-  const COMP_ORDER = { simple: 1, media: 2, compleja: 3, muy_compleja: 4 };
-  const ORDER_TO_COMP = { 1: 'simple', 2: 'media', 3: 'compleja', 4: 'muy_compleja' };
+// Determine the highest complexity among requested services
+// Factor 1: individual service complexity (hair: via COMPLEXITY_BY_LENGTH, others: fixed)
+// Factor 2: service count (2 = min complex, 3+ = min very_complex)
+// Result: MAX(highest_individual, floor_by_count)
+function getMaxComplexity(services, length) {
+  const COMP_ORDER = { simple: 1, medium: 2, complex: 3, very_complex: 4 };
+  const ORDER_TO_COMP = { 1: 'simple', 2: 'medium', 3: 'complex', 4: 'very_complex' };
 
-  // Paso 1: Max complejidad individual (lógica existente)
-  const complejidades = servicios.map(srv => {
+  const complexities = services.map(srv => {
     const config = SERVICIOS_CONFIG[srv];
-    if (!config) return 'media';
-    if (config.requiere_largo && largo && config.complejidad !== 'muy_compleja') {
-      return COMPLEJIDAD_POR_LARGO[largo] || config.complejidad;
+    if (!config) return 'medium';
+    if (config.requires_length && length && config.complexity !== 'very_complex') {
+      return COMPLEXITY_BY_LENGTH[length] || config.complexity;
     }
-    return config.complejidad;
+    return config.complexity;
   });
 
   let maxIndividual = 'simple';
-  if (complejidades.includes('muy_compleja')) maxIndividual = 'muy_compleja';
-  else if (complejidades.includes('compleja')) maxIndividual = 'compleja';
-  else if (complejidades.includes('media')) maxIndividual = 'media';
+  if (complexities.includes('very_complex')) maxIndividual = 'very_complex';
+  else if (complexities.includes('complex')) maxIndividual = 'complex';
+  else if (complexities.includes('medium')) maxIndividual = 'medium';
 
-  // Paso 2: Floor por cantidad de servicios
-  // 1 servicio = sin boost, 2 = mín compleja, 3+ = mín muy_compleja
-  let floorPorCantidad = 'simple';
-  if (servicios.length >= 3) floorPorCantidad = 'muy_compleja';
-  else if (servicios.length >= 2) floorPorCantidad = 'compleja';
+  let floorByCount = 'simple';
+  if (services.length >= 3) floorByCount = 'very_complex';
+  else if (services.length >= 2) floorByCount = 'complex';
 
-  // Paso 3: Retornar el mayor entre individual y floor
-  const finalOrder = Math.max(COMP_ORDER[maxIndividual] || 2, COMP_ORDER[floorPorCantidad] || 1);
+  const finalOrder = Math.max(COMP_ORDER[maxIndividual] || 2, COMP_ORDER[floorByCount] || 1);
   return ORDER_TO_COMP[finalOrder] || maxIndividual;
 }
 
 // ============================================================================
-// CÁLCULO DE PRECIO DETERMINÍSTICO
+// DETERMINISTIC PRICE CALCULATION
 // ============================================================================
-// Mismo patrón que duración: precio_base + ajuste por largo
-// Servicios de cabello: precio_base * multiplicador_largo
-// Servicios sin cabello: precio_base fijo
-// Si algún servicio no está en config → fallback al precio del LLM
-function calcularPrecio(servicios, largo) {
-  let precioTotal = 0;
-  for (const srv of servicios) {
+function calculatePrice(services, length) {
+  let totalPrice = 0;
+  for (const srv of services) {
     const config = SERVICIOS_CONFIG[srv];
-    if (config && config.precio_base != null) {
-      let precioServicio = config.precio_base;
-      if (config.requiere_largo && largo) {
-        precioServicio = Math.round(config.precio_base * (PRECIO_MULTIPLICADOR_LARGO[largo] || 1.0));
+    if (config && config.base_price != null) {
+      let servicePrice = config.base_price;
+      if (config.requires_length && length) {
+        servicePrice = Math.round(config.base_price * (PRICE_MULTIPLIER_LENGTH[length] || 1.0));
       }
-      precioTotal += precioServicio;
+      totalPrice += servicePrice;
     } else {
-      console.log(`[ParseInput] ⚠️ Servicio "${srv}" no encontrado en config, precio no calculable`);
+      console.log(`[ParseInput] ⚠️ Service "${srv}" not found in config, price not calculable`);
       return null;
     }
   }
-  return precioTotal;
+  return totalPrice;
 }
 
 // ============================================================================
-// DEFENSA: Filtrar servicio existente cuando agregar_a_turno_existente
+// DEFENSE: Filter existing service when adding to existing booking
 // ============================================================================
-// Si el LLM envía accidentalmente el servicio existente junto con el nuevo
-// (ej: ["Manicura semipermanente", "Pedicura"] cuando debería ser solo ["Pedicura"]),
-// la duración se duplica en AnalizarDisponibilidad (duracionExistente + duracionNueva
-// donde duracionNueva ya incluye el existente).
-// Solución: filtrar servicios que coincidan con servicio_interes del state.
-if (input.agregar_a_turno_existente && servicio.length > 1) {
-  const servicioExistente = (state.servicio_interes || '').toLowerCase().trim();
-  if (servicioExistente) {
-    const serviciosFiltrados = servicio.filter(
-      s => s.toLowerCase().trim() !== servicioExistente
+// If the LLM accidentally sends the existing service along with the new one,
+// duration doubles in AnalizarDisponibilidad.
+// Solution: filter services matching service_interest from state.
+if (input.add_to_existing_booking && service.length > 1) {
+  const existingService = (state.service_interest || state.servicio_interes || '').toLowerCase().trim();
+  if (existingService) {
+    const filteredServices = service.filter(
+      s => s.toLowerCase().trim() !== existingService
     );
-    // Solo filtrar si quedan servicios después (nunca dejar vacío)
-    if (serviciosFiltrados.length > 0 && serviciosFiltrados.length < servicio.length) {
-      console.log(`[ParseInput] 🛡️ DEFENSA agregar_servicio: filtrado "${servicioExistente}" del array. ` +
-                  `Original: [${servicio.join(', ')}] → Filtrado: [${serviciosFiltrados.join(', ')}]`);
-      servicio.length = 0;
-      serviciosFiltrados.forEach(s => servicio.push(s));
+    if (filteredServices.length > 0 && filteredServices.length < service.length) {
+      console.log(`[ParseInput] 🛡️ DEFENSE add_service: filtered "${existingService}" from array. ` +
+                  `Original: [${service.join(', ')}] → Filtered: [${filteredServices.join(', ')}]`);
+      service.length = 0;
+      filteredServices.forEach(s => service.push(s));
     }
   }
 }
 
-const duracion_estimada = calcularDuracion(servicio, largo_cabello);
-const complejidad_maxima = obtenerComplejidadMaxima(servicio, largo_cabello);
-const servicio_detalle = servicio.join(' + ');
+const estimated_duration = calculateDuration(service, hair_length);
+const max_complexity = getMaxComplexity(service, hair_length);
+const service_detail = service.join(' + ');
 
-// Precio determinístico: override sobre el precio del LLM
-const precio_calculado = calcularPrecio(servicio, largo_cabello);
-const precioFinal = precio_calculado !== null ? precio_calculado : precio;
-if (precio_calculado !== null && precio > 0 && precio_calculado !== precio) {
-  console.log(`[ParseInput] 🔧 Precio corregido: LLM=$${precio}, determinístico=$${precio_calculado}`);
+// Deterministic price: override LLM price
+const calculated_price = calculatePrice(service, hair_length);
+const finalPrice = calculated_price !== null ? calculated_price : price;
+if (calculated_price !== null && price > 0 && calculated_price !== price) {
+  console.log(`[ParseInput] 🔧 Price corrected: LLM=$${price}, deterministic=$${calculated_price}`);
 }
 
 // ============================================================================
-// GATE DETERMINÍSTICO: datos obligatorios para turno nuevo
+// DETERMINISTIC GATE: required data for new booking
 // ============================================================================
-// Si es turno nuevo y falta email o full_name → bloquear flujo.
-// Se fuerza modo "consultar_disponibilidad" para que SwitchModo rutee a
-// FormatearRespuestaOpciones, que detecta gate_bloqueado y devuelve
-// "datos_faltantes" al Master Agent.
-// Esto es código determinístico — imposible de bypassear por el LLM.
+// If new booking and missing email or full_name → block flow.
+// Forces mode "check_availability" so SwitchModo routes to
+// FormatearRespuestaOpciones, which detects gate_blocked and returns
+// "missing_data" to the Master Agent.
 
-const esTurnoNuevo = !input.turno_agendado && !input.agregar_a_turno_existente;
-const tieneFullName = !!(llmOutput.full_name || state.full_name);
-const tieneEmail = !!email;
-const tieneTelefono = !!telefono;
-const esTelegram = (state.channel || '').toLowerCase() === 'telegram';
+const isNewBooking = !input.booking_scheduled && !input.add_to_existing_booking;
+const hasFullName = !!(llmOutput.full_name || state.full_name);
+const hasEmail = !!email;
+const hasPhone = !!phone;
+const isTelegram = (state.channel || '').toLowerCase() === 'telegram';
 
-let gate_bloqueado = false;
-const gate_datos_faltantes = [];
+let gate_blocked = false;
+const gate_missing_data = [];
 
-if (esTurnoNuevo) {
-  if (!tieneFullName) gate_datos_faltantes.push('nombre completo');
-  if (!tieneEmail) gate_datos_faltantes.push('email');
-  // Telegram no provee teléfono automáticamente (WhatsApp sí)
-  if (esTelegram && !tieneTelefono) gate_datos_faltantes.push('teléfono');
-  gate_bloqueado = gate_datos_faltantes.length > 0;
+if (isNewBooking) {
+  if (!hasFullName) gate_missing_data.push('nombre completo');
+  if (!hasEmail) gate_missing_data.push('email');
+  if (isTelegram && !hasPhone) gate_missing_data.push('teléfono');
+  gate_blocked = gate_missing_data.length > 0;
 }
 
-if (gate_bloqueado) {
-  console.log(`[ParseInput] 🛡️ GATE BLOQUEADO: faltan ${gate_datos_faltantes.join(', ')}`);
+if (gate_blocked) {
+  console.log(`[ParseInput] 🛡️ GATE BLOCKED: missing ${gate_missing_data.join(', ')}`);
 }
 
-// RouteDecision (post-analyzer) maneja gate_bloqueado y fuerza modo/accion.
-// ParseInput ya no necesita forzar modo — solo pasa datos.
-
 // ============================================================================
-// EXTRAER FASES DEL SERVICIO MUY_COMPLEJA (si aplica)
+// EXTRACT PHASES FOR VERY_COMPLEX SERVICES (if applicable)
 // ============================================================================
-// Si algún servicio tiene estructura de 3 fases (activo_inicio + proceso + activo_fin),
-// extraer para que AnalizarDisponibilidad pueda modelar los bloques activos
-let activo_inicio = null;
-let proceso = null;
-let activo_fin = null;
+let active_start = null;
+let process_time = null;
+let active_end = null;
 
-const servicioConFases = servicio.find(srv => {
+const serviceWithPhases = service.find(srv => {
   const config = SERVICIOS_CONFIG[srv];
-  return config && config.activo_inicio != null;
+  return config && config.active_start != null;
 });
-if (servicioConFases) {
-  const config = SERVICIOS_CONFIG[servicioConFases];
-  activo_inicio = config.activo_inicio;
-  proceso = config.proceso;
-  activo_fin = config.activo_fin;
+if (serviceWithPhases) {
+  const config = SERVICIOS_CONFIG[serviceWithPhases];
+  active_start = config.active_start;
+  process_time = config.process_time;
+  active_end = config.active_end;
 }
 
 // ============================================================================
@@ -391,52 +375,52 @@ if (servicioConFases) {
 // ============================================================================
 return [{
   json: {
-    // Datos de la clienta
-    clienta_id,
-    nombre_clienta,
-    telefono,
+    // Client data
+    client_id,
+    client_name,
+    phone,
     email,
 
-    // Datos del turno
-    servicio,
-    servicio_detalle,
-    fecha_deseada,
-    hora_deseada,
-    precio: precioFinal,
-    duracion_estimada,
-    complejidad_maxima,
+    // Service
+    service,
+    service_detail,
+    requested_date,
+    requested_time,
+    price: finalPrice,
+    estimated_duration,
+    max_complexity,
 
-    // Fases para servicios muy_compleja (3 fases: activo_inicio, proceso, activo_fin)
-    activo_inicio,
-    proceso,
-    activo_fin,
+    // Phases for very_complex services (3 phases: active_start, process_time, active_end)
+    active_start,
+    process_time,
+    active_end,
 
-    // Análisis de imagen
+    // Image analysis
     image_analysis,
-    largo_cabello,
+    hair_length,
 
-    // IDs de contexto
+    // Context IDs
     lead_id: input.lead_id,
     lead_row_id,
     conversation_id,
 
-    // Estado de turno (para reprogramación)
-    turno_agendado: input.turno_agendado,
-    turno_fecha: input.turno_fecha,
+    // Existing booking state (for reschedule)
+    booking_scheduled: input.booking_scheduled,
+    booking_date: input.booking_date,
 
-    // Para agregar servicio a turno existente
-    agregar_a_turno_existente: input.agregar_a_turno_existente,
-    turno_id_existente: input.turno_id_existente,
-    turno_precio_existente: input.turno_precio_existente,
+    // For adding service to existing booking
+    add_to_existing_booking: input.add_to_existing_booking,
+    existing_booking_id: input.existing_booking_id,
+    existing_booking_price: input.existing_booking_price,
 
-    // Modo de operación (raw de LLM, RouteDecision decide el definitivo)
-    modo: input.modo,
-    preferencia_horario: input.preferencia_horario,
-    accion: input.accion,
+    // Operation mode (raw from LLM, RouteDecision decides the definitive one)
+    mode: input.mode,
+    time_preference: input.time_preference,
+    action: input.action,
 
-    // GATE determinístico
-    gate_bloqueado,
-    gate_datos_faltantes,
+    // Deterministic GATE
+    gate_blocked,
+    gate_missing_data,
 
     // Metadata
     received_at: new Date().toISOString()

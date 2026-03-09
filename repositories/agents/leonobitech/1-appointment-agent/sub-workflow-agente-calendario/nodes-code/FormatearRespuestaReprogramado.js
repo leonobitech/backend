@@ -1,149 +1,137 @@
 // ============================================================================
-// FORMATEAR RESPUESTA REPROGRAMADO - Agente Calendario Leraysi v2
+// FORMAT RESCHEDULE RESPONSE - Calendar Agent
 // ============================================================================
-// Construye la respuesta final para turno reprogramado con mensaje estructurado
+// Builds the final response for a rescheduled booking with structured message
 // ============================================================================
-// NODO: FormatearRespuestaReprogramado (Code)
-// INPUT: ActualizarTurnoBaserow (respuesta de Baserow Update)
-// OUTPUT: Respuesta estructurada con content_whatsapp_formatted para Master Agent
+// NODE: FormatearRespuestaReprogramado (Code)
+// INPUT: ActualizarTurnoBaserow (Baserow Update response)
+// OUTPUT: Structured response with content_whatsapp_formatted for Master Agent
 // ============================================================================
 
 const baserowResponse = $input.first().json;
 
-// Recuperar metadata del nodo anterior (PrepararReprogramadoBaserow)
+// Retrieve metadata from previous node (PrepararReprogramadoBaserow)
 const metaData = $('PrepararReprogramadoBaserow').first().json._meta;
 const prepData = $('PrepararReprogramadoBaserow').first().json;
 
-// El ID del turno actualizado en Baserow
-const turnoRowId = baserowResponse.id;
+// The updated booking row ID in Baserow
+const bookingRowId = baserowResponse.id;
 
-// Detectar si es pre-pago (tiene link de pago nuevo)
-const esPrepago = !!(prepData.mp_link);
+// Detect if pre-payment (has new payment link)
+const isPrePayment = !!(prepData.payment_link);
 
 // ============================================================================
 // HELPERS
 // ============================================================================
 
-function formatearFechaLegible(fechaStr) {
-  if (!fechaStr) return { fechaLegible: 'fecha por confirmar', nombreDia: '', hora: '09:00' };
-  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+function formatReadableDate(dateStr) {
+  if (!dateStr) return { readable: 'date to be confirmed', dayName: '', time: '09:00' };
+  const days = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
   // Parse "2026-02-27 09:00" or "2026-02-27 09:00:00"
-  const fecha = new Date(fechaStr.replace(' ', 'T'));
-  const dia = String(fecha.getDate()).padStart(2, '0');
-  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
-  const anio = fecha.getFullYear();
-  const nombreDia = dias[fecha.getDay()];
-  const nombreDiaCap = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1);
-  const hora = fechaStr.split(' ')[1]?.slice(0, 5) || '09:00';
-  return { fechaLegible: `${dia}/${mes}/${anio}`, nombreDia: nombreDiaCap, hora };
+  const date = new Date(dateStr.replace(' ', 'T'));
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const dayName = days[date.getDay()];
+  const dayNameCap = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+  const time = dateStr.split(' ')[1]?.slice(0, 5) || '09:00';
+  return { readable: `${day}/${month}/${year}`, dayName: dayNameCap, time };
 }
 
-function formatearMonto(monto) {
-  return (monto || 0).toLocaleString('es-AR', {
+function formatAmount(amount) {
+  return (amount || 0).toLocaleString('es-AR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   });
 }
 
 // ============================================================================
-// EXTRACT TURNO DATA FROM BASEROW
+// EXTRACT BOOKING DATA FROM BASEROW (English field names)
 // ============================================================================
 
-const servicios = (baserowResponse.servicio || []).map(s => s.value).join(' y ');
-const precio = parseFloat(baserowResponse.precio) || 0;
-const senaPagada = baserowResponse.sena_pagada === true || baserowResponse.sena_pagada === 'true';
-const senaMonto = parseFloat(baserowResponse.sena_monto) || 0;
+const services = (baserowResponse.service || []).map(s => s.value).join(' y ');
+const price = parseFloat(baserowResponse.price) || 0;
+const depositPaid = baserowResponse.deposit_paid === true || baserowResponse.deposit_paid === 'true';
+const depositAmount = parseFloat(baserowResponse.deposit_amount) || 0;
 
-const anterior = formatearFechaLegible(metaData.fecha_hora_anterior);
-const nueva = formatearFechaLegible(metaData.fecha_hora_nueva);
+const previous = formatReadableDate(metaData.previous_datetime);
+const newDate = formatReadableDate(metaData.new_datetime);
 
 // ============================================================================
 // BUILD STRUCTURED WHATSAPP MESSAGE
 // ============================================================================
 
-let mensajeFormateado = `⋆˚🧚‍♀️ ¡Tu turno fue reprogramado! ✨
+let formattedMessage = `Tu turno fue reprogramado!
 
-━━━━━━━━━━━━━━━━━━
-  🔄 *Cambio de Fecha*
-━━━━━━━━━━━━━━━━━━
+  Cambio de Fecha
 
-❌ *Anterior:* ${anterior.nombreDia} ${anterior.fechaLegible} ${anterior.hora} hs
-✅ *Nueva:* ${nueva.nombreDia} ${nueva.fechaLegible} ${nueva.hora} hs
+*Anterior:* ${previous.dayName} ${previous.readable} ${previous.time} hs
+*Nueva:* ${newDate.dayName} ${newDate.readable} ${newDate.time} hs
 
-━━━━━━━━━━━━━━━━━━
-  📋 *Detalles del Turno*
-━━━━━━━━━━━━━━━━━━
+  Detalles del Turno
 
-💇 *Servicio:* ${servicios}
-💰 *Precio:* $${formatearMonto(precio)}`;
+*Servicio:* ${services}
+*Precio:* $${formatAmount(price)}`;
 
-if (senaPagada) {
-  mensajeFormateado += `\n✅ *Tu seña sigue vigente*`;
+if (depositPaid) {
+  formattedMessage += `\n*Tu sena sigue vigente*`;
 }
 
-mensajeFormateado += `\n📍 *Dirección:* Yerbal 513, CABA`;
+formattedMessage += `\n*Direccion:* Yerbal 513, CABA`;
 
-// PATH A (pre-pago): incluir link de pago
-if (esPrepago && prepData.mp_link) {
-  mensajeFormateado += `
+// PATH A (pre-payment): include payment link
+if (isPrePayment && prepData.payment_link) {
+  formattedMessage += `
 
-━━━━━━━━━━━━━━━━━━
-
-💳 *Seña:* $${formatearMonto(senaMonto)}
-👉 *Link de pago:*
-${prepData.mp_link}`;
+*Sena:* $${formatAmount(depositAmount)}
+*Link de pago:*
+${prepData.payment_link}`;
 }
 
-// Link de confirmación de asistencia (post-pago, calendario actualizado)
+// Calendar confirmation link (post-payment, calendar updated)
 const calendarAcceptUrl = metaData.calendar_accept_url || null;
-if (!esPrepago && calendarAcceptUrl) {
-  mensajeFormateado += `
+if (!isPrePayment && calendarAcceptUrl) {
+  formattedMessage += `
 
-━━━━━━━━━━━━━━━━━━
-
-👉 *Confirmá tu asistencia:*
+*Confirma tu asistencia:*
 ${calendarAcceptUrl}`;
 }
 
-mensajeFormateado += `
-
-¡Te esperamos en *Estilos Leraysi*! 💅`;
-
 // ============================================================================
-// OUTPUT PARA MASTER AGENT
+// OUTPUT FOR MASTER AGENT
 // ============================================================================
 const response = {
   success: true,
-  accion: metaData.accion,
-  turno_id: turnoRowId,
+  action: metaData.action,
+  booking_id: bookingRowId,
   lead_row_id: metaData.lead_row_id,
 
-  // Mensaje formateado con cards (Master Agent debe usarlo tal cual como content_whatsapp)
-  content_whatsapp_formatted: mensajeFormateado,
+  // Formatted message with cards (Master Agent must use as-is as content_whatsapp)
+  content_whatsapp_formatted: formattedMessage,
 
-  // Datos del turno (para referencia del Master Agent)
-  turno: {
-    servicio: servicios,
-    precio,
-    sena_pagada: senaPagada,
-    fecha_anterior: `${anterior.nombreDia} ${anterior.fechaLegible} ${anterior.hora}`,
-    fecha_nueva: `${nueva.nombreDia} ${nueva.fechaLegible} ${nueva.hora}`,
+  // Booking data (for Master Agent reference)
+  booking: {
+    service: services,
+    price,
+    deposit_paid: depositPaid,
+    previous_date: `${previous.dayName} ${previous.readable} ${previous.time}`,
+    new_date: `${newDate.dayName} ${newDate.readable} ${newDate.time}`,
   },
 
-  // Datos específicos de reprogramación
-  reprogramacion: {
-    fecha_hora_anterior: metaData.fecha_hora_anterior,
-    fecha_hora_nueva: metaData.fecha_hora_nueva,
-    calendario_actualizado: metaData.calendario_actualizado
+  // Reschedule-specific data
+  reschedule: {
+    previous_datetime: metaData.previous_datetime,
+    new_datetime: metaData.new_datetime,
+    calendar_updated: metaData.calendar_updated
   }
 };
 
-// PATH A (pre-pago): incluir link de pago nuevo
-if (esPrepago) {
-  response.link_pago = prepData.mp_link;
+// PATH A (pre-payment): include new payment link
+if (isPrePayment) {
+  response.payment_link = prepData.payment_link;
   response.mp_preference_id = prepData.mp_preference_id;
-  response.sena_monto = baserowResponse.sena_monto;
-  response.precio = baserowResponse.precio;
+  response.deposit_amount = baserowResponse.deposit_amount;
+  response.price = baserowResponse.price;
 }
 
 return [{ json: response }];

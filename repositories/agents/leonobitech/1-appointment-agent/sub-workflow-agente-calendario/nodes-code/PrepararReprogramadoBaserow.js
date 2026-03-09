@@ -1,32 +1,26 @@
 // ============================================================================
-// PREPARAR REPROGRAMADO BASEROW - Agente Calendario Leraysi
+// PREPARE RESCHEDULE FOR BASEROW - Calendar Agent
 // ============================================================================
-// Transforma datos para UPDATE en Baserow
-// INPUT: BuscarTurnoBaserow (resultado de búsqueda con row_id)
-// OUTPUT: Campos listos para Baserow Update Row
-// ============================================================================
-// NODO: PrepararReprogramadoBaserow (Code)
-// FLUJO: Switch → BuscarTurnoBaserow → PrepararReprogramadoBaserow → Update
+// Transforms data for UPDATE in Baserow Bookings table
+// INPUT: BuscarTurnoBaserow (search result with row_id)
+// OUTPUT: Fields ready for Baserow Update Row
 // ============================================================================
 
-// Datos del turno encontrado en Baserow (viene de BuscarTurnoBaserow)
-const turnoEncontrado = $input.first().json;
-
-// Datos de ParseAgentResponse
+const bookingFound = $input.first().json;
 const data = $('ParseAgentResponse').first().json;
 
 // ============================================================================
-// VALIDACIÓN
+// VALIDATION
 // ============================================================================
-if (!turnoEncontrado || !turnoEncontrado.id) {
-  throw new Error('[PrepararReprogramadoBaserow] No se encontró el turno en Baserow. ' +
-                  `odoo_turno_id buscado: ${data.odoo_turno_id}`);
+if (!bookingFound || !bookingFound.id) {
+  throw new Error('[PrepararReprogramadoBaserow] Booking not found in Baserow. ' +
+                  `odoo_booking_id searched: ${data.odoo_booking_id}`);
 }
 
-const turnoRowId = turnoEncontrado.id;
+const bookingRowId = bookingFound.id;
 
 // ============================================================================
-// FORMATEAR FECHA
+// FORMAT DATETIME
 // ============================================================================
 function formatBaserowDatetime(date) {
   const argentinaTime = new Date(date.getTime() - (3 * 60 * 60 * 1000));
@@ -40,37 +34,35 @@ function formatBaserowDatetime(date) {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offset}`;
 }
 
-const ahora = new Date();
+const now = new Date();
 
 // ============================================================================
-// CAMPOS A ACTUALIZAR EN BASEROW
+// FIELDS TO UPDATE IN BASEROW (English field names)
 // ============================================================================
 const updateFields = {
-  // Nueva fecha y hora
-  // Fecha+hora con timezone Argentina para que Baserow muestre correctamente
-  // hora_sugerida puede venir como "15:00" o "15:00:00" — normalizar a HH:MM
-  fecha: (() => {
-    if (!data.fecha_turno) return null;
-    const hora = (data.hora_sugerida || '09:00').split(':').slice(0, 2).join(':');
-    return `${data.fecha_turno}T${hora}:00-03:00`;
+  // New date and time with Argentina timezone
+  date: (() => {
+    if (!data.booking_date) return null;
+    const time = (data.suggested_time || '09:00').split(':').slice(0, 2).join(':');
+    return `${data.booking_date}T${time}:00-03:00`;
   })(),
-  hora: (data.hora_sugerida || '09:00').split(':').slice(0, 2).join(':'),
+  time: (data.suggested_time || '09:00').split(':').slice(0, 2).join(':'),
 
-  // Actualizar odoo_turno_id (puede ser nuevo si era pendiente_pago)
-  odoo_turno_id: data.odoo_turno_id,
+  // Update odoo_booking_id (may be new if was pending_payment)
+  odoo_booking_id: data.odoo_booking_id,
 
-  // Timestamp de actualización
-  updated_at: formatBaserowDatetime(ahora),
+  // Update timestamp
+  updated_at: formatBaserowDatetime(now),
 
-  // Notas con historial
-  notas: `Turno reprogramado el ${ahora.toLocaleDateString('es-AR')}. ` +
-         `Fecha anterior: ${data.fecha_hora_anterior || 'N/A'}. ` +
-         `Motivo: ${data.motivo_reprogramacion || 'No especificado'}`
+  // Notes with history
+  notes: `Booking rescheduled on ${now.toLocaleDateString('es-AR')}. ` +
+         `Previous date: ${data.previous_datetime || 'N/A'}. ` +
+         `Reason: ${data.reschedule_reason || 'Not specified'}`
 };
 
-// Si hay link_pago nuevo (caso pendiente_pago → nuevo turno)
-if (data.link_pago) {
-  updateFields.mp_link = data.link_pago;
+// If there's a new payment_link (pending_payment case → new booking)
+if (data.payment_link) {
+  updateFields.payment_link = data.payment_link;
   updateFields.mp_preference_id = data.mp_preference_id || '';
 }
 
@@ -79,20 +71,17 @@ if (data.link_pago) {
 // ============================================================================
 return [{
   json: {
-    // Row ID para el Update
-    row_id: turnoRowId,
-
-    // Campos para Baserow Update
+    row_id: bookingRowId,
     ...updateFields,
 
-    // Metadata para FormatearRespuestaReprogramado
+    // Metadata for FormatearRespuestaReprogramado
     _meta: {
-      accion: data.accion,
-      mensaje_para_clienta: data.mensaje_para_clienta,
+      action: data.action,
+      client_message: data.client_message,
       lead_row_id: data.lead_row_id,
-      fecha_hora_anterior: data.fecha_hora_anterior,
-      fecha_hora_nueva: data.fecha_hora_nueva,
-      calendario_actualizado: data.calendario_actualizado,
+      previous_datetime: data.previous_datetime,
+      new_datetime: data.new_datetime,
+      calendar_updated: data.calendar_updated,
       calendar_accept_url: data.calendar_accept_url || null
     }
   }

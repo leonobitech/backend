@@ -1,31 +1,56 @@
 // ============================================================================
-// ANALIZAR DISPONIBILIDAD - Agente Calendario Leraysi v2
+// AVAILABILITY ANALYZER - Calendar Agent v2
 // ============================================================================
-// INPUT: ParseInput (datos del turno) + GetTurnosSemana (turnos existentes)
-// OUTPUT: Opciones disponibles con trabajadora asignada
+// INPUT: ParseInput (booking data) + GetTurnosSemana (existing bookings)
+// OUTPUT: Available options with assigned worker
 // ============================================================================
-// MODELO: 2 trabajadoras (A, B), bloques activos continuos,
-// servicios muy_compleja con 3 fases (activo_inicio + proceso + activo_fin).
-// Durante la fase de proceso la trabajadora queda LIBRE para atender otras clientas.
+// MODEL: 2 workers (primary, secondary), continuous active blocks,
+// very_complex services with 3 phases (active_start + process + active_end).
+// During the process phase the worker is FREE to serve other clients.
 // ============================================================================
 
-const turnosRaw = $('GetTurnosSemana').all();
-const turnos = turnosRaw.length > 0 ? turnosRaw.map(item => item.json) : [];
+const bookingsRaw = $('GetTurnosSemana').all();
+const bookings = bookingsRaw.length > 0 ? bookingsRaw.map(item => item.json) : [];
 const input = $('ParseInput').first().json;
 
 // ============================================================================
-// CONSTANTES
+// WORKER CONFIGURATION — Multi-tenant via environment variables
 // ============================================================================
-const JORNADA_INICIO = 540;   // 09:00 en minutos desde medianoche
-const JORNADA_FIN = 1140;     // 19:00 en minutos desde medianoche
-const TRABAJADORAS = ['Leraysi', 'Companera'];
-const STEP = 15;              // Granularidad de busqueda en minutos
+const WORKERS = {
+  PRIMARY: 'primary',
+  SECONDARY: 'secondary',
+};
+const WORKER_DISPLAY = {
+  primary: $env.WORKER_PRIMARY_NAME || 'Leraysi',
+  secondary: $env.WORKER_SECONDARY_NAME || 'Companera',
+};
+function getWorkerDisplay(worker) {
+  return WORKER_DISPLAY[worker] || worker;
+}
+function normalizeWorker(raw) {
+  if (!raw) return WORKERS.PRIMARY;
+  const val = (typeof raw === 'object' ? raw.value : raw) || '';
+  const lower = val.toLowerCase().trim();
+  if (lower === 'primary') return WORKERS.PRIMARY;
+  if (lower === 'secondary') return WORKERS.SECONDARY;
+  if (lower === (WORKER_DISPLAY.primary || '').toLowerCase()) return WORKERS.PRIMARY;
+  if (lower === (WORKER_DISPLAY.secondary || '').toLowerCase()) return WORKERS.SECONDARY;
+  return WORKERS.PRIMARY;
+}
+const WORKER_LIST = [WORKERS.PRIMARY, WORKERS.SECONDARY];
 
-// Fases estandar para todos los servicios muy_compleja
-const FASES_MUY_COMPLEJA = { activo_inicio: 180, proceso: 300, activo_fin: 120 };
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const DAY_START = 540;    // 09:00 in minutes from midnight
+const DAY_END = 1140;     // 19:00 in minutes from midnight
+const STEP = 15;          // Search granularity in minutes
 
-// Lookup: base_min por servicio (para calcular tiempo comprometido en ventana de proceso)
-const SERVICIOS_BASE_MIN = {
+// Standard phases for all very_complex services
+const PHASES_VERY_COMPLEX = { active_start: 180, process_time: 300, active_end: 120 };
+
+// Lookup: base_min per service (to calculate committed time in process window)
+const SERVICES_BASE_MIN = {
   'Corte mujer': 60,
   'Alisado brasileño': 600, 'Alisado keratina': 600,
   'Mechas completas': 600, 'Tintura completa': 600, 'Balayage': 600,
@@ -35,8 +60,8 @@ const SERVICIOS_BASE_MIN = {
   'Depilación láser piernas': 120, 'Depilación láser axilas': 60,
 };
 
-// Servicios muy_compleja (NO consumen ventana de proceso — son la fuente de la ventana)
-const SERVICIOS_MUY_COMPLEJA = new Set([
+// very_complex services (do NOT consume process window — they ARE the source)
+const SERVICES_VERY_COMPLEX = new Set([
   'Alisado brasileño', 'Alisado keratina', 'Mechas completas',
   'Tintura completa', 'Balayage'
 ]);
@@ -44,201 +69,170 @@ const SERVICIOS_MUY_COMPLEJA = new Set([
 // ============================================================================
 // HELPERS
 // ============================================================================
-function horaToMinutos(horaStr) {
-  if (!horaStr) return JORNADA_INICIO;
-  const parts = horaStr.split(':');
+function timeToMinutes(timeStr) {
+  if (!timeStr) return DAY_START;
+  const parts = timeStr.split(':');
   return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');
 }
 
-function minutosToHora(min) {
+function minutesToTime(min) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-// Detectar solapamiento entre dos intervalos [a1,a2) y [b1,b2)
-function solapan(a1, a2, b1, b2) {
+function overlaps(a1, a2, b1, b2) {
   return a1 < b2 && b1 < a2;
 }
 
-const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-const diasNombre = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 
 // ============================================================================
-// PASO 1: CONSTRUIR BLOQUES ACTIVOS POR TRABAJADORA POR DIA
+// STEP 1: BUILD ACTIVE BLOCKS PER WORKER PER DAY
 // ============================================================================
-// Para cada turno existente en Baserow, calcular sus bloques de tiempo activo:
-//   - muy_compleja: DOS bloques [inicio, inicio+180] y [inicio+480, inicio+600]
-//   - Otros: UN bloque continuo [inicio, inicio+duracion]
-// Turnos sin campo "trabajadora" se asignan a "A" por defecto (legacy).
+const blocksByDayWorker = {};
+const processWindowsByDay = {};
 
-const bloquesPorDiaTrabajadora = {};  // { "2026-02-24": { "A": [...], "B": [...] } }
-const ventanasProcesoPorDia = {};     // { "2026-02-24": [{ trabajadora, inicio, fin, turno_id }] }
-
-function inicializarDia(fecha) {
-  if (!bloquesPorDiaTrabajadora[fecha]) {
-    bloquesPorDiaTrabajadora[fecha] = {};
-    for (const t of TRABAJADORAS) {
-      bloquesPorDiaTrabajadora[fecha][t] = [];
+function initializeDay(date) {
+  if (!blocksByDayWorker[date]) {
+    blocksByDayWorker[date] = {};
+    for (const w of WORKER_LIST) {
+      blocksByDayWorker[date][w] = [];
     }
-    ventanasProcesoPorDia[fecha] = [];
+    processWindowsByDay[date] = [];
   }
 }
 
-// Normalizar nombre de trabajadora al valor exacto en TRABAJADORAS
-function normalizarTrabajadora(raw) {
-  if (!raw) return 'Leraysi';
-  const val = (typeof raw === 'object' ? raw.value : raw) || 'Leraysi';
-  // Buscar coincidencia case-insensitive
-  const match = TRABAJADORAS.find(t => t.toLowerCase() === val.toLowerCase().trim());
-  return match || 'Leraysi';
-}
+bookings.forEach(booking => {
+  const date = booking.date?.split('T')[0];
+  if (!date) return;
 
-turnos.forEach(turno => {
-  const fecha = turno.fecha?.split('T')[0];
-  if (!fecha) return;
+  const state = booking.state?.value || booking.state || '';
+  if (state === 'cancelled' || state === 'expired') return;
 
-  // Filtrar estados invalidos
-  const estado = turno.estado?.value || turno.estado || '';
-  if (estado === 'cancelado' || estado === 'expirado') return;
-
-  // Filtrar pendiente_pago con hold vencido (slot libre en tiempo real)
-  if (estado === 'pendiente_pago' && turno.expira_at) {
-    const expiraAt = new Date(turno.expira_at);
-    if (expiraAt < new Date()) return;
+  if (state === 'pending_payment' && booking.expires_at) {
+    const expiresAt = new Date(booking.expires_at);
+    if (expiresAt < new Date()) return;
   }
 
-  inicializarDia(fecha);
+  initializeDay(date);
 
-  const trabajadora = normalizarTrabajadora(turno.trabajadora);
-  const horaInicio = horaToMinutos(turno.hora || '09:00');
-  const duracion = Number(turno.duracion_min) || 60;
-  const complejidad = turno.complejidad_maxima?.value || turno.complejidad_maxima || 'media';
+  const worker = normalizeWorker(booking.worker);
+  const startTime = timeToMinutes(booking.time || '09:00');
+  const duration = Number(booking.duration_min) || 60;
+  const complexity = booking.max_complexity?.value || booking.max_complexity || 'medium';
 
-  const turnoId = turno.odoo_turno_id || turno.id || null;
+  const bookingId = booking.odoo_booking_id || booking.id || null;
 
-  if (complejidad === 'muy_compleja') {
-    // 3 fases: activo_inicio (180min) + proceso (300min) + activo_fin (120min)
-    const ai = FASES_MUY_COMPLEJA.activo_inicio;
-    const pr = FASES_MUY_COMPLEJA.proceso;
-    const af = FASES_MUY_COMPLEJA.activo_fin;
+  if (complexity === 'very_complex') {
+    const ai = PHASES_VERY_COMPLEX.active_start;
+    const pr = PHASES_VERY_COMPLEX.process_time;
+    const af = PHASES_VERY_COMPLEX.active_end;
 
-    bloquesPorDiaTrabajadora[fecha][trabajadora].push(
-      { start: horaInicio, end: horaInicio + ai, turno_id: turnoId },
-      { start: horaInicio + ai + pr, end: horaInicio + ai + pr + af, turno_id: turnoId }
+    blocksByDayWorker[date][worker].push(
+      { start: startTime, end: startTime + ai, booking_id: bookingId },
+      { start: startTime + ai + pr, end: startTime + ai + pr + af, booking_id: bookingId }
     );
 
-    // Registrar ventana de proceso (trabajadora LIBRE durante este tiempo)
-    ventanasProcesoPorDia[fecha].push({
-      trabajadora,
-      inicio: horaInicio + ai,
-      fin: horaInicio + ai + pr,
-      turno_id: turnoId
+    processWindowsByDay[date].push({
+      worker,
+      start: startTime + ai,
+      end: startTime + ai + pr,
+      booking_id: bookingId
     });
 
-    // Sub-servicios comprometidos en ventana de proceso
-    // Si el turno combina servicios (ej: "Balayage + Manicura semipermanente"),
-    // los sub-servicios no-quimicos ocupan tiempo dentro de la ventana.
-    // Se crea un bloque al INICIO de la ventana para reservar ese tiempo.
-    let subServicios = [];
-    if (turno.servicio_detalle && turno.servicio_detalle.includes('+')) {
-      subServicios = turno.servicio_detalle.split('+').map(s => s.trim());
-    } else if (Array.isArray(turno.servicio) && turno.servicio.length > 1) {
-      subServicios = turno.servicio.map(s => s?.value || s);
+    let subServices = [];
+    if (booking.service_detail && booking.service_detail.includes('+')) {
+      subServices = booking.service_detail.split('+').map(s => s.trim());
+    } else if (Array.isArray(booking.service) && booking.service.length > 1) {
+      subServices = booking.service.map(s => s?.value || s);
     }
 
-    if (subServicios.length > 1) {
-      let tiempoComprometido = 0;
-      for (const srv of subServicios) {
-        if (!SERVICIOS_MUY_COMPLEJA.has(srv)) {
-          tiempoComprometido += (SERVICIOS_BASE_MIN[srv] || 60);
+    if (subServices.length > 1) {
+      let committedTime = 0;
+      for (const srv of subServices) {
+        if (!SERVICES_VERY_COMPLEX.has(srv)) {
+          committedTime += (SERVICES_BASE_MIN[srv] || 60);
         }
       }
-      if (tiempoComprometido > 0) {
-        const procesoInicio = horaInicio + ai;
-        bloquesPorDiaTrabajadora[fecha][trabajadora].push({
-          start: procesoInicio,
-          end: Math.min(procesoInicio + tiempoComprometido, procesoInicio + pr),
-          turno_id: turnoId
+      if (committedTime > 0) {
+        const processStart = startTime + ai;
+        blocksByDayWorker[date][worker].push({
+          start: processStart,
+          end: Math.min(processStart + committedTime, processStart + pr),
+          booking_id: bookingId
         });
       }
     }
   } else {
-    // Bloque continuo
-    bloquesPorDiaTrabajadora[fecha][trabajadora].push({
-      start: horaInicio,
-      end: horaInicio + duracion,
-      turno_id: turnoId
+    blocksByDayWorker[date][worker].push({
+      start: startTime,
+      end: startTime + duration,
+      booking_id: bookingId
     });
   }
 });
 
 // ============================================================================
-// PASO 2: GENERAR DIAS DE BUSQUEDA
+// STEP 2: GENERATE SEARCH DAYS
 // ============================================================================
-// Proximos 30 dias, excluir domingos y hoy (regla de negocio: minimo manana)
-const hoy = new Date();
-const ahoraArgentina = new Date(hoy.getTime() - 3 * 60 * 60 * 1000);
-const hoyStr = ahoraArgentina.toISOString().split('T')[0];
+const now = new Date();
+const nowArgentina = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
-const diasDisponibles = [];
+const availableDays = [];
 for (let i = 1; i <= 30; i++) {
-  const fecha = new Date(hoy);
-  fecha.setDate(hoy.getDate() + i);
-  const fechaStr = fecha.toISOString().split('T')[0];
-  const diaSemana = fecha.getDay();
-  if (diaSemana === 0) continue; // Domingo cerrado
-  diasDisponibles.push({
-    fecha: fechaStr,
-    nombre_dia: diasNombre[diaSemana],
-    fechaObj: fecha
+  const date = new Date(now);
+  date.setDate(now.getDate() + i);
+  const dateStr = date.toISOString().split('T')[0];
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0) continue;
+  availableDays.push({
+    date: dateStr,
+    day_name: dayNames[dayOfWeek],
+    dateObj: date
   });
 }
 
 // ============================================================================
-// PASO 3: PARAMETROS DEL NUEVO SERVICIO
+// STEP 3: NEW SERVICE PARAMETERS
 // ============================================================================
-const duracionNueva = input.duracion_estimada || 60;
-const complejidadNueva = input.complejidad_maxima || 'media';
-const esMuyCompleja = complejidadNueva === 'muy_compleja' && input.activo_inicio != null;
+const newDuration = input.estimated_duration || 60;
+const newComplexity = input.max_complexity || 'medium';
+const isVeryComplex = newComplexity === 'very_complex' && input.active_start != null;
 
-const nuevoActivoInicio = input.activo_inicio || 0;
-const nuevoProceso = input.proceso || 0;
-const nuevoActivoFin = input.activo_fin || 0;
+const newActiveStart = input.active_start || 0;
+const newProcessTime = input.process_time || 0;
+const newActiveEnd = input.active_end || 0;
 
-// Fecha y hora deseadas
-const fechaSolicitadaRaw = input.fecha_deseada || '';
-const fechaSolicitada = fechaSolicitadaRaw.includes('T')
-  ? fechaSolicitadaRaw.split('T')[0]
-  : fechaSolicitadaRaw.split(' ')[0];
-const horaDeseada = input.hora_deseada ? horaToMinutos(input.hora_deseada) : null;
-const preferenciaHorario = input.preferencia_horario || null;
+const requestedDateRaw = input.requested_date || '';
+const requestedDate = requestedDateRaw.includes('T')
+  ? requestedDateRaw.split('T')[0]
+  : requestedDateRaw.split(' ')[0];
+const requestedTimeMin = input.requested_time ? timeToMinutes(input.requested_time) : null;
+const timePreference = input.time_preference || null;
 
 // ============================================================================
-// PASO 4: FUNCIONES DE CALCULO DE BLOQUES
+// STEP 4: BLOCK CALCULATION FUNCTIONS
 // ============================================================================
-
-// Retorna los bloques activos que el nuevo servicio ocuparia si empieza en horaInicio
-function bloquesActivosNuevoServicio(horaInicio) {
-  if (esMuyCompleja) {
+function newServiceActiveBlocks(startTime) {
+  if (isVeryComplex) {
     return [
-      { start: horaInicio, end: horaInicio + nuevoActivoInicio },
-      { start: horaInicio + nuevoActivoInicio + nuevoProceso, end: horaInicio + nuevoActivoInicio + nuevoProceso + nuevoActivoFin }
+      { start: startTime, end: startTime + newActiveStart },
+      { start: startTime + newActiveStart + newProcessTime, end: startTime + newActiveStart + newProcessTime + newActiveEnd }
     ];
   }
-  return [{ start: horaInicio, end: horaInicio + duracionNueva }];
+  return [{ start: startTime, end: startTime + newDuration }];
 }
 
-// Verificar que todos los bloques estan dentro de la jornada
-function dentroDeJornada(bloques) {
-  return bloques.every(b => b.start >= JORNADA_INICIO && b.end <= JORNADA_FIN);
+function withinWorkingHours(blocks) {
+  return blocks.every(b => b.start >= DAY_START && b.end <= DAY_END);
 }
 
-// Verificar que ningun bloque nuevo solapa con bloques existentes
-function sinConflictos(bloquesNuevos, bloquesExistentes) {
-  for (const nuevo of bloquesNuevos) {
-    for (const existente of bloquesExistentes) {
-      if (solapan(nuevo.start, nuevo.end, existente.start, existente.end)) {
+function noConflicts(newBlocks, existingBlocks) {
+  for (const newB of newBlocks) {
+    for (const existing of existingBlocks) {
+      if (overlaps(newB.start, newB.end, existing.start, existing.end)) {
         return false;
       }
     }
@@ -247,465 +241,390 @@ function sinConflictos(bloquesNuevos, bloquesExistentes) {
 }
 
 // ============================================================================
-// PASO 4b: EXTRAER DATOS DE TURNO EXISTENTE (antes de buscar slots)
+// STEP 4b: EXTRACT EXISTING BOOKING DATA
 // ============================================================================
-// Necesitamos estos datos antes del Paso 5 para:
-// - Excluir bloques del turno actual en agregar servicio (se reorganiza)
-// - Calcular duracion combinada
-let turnoServicioExistente = null;
-let turnoIdExistente = null;
-let turnoPrecioExistente = null;
-let turnoDuracionExistente = null;
-let turnoComplejidadExistente = null;
-let turnoSenaPagada = null;
-let turnoTrabajadoraExistente = null;
-let turnoHoraExistente = null;
+let existingService = null;
+let existingBookingId = null;
+let existingPrice = null;
+let existingDuration = null;
+let existingComplexity = null;
+let existingDeposit = null;
+let existingWorker = null;
+let existingTime = null;
 
-if (input.turno_agendado && input.lead_row_id) {
-  const turnoUsuaria = turnos.find(t => {
-    // Ignorar turnos cancelados/expirados — no son el turno activo de la clienta
-    const estadoT = t.estado?.value || t.estado || '';
-    if (estadoT === 'cancelado' || estadoT === 'expirado') return false;
+if (input.booking_scheduled && input.lead_row_id) {
+  const clientBooking = bookings.find(b => {
+    const stateB = b.state?.value || b.state || '';
+    if (stateB === 'cancelled' || stateB === 'expired') return false;
 
-    let turnoClientaRowId = null;
-    if (Array.isArray(t.clienta_id) && t.clienta_id.length > 0) {
-      turnoClientaRowId = t.clienta_id[0]?.id;
-    } else if (t.clienta_id && typeof t.clienta_id === 'object') {
-      turnoClientaRowId = t.clienta_id.id || t.clienta_id.value;
+    let bookingClientRowId = null;
+    if (Array.isArray(b.client_id) && b.client_id.length > 0) {
+      bookingClientRowId = b.client_id[0]?.id;
+    } else if (b.client_id && typeof b.client_id === 'object') {
+      bookingClientRowId = b.client_id.id || b.client_id.value;
     } else {
-      turnoClientaRowId = t.clienta_id;
+      bookingClientRowId = b.client_id;
     }
-    return turnoClientaRowId && String(turnoClientaRowId) === String(input.lead_row_id);
+    return bookingClientRowId && String(bookingClientRowId) === String(input.lead_row_id);
   });
 
-  if (turnoUsuaria) {
-    let servicioValue = null;
-    if (turnoUsuaria.servicio_detalle) {
-      servicioValue = turnoUsuaria.servicio_detalle;
-    } else if (Array.isArray(turnoUsuaria.servicio) && turnoUsuaria.servicio.length > 0) {
-      servicioValue = turnoUsuaria.servicio.map(s => s?.value || s).join(' + ');
-    } else if (turnoUsuaria.servicio?.value) {
-      servicioValue = turnoUsuaria.servicio.value;
+  if (clientBooking) {
+    let serviceValue = null;
+    if (clientBooking.service_detail) {
+      serviceValue = clientBooking.service_detail;
+    } else if (Array.isArray(clientBooking.service) && clientBooking.service.length > 0) {
+      serviceValue = clientBooking.service.map(s => s?.value || s).join(' + ');
+    } else if (clientBooking.service?.value) {
+      serviceValue = clientBooking.service.value;
     } else {
-      servicioValue = turnoUsuaria.servicio;
+      serviceValue = clientBooking.service;
     }
-    turnoServicioExistente = servicioValue || null;
-    turnoIdExistente = turnoUsuaria.odoo_turno_id || null;
-    turnoPrecioExistente = turnoUsuaria.precio ? Number(turnoUsuaria.precio) : null;
-    turnoDuracionExistente = turnoUsuaria.duracion_min ? Number(turnoUsuaria.duracion_min) : null;
-    turnoComplejidadExistente = turnoUsuaria.complejidad_maxima?.value || turnoUsuaria.complejidad_maxima || null;
-    turnoSenaPagada = turnoUsuaria.sena_monto ? Number(turnoUsuaria.sena_monto) : null;
-    turnoTrabajadoraExistente = normalizarTrabajadora(turnoUsuaria.trabajadora);
-    turnoHoraExistente = turnoUsuaria.hora || null;
+    existingService = serviceValue || null;
+    existingBookingId = clientBooking.odoo_booking_id || null;
+    existingPrice = clientBooking.price ? Number(clientBooking.price) : null;
+    existingDuration = clientBooking.duration_min ? Number(clientBooking.duration_min) : null;
+    existingComplexity = clientBooking.max_complexity?.value || clientBooking.max_complexity || null;
+    existingDeposit = clientBooking.deposit_amount ? Number(clientBooking.deposit_amount) : null;
+    existingWorker = normalizeWorker(clientBooking.worker);
+    existingTime = clientBooking.time || null;
   }
 }
 
 // ============================================================================
-// PASO 5: BUSCAR SLOTS DISPONIBLES
+// STEP 5: SEARCH AVAILABLE SLOTS
 // ============================================================================
-const candidatos = [];
+const candidates = [];
 
-// Priorizar la fecha solicitada
-let diasBusqueda = [...diasDisponibles];
-if (fechaSolicitada) {
-  const idxReq = diasBusqueda.findIndex(d => d.fecha === fechaSolicitada);
+let searchDays = [...availableDays];
+if (requestedDate) {
+  const idxReq = searchDays.findIndex(d => d.date === requestedDate);
   if (idxReq > 0) {
-    const [diaReq] = diasBusqueda.splice(idxReq, 1);
-    diasBusqueda.unshift(diaReq);
+    const [reqDay] = searchDays.splice(idxReq, 1);
+    searchDays.unshift(reqDay);
   }
 }
+searchDays = searchDays.slice(0, 14);
 
-// Limitar busqueda a 14 dias
-diasBusqueda = diasBusqueda.slice(0, 14);
+const isReschedule = input.booking_scheduled && existingBookingId && !input.add_to_existing_booking;
 
-// Reprogramacion: excluir bloques del turno propio (la clienta libera su slot)
-const esReprogramacion = input.turno_agendado && turnoIdExistente && !input.agregar_a_turno_existente;
+for (const day of searchDays) {
+  if (candidates.length >= 12) break;
 
-for (const dia of diasBusqueda) {
-  if (candidatos.length >= 12) break;
+  initializeDay(day.date);
+  const dayBlocks = blocksByDayWorker[day.date];
 
-  inicializarDia(dia.fecha);
-  const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
+  for (let startMin = DAY_START; startMin < DAY_END; startMin += STEP) {
+    const newBlocks = newServiceActiveBlocks(startMin);
+    if (!withinWorkingHours(newBlocks)) continue;
 
-  for (let startMin = JORNADA_INICIO; startMin < JORNADA_FIN; startMin += STEP) {
-    const bloquesNuevos = bloquesActivosNuevoServicio(startMin);
+    for (const worker of WORKER_LIST) {
+      const workerBlocks = isReschedule
+        ? dayBlocks[worker].filter(b => b.booking_id !== existingBookingId)
+        : dayBlocks[worker];
+      if (!noConflicts(newBlocks, workerBlocks)) continue;
 
-    // Verificar que cabe en la jornada
-    if (!dentroDeJornada(bloquesNuevos)) continue;
-
-    // Probar con cada trabajadora (A primero por prioridad de desempate)
-    for (const trabajadora of TRABAJADORAS) {
-      // Si es reprogramacion, excluir los bloques del turno que se esta moviendo
-      const bloquesExistentes = esReprogramacion
-        ? bloquesDia[trabajadora].filter(b => b.turno_id !== turnoIdExistente)
-        : bloquesDia[trabajadora];
-      if (!sinConflictos(bloquesNuevos, bloquesExistentes)) continue;
-
-      // Slot valido - calcular score
-      const esFechaDeseada = dia.fecha === fechaSolicitada;
+      const isRequestedDate = day.date === requestedDate;
       let score = 0;
 
-      // +10 si coincide con hora exacta deseada
-      if (horaDeseada !== null && startMin === horaDeseada) score += 10;
+      if (requestedTimeMin !== null && startMin === requestedTimeMin) score += 10;
+      if (isRequestedDate) score += 8;
+      if (timePreference === 'manana' && startMin < 12 * 60) score += 5;
+      else if (timePreference === 'tarde' && startMin >= 13 * 60) score += 5;
+      if (requestedTimeMin !== null && Math.abs(startMin - requestedTimeMin) <= 60) score += 2;
 
-      // +8 si es la fecha solicitada
-      if (esFechaDeseada) score += 8;
+      const dayLoad = (dayBlocks[worker] || []).length;
+      score -= dayLoad * 2;
 
-      // +5 si encaja en preferencia horaria
-      if (preferenciaHorario === 'manana' && startMin < 12 * 60) score += 5;
-      else if (preferenciaHorario === 'tarde' && startMin >= 13 * 60) score += 5;
+      const endTimeMin = isVeryComplex
+        ? startMin + newActiveStart + newProcessTime + newActiveEnd
+        : startMin + newDuration;
 
-      // +2 cercania a hora deseada (<=60min de distancia)
-      if (horaDeseada !== null && Math.abs(startMin - horaDeseada) <= 60) score += 2;
-
-      // Balanceo de carga: penalizar trabajadora con mas bloques en el dia
-      // Esto evita sobrecargar a una sola trabajadora
-      const cargaDia = (bloquesDia[trabajadora] || []).length;
-      score -= cargaDia * 2;
-
-      // Hora fin para display (tiempo total de la clienta en el salon)
-      const horaFinMin = esMuyCompleja
-        ? startMin + nuevoActivoInicio + nuevoProceso + nuevoActivoFin
-        : startMin + duracionNueva;
-
-      candidatos.push({
-        trabajadora,
-        fecha: dia.fecha,
-        hora_inicio: minutosToHora(startMin),
-        hora_fin: minutosToHora(horaFinMin),
-        nombre_dia: dia.nombre_dia,
-        duracion_min: esMuyCompleja ? (nuevoActivoInicio + nuevoProceso + nuevoActivoFin) : duracionNueva,
+      candidates.push({
+        worker,
+        date: day.date,
+        start_time: minutesToTime(startMin),
+        end_time: minutesToTime(endTimeMin),
+        day_name: day.day_name,
+        duration_min: isVeryComplex ? (newActiveStart + newProcessTime + newActiveEnd) : newDuration,
         score,
-        es_fecha_alternativa: !esFechaDeseada,
-        en_proceso: false
+        is_alternative_date: !isRequestedDate,
+        in_process: false
       });
     }
   }
 }
 
 // ============================================================================
-// PASO 6: CASO ESPECIAL — AGREGAR SERVICIO EN VENTANA DE PROCESO
+// STEP 6: SPECIAL CASE — ADD SERVICE IN PROCESS WINDOW
 // ============================================================================
-// Si la clienta tiene un turno muy_compleja existente y quiere agregar un servicio,
-// el nuevo servicio puede caber dentro de la ventana de proceso (5h libre).
-// La misma trabajadora lo atiende durante el tiempo de espera del quimico.
+if (input.add_to_existing_booking && input.booking_date) {
+  const bookingDate = input.booking_date.includes('T')
+    ? input.booking_date.split('T')[0]
+    : input.booking_date.split(' ')[0];
 
-if (input.agregar_a_turno_existente && input.turno_fecha) {
-  const turnoFecha = input.turno_fecha.includes('T')
-    ? input.turno_fecha.split('T')[0]
-    : input.turno_fecha.split(' ')[0];
+  const windows = processWindowsByDay[bookingDate] || [];
 
-  const ventanas = ventanasProcesoPorDia[turnoFecha] || [];
+  for (const window of windows) {
+    if (isVeryComplex) continue;
 
-  for (const ventana of ventanas) {
-    // Solo servicios NO muy_compleja pueden meterse en una ventana de proceso
-    if (esMuyCompleja) continue;
+    const windowDuration = window.end - window.start;
+    if (newDuration > windowDuration) continue;
 
-    const ventanaDuracion = ventana.fin - ventana.inicio;
-    if (duracionNueva > ventanaDuracion) continue;
+    const windowWorkerBlocks = (blocksByDayWorker[bookingDate] || {})[window.worker] || [];
 
-    // Buscar el primer hueco libre DENTRO de la ventana de proceso
-    const bloquesVentanaTrabajadora = (bloquesPorDiaTrabajadora[turnoFecha] || {})[ventana.trabajadora] || [];
+    for (let start = window.start; start + newDuration <= window.end; start += STEP) {
+      const newBlock = [{ start: start, end: start + newDuration }];
 
-    for (let start = ventana.inicio; start + duracionNueva <= ventana.fin; start += STEP) {
-      const nuevoBloque = [{ start: start, end: start + duracionNueva }];
-
-      if (sinConflictos(nuevoBloque, bloquesVentanaTrabajadora)) {
-        candidatos.unshift({
-          trabajadora: ventana.trabajadora,
-          fecha: turnoFecha,
-          hora_inicio: minutosToHora(start),
-          hora_fin: minutosToHora(start + duracionNueva),
-          nombre_dia: diasNombre[new Date(turnoFecha + 'T12:00:00').getDay()],
-          duracion_min: duracionNueva,
-          score: 20,  // Maxima prioridad: reutilizar ventana de proceso del mismo dia
-          es_fecha_alternativa: false,
-          en_proceso: true
+      if (noConflicts(newBlock, windowWorkerBlocks)) {
+        candidates.unshift({
+          worker: window.worker,
+          date: bookingDate,
+          start_time: minutesToTime(start),
+          end_time: minutesToTime(start + newDuration),
+          day_name: dayNames[new Date(bookingDate + 'T12:00:00').getDay()],
+          duration_min: newDuration,
+          score: 20,
+          is_alternative_date: false,
+          in_process: true
         });
-        break; // Primer hueco libre encontrado
+        break;
       }
     }
   }
 }
 
 // ============================================================================
-// PASO 6b: AGREGAR SERVICIO CON VALIDACION DE DISPONIBILIDAD
+// STEP 6b: ADD SERVICE WITH AVAILABILITY VALIDATION
 // ============================================================================
-// Cuando se agrega un servicio a un turno existente, verificar que la duracion
-// combinada cabe en el horario. Dos estrategias:
-//   A) simple/media/compleja: bloque continuo fusionado
-//   B) muy_compleja: 3 fases a las 9:00, existente en ventana de proceso
+if (input.add_to_existing_booking && existingBookingId) {
+  candidates.length = 0;
 
-if (input.agregar_a_turno_existente && turnoIdExistente) {
-  // Limpiar candidatos del Paso 5 (eran para servicio nuevo solo, sin contexto de turno existente)
-  candidatos.length = 0;
+  const currentWorker = existingWorker || WORKERS.PRIMARY;
+  const existDuration = existingDuration || 60;
+  const bookingDateExisting = input.booking_date
+    ? (input.booking_date.includes('T') ? input.booking_date.split('T')[0] : input.booking_date.split(' ')[0])
+    : requestedDate;
+  const originalTimeMin = existingTime ? timeToMinutes(existingTime) : (requestedTimeMin || DAY_START);
 
-  const trabajadoraActual = turnoTrabajadoraExistente || 'Leraysi';
-  const duracionExistente = turnoDuracionExistente || 60;
-  const turnoFechaExistente = input.turno_fecha
-    ? (input.turno_fecha.includes('T') ? input.turno_fecha.split('T')[0] : input.turno_fecha.split(' ')[0])
-    : fechaSolicitada;
-  const horaOriginalMin = turnoHoraExistente ? horaToMinutos(turnoHoraExistente) : (horaDeseada || JORNADA_INICIO);
-
-  // Funcion auxiliar: filtrar bloques excluyendo el turno actual
-  function bloquesSinTurnoActual(bloquesArr) {
-    return bloquesArr.filter(b => b.turno_id == null || String(b.turno_id) !== String(turnoIdExistente));
+  function blocksWithoutCurrent(blocksArr) {
+    return blocksArr.filter(b => b.booking_id == null || String(b.booking_id) !== String(existingBookingId));
   }
 
-  // Buscar en el dia del turno existente primero, luego alternativas
-  const diasBusquedaAgregar = [];
-  const diaExistente = diasDisponibles.find(d => d.fecha === turnoFechaExistente);
-  // Incluir el dia del turno incluso si no esta en diasDisponibles (puede ser hoy+1)
-  if (diaExistente) {
-    diasBusquedaAgregar.push(diaExistente);
-  } else if (turnoFechaExistente) {
-    const fechaObj = new Date(turnoFechaExistente + 'T12:00:00');
-    if (fechaObj.getDay() !== 0) { // No domingo
-      diasBusquedaAgregar.push({
-        fecha: turnoFechaExistente,
-        nombre_dia: diasNombre[fechaObj.getDay()],
-        fechaObj
+  const addServiceSearchDays = [];
+  const existingDay = availableDays.find(d => d.date === bookingDateExisting);
+  if (existingDay) {
+    addServiceSearchDays.push(existingDay);
+  } else if (bookingDateExisting) {
+    const dateObj = new Date(bookingDateExisting + 'T12:00:00');
+    if (dateObj.getDay() !== 0) {
+      addServiceSearchDays.push({
+        date: bookingDateExisting,
+        day_name: dayNames[dateObj.getDay()],
+        dateObj
       });
     }
   }
-  // Agregar dias alternativos
-  for (const dia of diasDisponibles) {
-    if (dia.fecha !== turnoFechaExistente) {
-      diasBusquedaAgregar.push(dia);
+  for (const day of availableDays) {
+    if (day.date !== bookingDateExisting) {
+      addServiceSearchDays.push(day);
     }
-    if (diasBusquedaAgregar.length >= 14) break;
+    if (addServiceSearchDays.length >= 14) break;
   }
 
-  if (esMuyCompleja) {
-    // ── ESTRATEGIA B: muy_compleja a las 9:00 + existente en ventana proceso ──
-    // El servicio muy_compleja SIEMPRE empieza a las 9:00 (unico slot donde cabe)
-    // El servicio existente se reubica en la ventana de proceso (12:00-17:00)
+  if (isVeryComplex) {
+    // ── STRATEGY B: very_complex at 9:00 + existing in process window ──
+    const windowStart = DAY_START + PHASES_VERY_COMPLEX.active_start;
+    const windowEnd = windowStart + PHASES_VERY_COMPLEX.process_time;
 
-    const ventanaInicio = JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio; // 720 = 12:00
-    const ventanaFin = ventanaInicio + FASES_MUY_COMPLEJA.proceso; // 1020 = 17:00
+    if (existDuration <= PHASES_VERY_COMPLEX.process_time) {
+      for (const day of addServiceSearchDays) {
+        if (candidates.length >= 6) break;
+        initializeDay(day.date);
+        const dayBlocks = blocksByDayWorker[day.date];
+        const isSameDay = day.date === bookingDateExisting;
 
-    // Verificar que el servicio existente cabe en la ventana de proceso
-    if (duracionExistente <= FASES_MUY_COMPLEJA.proceso) {
-      for (const dia of diasBusquedaAgregar) {
-        if (candidatos.length >= 6) break;
-        inicializarDia(dia.fecha);
-        const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
-        const esMismoDia = dia.fecha === turnoFechaExistente;
+        const orderedWorkers = [currentWorker, ...WORKER_LIST.filter(w => w !== currentWorker)];
 
-        // Probar trabajadora actual primero, luego la otra
-        const trabajadorasOrdenadas = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
-
-        for (const trabajadora of trabajadorasOrdenadas) {
-          // Bloques activos del muy_compleja: [9:00-12:00] y [17:00-19:00]
-          const bloquesNuevoMC = [
-            { start: JORNADA_INICIO, end: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio },
-            { start: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio + FASES_MUY_COMPLEJA.proceso,
-              end: JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio + FASES_MUY_COMPLEJA.proceso + FASES_MUY_COMPLEJA.activo_fin }
+        for (const worker of orderedWorkers) {
+          const vcBlocks = [
+            { start: DAY_START, end: DAY_START + PHASES_VERY_COMPLEX.active_start },
+            { start: DAY_START + PHASES_VERY_COMPLEX.active_start + PHASES_VERY_COMPLEX.process_time,
+              end: DAY_START + PHASES_VERY_COMPLEX.active_start + PHASES_VERY_COMPLEX.process_time + PHASES_VERY_COMPLEX.active_end }
           ];
 
-          // Obtener bloques de la trabajadora SIN el turno actual (se va a reorganizar)
-          const bloquesExistentes = esMismoDia
-            ? bloquesSinTurnoActual(bloquesDia[trabajadora] || [])
-            : (bloquesDia[trabajadora] || []);
+          const workerBlocks = isSameDay
+            ? blocksWithoutCurrent(dayBlocks[worker] || [])
+            : (dayBlocks[worker] || []);
 
-          // Verificar que los bloques activos del muy_compleja no solapan
-          if (!sinConflictos(bloquesNuevoMC, bloquesExistentes)) continue;
+          if (!noConflicts(vcBlocks, workerBlocks)) continue;
 
-          // Verificar que el servicio existente cabe en la ventana de proceso sin conflictos
-          // Buscar primer hueco libre en la ventana [12:00-17:00]
-          let horaServicioEnProceso = null;
-          for (let s = ventanaInicio; s + duracionExistente <= ventanaFin; s += STEP) {
-            const bloqueExist = [{ start: s, end: s + duracionExistente }];
-            if (sinConflictos(bloqueExist, bloquesExistentes)) {
-              horaServicioEnProceso = s;
+          let existingServiceInProcess = null;
+          for (let s = windowStart; s + existDuration <= windowEnd; s += STEP) {
+            const block = [{ start: s, end: s + existDuration }];
+            if (noConflicts(block, workerBlocks)) {
+              existingServiceInProcess = s;
               break;
             }
           }
 
-          if (horaServicioEnProceso === null) continue; // No cabe en la ventana
+          if (existingServiceInProcess === null) continue;
 
-          candidatos.push({
-            trabajadora,
-            fecha: dia.fecha,
-            hora_inicio: minutosToHora(JORNADA_INICIO), // 09:00
-            hora_fin: minutosToHora(JORNADA_FIN), // 19:00
-            nombre_dia: dia.nombre_dia,
-            duracion_min: FASES_MUY_COMPLEJA.activo_inicio + FASES_MUY_COMPLEJA.proceso + FASES_MUY_COMPLEJA.activo_fin,
-            score: (esMismoDia ? 18 : 0) + (trabajadora === trabajadoraActual ? 5 : 0),
-            es_fecha_alternativa: !esMismoDia,
-            en_proceso: false,
-            // Metadata agregar servicio
-            es_agregar_servicio: true,
-            hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
-            servicio_reubicado: true,
-            servicio_en_proceso: true,
-            hora_servicio_existente: minutosToHora(horaServicioEnProceso)
+          candidates.push({
+            worker,
+            date: day.date,
+            start_time: minutesToTime(DAY_START),
+            end_time: minutesToTime(DAY_END),
+            day_name: day.day_name,
+            duration_min: PHASES_VERY_COMPLEX.active_start + PHASES_VERY_COMPLEX.process_time + PHASES_VERY_COMPLEX.active_end,
+            score: (isSameDay ? 18 : 0) + (worker === currentWorker ? 5 : 0),
+            is_alternative_date: !isSameDay,
+            in_process: false,
+            is_add_service: true,
+            original_time: existingTime || minutesToTime(originalTimeMin),
+            service_relocated: true,
+            service_in_process: true,
+            existing_service_time: minutesToTime(existingServiceInProcess)
           });
         }
       }
     }
-  } else if (turnoComplejidadExistente === 'muy_compleja') {
-    // ── ESTRATEGIA C: existente muy_compleja, nuevo servicio en ventana de proceso ──
-    // El turno existente ocupa la jornada completa (3 fases).
-    // El nuevo servicio (NO muy_compleja) se realiza durante la ventana de proceso [12:00-17:00].
-    // CUALQUIER trabajadora disponible puede atender el nuevo servicio.
+  } else if (existingComplexity === 'very_complex') {
+    // ── STRATEGY C: existing is very_complex, new in process window ──
+    const windowStartC = DAY_START + PHASES_VERY_COMPLEX.active_start;
+    const windowEndC = windowStartC + PHASES_VERY_COMPLEX.process_time;
 
-    const ventanaInicioC = JORNADA_INICIO + FASES_MUY_COMPLEJA.activo_inicio; // 720 = 12:00
-    const ventanaFinC = ventanaInicioC + FASES_MUY_COMPLEJA.proceso; // 1020 = 17:00
+    for (const day of addServiceSearchDays) {
+      if (candidates.length >= 6) break;
+      initializeDay(day.date);
+      const dayBlocks = blocksByDayWorker[day.date];
+      const isSameDay = day.date === bookingDateExisting;
 
-    for (const dia of diasBusquedaAgregar) {
-      if (candidatos.length >= 6) break;
-      inicializarDia(dia.fecha);
-      const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
-      const esMismoDia = dia.fecha === turnoFechaExistente;
+      if (isSameDay) {
+        const orderedWorkersC = [currentWorker, ...WORKER_LIST.filter(w => w !== currentWorker)];
+        for (const worker of orderedWorkersC) {
+          const workerBlocks = dayBlocks[worker] || [];
 
-      if (esMismoDia) {
-        // Mismo dia: buscar espacio en la ventana de proceso con cualquier trabajadora
-        // Priorizar trabajadora actual (en_proceso) sobre otra (turno adicional)
-        const trabajadorasOrdenadasC = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
-        for (const trabajadora of trabajadorasOrdenadasC) {
-          const bloquesExistentes = bloquesDia[trabajadora] || [];
-
-          for (let start = ventanaInicioC; start + duracionNueva <= ventanaFinC; start += STEP) {
-            const nuevoBloque = [{ start, end: start + duracionNueva }];
-            if (sinConflictos(nuevoBloque, bloquesExistentes)) {
-              const esMismaTrabajadora = trabajadora === trabajadoraActual;
-              candidatos.push({
-                trabajadora,
-                fecha: dia.fecha,
-                // Misma trabajadora: jornada completa (servicio dentro de proceso)
-                // Otra trabajadora: slot real del servicio nuevo (turno adicional)
-                hora_inicio: esMismaTrabajadora ? minutosToHora(JORNADA_INICIO) : minutosToHora(start),
-                hora_fin: esMismaTrabajadora ? minutosToHora(JORNADA_FIN) : minutosToHora(start + duracionNueva),
-                nombre_dia: dia.nombre_dia,
-                duracion_min: esMismaTrabajadora ? 600 : duracionNueva,
-                score: 20 + (esMismaTrabajadora ? 5 : 0),
-                es_fecha_alternativa: false,
-                en_proceso: esMismaTrabajadora,
-                es_agregar_servicio: true,
-                es_turno_adicional: !esMismaTrabajadora,
-                trabajadora_turno_original: esMismaTrabajadora ? null : trabajadoraActual,
-                hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
-                servicio_reubicado: false,
-                servicio_en_proceso: esMismaTrabajadora,
-                hora_servicio_existente: minutosToHora(start)
+          for (let start = windowStartC; start + newDuration <= windowEndC; start += STEP) {
+            const newBlock = [{ start, end: start + newDuration }];
+            if (noConflicts(newBlock, workerBlocks)) {
+              const isSameWorker = worker === currentWorker;
+              candidates.push({
+                worker,
+                date: day.date,
+                start_time: isSameWorker ? minutesToTime(DAY_START) : minutesToTime(start),
+                end_time: isSameWorker ? minutesToTime(DAY_END) : minutesToTime(start + newDuration),
+                day_name: day.day_name,
+                duration_min: isSameWorker ? 600 : newDuration,
+                score: 20 + (isSameWorker ? 5 : 0),
+                is_alternative_date: false,
+                in_process: isSameWorker,
+                is_add_service: true,
+                is_additional_booking: !isSameWorker,
+                original_booking_worker: isSameWorker ? null : currentWorker,
+                original_time: existingTime || minutesToTime(originalTimeMin),
+                service_relocated: false,
+                service_in_process: isSameWorker,
+                existing_service_time: minutesToTime(start)
               });
-              break; // Primer hueco libre para esta trabajadora
+              break;
             }
           }
         }
       } else {
-        // Otro dia: buscar slot para SOLO el servicio nuevo (turno adicional)
-        // El turno muy_compleja existente queda en su dia original
-        const trabajadorasOrdenadasAlt = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
-        for (const trabajadora of trabajadorasOrdenadasAlt) {
-          const bloquesT = bloquesDia[trabajadora] || [];
-          for (let s = JORNADA_INICIO; s + duracionNueva <= JORNADA_FIN; s += STEP) {
-            if (sinConflictos([{ start: s, end: s + duracionNueva }], bloquesT)) {
-              candidatos.push({
-                trabajadora,
-                fecha: dia.fecha,
-                hora_inicio: minutosToHora(s),
-                hora_fin: minutosToHora(s + duracionNueva),
-                nombre_dia: dia.nombre_dia,
-                duracion_min: duracionNueva,
-                score: (trabajadora === trabajadoraActual ? 3 : 0),
-                es_fecha_alternativa: true,
-                en_proceso: false,
-                es_agregar_servicio: true,
-                es_turno_adicional: true,
-                trabajadora_turno_original: trabajadoraActual,
-                hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
-                servicio_reubicado: false,
-                servicio_en_proceso: false,
-                hora_servicio_existente: null
+        const orderedWorkersAlt = [currentWorker, ...WORKER_LIST.filter(w => w !== currentWorker)];
+        for (const worker of orderedWorkersAlt) {
+          const workerBlocks = dayBlocks[worker] || [];
+          for (let s = DAY_START; s + newDuration <= DAY_END; s += STEP) {
+            if (noConflicts([{ start: s, end: s + newDuration }], workerBlocks)) {
+              candidates.push({
+                worker,
+                date: day.date,
+                start_time: minutesToTime(s),
+                end_time: minutesToTime(s + newDuration),
+                day_name: day.day_name,
+                duration_min: newDuration,
+                score: (worker === currentWorker ? 3 : 0),
+                is_alternative_date: true,
+                in_process: false,
+                is_add_service: true,
+                is_additional_booking: true,
+                original_booking_worker: currentWorker,
+                original_time: existingTime || minutesToTime(originalTimeMin),
+                service_relocated: false,
+                service_in_process: false,
+                existing_service_time: null
               });
-              break; // Primer slot disponible para esta trabajadora
+              break;
             }
           }
-          if (candidatos.some(c => c.fecha === dia.fecha)) break;
+          if (candidates.some(c => c.date === day.date)) break;
         }
       }
     }
   } else {
-    // ── ESTRATEGIA A: misma trabajadora (combinado) o turno adicional (otra) ──
-    // Misma trabajadora: buscar bloque combinado (extender turno, UPDATE fila)
-    // Otra trabajadora: buscar solo servicio nuevo (turno adicional, CREATE fila nueva)
-    const duracionCombinada = duracionExistente + duracionNueva;
-    const finTurnoExistenteMin = horaOriginalMin + duracionExistente;
+    // ── STRATEGY A: same worker (combined) or additional booking (other) ──
+    const combinedDuration = existDuration + newDuration;
+    const existingEndMin = originalTimeMin + existDuration;
 
-    for (const dia of diasBusquedaAgregar) {
-      if (candidatos.length >= 12) break;
-      inicializarDia(dia.fecha);
-      const bloquesDia = bloquesPorDiaTrabajadora[dia.fecha];
-      const esMismoDia = dia.fecha === turnoFechaExistente;
+    for (const day of addServiceSearchDays) {
+      if (candidates.length >= 12) break;
+      initializeDay(day.date);
+      const dayBlocks = blocksByDayWorker[day.date];
+      const isSameDay = day.date === bookingDateExisting;
 
-      // Probar trabajadora actual primero (bloque combinado), luego otra (turno adicional)
-      const trabajadorasOrdenadas = [trabajadoraActual, ...TRABAJADORAS.filter(t => t !== trabajadoraActual)];
+      const orderedWorkers = [currentWorker, ...WORKER_LIST.filter(w => w !== currentWorker)];
 
-      for (const trabajadora of trabajadorasOrdenadas) {
-        const esMismaTrabajadora = trabajadora === trabajadoraActual;
-        // Misma trabajadora: buscar bloque combinado (extender turno)
-        // Otra trabajadora: buscar solo servicio nuevo (turno adicional)
-        const duracionBusqueda = esMismaTrabajadora ? duracionCombinada : duracionNueva;
+      for (const worker of orderedWorkers) {
+        const isSameWorker = worker === currentWorker;
+        const searchDuration = isSameWorker ? combinedDuration : newDuration;
 
-        // Solo excluir turno actual de bloques de la misma trabajadora en el mismo dia
-        // (porque el bloque combinado reemplaza al turno actual)
-        // Para otra trabajadora: no excluir nada (el turno actual no esta en sus bloques)
-        const bloquesExistentes = (esMismoDia && esMismaTrabajadora)
-          ? bloquesSinTurnoActual(bloquesDia[trabajadora] || [])
-          : (bloquesDia[trabajadora] || []);
+        const workerBlocks = (isSameDay && isSameWorker)
+          ? blocksWithoutCurrent(dayBlocks[worker] || [])
+          : (dayBlocks[worker] || []);
 
-        for (let startMin = JORNADA_INICIO; startMin + duracionBusqueda <= JORNADA_FIN; startMin += STEP) {
-          const bloque = [{ start: startMin, end: startMin + duracionBusqueda }];
+        for (let startMin = DAY_START; startMin + searchDuration <= DAY_END; startMin += STEP) {
+          const block = [{ start: startMin, end: startMin + searchDuration }];
 
-          if (!dentroDeJornada(bloque)) continue;
-          if (!sinConflictos(bloque, bloquesExistentes)) continue;
+          if (!withinWorkingHours(block)) continue;
+          if (!noConflicts(block, workerBlocks)) continue;
 
-          // Turno adicional (otra trabajadora, mismo dia): el slot NO puede solaparse
-          // con el turno original de la clienta (no puede estar en dos servicios a la vez)
-          if (!esMismaTrabajadora && esMismoDia) {
-            const turnoOrigStart = horaOriginalMin;
-            const turnoOrigEnd = horaOriginalMin + duracionExistente;
-            if (solapan(startMin, startMin + duracionBusqueda, turnoOrigStart, turnoOrigEnd)) continue;
+          if (!isSameWorker && isSameDay) {
+            const origStart = originalTimeMin;
+            const origEnd = originalTimeMin + existDuration;
+            if (overlaps(startMin, startMin + searchDuration, origStart, origEnd)) continue;
           }
 
-          // Calcular score
-          // Agregar servicio: mismo dia es FUERTEMENTE preferido (clienta ya tiene turno ese dia)
           let score = 0;
-          if (esMismoDia) score += 20;
+          if (isSameDay) score += 20;
 
-          if (esMismaTrabajadora) {
-            // Bloque combinado: bonus por mismo horario original
-            if (startMin === horaOriginalMin) score += 20;
-            else if (esMismoDia && Math.abs(startMin - horaOriginalMin) <= 60) score += 5;
-            score += 3; // misma trabajadora
+          if (isSameWorker) {
+            if (startMin === originalTimeMin) score += 20;
+            else if (isSameDay && Math.abs(startMin - originalTimeMin) <= 60) score += 5;
+            score += 3;
           } else {
-            // Turno adicional: bonus por adyacencia (justo despues del turno existente)
-            if (esMismoDia && startMin === finTurnoExistenteMin) score += 20;
-            else if (esMismoDia && Math.abs(startMin - finTurnoExistenteMin) <= 60) score += 5;
+            if (isSameDay && startMin === existingEndMin) score += 20;
+            else if (isSameDay && Math.abs(startMin - existingEndMin) <= 60) score += 5;
           }
 
-          const cargaDia = (bloquesDia[trabajadora] || []).length;
-          score -= cargaDia * 2;
+          const dayLoad = (dayBlocks[worker] || []).length;
+          score -= dayLoad * 2;
 
-          candidatos.push({
-            trabajadora,
-            fecha: dia.fecha,
-            hora_inicio: minutosToHora(startMin),
-            hora_fin: minutosToHora(startMin + duracionBusqueda),
-            nombre_dia: dia.nombre_dia,
-            duracion_min: duracionBusqueda,
+          candidates.push({
+            worker,
+            date: day.date,
+            start_time: minutesToTime(startMin),
+            end_time: minutesToTime(startMin + searchDuration),
+            day_name: day.day_name,
+            duration_min: searchDuration,
             score,
-            es_fecha_alternativa: !esMismoDia,
-            en_proceso: false,
-            // Metadata agregar servicio
-            es_agregar_servicio: true,
-            es_turno_adicional: !esMismaTrabajadora,
-            trabajadora_turno_original: esMismaTrabajadora ? null : trabajadoraActual,
-            hora_original: turnoHoraExistente || minutosToHora(horaOriginalMin),
-            servicio_reubicado: esMismaTrabajadora ? (startMin !== horaOriginalMin) : false,
-            servicio_en_proceso: false
+            is_alternative_date: !isSameDay,
+            in_process: false,
+            is_add_service: true,
+            is_additional_booking: !isSameWorker,
+            original_booking_worker: isSameWorker ? null : currentWorker,
+            original_time: existingTime || minutesToTime(originalTimeMin),
+            service_relocated: isSameWorker ? (startMin !== originalTimeMin) : false,
+            service_in_process: false
           });
         }
       }
@@ -714,124 +633,110 @@ if (input.agregar_a_turno_existente && turnoIdExistente) {
 }
 
 // ============================================================================
-// PASO 7: DEDUPLICAR Y SELECCIONAR TOP 3
+// STEP 7: DEDUPLICATE AND SELECT TOP 3
 // ============================================================================
-// No repetir misma fecha+hora (quedarse con el de mayor score)
-const vistos = new Map();
-const candidatosUnicos = [];
-for (const c of candidatos) {
-  const key = `${c.fecha}-${c.hora_inicio}`;
-  if (!vistos.has(key)) {
-    vistos.set(key, candidatosUnicos.length);
-    candidatosUnicos.push(c);
+const seen = new Map();
+const uniqueCandidates = [];
+for (const c of candidates) {
+  const key = `${c.date}-${c.start_time}`;
+  if (!seen.has(key)) {
+    seen.set(key, uniqueCandidates.length);
+    uniqueCandidates.push(c);
   } else {
-    const idx = vistos.get(key);
-    if (c.score > candidatosUnicos[idx].score) {
-      candidatosUnicos[idx] = c;
+    const idx = seen.get(key);
+    if (c.score > uniqueCandidates[idx].score) {
+      uniqueCandidates[idx] = c;
     }
   }
 }
 
-// Ordenar por score descendente
-candidatosUnicos.sort((a, b) => b.score - a.score);
+uniqueCandidates.sort((a, b) => b.score - a.score);
 
-// Seleccionar 3 opciones significativamente distintas
-// Misma dia+trabajadora: minimo 60min de separacion
-const elegidos = [];
-for (const c of candidatosUnicos) {
-  const cercano = elegidos.some(e =>
-    e.fecha === c.fecha &&
-    e.trabajadora === c.trabajadora &&
-    Math.abs(horaToMinutos(e.hora_inicio) - horaToMinutos(c.hora_inicio)) < 60
+const selected = [];
+for (const c of uniqueCandidates) {
+  const tooClose = selected.some(e =>
+    e.date === c.date &&
+    e.worker === c.worker &&
+    Math.abs(timeToMinutes(e.start_time) - timeToMinutes(c.start_time)) < 60
   );
-  if (!cercano) elegidos.push(c);
-  if (elegidos.length >= 3) break;
+  if (!tooClose) selected.push(c);
+  if (selected.length >= 3) break;
 }
 
-const opciones = elegidos.map((s, i) => {
-  const fechaObj = new Date(s.fecha + 'T12:00:00');
+const options = selected.map((s, i) => {
+  const dateObj = new Date(s.date + 'T12:00:00');
   return {
-    opcion: i + 1,
-    trabajadora: s.trabajadora,
-    fecha: s.fecha,
-    hora_inicio: s.hora_inicio,
-    hora_fin: s.hora_fin,
-    nombre_dia: s.nombre_dia,
-    fecha_humana: `${s.nombre_dia.toLowerCase()} ${fechaObj.getDate()} de ${meses[fechaObj.getMonth()]}`,
-    duracion_min: s.duracion_min,
-    es_fecha_alternativa: s.es_fecha_alternativa,
-    en_proceso: s.en_proceso,
-    // Metadata agregar servicio (solo presente cuando aplica)
-    ...(s.es_agregar_servicio ? {
-      es_agregar_servicio: true,
-      es_turno_adicional: s.es_turno_adicional || false,
-      trabajadora_turno_original: s.trabajadora_turno_original || null,
-      hora_original: s.hora_original,
-      servicio_reubicado: s.servicio_reubicado,
-      servicio_en_proceso: s.servicio_en_proceso,
-      hora_servicio_existente: s.hora_servicio_existente
+    option: i + 1,
+    worker: s.worker,
+    date: s.date,
+    start_time: s.start_time,
+    end_time: s.end_time,
+    day_name: s.day_name,
+    human_date: `${s.day_name.toLowerCase()} ${dateObj.getDate()} de ${months[dateObj.getMonth()]}`,
+    duration_min: s.duration_min,
+    is_alternative_date: s.is_alternative_date,
+    in_process: s.in_process,
+    ...(s.is_add_service ? {
+      is_add_service: true,
+      is_additional_booking: s.is_additional_booking || false,
+      original_booking_worker: s.original_booking_worker || null,
+      original_time: s.original_time,
+      service_relocated: s.service_relocated,
+      service_in_process: s.service_in_process,
+      existing_service_time: s.existing_service_time
     } : {})
   };
 });
 
 // ============================================================================
-// PASO 8: DETERMINAR DISPONIBILIDAD
+// STEP 8: DETERMINE AVAILABILITY
 // ============================================================================
-const disponible = opciones.length > 0;
-let motivoNoDisponible = null;
+const available = options.length > 0;
+let unavailableReason = null;
 
-if (!disponible) {
-  motivoNoDisponible = `No hay disponibilidad para ${input.servicio_detalle || 'el servicio solicitado'} en los proximos dias. Ambas trabajadoras tienen la agenda completa.`;
+if (!available) {
+  unavailableReason = `No availability for ${input.service_detail || 'the requested service'} in the coming days. Both workers have full schedules.`;
 }
 
 // ============================================================================
-// PASO 9: RESUMEN PARA BUILDAGENTPROMPT
+// STEP 9: SUMMARY FOR BUILDAGENTPROMPT
 // ============================================================================
-const resumen = opciones.length > 0
-  ? opciones.map(o => `Opcion ${o.opcion}: ${o.fecha_humana} ${o.hora_inicio}-${o.hora_fin} (Trabajadora ${o.trabajadora})`).join('\n')
-  : 'Sin disponibilidad en los proximos dias';
+const summary = options.length > 0
+  ? options.map(o => `Option ${o.option}: ${o.human_date} ${o.start_time}-${o.end_time} (Worker ${getWorkerDisplay(o.worker)})`).join('\n')
+  : 'No availability in the coming days';
 
 // ============================================================================
-// OUTPUT — Compatible con BuildAgentPrompt y FormatearRespuestaOpciones
+// OUTPUT
 // ============================================================================
 return [{
   json: {
     ...input,
 
-    // Nuevo modelo de disponibilidad
-    disponible,
-    opciones,
-    mensaje_no_disponible: motivoNoDisponible,
+    available,
+    options,
+    unavailable_message: unavailableReason,
+    recommended_slots: options,
 
-    // Alias para compatibilidad con FormatearRespuestaOpciones (lee slots_recomendados)
-    slots_recomendados: opciones,
+    date_available: options.some(o => !o.is_alternative_date),
+    requested_date: requestedDateRaw,
+    unavailable_reason: unavailableReason,
+    availability_summary: summary,
 
-    // Compatibilidad con BuildAgentPrompt
-    fecha_disponible: opciones.some(o => !o.es_fecha_alternativa),
-    fecha_solicitada: fechaSolicitadaRaw,
-    motivo_no_disponible: motivoNoDisponible,
-    resumen_disponibilidad: resumen,
-
-    // Alternativas (dias sin slot en fecha deseada)
-    alternativas: opciones.filter(o => o.es_fecha_alternativa).map(o => ({
-      fecha: o.fecha,
-      nombre_dia: o.nombre_dia
+    alternatives: options.filter(o => o.is_alternative_date).map(o => ({
+      date: o.date,
+      day_name: o.day_name
     })),
 
-    // Turno existente (para reprogramacion/agregar servicio)
-    turno_servicio_existente: turnoServicioExistente,
-    turno_id_existente: turnoIdExistente,
-    turno_precio_existente: turnoPrecioExistente,
-    turno_duracion_existente: turnoDuracionExistente,
-    turno_complejidad_existente: turnoComplejidadExistente,
-    turno_sena_pagada: turnoSenaPagada,
-    turno_trabajadora_existente: turnoTrabajadoraExistente,
-    turno_hora_original: turnoHoraExistente,
+    existing_service: existingService,
+    existing_booking_id: existingBookingId,
+    existing_booking_price: existingPrice,
+    existing_duration: existingDuration,
+    existing_complexity: existingComplexity,
+    existing_deposit: existingDeposit,
+    existing_worker: existingWorker,
+    existing_time: existingTime,
 
-    // Accion explicita
-    accion: input.accion || null,
-
-    // Metadata
-    turnos_existentes: turnos.length
+    action: input.action || null,
+    existing_bookings_count: bookings.length
   }
 }];

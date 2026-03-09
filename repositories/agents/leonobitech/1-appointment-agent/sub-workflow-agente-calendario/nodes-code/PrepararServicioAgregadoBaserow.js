@@ -1,39 +1,46 @@
 // ============================================================================
-// PREPARAR SERVICIO AGREGADO BASEROW - Agente Calendario Leraysi v4
+// PREPARE ADD SERVICE FOR BASEROW - Calendar Agent v4
 // ============================================================================
-// Bifurca en DOS caminos según tipo de operación:
+// Two paths based on operation type:
 //
-// PATH A — TURNO ADICIONAL (es_turno_adicional = true):
-//   Otra trabajadora hace SOLO el servicio nuevo → CREATE fila nueva
-//   El turno original queda INTACTO (no se modifica)
-//   La fila nueva tiene turno_padre_id para vincularlos
+// PATH A — ADDITIONAL BOOKING (is_additional_booking = true):
+//   Different worker handles ONLY the new service → CREATE new row
+//   Original booking stays INTACT (not modified)
+//   New row has parent_booking_id to link them
 //
-// PATH B — MISMA TRABAJADORA (bloque combinado):
-//   UPDATE fila existente con campos pendientes (v3: separación responsabilidades)
-//   Los datos definitivos se aplican via webhook de pago
-// ============================================================================
-// INPUT: BuscarTurnoBaserow (resultado de búsqueda con row_id)
-// OUTPUT: Campos para Baserow Create o Update + _meta
+// PATH B — SAME WORKER (combined block):
+//   UPDATE existing row with pending fields (v3: separation of responsibilities)
+//   Definitive data applied via payment webhook
 // ============================================================================
 
-// Datos del turno encontrado en Baserow (viene de BuscarTurnoBaserow / Get many rows)
-const turnoEncontrado = $input.first().json;
-
-// Datos de ParseAgentResponse
+const bookingFound = $input.first().json;
 const data = $('ParseAgentResponse').first().json;
 
-// ============================================================================
-// VALIDACIÓN
-// ============================================================================
-if (!turnoEncontrado || !turnoEncontrado.id) {
-  throw new Error('[PrepararServicioAgregadoBaserow] No se encontró el turno en Baserow. ' +
-                  `odoo_turno_id buscado: ${data.odoo_turno_id}`);
+// Worker configuration
+const WORKERS = {
+  PRIMARY: 'primary',
+  SECONDARY: 'secondary',
+};
+const WORKER_DISPLAY = {
+  primary: $env.WORKER_PRIMARY_NAME || 'Leraysi',
+  secondary: $env.WORKER_SECONDARY_NAME || 'Companera',
+};
+function getWorkerDisplay(worker) {
+  return WORKER_DISPLAY[worker] || worker;
 }
 
-const turnoRowId = turnoEncontrado.id;
+// ============================================================================
+// VALIDATION
+// ============================================================================
+if (!bookingFound || !bookingFound.id) {
+  throw new Error('[PrepararServicioAgregadoBaserow] Booking not found in Baserow. ' +
+                  `odoo_booking_id searched: ${data.odoo_booking_id}`);
+}
+
+const bookingRowId = bookingFound.id;
 
 // ============================================================================
-// FORMATEAR FECHA
+// FORMAT DATETIME
 // ============================================================================
 function formatBaserowDatetime(date) {
   const argentinaTime = new Date(date.getTime() - (3 * 60 * 60 * 1000));
@@ -47,144 +54,135 @@ function formatBaserowDatetime(date) {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offset}`;
 }
 
-const ahora = new Date();
-const expiraAt = new Date(ahora.getTime() + 15 * 60 * 1000); // 15 min para pagar
+const now = new Date();
+const expiresAt = new Date(now.getTime() + 15 * 60 * 1000); // 15 min to pay
 
 // ============================================================================
-// PATH A: TURNO ADICIONAL — CREATE fila nueva
+// PATH A: ADDITIONAL BOOKING — CREATE new row
 // ============================================================================
-if (data.es_turno_adicional) {
-  // hora_sugerida = hora del slot elegido (09:00 para JC, hora real del nuevo servicio)
-  // hora_servicio_reubicado = hora reubicada del PADRE (servicio existente), NO del nuevo
-  const horaAdicional = data.hora_sugerida || '09:00';
-  const precioNuevo = Number(data.precio) || 0;
-  const senaNuevo = Math.round(precioNuevo * 0.3);
+if (data.is_additional_booking) {
+  const additionalTime = data.suggested_time || '09:00';
+  const priceNew = Number(data.price) || 0;
+  const depositNew = Math.round(priceNew * 0.3);
 
-  // ── REUBICACIÓN PADRE (Caso C: agregar JC a servicio corto, misma trabajadora) ──
-  // Si Estrategia B calculó una hora reubicada para el servicio existente,
-  // incluir update del padre en _meta para que n8n lo aplique pre-pago (holdea el slot)
-  const horaReubicadaPadre = data.hora_servicio_reubicado || null;
-  const padreNecesitaReubicacion = horaReubicadaPadre && data.servicio_reubicado === true;
+  // ── PARENT RELOCATION (Case C: adding full day to short service, same worker) ──
+  const relocatedParentTime = data.relocated_service_time || null;
+  const parentNeedsRelocation = relocatedParentTime && data.service_relocated === true;
 
-  // Construir fila nueva (misma estructura que PrepararTurnoBaserow)
+  // Build new row (same structure as PrepararTurnoBaserow)
   const createFields = {
-    // Fecha y hora
-    fecha: data.fecha_turno
-      ? data.fecha_turno + 'T' + horaAdicional + ':00-03:00'
+    // Date and time
+    date: data.booking_date
+      ? data.booking_date + 'T' + additionalTime + ':00-03:00'
       : null,
-    hora: horaAdicional,
+    time: additionalTime,
 
-    // Relación con Lead (del turno padre)
-    // Baserow link row fields vienen como [{id, value, ...}] → extraer solo IDs [219]
-    clienta_id: Array.isArray(turnoEncontrado.clienta_id)
-      ? turnoEncontrado.clienta_id.map(c => typeof c === 'object' ? c.id : c)
+    // Lead relationship (from parent booking)
+    // Baserow link row fields come as [{id, value, ...}] → extract only IDs
+    client_id: Array.isArray(bookingFound.client_id)
+      ? bookingFound.client_id.map(c => typeof c === 'object' ? c.id : c)
       : [],
 
-    // Datos clienta (copiados del turno padre)
-    // Pueden ser lookup fields (array de objetos) o texto plano
-    nombre_clienta: Array.isArray(turnoEncontrado.nombre_clienta)
-      ? (turnoEncontrado.nombre_clienta[0]?.value || data.nombre_clienta || '')
-      : (turnoEncontrado.nombre_clienta || data.nombre_clienta || ''),
-    telefono: Array.isArray(turnoEncontrado.telefono)
-      ? (turnoEncontrado.telefono[0]?.value || data.telefono || '')
-      : (turnoEncontrado.telefono || data.telefono || ''),
-    email: Array.isArray(turnoEncontrado.email)
-      ? (turnoEncontrado.email[0]?.value || data.email || '')
-      : (turnoEncontrado.email || data.email || ''),
+    // Client data (copied from parent booking)
+    // Can be lookup fields (array of objects) or plain text
+    client_name: Array.isArray(bookingFound.client_name)
+      ? (bookingFound.client_name[0]?.value || data.client_name || '')
+      : (bookingFound.client_name || data.client_name || ''),
+    phone: Array.isArray(bookingFound.phone)
+      ? (bookingFound.phone[0]?.value || data.phone || '')
+      : (bookingFound.phone || data.phone || ''),
+    email: Array.isArray(bookingFound.email)
+      ? (bookingFound.email[0]?.value || data.email || '')
+      : (bookingFound.email || data.email || ''),
 
-    // Servicio: SOLO el nuevo (no combinado)
-    // Baserow multi-select espera array de display names: ["Pedicura"]
-    // servicio_detalle es string ("Pedicura" o "Manicura simple + Pedicura")
-    servicio: (data.servicio_detalle || '').split(' + ').filter(s => s.trim()),
-    servicio_detalle: data.servicio_detalle || '',
-    complejidad_maxima: data.complejidad_maxima || 'media',
-    trabajadora: data.trabajadora || 'Companera',
-    duracion_min: data.duracion_estimada || 60,
+    // Service: ONLY the new one (not combined)
+    service: (data.service_detail || '').split(' + ').filter(s => s.trim()),
+    service_detail: data.service_detail || '',
+    max_complexity: data.max_complexity || 'medium',
+    worker: data.worker || WORKERS.SECONDARY,
+    duration_min: data.estimated_duration || 60,
 
-    // Precio: SOLO del servicio nuevo
-    precio: precioNuevo,
-    sena_monto: senaNuevo,
-    sena_pagada: false,
+    // Price: ONLY for the new service
+    price: priceNew,
+    deposit_amount: depositNew,
+    deposit_paid: false,
 
-    // Estado
-    estado: 'pendiente_pago',
+    // State
+    state: 'pending_payment',
 
     // MercadoPago
     mp_preference_id: data.mp_preference_id || '',
-    mp_link: data.link_pago || '',
+    payment_link: data.payment_link || '',
     mp_payment_id: '',
 
     // Timestamps
-    created_at: formatBaserowDatetime(ahora),
-    expira_at: formatBaserowDatetime(expiraAt),
+    created_at: formatBaserowDatetime(now),
+    expires_at: formatBaserowDatetime(expiresAt),
 
-    // Vinculación con turno padre
-    turno_padre_id: turnoRowId,
-    // hora_pre_reubicacion: SOLO cuando el padre fue reubicado (Caso C/D) → usado por FiltrarExpirados para revert
-    hora_pre_reubicacion: padreNecesitaReubicacion ? (data.hora_original_padre || turnoEncontrado.hora || '') : '',
-    // fecha_pre_reubicacion: datetime original del padre antes de reubicación → para revert directo sin reconstruir
-    fecha_pre_reubicacion: padreNecesitaReubicacion ? (turnoEncontrado.fecha || '') : '',
+    // Link to parent booking
+    parent_booking_id: bookingRowId,
+    // pre_relocation_time: ONLY when parent was relocated → used by FiltrarExpirados for revert
+    pre_relocation_time: parentNeedsRelocation ? (data.original_parent_time || bookingFound.time || '') : '',
+    // pre_relocation_date: original parent datetime before relocation → for direct revert
+    pre_relocation_date: parentNeedsRelocation ? (bookingFound.date || '') : '',
 
     // Odoo
-    odoo_turno_id: data.odoo_turno_id || null,
+    odoo_booking_id: data.odoo_booking_id || null,
 
     // Conversation
-    conversation_id: turnoEncontrado.conversation_id || data.conversation_id || null,
+    conversation_id: bookingFound.conversation_id || data.conversation_id || null,
 
-    // Notas
-    notas: `Servicio adicional. Turno original: #${turnoRowId} ` +
-           `(${typeof turnoEncontrado.trabajadora === 'object' ? (turnoEncontrado.trabajadora?.value || 'Leraysi') : (turnoEncontrado.trabajadora || 'Leraysi')} ` +
-           `${turnoEncontrado.hora || '?'} ` +
-           `${turnoEncontrado.servicio_detalle || ''}). ` +
-           `Creado el ${ahora.toLocaleDateString('es-AR')}.` +
-           (padreNecesitaReubicacion ? ` Hora padre reubicada: ${turnoEncontrado.hora} → ${horaReubicadaPadre}.` : ''),
+    // Notes
+    notes: `Additional service. Original booking: #${bookingRowId} ` +
+           `(${getWorkerDisplay(typeof bookingFound.worker === 'object' ? (bookingFound.worker?.value || WORKERS.PRIMARY) : (bookingFound.worker || WORKERS.PRIMARY))} ` +
+           `${bookingFound.time || '?'} ` +
+           `${bookingFound.service_detail || ''}). ` +
+           `Created on ${now.toLocaleDateString('es-AR')}.` +
+           (parentNeedsRelocation ? ` Parent time relocated: ${bookingFound.time} → ${relocatedParentTime}.` : ''),
   };
 
-  console.log(`[PrepararServicioAgregadoBaserow] PATH A: TURNO ADICIONAL. ` +
-    `Padre: #${turnoRowId} (${turnoEncontrado.trabajadora}). ` +
-    `Nuevo: ${data.trabajadora} ${horaAdicional} ${data.servicio_detalle}` +
-    (padreNecesitaReubicacion ? `. Reubicar padre: ${turnoEncontrado.hora} → ${horaReubicadaPadre}` : ''));
+  console.log(`[PrepararServicioAgregadoBaserow] PATH A: ADDITIONAL BOOKING. ` +
+    `Parent: #${bookingRowId} (${getWorkerDisplay(bookingFound.worker)}). ` +
+    `New: ${getWorkerDisplay(data.worker)} ${additionalTime} ${data.service_detail}` +
+    (parentNeedsRelocation ? `. Relocate parent: ${bookingFound.time} → ${relocatedParentTime}` : ''));
 
   return [{
     json: {
-      // Flag para que el IF node en n8n sepa que es CREATE (no UPDATE)
       _operacion: 'crear_turno_adicional',
-
-      // Campos para Baserow Create Row
       ...createFields,
 
-      // Metadata para FormatearRespuestaServicioAgregado
+      // Metadata for FormatearRespuestaServicioAgregado
       _meta: {
-        accion: data.accion,
-        mensaje_para_clienta: data.mensaje_para_clienta,
+        action: data.action,
+        client_message: data.client_message,
         lead_row_id: data.lead_row_id,
-        odoo_turno_id: data.odoo_turno_id,
-        // Datos del turno padre (para desglose de seña en respuesta)
-        turno_padre_row_id: turnoRowId,
-        turno_precio_existente: turnoEncontrado.precio || 0,
-        turno_sena_pagada: turnoEncontrado.sena_monto || 0,
-        turno_servicio_existente: turnoEncontrado.servicio_detalle || '',
-        turno_hora_original: turnoEncontrado.hora || '',
-        turno_trabajadora_original: turnoEncontrado.trabajadora || 'Leraysi',
-        turno_complejidad_padre: turnoEncontrado.complejidad_maxima?.value || turnoEncontrado.complejidad_maxima || 'media',
-        // Reubicación padre (Caso C: agregar JC a servicio corto, misma trabajadora)
-        reubicar_padre: padreNecesitaReubicacion ? {
-          row_id: turnoRowId,
-          hora_nueva: horaReubicadaPadre,
-          fecha_nueva: data.fecha_turno
-            ? data.fecha_turno + 'T' + horaReubicadaPadre + ':00-03:00'
+        odoo_booking_id: data.odoo_booking_id,
+        // Parent booking data (for deposit breakdown in response)
+        parent_booking_row_id: bookingRowId,
+        existing_booking_price: bookingFound.price || 0,
+        existing_booking_deposit: bookingFound.deposit_amount || 0,
+        existing_service: bookingFound.service_detail || '',
+        existing_time: bookingFound.time || '',
+        existing_worker: bookingFound.worker || WORKERS.PRIMARY,
+        existing_complexity: bookingFound.max_complexity?.value || bookingFound.max_complexity || 'medium',
+        // Parent relocation (Case C)
+        relocate_parent: parentNeedsRelocation ? {
+          row_id: bookingRowId,
+          new_time: relocatedParentTime,
+          new_date: data.booking_date
+            ? data.booking_date + 'T' + relocatedParentTime + ':00-03:00'
             : null,
-          hora_original: data.hora_original_padre || turnoEncontrado.hora || '',
+          original_time: data.original_parent_time || bookingFound.time || '',
         } : null,
-        // Datos definitivos (para turno adicional son los mismos, no hay split)
-        datos_definitivos: {
-          servicio: data.servicio,
-          servicio_detalle: data.servicio_detalle || '',
-          hora: horaAdicional,
-          duracion_min: data.duracion_estimada || 60,
-          complejidad_maxima: data.complejidad_maxima || 'media',
-          precio: precioNuevo,
-          sena_monto: senaNuevo,
+        // Definitive data (for additional booking they're the same, no split)
+        definitive_data: {
+          service: data.service,
+          service_detail: data.service_detail || '',
+          time: additionalTime,
+          duration_min: data.estimated_duration || 60,
+          max_complexity: data.max_complexity || 'medium',
+          price: priceNew,
+          deposit_amount: depositNew,
         },
       }
     }
@@ -192,53 +190,53 @@ if (data.es_turno_adicional) {
 }
 
 // ============================================================================
-// PATH B: MISMA TRABAJADORA — UPDATE fila existente (v3: separación responsabilidades)
+// PATH B: SAME WORKER — UPDATE existing row (v3: separation of responsibilities)
 // ============================================================================
-const horaDefinitiva = data.hora_sugerida || turnoEncontrado.hora || '09:00';
-const precioDefinitivo = data.precio;
-const senaMonto = Math.round((precioDefinitivo || 0) * 0.3);
+const definitiveTime = data.suggested_time || bookingFound.time || '09:00';
+const definitivePrice = data.price;
+const depositAmount = Math.round((definitivePrice || 0) * 0.3);
 
-const datosDefinitivos = {
-  servicio: data.servicio,
-  servicio_detalle: data.servicio_detalle,
-  hora: horaDefinitiva,
-  duracion_min: data.duracion_estimada || 60,
-  complejidad_maxima: data.complejidad_maxima || 'media',
-  precio: precioDefinitivo,
-  sena_monto: senaMonto,
+const definitiveData = {
+  service: data.service,
+  service_detail: data.service_detail,
+  time: definitiveTime,
+  duration_min: data.estimated_duration || 60,
+  max_complexity: data.max_complexity || 'medium',
+  price: definitivePrice,
+  deposit_amount: depositAmount,
 };
 
 const updateFields = {
-  sena_pagada: false,
-  estado: 'pendiente_pago',
+  deposit_paid: false,
+  state: 'pending_payment',
   mp_preference_id: data.mp_preference_id || '',
-  mp_link: data.link_pago || '',
-  updated_at: formatBaserowDatetime(ahora),
-  expira_at: formatBaserowDatetime(expiraAt),
-  notas: `Servicio agregado el ${ahora.toLocaleDateString('es-AR')}. ` +
-         `Servicios: ${data.servicio_detalle}. ` +
-         `Total: $${precioDefinitivo?.toLocaleString('es-AR') || 0}. ` +
-         `Seña diferencial: $${senaMonto.toLocaleString('es-AR')}. ` +
-         `Pendiente de pago.`
+  payment_link: data.payment_link || '',
+  updated_at: formatBaserowDatetime(now),
+  expires_at: formatBaserowDatetime(expiresAt),
+  notes: `Service added on ${now.toLocaleDateString('es-AR')}. ` +
+         `Services: ${data.service_detail}. ` +
+         `Total: $${definitivePrice?.toLocaleString('es-AR') || 0}. ` +
+         `Differential deposit: $${depositAmount.toLocaleString('es-AR')}. ` +
+         `Pending payment.`
 };
 
-console.log(`[PrepararServicioAgregadoBaserow] PATH B: UPDATE misma trabajadora. ` +
-  `Row: #${turnoRowId}. Servicios: ${data.servicio_detalle}`);
+console.log(`[PrepararServicioAgregadoBaserow] PATH B: UPDATE same worker. ` +
+  `Row: #${bookingRowId}. Services: ${data.service_detail}`);
 
 return [{
   json: {
     _operacion: 'actualizar_turno_existente',
-    row_id: turnoRowId,
+    row_id: bookingRowId,
     ...updateFields,
     _meta: {
-      accion: data.accion,
-      mensaje_para_clienta: data.mensaje_para_clienta,
+      action: data.action,
+      client_message: data.client_message,
       lead_row_id: data.lead_row_id,
-      odoo_turno_id: data.odoo_turno_id,
-      turno_precio_existente: turnoEncontrado.precio || 0,
-      turno_sena_pagada: turnoEncontrado.sena_monto || 0,
-      turno_servicio_existente: turnoEncontrado.servicio_detalle || '',
-      datos_definitivos: datosDefinitivos,
+      odoo_booking_id: data.odoo_booking_id,
+      existing_booking_price: bookingFound.price || 0,
+      existing_booking_deposit: bookingFound.deposit_amount || 0,
+      existing_service: bookingFound.service_detail || '',
+      definitive_data: definitiveData,
     }
   }
 }];

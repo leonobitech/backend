@@ -1,30 +1,30 @@
 // ============================================================================
-// FORMATEAR RESPUESTA EXITO - Agente Calendario Leraysi
+// FORMAT SUCCESS RESPONSE - Calendar Agent
 // ============================================================================
-// Construye la respuesta final exitosa para devolver al Master Agent
+// Builds the final success response to return to Master Agent
 // ============================================================================
-// NODO: FormatearRespuestaExito (Code)
-// INPUT: CrearTurnoBaserow (respuesta de Baserow con ID del row creado)
-// OUTPUT: Respuesta estructurada para Return
+// NODE: FormatearRespuestaExito (Code)
+// INPUT: CrearTurnoBaserow (Baserow response with created row ID)
+// OUTPUT: Structured response for Return
 // ============================================================================
 
 const baserowResponse = $input.first().json;
 
-// Recuperar metadata del nodo anterior (PrepararTurnoBaserow)
+// Retrieve metadata from previous node (PrepararTurnoBaserow)
 const metaData = $('PrepararTurnoBaserow').first().json._meta;
 
-// El ID del turno creado en Baserow
-const turnoRowId = baserowResponse.id;
+// The booking row ID created in Baserow
+const bookingRowId = baserowResponse.id;
 
 // ============================================================================
-// OUTPUT PARA MASTER AGENT
+// OUTPUT FOR MASTER AGENT
 // ============================================================================
 return [{
   json: {
     success: true,
-    accion: metaData.accion,
-    turno_id: turnoRowId,
-    mensaje_para_clienta: metaData.mensaje_para_clienta,
+    action: metaData.action,
+    booking_id: bookingRowId,
+    client_message: metaData.client_message,
     lead_row_id: metaData.lead_row_id
   }
 }];

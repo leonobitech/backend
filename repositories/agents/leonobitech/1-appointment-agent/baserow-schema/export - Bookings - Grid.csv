@@ -1,0 +1,1 @@
+﻿id,date,time,worker,state,duration_min,client_name,service,pre_relocation_time,pre_relocation_date,client_id,phone,email,service_detail,max_complexity,price,deposit_amount,deposit_paid,parent_booking_id,mp_payment_id,mp_link,mp_preference_id,odoo_event_id,conversation_id,odoo_turno_id,created_at,expira_at,confirmado_at,updated_at,notas

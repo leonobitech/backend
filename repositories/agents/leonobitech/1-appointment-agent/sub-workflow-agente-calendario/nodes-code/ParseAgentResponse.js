@@ -1,9 +1,17 @@
 // ============================================================================
-// PARSE AGENT RESPONSE - Agente Calendario Leraysi
+// PARSE AGENT RESPONSE - Calendar Agent
+// ============================================================================
+// Parses LLM output JSON, maps status to action for downstream routing
 // ============================================================================
 const input = $("AnalizarDisponibilidad").first().json;
 const buildPrompt = $("BuildAgentPrompt").first().json;
 const agentOutput = $input.first().json.output;
+
+// Worker configuration
+const WORKERS = {
+  PRIMARY: 'primary',
+  SECONDARY: 'secondary',
+};
 
 function extractJSON(text) {
   try {
@@ -23,255 +31,257 @@ function extractJSON(text) {
     } catch (e) {}
   }
   return {
-    estado: "error",
-    mensaje_para_clienta: "Error procesando la solicitud de turno",
+    status: "error",
+    client_message: "Error procesando la solicitud de turno",
   };
 }
 
 const llmResponse = extractJSON(agentOutput);
 
-const ESTADO_A_ACCION = {
-  turno_creado: "turno_creado",
-  turno_adicional_creado: "servicio_agregado", // Rutea al mismo branch; IF_TurnoAdicional bifurca después
-  fecha_no_disponible: "sin_disponibilidad",
-  turno_reprogramado: "turno_reprogramado",
-  servicio_agregado: "servicio_agregado",
+// Map LLM status → internal action for routing
+// Accept both old Spanish and new English status values
+const STATUS_TO_ACTION = {
+  // New English statuses (from updated system prompt)
+  booking_created: "booking_created",
+  additional_booking_created: "service_added",
+  date_unavailable: "no_availability",
+  booking_rescheduled: "booking_rescheduled",
+  service_added: "service_added",
   error: "error",
+  // Old Spanish statuses (backwards compat)
+  turno_creado: "booking_created",
+  turno_adicional_creado: "service_added",
+  fecha_no_disponible: "no_availability",
+  turno_reprogramado: "booking_rescheduled",
+  servicio_agregado: "service_added",
 };
-const accion =
-  ESTADO_A_ACCION[llmResponse.estado] || llmResponse.estado || "error";
 
-let resultado = {
-  clienta_id: input.clienta_id,
-  nombre_clienta: input.nombre_clienta,
-  telefono: input.telefono,
+const llmStatus = llmResponse.status || llmResponse.estado || "error";
+const action = STATUS_TO_ACTION[llmStatus] || llmStatus || "error";
+
+// Get message from LLM (accept both field names)
+const clientMessage = llmResponse.client_message || llmResponse.mensaje_para_clienta;
+
+let result = {
+  client_id: input.client_id,
+  client_name: input.client_name,
+  phone: input.phone,
   email: input.email || "",
   lead_row_id: input.lead_row_id,
   conversation_id: input.conversation_id || null,
-  precio: input.precio,
-  servicio: input.servicio,
-  servicio_detalle: input.servicio_detalle || "",
-  duracion_estimada: input.duracion_estimada || 60,
-  complejidad_maxima: input.complejidad_maxima || "media",
-  trabajadora: buildPrompt._precalculado?.trabajadora || input.turno_trabajadora_existente || 'Leraysi',
-  accion: accion,
-  mensaje_para_clienta: llmResponse.mensaje_para_clienta,
-  alternativas: llmResponse.alternativas || [],
+  price: input.price,
+  service: input.service,
+  service_detail: input.service_detail || "",
+  estimated_duration: input.estimated_duration || 60,
+  max_complexity: input.max_complexity || "medium",
+  worker: buildPrompt._precalculated?.worker || input.existing_worker || WORKERS.PRIMARY,
+  action: action,
+  client_message: clientMessage,
+  alternatives: llmResponse.alternatives || llmResponse.alternativas || [],
 };
 
-// CASO: TURNO CREADO
-if (llmResponse.estado === "turno_creado") {
+// CASE: BOOKING CREATED
+if (llmStatus === "booking_created" || llmStatus === "turno_creado") {
   const mpPreferenceId =
     llmResponse.mp_preference_id ||
+    llmResponse.payment_link?.match(/preference-id=([^&\s]+)/)?.[1] ||
     llmResponse.link_pago?.match(/preference-id=([^&\s]+)/)?.[1] ||
     "";
-  const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || "").split(" ");
-  resultado = {
-    ...resultado,
-    fecha_turno: fechaTurno || input.fecha_solicitada,
-    hora_sugerida: horaTurno || input.hora_deseada || "09:00",
-    odoo_turno_id: llmResponse.turno_id,
+  const datetime = llmResponse.datetime || llmResponse.fecha_hora || "";
+  const [bookingDate, bookingTime] = datetime.split(" ");
+  result = {
+    ...result,
+    booking_date: bookingDate || input.requested_date,
+    suggested_time: bookingTime || input.requested_time || "09:00",
+    odoo_booking_id: llmResponse.booking_id || llmResponse.turno_id,
     mp_preference_id: mpPreferenceId,
-    link_pago: llmResponse.link_pago || "",
-    estado_turno: "pendiente_pago",
-    sena_monto: llmResponse.sena || Math.round((input.precio || 0) * 0.3),
+    payment_link: llmResponse.payment_link || llmResponse.link_pago || "",
+    booking_state: "pending_payment",
+    deposit_amount: llmResponse.deposit || llmResponse.sena || Math.round((input.price || 0) * 0.3),
   };
 }
 
-// CASO: FECHA NO DISPONIBLE
-if (llmResponse.estado === "fecha_no_disponible") {
-  resultado = {
-    ...resultado,
-    fecha_solicitada: llmResponse.fecha_solicitada || input.fecha_solicitada,
-    motivo_no_disponible: llmResponse.motivo,
+// CASE: DATE UNAVAILABLE
+if (llmStatus === "date_unavailable" || llmStatus === "fecha_no_disponible") {
+  result = {
+    ...result,
+    requested_date: llmResponse.requested_date || llmResponse.fecha_solicitada || input.requested_date,
+    unavailable_reason: llmResponse.reason || llmResponse.motivo,
   };
 }
 
-// CASO: TURNO REPROGRAMADO
-if (llmResponse.estado === "turno_reprogramado") {
-  const [fechaNueva, horaNueva] = (llmResponse.fecha_hora_nueva || "").split(
-    " ",
-  );
+// CASE: BOOKING RESCHEDULED
+if (llmStatus === "booking_rescheduled" || llmStatus === "turno_reprogramado") {
+  const newDatetime = llmResponse.new_datetime || llmResponse.fecha_hora_nueva || "";
+  const [newDate, newTime] = newDatetime.split(" ");
   const mpPreferenceId =
     llmResponse.mp_preference_id ||
+    llmResponse.payment_link?.match(/preference-id=([^&\s]+)/)?.[1] ||
     llmResponse.link_pago?.match(/preference-id=([^&\s]+)/)?.[1] ||
     "";
-  resultado = {
-    ...resultado,
-    odoo_turno_id: llmResponse.odoo_turno_id,
-    turno_id_anterior: llmResponse.turno_id_anterior,
-    turno_id_nuevo: llmResponse.turno_id_nuevo,
-    fecha_turno: fechaNueva,
-    hora_sugerida: horaNueva || "09:00",
-    fecha_hora_anterior: llmResponse.fecha_hora_anterior,
-    fecha_hora_nueva: llmResponse.fecha_hora_nueva,
+  result = {
+    ...result,
+    odoo_booking_id: llmResponse.odoo_booking_id || llmResponse.odoo_turno_id,
+    previous_booking_id: llmResponse.previous_booking_id || llmResponse.turno_id_anterior,
+    new_booking_id: llmResponse.new_booking_id || llmResponse.turno_id_nuevo,
+    booking_date: newDate,
+    suggested_time: newTime || "09:00",
+    previous_datetime: llmResponse.previous_datetime || llmResponse.fecha_hora_anterior,
+    new_datetime: newDatetime,
     mp_preference_id: mpPreferenceId,
-    link_pago: llmResponse.link_pago || null,
-    calendario_actualizado: true,
+    payment_link: llmResponse.payment_link || llmResponse.link_pago || null,
+    calendar_updated: true,
     calendar_accept_url: llmResponse.calendar_accept_url || null,
-    motivo_reprogramacion: llmResponse.motivo || "Solicitud de la clienta",
+    reschedule_reason: llmResponse.reason || llmResponse.motivo || "Solicitud de la clienta",
   };
 }
 
-// CASO: TURNO ADICIONAL CREADO (otra trabajadora, fila nueva en Baserow)
-if (llmResponse.estado === "turno_adicional_creado") {
-  const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || "").split(" ");
+// CASE: ADDITIONAL BOOKING CREATED (different worker, new Baserow row)
+if (llmStatus === "additional_booking_created" || llmStatus === "turno_adicional_creado") {
+  const datetime = llmResponse.datetime || llmResponse.fecha_hora || "";
+  const [bookingDate, bookingTime] = datetime.split(" ");
   const mpPreferenceId =
     llmResponse.mp_preference_id ||
+    llmResponse.payment_link?.match(/preference-id=([^&\s]+)/)?.[1] ||
     llmResponse.link_pago?.match(/preference-id=([^&\s]+)/)?.[1] ||
     "";
-  // Solo el servicio nuevo (NO combinado con el existente)
-  const precioNuevo = Number(llmResponse.precio) || Number(input.precio) || 0;
-  resultado = {
-    ...resultado,
-    odoo_turno_id: llmResponse.turno_id,
-    // Para buscar el turno PADRE en Baserow (BuscarTurnoServicioAgregado filtra por odoo_turno_id)
-    odoo_turno_id_padre: llmResponse.turno_id_padre || buildPrompt._precalculado?.turno_id_padre || null,
-    turno_id_padre: llmResponse.turno_id_padre || buildPrompt._precalculado?.turno_id_padre || null,
-    fecha_turno: fechaTurno || input.fecha_solicitada,
-    hora_sugerida: horaTurno || input.hora_deseada || "09:00",
-    // Solo servicio nuevo (no combinado)
-    servicio: llmResponse.servicio || input.servicio,
-    servicio_detalle: llmResponse.servicio_detalle || input.servicio_detalle || "",
-    precio: precioNuevo,
-    duracion_estimada: llmResponse.duracion_estimada || input.duracion_estimada || 60,
-    complejidad_maxima: llmResponse.complejidad_maxima || input.complejidad_maxima || "media",
-    sena_monto: llmResponse.sena || Math.round(precioNuevo * 0.3),
+  const priceNew = Number(llmResponse.price || llmResponse.precio) || Number(input.price) || 0;
+  result = {
+    ...result,
+    odoo_booking_id: llmResponse.booking_id || llmResponse.turno_id,
+    // For finding the PARENT booking in Baserow
+    odoo_parent_booking_id: llmResponse.parent_booking_id || llmResponse.turno_id_padre || buildPrompt._precalculated?.parent_booking_id || null,
+    parent_booking_id: llmResponse.parent_booking_id || llmResponse.turno_id_padre || buildPrompt._precalculated?.parent_booking_id || null,
+    booking_date: bookingDate || input.requested_date,
+    suggested_time: bookingTime || input.requested_time || "09:00",
+    service: llmResponse.service || llmResponse.servicio || input.service,
+    service_detail: llmResponse.service_detail || llmResponse.servicio_detalle || input.service_detail || "",
+    price: priceNew,
+    estimated_duration: llmResponse.estimated_duration || llmResponse.duracion_estimada || input.estimated_duration || 60,
+    max_complexity: llmResponse.max_complexity || llmResponse.complejidad_maxima || input.max_complexity || "medium",
+    deposit_amount: llmResponse.deposit || llmResponse.sena || Math.round(priceNew * 0.3),
     mp_preference_id: mpPreferenceId,
-    link_pago: llmResponse.link_pago || "",
-    estado_turno: "pendiente_pago",
-    trabajadora: llmResponse.trabajadora || buildPrompt._precalculado?.trabajadora || "Companera",
-    // Datos del turno padre (para contexto)
-    turno_servicio_existente: input.turno_servicio_existente || "",
-    turno_trabajadora_existente: input.turno_trabajadora_existente || "Leraysi",
-    turno_precio_existente: input.turno_precio_existente || 0,
-    es_turno_adicional: true,
-    // Reubicación padre (Estrategia B: agregar JC a cortos existentes, misma trabajadora)
-    hora_servicio_reubicado: buildPrompt._precalculado?.hora_servicio_existente || null,
-    servicio_reubicado: buildPrompt._precalculado?.servicio_reubicado || false,
-    hora_original_padre: buildPrompt._precalculado?.hora_original || null,
+    payment_link: llmResponse.payment_link || llmResponse.link_pago || "",
+    booking_state: "pending_payment",
+    worker: llmResponse.worker || llmResponse.trabajadora || buildPrompt._precalculated?.worker || WORKERS.SECONDARY,
+    // Parent booking data (for context)
+    existing_service: input.existing_service || "",
+    existing_worker: input.existing_worker || WORKERS.PRIMARY,
+    existing_booking_price: input.existing_booking_price || 0,
+    is_additional_booking: true,
+    // Parent relocation (Strategy B: adding full day to short existing, same worker)
+    relocated_service_time: buildPrompt._precalculated?.existing_service_time || null,
+    service_relocated: buildPrompt._precalculated?.service_relocated || false,
+    original_parent_time: buildPrompt._precalculated?.original_time || null,
   };
 }
 
-// CASO: SERVICIO AGREGADO
-if (llmResponse.estado === "servicio_agregado") {
-  const [fechaTurno, horaTurno] = (llmResponse.fecha_hora || "").split(" ");
+// CASE: SERVICE ADDED (same worker, update existing row)
+if (llmStatus === "service_added" || llmStatus === "servicio_agregado") {
+  const datetime = llmResponse.datetime || llmResponse.fecha_hora || "";
+  const [bookingDate, bookingTime] = datetime.split(" ");
   const mpPreferenceId =
     llmResponse.mp_preference_id ||
+    llmResponse.payment_link?.match(/preference-id=([^&\s]+)/)?.[1] ||
     llmResponse.link_pago?.match(/preference-id=([^&\s]+)/)?.[1] ||
     "";
-  // Usar servicios_combinados del MCP tool (fuente más confiable, lee de Odoo)
-  // Fallback: reconstruir desde turno_servicio_existente + servicio nuevo
-  let servicioDetalleCombinado = "";
-  let serviciosArray = [];
-  if (llmResponse.servicios_combinados) {
-    servicioDetalleCombinado = llmResponse.servicios_combinados;
-    serviciosArray = servicioDetalleCombinado.split(" + ").map(s => s.trim()).filter(Boolean);
+  // Use combined services from MCP tool (most reliable, reads from Odoo)
+  let combinedServiceDetail = "";
+  let servicesArray = [];
+  const combinedFromLLM = llmResponse.combined_services || llmResponse.servicios_combinados;
+  if (combinedFromLLM) {
+    combinedServiceDetail = combinedFromLLM;
+    servicesArray = combinedServiceDetail.split(" + ").map(s => s.trim()).filter(Boolean);
   } else {
-    const servicioExistente = input.turno_servicio_existente || "";
-    const serviciosInputArray = Array.isArray(input.servicio)
-      ? input.servicio
-      : [input.servicio];
-    const servicioExistenteNorm = servicioExistente.toLowerCase().trim();
-    const servicioNuevoRaw =
-      serviciosInputArray.find(
-        (s) => s && s.toLowerCase().trim() !== servicioExistenteNorm,
-      ) ||
-      serviciosInputArray[serviciosInputArray.length - 1] ||
-      "";
-    const servicioNuevo = servicioNuevoRaw
-      ? servicioNuevoRaw.charAt(0).toUpperCase() +
-        servicioNuevoRaw.slice(1).replace(/_/g, " ")
+    const existingSvc = input.existing_service || "";
+    const inputServicesArr = Array.isArray(input.service) ? input.service : [input.service];
+    const existingNorm = existingSvc.toLowerCase().trim();
+    const newSvcRaw =
+      inputServicesArr.find((s) => s && s.toLowerCase().trim() !== existingNorm) ||
+      inputServicesArr[inputServicesArr.length - 1] || "";
+    const newSvc = newSvcRaw
+      ? newSvcRaw.charAt(0).toUpperCase() + newSvcRaw.slice(1).replace(/_/g, " ")
       : "";
-    serviciosArray = [];
-    if (servicioExistente) serviciosArray.push(servicioExistente);
-    if (
-      servicioNuevo &&
-      servicioNuevo.toLowerCase() !== servicioExistente.toLowerCase()
-    ) {
-      serviciosArray.push(servicioNuevo);
+    servicesArray = [];
+    if (existingSvc) servicesArray.push(existingSvc);
+    if (newSvc && newSvc.toLowerCase() !== existingSvc.toLowerCase()) {
+      servicesArray.push(newSvc);
     }
-    servicioDetalleCombinado = serviciosArray.join(" + ");
+    combinedServiceDetail = servicesArray.join(" + ");
   }
-  const fechaTurnoFinal =
-    fechaTurno ||
-    (input.turno_fecha?.includes("T")
-      ? input.turno_fecha.split("T")[0]
-      : input.turno_fecha?.split(" ")[0]) ||
+  const bookingDateFinal =
+    bookingDate ||
+    (input.booking_date?.includes("T")
+      ? input.booking_date.split("T")[0]
+      : input.booking_date?.split(" ")[0]) ||
     "";
-  const horaTurnoFinal =
-    horaTurno ||
-    (input.turno_fecha?.includes("T")
-      ? input.turno_fecha.split("T")[1]?.slice(0, 5)
-      : input.turno_fecha?.split(" ")[1]) ||
+  const bookingTimeFinal =
+    bookingTime ||
+    (input.booking_date?.includes("T")
+      ? input.booking_date.split("T")[1]?.slice(0, 5)
+      : input.booking_date?.split(" ")[1]) ||
     "09:00";
-  // Safety net: precio determinístico (ParseInput) sobre precio del LLM
-  const precioExDet = Number(input.turno_precio_existente) || 0;
-  const precioNuevoDet = Number(input.precio) || 0;
-  const precioTotalDet = precioExDet + precioNuevoDet;
-  const precioTotalFinal = precioTotalDet > 0 ? precioTotalDet : (llmResponse.precio_total || 0);
-  if (llmResponse.precio_total && precioTotalDet > 0 && llmResponse.precio_total !== precioTotalDet) {
-    console.log(`[ParseAgentResponse] 🔧 Precio servicio_agregado corregido: LLM=$${llmResponse.precio_total}, det=$${precioTotalDet}`);
+  // Safety net: deterministic price over LLM price
+  const existPriceDet = Number(input.existing_booking_price) || 0;
+  const newPriceDet = Number(input.price) || 0;
+  const totalPriceDet = existPriceDet + newPriceDet;
+  const llmTotalPrice = llmResponse.total_price || llmResponse.precio_total || 0;
+  const totalPriceFinal = totalPriceDet > 0 ? totalPriceDet : llmTotalPrice;
+  if (llmTotalPrice && totalPriceDet > 0 && llmTotalPrice !== totalPriceDet) {
+    console.log(`[ParseAgentResponse] 🔧 Price service_added corrected: LLM=$${llmTotalPrice}, det=$${totalPriceDet}`);
   }
-  resultado = {
-    ...resultado,
-    odoo_turno_id: llmResponse.turno_id,
-    fecha_turno: fechaTurnoFinal,
-    hora_sugerida: horaTurnoFinal,
-    servicio: serviciosArray,
-    servicio_detalle: servicioDetalleCombinado,
-    precio: precioTotalFinal,
-    duracion_estimada:
-      llmResponse.duracion_estimada || input.duracion_estimada || 60,
-    complejidad_maxima:
-      llmResponse.complejidad_maxima || input.complejidad_maxima || "media",
-    sena_monto:
-      llmResponse.sena || Math.round((precioTotalFinal || 0) * 0.3),
+  result = {
+    ...result,
+    odoo_booking_id: llmResponse.booking_id || llmResponse.turno_id,
+    booking_date: bookingDateFinal,
+    suggested_time: bookingTimeFinal,
+    service: servicesArray,
+    service_detail: combinedServiceDetail,
+    price: totalPriceFinal,
+    estimated_duration: llmResponse.estimated_duration || llmResponse.duracion_estimada || input.estimated_duration || 60,
+    max_complexity: llmResponse.max_complexity || llmResponse.complejidad_maxima || input.max_complexity || "medium",
+    deposit_amount: llmResponse.deposit || llmResponse.sena || Math.round((totalPriceFinal || 0) * 0.3),
     mp_preference_id: mpPreferenceId,
-    link_pago: llmResponse.link_pago || "",
-    estado_turno: "pendiente_pago",
+    payment_link: llmResponse.payment_link || llmResponse.link_pago || "",
+    booking_state: "pending_payment",
   };
 }
 
-// ── OVERRIDE: _precalculado.es_turno_adicional es la autoridad (no el LLM) ──
-// SIEMPRE que _precalculado marque turno adicional, forzar datos correctos:
-// - es_turno_adicional = true (para PATH A en PrepararServicioAgregadoBaserow)
-// - servicio/precio = solo el servicio NUEVO (el LLM contamina con datos combinados de la tool)
-// - hora = la del _precalculado (ventana de proceso), no la del LLM
-if (buildPrompt._precalculado?.es_turno_adicional === true) {
-  console.log(`[ParseAgentResponse] 🔧 Override turno adicional: forzando datos del servicio nuevo (LLM estado="${llmResponse.estado}")`);
-  resultado.es_turno_adicional = true;
+// ── OVERRIDE: _precalculated.is_additional_booking is the authority (not the LLM) ──
+if (buildPrompt._precalculated?.is_additional_booking === true) {
+  console.log(`[ParseAgentResponse] 🔧 Override additional booking: forcing new service data (LLM status="${llmStatus}")`);
+  result.is_additional_booking = true;
 
-  // Reset servicio/precio al servicio NUEVO solamente (LLM/tool devuelven combinados)
-  resultado.servicio = input.servicio;
-  resultado.servicio_detalle = input.servicio_detalle || '';
-  const _precioNuevoOverride = Number(input.precio) || 0;
-  resultado.precio = _precioNuevoOverride;
-  resultado.sena_monto = Math.round(_precioNuevoOverride * 0.3);
-  resultado.duracion_estimada = input.duracion_estimada || 60;
-  resultado.complejidad_maxima = input.complejidad_maxima || 'media';
+  // Reset service/price to NEW service only (LLM/tool return combined)
+  result.service = input.service;
+  result.service_detail = input.service_detail || '';
+  const _priceNewOverride = Number(input.price) || 0;
+  result.price = _priceNewOverride;
+  result.deposit_amount = Math.round(_priceNewOverride * 0.3);
+  result.estimated_duration = input.estimated_duration || 60;
+  result.max_complexity = input.max_complexity || 'medium';
 
-  // Hora: usar _precalculado (ventana de proceso real), no la del LLM
-  resultado.hora_sugerida = buildPrompt._precalculado?.hora || resultado.hora_sugerida;
+  // Time: use _precalculated (real process window), not LLM
+  result.suggested_time = buildPrompt._precalculated?.time || result.suggested_time;
 
-  // Propagar campos de reubicación
-  resultado.hora_servicio_reubicado = resultado.hora_servicio_reubicado || buildPrompt._precalculado?.hora_servicio_existente || null;
-  if (resultado.servicio_reubicado === undefined) {
-    resultado.servicio_reubicado = buildPrompt._precalculado?.servicio_reubicado || false;
+  // Propagate relocation fields
+  result.relocated_service_time = result.relocated_service_time || buildPrompt._precalculated?.existing_service_time || null;
+  if (result.service_relocated === undefined) {
+    result.service_relocated = buildPrompt._precalculated?.service_relocated || false;
   }
-  resultado.hora_original_padre = resultado.hora_original_padre || buildPrompt._precalculado?.hora_original || null;
+  result.original_parent_time = result.original_parent_time || buildPrompt._precalculated?.original_time || null;
 
-  // Datos del turno padre
-  resultado.turno_id_padre = resultado.turno_id_padre || buildPrompt._precalculado?.turno_id_padre || null;
-  resultado.odoo_turno_id_padre = resultado.turno_id_padre;
+  // Parent booking data
+  result.parent_booking_id = result.parent_booking_id || buildPrompt._precalculated?.parent_booking_id || null;
+  result.odoo_parent_booking_id = result.parent_booking_id;
 
-  // Trabajadora del _precalculado (más confiable que LLM)
-  resultado.trabajadora = buildPrompt._precalculado?.trabajadora || resultado.trabajadora || input.turno_trabajadora_existente || "Leraysi";
+  // Worker from _precalculated (more reliable than LLM)
+  result.worker = buildPrompt._precalculated?.worker || result.worker || input.existing_worker || WORKERS.PRIMARY;
 }
 
-// Normalizar hora_sugerida a HH:MM (la LLM puede devolver "15:00:00" con segundos)
-if (resultado.hora_sugerida) {
-  resultado.hora_sugerida = resultado.hora_sugerida.split(':').slice(0, 2).join(':');
+// Normalize suggested_time to HH:MM (LLM may return "15:00:00" with seconds)
+if (result.suggested_time) {
+  result.suggested_time = result.suggested_time.split(':').slice(0, 2).join(':');
 }
 
-return [{ json: resultado }];
+return [{ json: result }];

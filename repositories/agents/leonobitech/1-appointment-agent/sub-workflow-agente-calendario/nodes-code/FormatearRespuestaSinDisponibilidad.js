@@ -1,11 +1,11 @@
 // ============================================================================
-// FORMATEAR RESPUESTA SIN DISPONIBILIDAD - Agente Calendario Leraysi
+// FORMAT NO AVAILABILITY RESPONSE - Calendar Agent
 // ============================================================================
-// Formatea la respuesta cuando no hay disponibilidad para el turno solicitado
+// Formats the response when there is no availability for the requested booking
 // ============================================================================
-// NODO: FormatearRespuestaSinDisponibilidad (Code)
+// NODE: FormatearRespuestaSinDisponibilidad (Code)
 // INPUT: ParseAgentResponse via IF_Agendar (False Branch)
-// OUTPUT: Respuesta formateada para el workflow principal
+// OUTPUT: Formatted response for the main workflow
 // ============================================================================
 
 const data = $input.first().json;
@@ -13,13 +13,12 @@ const data = $input.first().json;
 // ============================================================================
 // OUTPUT
 // ============================================================================
-
 return [{
   json: {
     success: false,
-    accion: data.accion || 'sin_disponibilidad',
-    mensaje_para_clienta: data.mensaje_para_clienta,
+    action: data.action || 'no_availability',
+    client_message: data.client_message,
     lead_row_id: data.lead_row_id,
-    alternativas: data.alternativas || []
+    alternatives: data.alternatives || []
   }
 }];

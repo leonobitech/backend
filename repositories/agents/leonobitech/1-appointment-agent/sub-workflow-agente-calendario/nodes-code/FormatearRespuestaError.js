@@ -1,49 +1,49 @@
 // ============================================================================
-// FORMATEAR RESPUESTA ERROR - Agente Calendario Leraysi
+// FORMAT ERROR RESPONSE - Calendar Agent
 // ============================================================================
-// Maneja errores y devuelve respuesta estructurada al Master Agent
+// Handles errors and returns structured response to Master Agent
 // ============================================================================
-// NODO: FormatearRespuestaError (Code)
+// NODE: FormatearRespuestaError (Code)
 // INPUT: SwitchAccion (fallback/error branch)
-// OUTPUT: Respuesta de error estructurada para Return
+// OUTPUT: Structured error response for Return
 // ============================================================================
 
 const input = $input.first().json;
 
 // ============================================================================
-// CONSTRUIR MENSAJE DE ERROR
+// BUILD ERROR MESSAGE
 // ============================================================================
-let errorMessage = 'Error desconocido en el flujo del calendario';
+let errorMessage = 'Unknown error in calendar workflow';
 let errorDetails = {};
 
-// Error del Switch (tool no reconocida)
+// Error from Switch (unrecognized tool)
 if (input.error) {
   errorMessage = input.error;
 }
 
-// Contexto adicional
+// Additional context
 if (input.tool) {
-  errorDetails.tool_intentada = input.tool;
+  errorDetails.attempted_tool = input.tool;
 }
 
 if (input.tools_validas) {
-  errorDetails.tools_validas = input.tools_validas;
+  errorDetails.valid_tools = input.tools_validas;
 }
 
-// Datos originales para debugging
+// Original data for debugging
 if (input.original_input) {
   errorDetails.original_input = input.original_input;
 }
 
 // ============================================================================
-// OUTPUT PARA MASTER AGENT
+// OUTPUT FOR MASTER AGENT
 // ============================================================================
 return [{
   json: {
     success: false,
-    accion: 'error',
+    action: 'error',
     error: errorMessage,
-    detalles: errorDetails,
-    mensaje_para_clienta: 'Lo siento, hubo un problema procesando tu solicitud de turno. Por favor, intenta de nuevo o contacta directamente al salón.'
+    details: errorDetails,
+    client_message: 'Lo siento, hubo un problema procesando tu solicitud de turno. Por favor, intenta de nuevo o contacta directamente al salon.'
   }
 }];
