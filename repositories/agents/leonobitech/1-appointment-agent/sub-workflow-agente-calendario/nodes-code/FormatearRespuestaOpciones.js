@@ -1,238 +1,253 @@
 // ============================================================================
-// FORMATEAR RESPUESTA OPCIONES - Agente Calendario Leraysi
+// FORMAT OPTIONS RESPONSE - Calendar Agent
 // ============================================================================
-// INPUT: AnalizarDisponibilidad (con slots_recomendados[])
-// OUTPUT: Respuesta formateada con opciones de horario para la clienta
-// Se usa solo en modo "consultar_disponibilidad" (bypass del LLM)
+// INPUT: AnalizarDisponibilidad (with recommended_slots[])
+// OUTPUT: Formatted response with schedule options for the client
+// Used only in "check_availability" mode (LLM bypass)
 // ============================================================================
 
 const data = $input.first().json;
 
 // ============================================================================
-// GATE DETERMINÍSTICO: si ParseInput bloqueó por datos faltantes
+// DETERMINISTIC GATE: if ParseInput blocked due to missing data
 // ============================================================================
-if (data.gate_bloqueado) {
-  const faltantes = data.gate_datos_faltantes || ['email'];
-  const nombre = data.nombre_clienta || 'Reina';
+if (data.gate_blocked || data.gate_bloqueado) {
+  const missing = data.gate_missing_data || data.gate_datos_faltantes || ['email'];
+  const name = data.client_name || data.nombre_clienta || 'Reina';
 
-  const listaFaltantes = faltantes.map(d => `* Tu ${d}`).join('\n');
+  const missingList = missing.map(d => `* Tu ${d}`).join('\n');
 
-  console.log(`[FormatearRespuesta] 🛡️ GATE: devolviendo datos_faltantes (${faltantes.join(', ')})`);
+  console.log(`[FormatResponse] GATE: returning missing_data (${missing.join(', ')})`);
 
   return [{
     json: {
       success: true,
-      accion: 'datos_faltantes',
-      mensaje_para_clienta: `${nombre}, para reservar tu turno necesito que me pases:\n\n${listaFaltantes}\n\n¿Me los compartís?`,
-      opciones: [],
-      datos_faltantes: faltantes,
+      action: 'missing_data',
+      client_message: `${name}, para reservar tu turno necesito que me pases:\n\n${missingList}\n\n¿Me los compartis?`,
+      options: [],
+      missing_data: missing,
       lead_row_id: data.lead_row_id || null
     }
   }];
 }
 
-const slots = data.slots_recomendados || [];
-const servicioDisplay = data.servicio_detalle || (Array.isArray(data.servicio) ? data.servicio.join(' + ') : data.servicio) || 'servicio';
-const nombreClienta = data.nombre_clienta || 'Reina';
-const esAgregarServicio = data.agregar_a_turno_existente === true;
-const horaOriginal = data.turno_hora_original || null;
-const esSlotNoDisponible = data.accion === 'slot_no_disponible';
-const horaDeseada = data.hora_deseada || null;
+const slots = data.recommended_slots || data.slots_recomendados || [];
+const serviceDisplay = data.service_detail || (Array.isArray(data.service) ? data.service.join(' + ') : data.service) || 'servicio';
+const clientName = data.client_name || data.nombre_clienta || 'Reina';
+const addToExistingBooking = (data.add_to_existing_booking ?? data.agregar_a_turno_existente) === true;
+const existingTime = data.existing_time || data.turno_hora_original || null;
+const isSlotUnavailable = (data.action || data.accion) === 'slot_unavailable' || (data.action || data.accion) === 'slot_no_disponible';
+const requestedTime = data.requested_time || data.hora_deseada || null;
+const existingComplexity = data.existing_complexity || data.turno_complejidad_existente || '';
 
-let accion;
-let mensajeParaClienta;
+let action;
+let clientMessage;
 
-// ── SLOT YA NO DISPONIBLE: race condition, presentar alternativas con contexto ──
-if (esSlotNoDisponible && slots.length > 0) {
-  accion = 'opciones_disponibles';
+// -- SLOT NO LONGER AVAILABLE: race condition, present alternatives with context --
+if (isSlotUnavailable && slots.length > 0) {
+  action = 'options_available';
 
-  const opcionesTexto = slots.map(s => {
-    if (s.duracion_min >= 600) {
-      return `* ${s.fecha_humana} - jornada completa (${s.hora_inicio} a ${s.hora_fin})`;
+  const optionsText = slots.map(s => {
+    if (s.duration_min >= 600 || s.duracion_min >= 600) {
+      return `* ${s.human_date || s.fecha_humana} - jornada completa (${s.start_time || s.hora_inicio} a ${s.end_time || s.hora_fin})`;
     }
-    return `* ${s.fecha_humana} a las ${s.hora_inicio}`;
+    return `* ${s.human_date || s.fecha_humana} a las ${s.start_time || s.hora_inicio}`;
   }).join('\n');
 
-  mensajeParaClienta = `${nombreClienta}, disculpa, el horario de las ${horaDeseada || '?'} ya no esta disponible. Te puedo ofrecer estas alternativas:\n\n${opcionesTexto}\n\n¿Cual te queda mejor?`;
+  clientMessage = `${clientName}, disculpa, el horario de las ${requestedTime || '?'} ya no esta disponible. Te puedo ofrecer estas alternativas:\n\n${optionsText}\n\n¿Cual te queda mejor?`;
 
-} else if (esAgregarServicio && data.turno_complejidad_existente === 'muy_compleja') {
-  // ── AGREGAR SERVICIO A JORNADA COMPLETA: confirmar directo sin opciones ──
-  // La clienta ya va a estar todo el día — no tiene sentido ofrecer opciones de horario.
-  const slotMismoDia = slots.find(s => !s.es_fecha_alternativa);
+} else if (addToExistingBooking && existingComplexity === 'very_complex') {
+  // -- ADD SERVICE TO FULL DAY: confirm directly without options --
+  // Client will already be there all day — no point offering time options.
+  const sameDaySlot = slots.find(s => !(s.is_alternative_date || s.es_fecha_alternativa));
 
-  if (slotMismoDia) {
-    accion = 'confirmar_agregar_servicio_directo';
+  if (sameDaySlot) {
+    action = 'confirm_add_service_direct';
 
-    const precioExistente = data.turno_precio_existente || 0;
-    const precioNuevo = data.precio || 0;
-    const precioTotal = precioExistente + precioNuevo;
-    const senaPagada = data.turno_sena_pagada || Math.round(precioExistente * 0.3);
-    const senaTotalNueva = Math.round(precioTotal * 0.3);
-    const senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);
-    const servicioExistente = data.turno_servicio_existente || 'servicio actual';
-    const fechaSlot = slotMismoDia.fecha_humana || 'tu turno';
+    const existingPrice = data.existing_booking_price || data.turno_precio_existente || 0;
+    const newPrice = data.price || data.precio || 0;
+    const totalPrice = existingPrice + newPrice;
+    const depositPaid = data.existing_booking_deposit || data.turno_sena_pagada || Math.round(existingPrice * 0.3);
+    const newTotalDeposit = Math.round(totalPrice * 0.3);
+    const differentialDeposit = Math.max(0, newTotalDeposit - depositPaid);
+    const existingService = data.existing_service || data.turno_servicio_existente || 'servicio actual';
+    const slotDate = sameDaySlot.human_date || sameDaySlot.fecha_humana || 'tu turno';
 
-    mensajeParaClienta = `⋆˚🧚‍♀️¡Genial mi vida! 💅 Voy a agregar ${servicioDisplay.toLowerCase()} a tu turno del ${fechaSlot} - Jornada completa.\n\n` +
-      `📋 Resumen:\n` +
-      `* ${servicioExistente}: $${precioExistente.toLocaleString('es-AR')}\n` +
-      `* ${servicioDisplay}: $${precioNuevo.toLocaleString('es-AR')}\n` +
-      `* Total: $${precioTotal.toLocaleString('es-AR')}\n\n` +
-      `💰 Seña ya pagada: $${senaPagada.toLocaleString('es-AR')}\n` +
-      `💰 Seña adicional a pagar: $${senaDiferencial.toLocaleString('es-AR')}\n\n` +
-      `¿Me confirmas, reina? 🫶✨`;
+    clientMessage = `¡Genial mi vida! Voy a agregar ${serviceDisplay.toLowerCase()} a tu turno del ${slotDate} - Jornada completa.\n\n` +
+      `Resumen:\n` +
+      `* ${existingService}: $${existingPrice.toLocaleString('es-AR')}\n` +
+      `* ${serviceDisplay}: $${newPrice.toLocaleString('es-AR')}\n` +
+      `* Total: $${totalPrice.toLocaleString('es-AR')}\n\n` +
+      `Sena ya pagada: $${depositPaid.toLocaleString('es-AR')}\n` +
+      `Sena adicional a pagar: $${differentialDeposit.toLocaleString('es-AR')}\n\n` +
+      `¿Me confirmas, reina?`;
   } else {
-    // No cabe el mismo día — mensaje breve sin opciones
-    accion = 'sin_disponibilidad_agregar';
-    mensajeParaClienta = `${nombreClienta}, lamentablemente no podemos agregar ${servicioDisplay.toLowerCase()} a tu turno 😔 La agenda está completa ese día. ¿Querés agendarlo para otro día por separado?`;
+    // Doesn't fit same day — brief message without options
+    action = 'no_availability_add_service';
+    clientMessage = `${clientName}, lamentablemente no podemos agregar ${serviceDisplay.toLowerCase()} a tu turno. La agenda esta completa ese dia. ¿Queres agendarlo para otro dia por separado?`;
   }
 
-} else if (esAgregarServicio && slots.length > 0 && data.fecha_disponible === false && slots.every(s => s.servicio_reubicado && s.es_fecha_alternativa)) {
-  // ── AGREGAR SERVICIO NO DISPONIBLE MISMO DÍA: ofrecer opciones claras ──
-  // Caso: servicio muy_compleja (jornada completa) no cabe el día del turno existente.
-  // NO forzar reprogramación — dar control a la clienta.
-  accion = 'opciones_agregar_no_disponible';
+} else if (addToExistingBooking && slots.length > 0 && (data.date_available === false || data.fecha_disponible === false) && slots.every(s => (s.service_relocated || s.servicio_reubicado) && (s.is_alternative_date || s.es_fecha_alternativa))) {
+  // -- ADD SERVICE NOT AVAILABLE SAME DAY: offer clear options --
+  // Case: very_complex service (full day) doesn't fit on existing booking day.
+  // DON'T force reschedule — give control to the client.
+  action = 'options_add_service_unavailable';
 
-  const servicioExistente = data.turno_servicio_existente || 'servicio actual';
+  const existingService = data.existing_service || data.turno_servicio_existente || 'servicio actual';
 
-  // Formatear fecha solicitada
-  const fechaSolStr = data.fecha_solicitada || data.fecha_deseada || '';
-  let fechaSolHumana = fechaSolStr;
-  if (fechaSolStr) {
-    const _dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-    const _meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-    const fObj = new Date(fechaSolStr + 'T12:00:00');
-    fechaSolHumana = `${_dias[fObj.getDay()]} ${fObj.getDate()} de ${_meses[fObj.getMonth()]}`;
+  // Format requested date
+  const requestedDateStr = data.requested_date || data.fecha_solicitada || data.fecha_deseada || '';
+  let requestedDateHuman = requestedDateStr;
+  if (requestedDateStr) {
+    const _days = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+    const _months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const fObj = new Date(requestedDateStr + 'T12:00:00');
+    requestedDateHuman = `${_days[fObj.getDay()]} ${fObj.getDate()} de ${_months[fObj.getMonth()]}`;
   }
 
-  // Fechas alternativas compactas: "martes 3, miércoles 4 o jueves 5"
-  const fechasAlt = slots.map(s => {
-    const parts = s.fecha_humana.split(' ');
+  // Compact alternative dates: "martes 3, miercoles 4 o jueves 5"
+  const altDates = slots.map(s => {
+    const parts = (s.human_date || s.fecha_humana).split(' ');
     return `${parts[0]} ${parts[1]}`;
   }).join(', ').replace(/, ([^,]+)$/, ' o $1');
 
-  mensajeParaClienta = `${nombreClienta}, no es posible agregar ${servicioDisplay.toLowerCase()} a tu turno del ${fechaSolHumana} 😔\n\n` +
-    `${servicioDisplay} requiere jornada completa (09:00 a 19:00) y ese día la agenda está llena.\n\n` +
-    `¿Qué preferís hacer?\n\n` +
-    `1️⃣ Mantener tu ${servicioExistente} el ${fechaSolHumana} a las ${horaOriginal} como está\n` +
-    `2️⃣ Reprogramar todo junto en jornada completa (${fechasAlt})\n` +
-    `3️⃣ Agendar ${servicioDisplay.toLowerCase()} por separado en otro día\n\n` +
-    `Decime y lo coordinamos 💅`;
+  clientMessage = `${clientName}, no es posible agregar ${serviceDisplay.toLowerCase()} a tu turno del ${requestedDateHuman}\n\n` +
+    `${serviceDisplay} requiere jornada completa (09:00 a 19:00) y ese dia la agenda esta llena.\n\n` +
+    `¿Que preferis hacer?\n\n` +
+    `1 Mantener tu ${existingService} el ${requestedDateHuman} a las ${existingTime} como esta\n` +
+    `2 Reprogramar todo junto en jornada completa (${altDates})\n` +
+    `3 Agendar ${serviceDisplay.toLowerCase()} por separado en otro dia\n\n` +
+    `Decime y lo coordinamos`;
 
-} else if (esAgregarServicio && slots.length > 0) {
-  // ── AGREGAR SERVICIO: opciones con contexto de cambio horario + desglose seña ──
-  accion = 'opciones_agregar_servicio';
+} else if (addToExistingBooking && slots.length > 0) {
+  // -- ADD SERVICE: options with schedule change context + deposit breakdown --
+  action = 'options_add_service';
 
-  const opcionesTexto = slots.map(s => {
-    if (s.es_turno_adicional) {
-      // Turno adicional: otra trabajadora hace solo el servicio nuevo
-      // La hora de llegada NO cambia — excelente UX
-      if (!s.es_fecha_alternativa && horaOriginal) {
-        return `* ${s.fecha_humana} - ${s.trabajadora} hace tu ${servicioDisplay.toLowerCase()} a las ${s.hora_inicio} (vos llegas a las ${horaOriginal} como estaba previsto)`;
+  const optionsText = slots.map(s => {
+    const isAdditional = s.is_additional_booking || s.es_turno_adicional;
+    const humanDate = s.human_date || s.fecha_humana;
+    const startTime = s.start_time || s.hora_inicio;
+    const endTime = s.end_time || s.hora_fin;
+    const workerName = s.worker_name || s.trabajadora;
+    const isAltDate = s.is_alternative_date || s.es_fecha_alternativa;
+    const durationMin = s.duration_min || s.duracion_min;
+
+    if (isAdditional) {
+      // Additional booking: another worker handles only the new service
+      // Arrival time does NOT change — excellent UX
+      if (!isAltDate && existingTime) {
+        return `* ${humanDate} - ${workerName} hace tu ${serviceDisplay.toLowerCase()} a las ${startTime} (vos llegas a las ${existingTime} como estaba previsto)`;
       }
-      return `* ${s.fecha_humana} a las ${s.hora_inicio} con ${s.trabajadora}`;
+      return `* ${humanDate} a las ${startTime} con ${workerName}`;
     }
-    if (s.duracion_min >= 600) {
-      return `* ${s.fecha_humana} - jornada completa (${s.hora_inicio} a ${s.hora_fin}, tu servicio actual se acomoda dentro)`;
+    if (durationMin >= 600) {
+      return `* ${humanDate} - jornada completa (${startTime} a ${endTime}, tu servicio actual se acomoda dentro)`;
     }
-    if (horaOriginal && s.hora_inicio === horaOriginal && !s.es_fecha_alternativa) {
-      return `* ${s.fecha_humana} a las ${s.hora_inicio} (tu horario actual se mantiene)`;
+    if (existingTime && startTime === existingTime && !isAltDate) {
+      return `* ${humanDate} a las ${startTime} (tu horario actual se mantiene)`;
     }
-    if (horaOriginal && !s.es_fecha_alternativa) {
-      return `* ${s.fecha_humana} a las ${s.hora_inicio} (tu turno se moveria de ${horaOriginal} a ${s.hora_inicio})`;
+    if (existingTime && !isAltDate) {
+      return `* ${humanDate} a las ${startTime} (tu turno se moveria de ${existingTime} a ${startTime})`;
     }
-    return `* ${s.fecha_humana} a las ${s.hora_inicio}`;
+    return `* ${humanDate} a las ${startTime}`;
   }).join('\n');
 
-  // Calcular desglose de seña para agregar servicio
-  const precioExistente = data.turno_precio_existente || 0;
-  const precioNuevo = data.precio || 0;
-  // Turno adicional: seña solo del servicio nuevo. Bloque combinado: seña diferencial
-  const hayTurnoAdicional = slots.some(s => s.es_turno_adicional);
-  const precioTotal = hayTurnoAdicional ? precioNuevo : (precioExistente + precioNuevo);
-  const senaPagada = hayTurnoAdicional ? 0 : (data.turno_sena_pagada || Math.round(precioExistente * 0.3));
-  const senaTotalNueva = Math.round(precioTotal * 0.3);
-  const senaDiferencial = Math.max(0, senaTotalNueva - senaPagada);
+  // Calculate deposit breakdown for add service
+  const existingPrice = data.existing_booking_price || data.turno_precio_existente || 0;
+  const newPrice = data.price || data.precio || 0;
+  // Additional booking: deposit only for new service. Combined block: differential deposit
+  const hasAdditionalBooking = slots.some(s => s.is_additional_booking || s.es_turno_adicional);
+  const totalPrice = hasAdditionalBooking ? newPrice : (existingPrice + newPrice);
+  const depositPaid = hasAdditionalBooking ? 0 : (data.existing_booking_deposit || data.turno_sena_pagada || Math.round(existingPrice * 0.3));
+  const newTotalDeposit = Math.round(totalPrice * 0.3);
+  const differentialDeposit = Math.max(0, newTotalDeposit - depositPaid);
 
-  const servicioExistente = data.turno_servicio_existente || 'servicio actual';
+  const existingService = data.existing_service || data.turno_servicio_existente || 'servicio actual';
 
-  let desgloseSena;
-  if (hayTurnoAdicional) {
-    desgloseSena = `\n\n📋 Servicio adicional:\n` +
-      `* ${servicioDisplay}: $${precioNuevo.toLocaleString('es-AR')}\n` +
-      `💰 Seña a pagar: $${senaDiferencial.toLocaleString('es-AR')}\n` +
-      `(tu turno de ${servicioExistente} a las ${horaOriginal || '?'} no cambia)`;
+  let depositBreakdown;
+  if (hasAdditionalBooking) {
+    depositBreakdown = `\n\nServicio adicional:\n` +
+      `* ${serviceDisplay}: $${newPrice.toLocaleString('es-AR')}\n` +
+      `Sena a pagar: $${differentialDeposit.toLocaleString('es-AR')}\n` +
+      `(tu turno de ${existingService} a las ${existingTime || '?'} no cambia)`;
   } else {
-    desgloseSena = `\n\n📋 Resumen del turno actualizado:\n` +
-      `* ${servicioExistente}: $${precioExistente.toLocaleString('es-AR')}\n` +
-      `* ${servicioDisplay}: $${precioNuevo.toLocaleString('es-AR')}\n` +
-      `* Total: $${(precioExistente + precioNuevo).toLocaleString('es-AR')}\n\n` +
-      `💰 Seña ya pagada: $${(data.turno_sena_pagada || Math.round(precioExistente * 0.3)).toLocaleString('es-AR')}\n` +
-      `💰 Seña adicional a pagar: $${senaDiferencial.toLocaleString('es-AR')}`;
+    depositBreakdown = `\n\nResumen del turno actualizado:\n` +
+      `* ${existingService}: $${existingPrice.toLocaleString('es-AR')}\n` +
+      `* ${serviceDisplay}: $${newPrice.toLocaleString('es-AR')}\n` +
+      `* Total: $${(existingPrice + newPrice).toLocaleString('es-AR')}\n\n` +
+      `Sena ya pagada: $${(data.existing_booking_deposit || data.turno_sena_pagada || Math.round(existingPrice * 0.3)).toLocaleString('es-AR')}\n` +
+      `Sena adicional a pagar: $${differentialDeposit.toLocaleString('es-AR')}`;
   }
 
-  mensajeParaClienta = `${nombreClienta}, para agregar ${servicioDisplay.toLowerCase()} a tu turno, estas son las opciones:\n\n${opcionesTexto}${desgloseSena}\n\n¿Cual te queda mejor?`;
+  clientMessage = `${clientName}, para agregar ${serviceDisplay.toLowerCase()} a tu turno, estas son las opciones:\n\n${optionsText}${depositBreakdown}\n\n¿Cual te queda mejor?`;
 
 } else if (slots.length > 0) {
-  // ── TURNO NUEVO: opciones normales ──
-  accion = 'opciones_disponibles';
+  // -- NEW BOOKING: normal options --
+  action = 'options_available';
 
-  const esJornadaCompleta = slots.some(s => s.duracion_min >= 600);
+  const isFullDay = slots.some(s => (s.duration_min || s.duracion_min) >= 600);
 
-  const opcionesTexto = slots.map(s => {
-    if (s.en_proceso) {
-      return `* ${s.fecha_humana} a las ${s.hora_inicio} (aprovechando tiempo de proceso)`;
+  const optionsText = slots.map(s => {
+    const humanDate = s.human_date || s.fecha_humana;
+    const startTime = s.start_time || s.hora_inicio;
+    const endTime = s.end_time || s.hora_fin;
+    const durationMin = s.duration_min || s.duracion_min;
+    const inProcess = s.in_process || s.en_proceso;
+
+    if (inProcess) {
+      return `* ${humanDate} a las ${startTime} (aprovechando tiempo de proceso)`;
     }
-    if (s.duracion_min >= 600) {
-      return `* ${s.fecha_humana} - jornada completa (${s.hora_inicio} a ${s.hora_fin})`;
+    if (durationMin >= 600) {
+      return `* ${humanDate} - jornada completa (${startTime} a ${endTime})`;
     }
-    return `* ${s.fecha_humana} a las ${s.hora_inicio}`;
+    return `* ${humanDate} a las ${startTime}`;
   }).join('\n');
 
-  if (esJornadaCompleta) {
-    mensajeParaClienta = `${nombreClienta}, como ${servicioDisplay.toLowerCase()} es un servicio extenso, necesitamos una jornada completa. Tengo disponibles estos días:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
+  if (isFullDay) {
+    clientMessage = `${clientName}, como ${serviceDisplay.toLowerCase()} es un servicio extenso, necesitamos una jornada completa. Tengo disponibles estos dias:\n\n${optionsText}\n\n¿Cual te queda mejor?`;
   } else {
-    mensajeParaClienta = `${nombreClienta}, para ${servicioDisplay.toLowerCase()} tengo estos horarios:\n\n${opcionesTexto}\n\n¿Cuál te queda mejor?`;
+    clientMessage = `${clientName}, para ${serviceDisplay.toLowerCase()} tengo estos horarios:\n\n${optionsText}\n\n¿Cual te queda mejor?`;
   }
 } else {
-  // ── SIN DISPONIBILIDAD ──
-  accion = esAgregarServicio ? 'sin_disponibilidad_agregar' : 'sin_disponibilidad';
+  // -- NO AVAILABILITY --
+  action = addToExistingBooking ? 'no_availability_add_service' : 'no_availability';
 
-  const alternativas = data.alternativas || [];
-  if (alternativas.length > 0) {
-    const altTexto = alternativas.map(a =>
-      `* ${a.nombre_dia} ${a.fecha}`
+  const alternatives = data.alternatives || data.alternativas || [];
+  if (alternatives.length > 0) {
+    const altText = alternatives.map(a =>
+      `* ${a.day_name || a.nombre_dia} ${a.date || a.fecha}`
     ).join('\n');
-    mensajeParaClienta = esAgregarServicio
-      ? `${nombreClienta}, no es posible agregar ${servicioDisplay.toLowerCase()} a tu turno ese dia. Te puedo ofrecer estos dias:\n\n${altTexto}\n\n¿Cual te queda mejor?`
-      : `${nombreClienta}, no encontré horarios disponibles para ${servicioDisplay.toLowerCase()} en la fecha que pediste. Te puedo ofrecer estos días:\n\n${altTexto}\n\n¿Cuál te queda mejor?`;
+    clientMessage = addToExistingBooking
+      ? `${clientName}, no es posible agregar ${serviceDisplay.toLowerCase()} a tu turno ese dia. Te puedo ofrecer estos dias:\n\n${altText}\n\n¿Cual te queda mejor?`
+      : `${clientName}, no encontre horarios disponibles para ${serviceDisplay.toLowerCase()} en la fecha que pediste. Te puedo ofrecer estos dias:\n\n${altText}\n\n¿Cual te queda mejor?`;
   } else {
-    mensajeParaClienta = esAgregarServicio
-      ? `${nombreClienta}, no es posible agregar ${servicioDisplay.toLowerCase()} a tu turno en los proximos dias. Ambas estilistas tienen la agenda completa.`
-      : `${nombreClienta}, no encontré horarios disponibles para ${servicioDisplay.toLowerCase()} en los próximos días. ¿Querés que busque en otra fecha?`;
+    clientMessage = addToExistingBooking
+      ? `${clientName}, no es posible agregar ${serviceDisplay.toLowerCase()} a tu turno en los proximos dias. Ambas estilistas tienen la agenda completa.`
+      : `${clientName}, no encontre horarios disponibles para ${serviceDisplay.toLowerCase()} en los proximos dias. ¿Queres que busque en otra fecha?`;
   }
 }
 
 return [{
   json: {
     success: true,
-    accion,
-    mensaje_para_clienta: mensajeParaClienta,
-    opciones: accion === 'confirmar_agregar_servicio_directo'
-      ? slots.filter(s => !s.es_fecha_alternativa)
+    action,
+    client_message: clientMessage,
+    options: action === 'confirm_add_service_direct'
+      ? slots.filter(s => !(s.is_alternative_date || s.es_fecha_alternativa))
       : slots,
     lead_row_id: data.lead_row_id || null,
-    // Precio determinístico para que Master Agent cotice correctamente
-    precio: data.precio || 0,
-    sena: Math.round((data.precio || 0) * 0.3),
-    duracion_estimada: data.duracion_estimada || 0,
-    complejidad_maxima: data.complejidad_maxima || 'media',
-    // Contexto agregar servicio (para que Master Agent sepa el flujo)
-    agregar_a_turno_existente: esAgregarServicio,
-    turno_id_existente: data.turno_id_existente || null,
-    turno_precio_existente: data.turno_precio_existente || null,
-    turno_hora_original: horaOriginal,
-    // Desglose seña (solo relevante cuando esAgregarServicio)
-    turno_sena_pagada: data.turno_sena_pagada || null,
-    turno_servicio_existente: data.turno_servicio_existente || null
+    // Deterministic price for Master Agent to quote correctly
+    price: data.price || data.precio || 0,
+    deposit: Math.round((data.price || data.precio || 0) * 0.3),
+    estimated_duration: data.estimated_duration || data.duracion_estimada || 0,
+    max_complexity: data.max_complexity || data.complejidad_maxima || 'medium',
+    // Add service context (for Master Agent to know the flow)
+    add_to_existing_booking: addToExistingBooking,
+    existing_booking_id: data.existing_booking_id || data.turno_id_existente || null,
+    existing_booking_price: data.existing_booking_price || data.turno_precio_existente || null,
+    existing_time: existingTime,
+    // Deposit breakdown (only relevant when addToExistingBooking)
+    existing_booking_deposit: data.existing_booking_deposit || data.turno_sena_pagada || null,
+    existing_service: data.existing_service || data.turno_servicio_existente || null
   }
 }];

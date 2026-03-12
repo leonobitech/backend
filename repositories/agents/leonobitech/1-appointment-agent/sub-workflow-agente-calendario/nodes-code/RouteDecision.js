@@ -1,161 +1,182 @@
 // ============================================================================
-// ROUTE DECISION - Nodo decisor determinístico
+// ROUTE DECISION - Deterministic decision node
 // ============================================================================
-// POSICIÓN: AnalizarDisponibilidad → [RouteDecision] → SwitchModo
+// POSITION: AnalizarDisponibilidad -> [RouteDecision] -> SwitchMode
 //
-// Este nodo tiene TODAS las cartas:
-//   - Lo que la LLM envió (modo, accion, agregar_a_turno_existente, etc.)
-//   - Lo que el analyzer encontró (opciones, disponible, slots_recomendados)
+// This node has ALL the cards:
+//   - What the LLM sent (mode, action, add_to_existing_booking, etc.)
+//   - What the analyzer found (options, available, recommended_slots)
 //
-// RESPONSABILIDAD: Decidir `modo` y `accion` de forma determinística.
-// SwitchModo solo bifurca basándose en lo que este nodo decide.
-// No importa si la LLM falló en enviar modo/accion — este nodo corrige.
+// RESPONSIBILITY: Decide `mode` and `action` deterministically.
+// SwitchMode only branches based on what this node decides.
+// Doesn't matter if the LLM failed to send mode/action — this node corrects.
 //
-// FLUJO DE 3 PASOS:
-//   PASO 1: consultar_disponibilidad → devuelve opciones (modo: consultar_disponibilidad)
-//   PASO 2: confirmar → valida slot, devuelve resumen (modo: confirmar)
-//   PASO 3: crear → crea turno + link de pago (modo: agendar)
+// 3-STEP FLOW:
+//   STEP 1: check_availability -> returns options (mode: check_availability)
+//   STEP 2: confirm -> validates slot, returns summary (mode: confirm)
+//   STEP 3: schedule -> creates booking + payment link (mode: schedule)
 // ============================================================================
 
 const data = $input.first().json;
 
-// === Datos de la LLM (pueden ser null) ===
-const modoLLM = data.modo;
-const accionLLM = data.accion;
+// === LLM data (may be null) — accept both English and Spanish ===
+const llmMode = data.mode || data.modo;
+const llmAction = data.action || data.accion;
 
-// === Datos del analyzer (realidad) ===
-const opciones = data.opciones || data.slots_recomendados || [];
-const disponible = data.disponible === true;
+// === Analyzer data (reality) — accept both English and Spanish ===
+const options = data.options || data.recommended_slots || data.opciones || data.slots_recomendados || [];
+const available = (data.available ?? data.disponible) === true;
 
-// === Contexto del request ===
-const gateBloqueado = data.gate_bloqueado === true;
-const agregarATurnoExistente = data.agregar_a_turno_existente === true;
-const turnoAgendado = data.turno_agendado === true;
+// === Request context — accept both English and Spanish ===
+const gateBlocked = (data.gate_blocked ?? data.gate_bloqueado) === true;
+const addToExistingBooking = (data.add_to_existing_booking ?? data.agregar_a_turno_existente) === true;
+const bookingScheduled = (data.booking_scheduled ?? data.turno_agendado) === true;
 
-// === Hora y fecha solicitadas ===
-const fechaSolicitadaRaw = data.fecha_solicitada || data.fecha_deseada || '';
-const fechaSoloParte = fechaSolicitadaRaw.includes('T')
-  ? fechaSolicitadaRaw.split('T')[0]
-  : fechaSolicitadaRaw.split(' ')[0];
-const horaDeseada = data.hora_deseada || '';
+// === Requested date and time — accept both English and Spanish ===
+const requestedDateRaw = data.requested_date || data.fecha_solicitada || data.fecha_deseada || '';
+const datePart = requestedDateRaw.includes('T')
+  ? requestedDateRaw.split('T')[0]
+  : requestedDateRaw.split(' ')[0];
+const requestedTime = data.requested_time || data.hora_deseada || '';
+
+// === Existing booking complexity — accept both ===
+const existingComplexity = data.existing_complexity || data.turno_complejidad_existente || '';
 
 // ============================================================================
-// VERIFICAR SI EL SLOT EXACTO SOLICITADO ESTÁ EN LAS OPCIONES
+// CHECK IF THE EXACT REQUESTED SLOT IS IN THE OPTIONS
 // ============================================================================
-// Compara fecha + hora solicitada contra las opciones del analyzer.
-// Si ninguna opción coincide → el slot NO está disponible.
-const slotExactoDisponible = opciones.some(o =>
-  o.fecha === fechaSoloParte && o.hora_inicio === horaDeseada
+// Compares requested date + time against analyzer options.
+// If no option matches -> the slot is NOT available.
+const exactSlotAvailable = options.some(o =>
+  (o.date || o.fecha) === datePart && (o.start_time || o.hora_inicio) === requestedTime
 );
 
 // ============================================================================
-// DECISION TREE — DETERMINÍSTICO
+// DECISION TREE — DETERMINISTIC
 // ============================================================================
-let modo, accion, motivo;
+let mode, action, reason;
 
-// 1. GATE BLOQUEADO: faltan datos obligatorios → bypass directo
-if (gateBloqueado) {
-  modo = 'consultar_disponibilidad';
-  accion = 'datos_faltantes';
-  motivo = `Gate bloqueado: faltan ${(data.gate_datos_faltantes || []).join(', ')}`;
+// Normalize LLM mode values (accept both Spanish and English)
+const MODE_MAP = {
+  'consultar_disponibilidad': 'check_availability',
+  'check_availability': 'check_availability',
+  'confirmar': 'confirm',
+  'confirm': 'confirm',
+  'crear': 'schedule',
+  'agendar': 'schedule',
+  'schedule': 'schedule',
+  'create': 'schedule',
+};
+const normalizedLlmMode = MODE_MAP[llmMode] || llmMode;
+
+// Normalize LLM action values
+const normalizedLlmAction = llmAction === 'reprogramar' ? 'reschedule'
+  : llmAction === 'reschedule' ? 'reschedule'
+  : llmAction;
+
+// 1. GATE BLOCKED: missing required data -> direct bypass
+if (gateBlocked) {
+  mode = 'check_availability';
+  action = 'missing_data';
+  reason = `Gate blocked: missing ${(data.gate_missing_data || data.gate_datos_faltantes || []).join(', ')}`;
 }
 
-// 2. LLM PIDIÓ CONSULTAR: PASO 1 del flujo tres-pasos → siempre respetar
-else if (modoLLM === 'consultar_disponibilidad') {
-  modo = 'consultar_disponibilidad';
-  if (agregarATurnoExistente) {
-    accion = 'consultar_agregar_servicio';
-  } else if (accionLLM === 'reprogramar') {
-    accion = 'consultar_reprogramar';
+// 2. LLM REQUESTED CHECK: STEP 1 of three-step flow -> always respect
+else if (normalizedLlmMode === 'check_availability') {
+  mode = 'check_availability';
+  if (addToExistingBooking) {
+    action = 'check_add_service';
+  } else if (normalizedLlmAction === 'reschedule') {
+    action = 'check_reschedule';
   } else {
-    accion = 'consultar_turno_nuevo';
+    action = 'check_new_booking';
   }
-  motivo = `LLM pidió consultar explícitamente (accion: ${accion})`;
+  reason = `LLM requested check explicitly (action: ${action})`;
 }
 
-// 3. LLM PIDIÓ CONFIRMAR: PASO 2 — validar slot y devolver resumen sin crear
-else if (modoLLM === 'confirmar') {
-  if (!disponible || opciones.length === 0) {
-    // Slot ya no está disponible (race condition entre PASO 1 y PASO 2)
-    modo = 'consultar_disponibilidad';
-    accion = 'slot_no_disponible';
-    motivo = `Confirmar: slot no disponible, race condition`;
-  } else if (slotExactoDisponible) {
-    // Slot disponible → devolver resumen de confirmación
-    modo = 'confirmar';
-    accion = 'resumen_confirmacion';
-    motivo = `Confirmar: slot ${horaDeseada} en ${fechaSoloParte} validado OK`;
-  } else if (agregarATurnoExistente &&
-             data.turno_complejidad_existente === 'muy_compleja' &&
-             opciones.some(o => o.fecha === fechaSoloParte && !o.es_fecha_alternativa)) {
-    // JC + agregar servicio: hora no matchea exacta pero hay slot mismo día
-    modo = 'confirmar';
-    accion = 'resumen_confirmacion';
-    motivo = `Confirmar JC: slot mismo día disponible`;
+// 3. LLM REQUESTED CONFIRM: STEP 2 -> validate slot and return summary without creating
+else if (normalizedLlmMode === 'confirm') {
+  if (!available || options.length === 0) {
+    // Slot no longer available (race condition between STEP 1 and STEP 2)
+    mode = 'check_availability';
+    action = 'slot_unavailable';
+    reason = `Confirm: slot unavailable, race condition`;
+  } else if (exactSlotAvailable) {
+    // Slot available -> return confirmation summary
+    mode = 'confirm';
+    action = 'confirmation_summary';
+    reason = `Confirm: slot ${requestedTime} on ${datePart} validated OK`;
+  } else if (addToExistingBooking &&
+             existingComplexity === 'very_complex' &&
+             options.some(o => (o.date || o.fecha) === datePart && !(o.is_alternative_date || o.es_fecha_alternativa))) {
+    // Full day + add service: time doesn't match exactly but there's a same-day slot
+    mode = 'confirm';
+    action = 'confirmation_summary';
+    reason = `Confirm full day: same-day slot available`;
   } else {
-    // Slot ocupado pero hay alternativas
-    modo = 'consultar_disponibilidad';
-    accion = 'slot_no_disponible';
-    motivo = `Confirmar: slot ${horaDeseada} en ${fechaSoloParte} NO disponible. ${opciones.length} alternativas`;
+    // Slot taken but alternatives exist
+    mode = 'check_availability';
+    action = 'slot_unavailable';
+    reason = `Confirm: slot ${requestedTime} on ${datePart} NOT available. ${options.length} alternatives`;
   }
 }
 
-// 4. SIN DISPONIBILIDAD: ni el slot ni alternativas
-else if (!disponible || opciones.length === 0) {
-  modo = 'consultar_disponibilidad';
-  accion = 'sin_disponibilidad';
-  motivo = 'Analyzer: sin disponibilidad';
+// 4. NO AVAILABILITY: neither the slot nor alternatives
+else if (!available || options.length === 0) {
+  mode = 'check_availability';
+  action = 'no_availability';
+  reason = 'Analyzer: no availability';
 }
 
-// 5. SLOT EXACTO DISPONIBLE + MODO CREAR: PASO 3 — crear turno
-else if (slotExactoDisponible && (modoLLM === 'crear' || modoLLM === 'agendar')) {
-  modo = 'agendar';
-  if (agregarATurnoExistente) {
-    accion = 'agregar_servicio';
-  } else if (accionLLM === 'reprogramar') {
-    accion = 'reprogramar';
+// 5. EXACT SLOT AVAILABLE + SCHEDULE MODE: STEP 3 -> create booking
+else if (exactSlotAvailable && normalizedLlmMode === 'schedule') {
+  mode = 'schedule';
+  if (addToExistingBooking) {
+    action = 'add_service';
+  } else if (normalizedLlmAction === 'reschedule') {
+    action = 'reschedule';
   } else {
-    accion = 'agendar_turno_nuevo';
+    action = 'schedule_new_booking';
   }
-  motivo = `Slot ${horaDeseada} en ${fechaSoloParte} disponible → crear`;
+  reason = `Slot ${requestedTime} on ${datePart} available -> create`;
 }
 
-// 6. JORNADA COMPLETA + AGREGAR SERVICIO + CREAR: rutear directo
-//    LLM envía hora 09:00 (llegada) pero el slot real es otro (ej: 12:00 Compañera).
-//    El slot exacto no matchea (09:00 ≠ 12:00) pero HAY slot mismo día → agendar.
-//    NO mutar hora_deseada — downstream ya maneja 09:00 (cliente) vs 12:00 (interno).
-else if ((modoLLM === 'crear' || modoLLM === 'agendar') && agregarATurnoExistente &&
-         data.turno_complejidad_existente === 'muy_compleja' &&
-         opciones.some(o => o.fecha === fechaSoloParte && !o.es_fecha_alternativa)) {
-  modo = 'agendar';
-  accion = 'agregar_servicio';
-  motivo = `Jornada completa: slot mismo día disponible, ruteo directo a crear`;
+// 6. FULL DAY + ADD SERVICE + SCHEDULE: direct routing
+//    LLM sends time 09:00 (arrival) but the real slot is different (e.g.: 12:00 Secondary).
+//    The exact slot doesn't match (09:00 != 12:00) but there IS a same-day slot -> schedule.
+//    DO NOT mutate requested_time — downstream already handles 09:00 (client) vs 12:00 (internal).
+else if (normalizedLlmMode === 'schedule' && addToExistingBooking &&
+         existingComplexity === 'very_complex' &&
+         options.some(o => (o.date || o.fecha) === datePart && !(o.is_alternative_date || o.es_fecha_alternativa))) {
+  mode = 'schedule';
+  action = 'add_service';
+  reason = `Full day: same-day slot available, direct routing to create`;
 }
 
-// 7. SLOT NO DISPONIBLE + HAY ALTERNATIVAS: presentar opciones
-//    Race condition (slot se ocupó entre pasos)
+// 7. SLOT NOT AVAILABLE + HAS ALTERNATIVES: present options
+//    Race condition (slot was taken between steps)
 else {
-  modo = 'consultar_disponibilidad';
-  accion = 'slot_no_disponible';
-  motivo = `Slot ${horaDeseada} en ${fechaSoloParte} NO disponible. ${opciones.length} alternativas`;
+  mode = 'check_availability';
+  action = 'slot_unavailable';
+  reason = `Slot ${requestedTime} on ${datePart} NOT available. ${options.length} alternatives`;
 }
 
-console.log(`[RouteDecision] modo=${modo} | accion=${accion} | ${motivo}`);
+console.log(`[RouteDecision] mode=${mode} | action=${action} | ${reason}`);
 
 // ============================================================================
-// OUTPUT: misma data + modo y accion decididos
+// OUTPUT: same data + decided mode and action
 // ============================================================================
 return [{
   json: {
     ...data,
-    modo,
-    accion,
+    mode,
+    action,
     _route_decision: {
-      modo_llm: modoLLM || null,
-      accion_llm: accionLLM || null,
-      slot_exacto_disponible: slotExactoDisponible,
-      total_opciones: opciones.length,
-      motivo
+      llm_mode: llmMode || null,
+      llm_action: llmAction || null,
+      exact_slot_available: exactSlotAvailable,
+      total_options: options.length,
+      reason
     }
   }
 }];
