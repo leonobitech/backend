@@ -764,7 +764,7 @@ Llamar `book_appointment` con:
 
 ⚠️⚠️⚠️ **EJEMPLO CRÍTICO** — Este flujo es OBLIGATORIO cuando la clienta confirma una opción de agregar servicio.
 
-**Contexto**: La clienta tiene manicura semipermanente ($8,000) a las 15:00 con Compañera. Quiso agregar pedicura ($6,000). Se llamó `check_availability` y devolvió `accion: "opciones_agregar_servicio"` con opción 1: Leraysi a las 13:00.
+**Contexto**: La clienta tiene manicura semipermanente ($8,000) a las 15:00 con Compañera. Quiso agregar pedicura ($6,000). Se llamó `check_availability` y devolvió `accion: "opciones_agregar_servicio"` con opción 1: Estilista 1 a las 13:00.
 
 **3i-4a. Presentar opciones (usar `mensaje_para_clienta` exacto):**
 

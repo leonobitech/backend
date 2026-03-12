@@ -21,8 +21,8 @@ const WORKERS = {
   SECONDARY: 'secondary',
 };
 const WORKER_DISPLAY = {
-  primary: $env.WORKER_PRIMARY_NAME || 'Leraysi',
-  secondary: $env.WORKER_SECONDARY_NAME || 'Companera',
+  primary: $env.WORKER_PRIMARY_NAME || 'Estilista 1',
+  secondary: $env.WORKER_SECONDARY_NAME || 'Estilista 2',
 };
 function getWorkerDisplay(worker) {
   return WORKER_DISPLAY[worker] || worker;

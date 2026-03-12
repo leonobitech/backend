@@ -20,8 +20,8 @@ const WORKERS = {
 };
 
 const WORKER_DISPLAY = {
-  [WORKERS.PRIMARY]: $env.WORKER_PRIMARY_NAME || 'Primary',
-  [WORKERS.SECONDARY]: $env.WORKER_SECONDARY_NAME || 'Secondary',
+  [WORKERS.PRIMARY]: $env.WORKER_PRIMARY_NAME || 'Estilista 1',
+  [WORKERS.SECONDARY]: $env.WORKER_SECONDARY_NAME || 'Estilista 2',
 };
 
 function getWorkerDisplay(workerKey) {
