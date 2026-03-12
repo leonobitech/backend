@@ -470,7 +470,7 @@ const output = {
   state: mergedState,
   meta: {
     timestamp: new Date().toISOString(),
-    version: "leraysi-output@3.3",
+    version: "leonobit-output@3.3",
     patch_applied: Object.keys(statePatch),
   },
 };
