@@ -47,7 +47,6 @@ ARCA Web Services:
     "external_dependencies": {
         "python": [
             "cryptography",
-            "OpenSSL",
             "zeep",
             "lxml",
         ],
