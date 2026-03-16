@@ -41,8 +41,12 @@ traefik/acme.json
 # Ignorar los datos de Odoo
 /repositories/odoo/odoo.conf
 
+# Odoo addons con repo propio (público)
+repositories/odoo/addons/l10n_ar_arca_edi/
+
 # Ignorar los datos de Rust
 **/target
 **/dist
 **/node_modules
 repositories/odoo/odoo_data/
+**/*.crt
