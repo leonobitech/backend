@@ -1008,6 +1008,9 @@ services:
     env_file:
       - ./repositories/baserow/.env
 
+    environment:
+      - NUXT_SOURCEMAP=false
+
     networks:
       - leonobitech-net
 
