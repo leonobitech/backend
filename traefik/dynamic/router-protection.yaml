@@ -60,6 +60,17 @@ http:
       middlewares:
         - rate-limit-strict@file
 
+    # -------------------------------------------------------------------------
+    # 🗺️ Block source map requests on admin frontends (Baserow, n8n, Odoo)
+    # Prevents 500 errors from missing .js.map files in Nuxt/Nitro builds
+    # -------------------------------------------------------------------------
+    block-sourcemaps:
+      rule: "Host(`br.leonobitech.com`) && PathRegexp(`\\.js\\.map$`)"
+      entryPoints:
+        - websecure
+      service: blackhole
+      priority: 900
+
   # -------------------------------------------------------------------------
   # 🕳️ Blackhole service - responds with 404 for blocked paths
   # -------------------------------------------------------------------------
