@@ -43,6 +43,7 @@ traefik/acme.json
 
 # Odoo addons con repo propio (público)
 repositories/odoo/addons/l10n_ar_arca_edi/
+repositories/odoo/addons/appointment_management/
 
 # Ignorar los datos de Rust
 **/target
