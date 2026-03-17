@@ -1031,6 +1031,15 @@ services:
       - "traefik.enable=true"
 
       #########################################
+      # 🗺️ Block sourcemap requests (priority > frontend)
+      #########################################
+      - "traefik.http.routers.baserow-block-maps.rule=Host(`br.leonobitech.com`) && PathRegexp(`.*\\.js\\.map$$`)"
+      - "traefik.http.routers.baserow-block-maps.entrypoints=websecure"
+      - "traefik.http.routers.baserow-block-maps.tls.certresolver=le"
+      - "traefik.http.routers.baserow-block-maps.priority=9999"
+      - "traefik.http.routers.baserow-block-maps.service=blackhole@file"
+
+      #########################################
       # 🌍 Router principal para el frontend
       #########################################
       - "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`)"
