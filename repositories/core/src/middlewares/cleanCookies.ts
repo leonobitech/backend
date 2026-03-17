@@ -66,13 +66,24 @@ export default function cleanCookies(
     delete req.headers.cookie;
   }
 
-  // 📝 Logging silencioso si se limpió algo
+  // 🧹 Enviar Set-Cookie para borrar cookies no autorizadas del browser
   if (removed.length > 0) {
+    for (const name of removed) {
+      res.cookie(name, "", {
+        maxAge: 0,
+        path: "/",
+        domain: ".leonobitech.com",
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+      });
+    }
+
     loggerAudit(
       "security.cookie_cleaned",
       {
         performedBy: "anonymous",
-        reason: "Cookies no autorizadas eliminadas silenciosamente",
+        reason: "Cookies no autorizadas eliminadas del browser",
         cookiesRemoved: removed,
         path: req.originalUrl,
         method: req.method,
