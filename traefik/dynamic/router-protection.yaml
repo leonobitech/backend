@@ -65,7 +65,8 @@ http:
     # Prevents 500 errors from missing .js.map files in Nuxt/Nitro builds
     # -------------------------------------------------------------------------
     block-sourcemaps:
-      rule: "Host(`br.leonobitech.com`) && PathRegexp(`.*\\.js\\.map$`)"
+      rule: >-
+        Host(`br.leonobitech.com`) && PathRegexp(`.*\.js\.map$`)
       entryPoints:
         - websecure
       service: blackhole
