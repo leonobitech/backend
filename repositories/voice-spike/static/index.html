@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Voice Spike - Leonobitech</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #fff;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 2rem;
+    }
+
+    #callBtn {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      border: none;
+      background: #22c55e;
+      color: white;
+      font-size: 2.5rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 30px rgba(34, 197, 94, 0.3);
+    }
+
+    #callBtn:hover { transform: scale(1.05); }
+
+    #callBtn.active {
+      background: #ef4444;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.3);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.3); }
+      50% { box-shadow: 0 0 50px rgba(239, 68, 68, 0.5); }
+    }
+
+    #status {
+      margin-top: 1.5rem;
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    #status.connected { color: #22c55e; }
+    #status.error { color: #ef4444; }
+
+    #transcript {
+      margin-top: 2rem;
+      width: 100%;
+      max-width: 500px;
+      min-height: 200px;
+      max-height: 60vh;
+      overflow-y: auto;
+      padding: 1rem;
+      background: #141414;
+      border-radius: 12px;
+      border: 1px solid #2a2a2a;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .user-msg {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #1a1a1a;
+      color: #e5e5e5;
+    }
+
+    .ai-msg {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #1a1a1a;
+      color: #60a5fa;
+    }
+
+    .ai-msg::before {
+      content: "🤖 ";
+    }
+
+    .user-msg::before {
+      content: "🎤 ";
+    }
+
+    .partial {
+      color: #666;
+      font-style: italic;
+    }
+
+    .thinking {
+      color: #888;
+      font-style: italic;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Voice Spike</h1>
+  <p class="subtitle">Habla → Whisper → Claude → Piper → Escucha</p>
+
+  <button id="callBtn" onclick="toggleCall()">📞</button>
+
+  <p id="status">Presiona para iniciar</p>
+
+  <div id="transcript"></div>
+
+  <script>
+    let ws = null
+    let audioContext = null
+    let mediaStream = null
+    let isActive = false
+    let currentPlayback = null  // para poder cortarlo en barge-in
+
+    const btn = document.getElementById('callBtn')
+    const status = document.getElementById('status')
+    const transcript = document.getElementById('transcript')
+
+    async function toggleCall() {
+      if (isActive) {
+        stopCall()
+      } else {
+        await startCall()
+      }
+    }
+
+    async function startCall() {
+      try {
+        setStatus('Solicitando micrófono...', '')
+
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            sampleRate: 48000,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        })
+
+        setStatus('Conectando...', '')
+
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+        ws = new WebSocket(`${proto}://${location.host}/ws/voice`)
+
+        ws.binaryType = 'arraybuffer'
+
+        ws.onopen = async () => {
+          setStatus('Conectado - Habla...', 'connected')
+          btn.classList.add('active')
+          btn.textContent = '⏹'
+          isActive = true
+
+          const sampleRate = audioContext ? audioContext.sampleRate : 48000
+          ws.send(JSON.stringify({ type: 'config', sampleRate }))
+
+          await startAudioCapture()
+        }
+
+        ws.onmessage = (event) => {
+          // Audio binario (WAV de Piper)
+          if (event.data instanceof ArrayBuffer) {
+            playAudio(event.data)
+            return
+          }
+
+          const data = JSON.parse(event.data)
+
+          if (data.type === 'partial') {
+            updatePartial(data.text)
+          } else if (data.type === 'final') {
+            addMessage(data.text, 'user-msg')
+          } else if (data.type === 'thinking') {
+            showThinking()
+          } else if (data.type === 'response') {
+            removeThinking()
+            addMessage(data.text, 'ai-msg')
+          } else if (data.type === 'stop_playback') {
+            stopPlayback()
+          }
+        }
+
+        ws.onerror = () => setStatus('Error de conexión', 'error')
+        ws.onclose = () => {
+          if (isActive) stopCall()
+        }
+
+      } catch (err) {
+        console.error(err)
+        setStatus(`Error: ${err.message}`, 'error')
+      }
+    }
+
+    async function startAudioCapture() {
+      audioContext = new AudioContext({ sampleRate: 48000 })
+
+      await audioContext.audioWorklet.addModule('/static/audio-processor.js')
+
+      const source = audioContext.createMediaStreamSource(mediaStream)
+      const worklet = new AudioWorkletNode(audioContext, 'audio-processor')
+
+      worklet.port.onmessage = (event) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(event.data)
+        }
+      }
+
+      source.connect(worklet)
+      worklet.connect(audioContext.destination)
+    }
+
+    function stopCall() {
+      isActive = false
+      btn.classList.remove('active')
+      btn.textContent = '📞'
+      setStatus('Desconectado', '')
+
+      if (ws) { ws.close(); ws = null }
+      if (audioContext) { audioContext.close(); audioContext = null }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop())
+        mediaStream = null
+      }
+    }
+
+    async function playAudio(arrayBuffer) {
+      try {
+        // Parar playback anterior si existe
+        stopPlayback()
+
+        const playbackCtx = new AudioContext()
+        const audioBuffer = await playbackCtx.decodeAudioData(arrayBuffer)
+        const source = playbackCtx.createBufferSource()
+        source.buffer = audioBuffer
+        source.connect(playbackCtx.destination)
+
+        currentPlayback = { source, ctx: playbackCtx }
+
+        source.onended = () => {
+          currentPlayback = null
+          playbackCtx.close()
+          // Avisar al server que terminó el playback
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'playback_ended' }))
+          }
+          setStatus('Conectado - Habla...', 'connected')
+        }
+
+        setStatus('Escuchando respuesta...', 'connected')
+        source.start()
+      } catch (err) {
+        console.error('Error playing audio:', err)
+      }
+    }
+
+    function stopPlayback() {
+      if (currentPlayback) {
+        try {
+          currentPlayback.source.stop()
+          currentPlayback.ctx.close()
+        } catch (e) {}
+        currentPlayback = null
+        setStatus('Conectado - Habla...', 'connected')
+      }
+    }
+
+    function setStatus(text, className) {
+      status.textContent = text
+      status.className = className || ''
+    }
+
+    function updatePartial(text) {
+      let partial = transcript.querySelector('.partial')
+      if (!partial) {
+        partial = document.createElement('div')
+        partial.className = 'partial'
+        transcript.appendChild(partial)
+      }
+      partial.textContent = text
+      transcript.scrollTop = transcript.scrollHeight
+    }
+
+    function addMessage(text, className) {
+      const partial = transcript.querySelector('.partial')
+      if (partial) partial.remove()
+
+      const div = document.createElement('div')
+      div.className = className
+      div.textContent = text
+      transcript.appendChild(div)
+      transcript.scrollTop = transcript.scrollHeight
+    }
+
+    function showThinking() {
+      removeThinking()
+      const div = document.createElement('div')
+      div.className = 'thinking'
+      div.textContent = '🤖 Pensando...'
+      transcript.appendChild(div)
+      transcript.scrollTop = transcript.scrollHeight
+    }
+
+    function removeThinking() {
+      const thinking = transcript.querySelector('.thinking')
+      if (thinking) thinking.remove()
+    }
+  </script>
+</body>
+</html>
