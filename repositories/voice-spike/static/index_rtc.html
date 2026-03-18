@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Voice Spike RTC - Leonobitech</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; color: #fff; }
+
+    .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 2rem; }
+
+    #callBtn {
+      width: 120px; height: 120px; border-radius: 50%; border: none;
+      background: #22c55e; color: white; font-size: 2.5rem; cursor: pointer;
+      transition: all 0.2s; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 30px rgba(34, 197, 94, 0.3);
+    }
+
+    #callBtn:hover { transform: scale(1.05); }
+
+    #callBtn.active {
+      background: #ef4444;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.3);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.3); }
+      50% { box-shadow: 0 0 50px rgba(239, 68, 68, 0.5); }
+    }
+
+    #status { margin-top: 1.5rem; font-size: 0.85rem; color: #888; }
+    #status.connected { color: #22c55e; }
+    #status.error { color: #ef4444; }
+
+    #transcript {
+      margin-top: 2rem; width: 100%; max-width: 500px; min-height: 200px;
+      max-height: 60vh; overflow-y: auto; padding: 1rem; background: #141414;
+      border-radius: 12px; border: 1px solid #2a2a2a; font-size: 0.95rem; line-height: 1.6;
+    }
+
+    .user-msg { padding: 0.5rem 0; border-bottom: 1px solid #1a1a1a; color: #e5e5e5; }
+    .ai-msg { padding: 0.5rem 0; border-bottom: 1px solid #1a1a1a; color: #60a5fa; }
+    .ai-msg::before { content: "🤖 "; }
+    .user-msg::before { content: "🎤 "; }
+    .thinking { color: #888; font-style: italic; font-size: 0.85rem; }
+    .badge {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
+      font-size: 0.7rem; background: #1e3a5f; color: #60a5fa; margin-left: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Voice Spike <span class="badge">WebRTC</span></h1>
+  <p class="subtitle">WebSocket signaling → WebRTC audio → Whisper → Claude → Piper</p>
+
+  <button id="callBtn" onclick="toggleCall()">📞</button>
+  <p id="status">Presiona para iniciar</p>
+  <div id="transcript"></div>
+
+  <!-- Audio element for remote playback -->
+  <audio id="remoteAudio" autoplay></audio>
+
+  <script>
+    let ws = null
+    let pc = null
+    let mediaStream = null
+    let isActive = false
+
+    const btn = document.getElementById('callBtn')
+    const status = document.getElementById('status')
+    const transcript = document.getElementById('transcript')
+    const remoteAudio = document.getElementById('remoteAudio')
+
+    async function toggleCall() {
+      if (isActive) {
+        stopCall()
+      } else {
+        await startCall()
+      }
+    }
+
+    async function startCall() {
+      try {
+        setStatus('Solicitando micrófono...', '')
+
+        // 1. Obtener micrófono
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: false,
+        })
+
+        setStatus('Conectando WebSocket...', '')
+
+        // 2. Abrir WebSocket para señalización
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+        ws = new WebSocket(`${proto}://${location.host}/ws/voice`)
+
+        ws.onopen = () => {
+          log('WebSocket abierto')
+          setupWebRTC()
+        }
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data)
+          handleSignaling(msg)
+        }
+
+        ws.onerror = (e) => {
+          log('WebSocket error')
+          setStatus('Error de conexión', 'error')
+        }
+
+        ws.onclose = () => {
+          log('WebSocket cerrado')
+          if (isActive) stopCall()
+        }
+
+      } catch (err) {
+        console.error(err)
+        setStatus(`Error: ${err.message}`, 'error')
+      }
+    }
+
+    async function setupWebRTC() {
+      // 3. Crear RTCPeerConnection
+      pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+        ],
+        bundlePolicy: 'max-bundle',
+      })
+
+      // 4. Transceiver audio sendrecv (priorizar Opus)
+      const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' })
+
+      const caps = RTCRtpSender.getCapabilities('audio')
+      if (caps) {
+        const opus = caps.codecs.filter(c => c.mimeType.toLowerCase() === 'audio/opus')
+        const rest = caps.codecs.filter(c => c.mimeType.toLowerCase() !== 'audio/opus')
+        if (opus.length) {
+          audioTransceiver.setCodecPreferences([...opus, ...rest])
+        }
+      }
+
+      // 5. Agregar track del micrófono al transceiver
+      const audioTrack = mediaStream.getAudioTracks()[0]
+      await audioTransceiver.sender.replaceTrack(audioTrack)
+
+      // 6. DataChannels (cliente crea, server recibe)
+      const dcCtrl = pc.createDataChannel('ctrl', { ordered: false, maxRetransmits: 0 })
+      const dcChat = pc.createDataChannel('chat', { ordered: true })
+
+      dcCtrl.onopen = () => log('DataChannel ctrl abierto')
+      dcChat.onopen = () => log('DataChannel chat abierto')
+
+      dcChat.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        if (data.type === 'final') {
+          addMessage(data.text, 'user-msg')
+        } else if (data.type === 'thinking') {
+          showThinking()
+        } else if (data.type === 'response') {
+          removeThinking()
+          addMessage(data.text, 'ai-msg')
+        }
+      }
+
+      // 7. Track remoto (audio del server / Piper TTS)
+      pc.ontrack = (ev) => {
+        log('Track remoto recibido')
+        const remoteStream = ev.streams?.[0] ?? new MediaStream([ev.track])
+        remoteAudio.srcObject = remoteStream
+        remoteAudio.play().catch(() => {})
+      }
+
+      // 8. ICE candidates → enviar por WebSocket (trickle)
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            kind: 'webrtc.candidate',
+            candidate: ev.candidate.toJSON(),
+          }))
+        }
+      }
+
+      // 9. Connection state
+      pc.onconnectionstatechange = () => {
+        log(`Connection state: ${pc.connectionState}`)
+        if (pc.connectionState === 'connected') {
+          setStatus('Conectado - Habla...', 'connected')
+          btn.classList.add('active')
+          btn.textContent = '⏹'
+          isActive = true
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          stopCall()
+        }
+      }
+
+      // 10. Crear offer
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+      })
+      await pc.setLocalDescription(offer)
+
+      // 11. Esperar ICE gathering (con timeout)
+      await waitIceGathering(pc, 1500)
+
+      // 12. Enviar offer por WebSocket
+      ws.send(JSON.stringify({
+        kind: 'webrtc.offer',
+        sdp: pc.localDescription.sdp,
+      }))
+
+      log('Offer enviado')
+      setStatus('Esperando answer...', '')
+
+      // 13. Keepalive ping cada 5s para mantener WebSocket abierto
+      const pingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ kind: 'ping', ts: Date.now() }))
+        } else {
+          clearInterval(pingInterval)
+        }
+      }, 5000)
+    }
+
+    async function waitIceGathering(pc, timeoutMs) {
+      if (pc.iceGatheringState === 'complete') return
+
+      return new Promise((resolve) => {
+        const onStateChange = () => {
+          if (pc.iceGatheringState === 'complete') {
+            pc.removeEventListener('icegatheringstatechange', onStateChange)
+            resolve()
+          }
+        }
+        pc.addEventListener('icegatheringstatechange', onStateChange)
+        setTimeout(() => {
+          pc.removeEventListener('icegatheringstatechange', onStateChange)
+          resolve()
+        }, timeoutMs)
+      })
+    }
+
+    async function handleSignaling(msg) {
+      if (msg.kind === 'webrtc.answer') {
+        log('Answer recibido')
+        await pc.setRemoteDescription(new RTCSessionDescription({
+          type: 'answer',
+          sdp: msg.sdp,
+        }))
+
+      } else if (msg.kind === 'webrtc.candidate') {
+        if (msg.candidate && msg.candidate.candidate) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
+          } catch (e) {
+            log(`ICE candidate error: ${e.message}`)
+          }
+        }
+
+      } else if (msg.kind === 'pong') {
+        // heartbeat response
+      }
+    }
+
+    function stopCall() {
+      isActive = false
+      btn.classList.remove('active')
+      btn.textContent = '📞'
+      setStatus('Desconectado', '')
+
+      if (pc) { pc.close(); pc = null }
+      if (ws) { ws.close(); ws = null }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop())
+        mediaStream = null
+      }
+    }
+
+    function log(msg) {
+      console.log(`[RTC] ${msg}`)
+    }
+
+    function setStatus(text, cls) {
+      status.textContent = text
+      status.className = cls || ''
+    }
+
+    function addMessage(text, className) {
+      const div = document.createElement('div')
+      div.className = className
+      div.textContent = text
+      transcript.appendChild(div)
+      transcript.scrollTop = transcript.scrollHeight
+    }
+
+    function showThinking() {
+      removeThinking()
+      const div = document.createElement('div')
+      div.className = 'thinking'
+      div.textContent = '🤖 Pensando...'
+      transcript.appendChild(div)
+      transcript.scrollTop = transcript.scrollHeight
+    }
+
+    function removeThinking() {
+      const el = transcript.querySelector('.thinking')
+      if (el) el.remove()
+    }
+  </script>
+</body>
+</html>
