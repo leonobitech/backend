@@ -4,7 +4,13 @@ import os
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
-from livekit.plugins import anthropic, deepgram, elevenlabs, silero, noise_cancellation
+from livekit.plugins import anthropic, deepgram, elevenlabs, silero
+
+try:
+    from livekit.plugins import noise_cancellation
+    HAS_NOISE_CANCELLATION = True
+except ImportError:
+    HAS_NOISE_CANCELLATION = False
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 
@@ -88,14 +94,18 @@ async def entrypoint(ctx: agents.JobContext):
         mcp_servers=mcp_servers,
     )
 
-    await session.start(
-        room=ctx.room,
-        agent=VoiceAssistant(),
-        room_options=room_io.RoomOptions(
+    room_opts = room_io.RoomOptions()
+    if HAS_NOISE_CANCELLATION:
+        room_opts = room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
                 noise_cancellation=noise_cancellation.BVC(),
             ),
-        ),
+        )
+
+    await session.start(
+        room=ctx.room,
+        agent=VoiceAssistant(),
+        room_options=room_opts,
     )
 
     await ctx.connect()
