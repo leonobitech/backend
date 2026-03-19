@@ -16,15 +16,17 @@ COPY agent.py ./
 # Install Python deps
 RUN pip install --no-cache-dir -e ".[cloud]"
 
-# Non-root user
-RUN useradd -m -r -u 10010 agent
+# Shared cache dir accessible by all users (including subprocesses)
+ENV HF_HOME=/app/.cache/huggingface
+RUN mkdir -p /app/.cache/huggingface
 
-# Download models at build time (as root, then fix permissions)
+# Download models at build time
 RUN python agent.py download-files || true
-RUN cp -r /root/.cache/huggingface /home/agent/.cache/huggingface 2>/dev/null || true && \
-    chown -R agent:agent /home/agent/.cache 2>/dev/null || true
 
-ENV HOME=/home/agent
+# Non-root user
+RUN useradd -r -u 10010 agent && \
+    chown -R agent:agent /app/.cache
+
 USER agent
 
 # LiveKit agent entrypoint
