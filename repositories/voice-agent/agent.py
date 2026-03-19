@@ -8,9 +8,9 @@ from livekit.plugins import anthropic, deepgram, elevenlabs, silero, noise_cance
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 
-load_dotenv(".env.local", override=True)
-# Ensure env vars are available in child processes
-os.environ.setdefault("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY", ""))
+# Load .env.local only in local dev (skip in Docker where env is injected)
+if os.path.exists(".env.local"):
+    load_dotenv(".env.local", override=True)
 
 logger = logging.getLogger("voice-agent")
 logger.setLevel(logging.INFO)

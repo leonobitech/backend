@@ -1137,6 +1137,39 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  voice_agent:
+    container_name: voice_agent
+    build:
+      context: ./repositories/voice-agent
+    image: leonobitech/voice-agent:v1.0
+    restart: unless-stopped
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/voice-agent/.env
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      odoo_mcp:
+        condition: service_healthy
+
+    cpus: 1.0
+    mem_limit: 512m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   wa_signature_proxy:
     container_name: wa_signature_proxy
     build:
