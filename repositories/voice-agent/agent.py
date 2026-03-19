@@ -4,10 +4,9 @@ import os
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
-from livekit.plugins import anthropic, deepgram, silero, noise_cancellation
+from livekit.plugins import anthropic, deepgram, elevenlabs, silero, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-from tts_piper import PiperTTS
 
 load_dotenv(".env.local", override=True)
 # Ensure env vars are available in child processes
@@ -61,11 +60,19 @@ async def entrypoint(ctx: agents.JobContext):
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
 
-    # Local TTS: Piper (daniela AR, high quality)
-    piper_tts = PiperTTS(
-        length_scale=0.75,
-        noise_scale=0.8,
-        noise_w=0.6,
+    # Cloud TTS: ElevenLabs (streaming, high quality)
+    elevenlabs_tts = elevenlabs.TTS(
+        voice_id="QK4xDwo9ESPHA4JNUpX3",
+        model="eleven_multilingual_v2",
+        language="es",
+        voice_settings=elevenlabs.VoiceSettings(
+            stability=0.5,
+            similarity_boost=0.75,
+            style=0.2,
+            speed=1.1,
+            use_speaker_boost=True,
+        ),
+        api_key=os.getenv("ELEVENLABS_API_KEY"),
     )
 
     session = AgentSession(
@@ -75,7 +82,7 @@ async def entrypoint(ctx: agents.JobContext):
             temperature=0.7,
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         ),
-        tts=piper_tts,
+        tts=elevenlabs_tts,
         vad=ctx.proc.userdata["vad"],
         turn_detection=MultilingualModel(),
         mcp_servers=mcp_servers,
