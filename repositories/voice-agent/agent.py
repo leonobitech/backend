@@ -11,7 +11,6 @@ try:
     HAS_NOISE_CANCELLATION = True
 except ImportError:
     HAS_NOISE_CANCELLATION = False
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 
 # Load .env.local only in local dev (skip in Docker where env is injected)
@@ -90,7 +89,6 @@ async def entrypoint(ctx: agents.JobContext):
         ),
         tts=elevenlabs_tts,
         vad=ctx.proc.userdata["vad"],
-        turn_detection=MultilingualModel(),
         mcp_servers=mcp_servers,
     )
 
