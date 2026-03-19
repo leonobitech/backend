@@ -16,12 +16,15 @@ COPY agent.py ./
 # Install Python deps
 RUN pip install --no-cache-dir -e ".[cloud]"
 
-# Download turn detector model at build time
-RUN python -c "from livekit.plugins.turn_detector.base import _download_from_hf_hub; _download_from_hf_hub('model_q8.onnx')" || true
-RUN python agent.py download-files || true
-
 # Non-root user
-RUN useradd -r -u 10010 agent
+RUN useradd -m -r -u 10010 agent
+
+# Download models at build time (as root, then fix permissions)
+RUN python agent.py download-files || true
+RUN cp -r /root/.cache/huggingface /home/agent/.cache/huggingface 2>/dev/null || true && \
+    chown -R agent:agent /home/agent/.cache 2>/dev/null || true
+
+ENV HOME=/home/agent
 USER agent
 
 # LiveKit agent entrypoint
