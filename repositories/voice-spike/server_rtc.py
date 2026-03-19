@@ -25,16 +25,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from faster_whisper import WhisperModel
-
-# XTTS v2 TTS
-import torch
-original_torch_load = torch.load
-def _patched_load(*args, **kwargs):
-    kwargs['weights_only'] = False
-    return original_torch_load(*args, **kwargs)
-torch.load = _patched_load
-
-from TTS.api import TTS
+from piper import PiperVoice
+from piper.voice import SynthesisConfig
 
 load_dotenv()
 
@@ -48,9 +40,7 @@ SILENCE_THRESHOLD_MS = 800
 SAMPLE_RATE = 16000
 FRAME_MS = 30
 ENERGY_THRESHOLD = 200
-XTTS_MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
-XTTS_REF_VOICE = "/tmp/ref_male.wav"  # Referencia de voz generada con Piper davefx
-XTTS_SAMPLE_RATE = 24000
+PIPER_MODEL = Path(__file__).parent / "models" / "es_AR-daniela-high.onnx"
 
 app = FastAPI(title="Voice Spike RTC")
 
@@ -58,22 +48,22 @@ static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 whisper_model: WhisperModel = None
-xtts_model: TTS = None
+piper_voice: PiperVoice = None
 claude_client: anthropic.Anthropic = None
 pcs: set[RTCPeerConnection] = set()
 
 
 @app.on_event("startup")
 async def load_models():
-    global whisper_model, xtts_model, claude_client
+    global whisper_model, piper_voice, claude_client
 
     logger.info("Cargando Whisper...")
     whisper_model = WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type="int8")
     logger.info("Whisper cargado.")
 
-    logger.info("Cargando XTTS v2...")
-    xtts_model = TTS(XTTS_MODEL, gpu=False)
-    logger.info("XTTS v2 cargado.")
+    logger.info("Cargando Piper TTS...")
+    piper_voice = PiperVoice.load(str(PIPER_MODEL))
+    logger.info("Piper cargado.")
 
     claude_client = anthropic.Anthropic()
     logger.info("Claude client listo.")
@@ -93,7 +83,7 @@ async def index():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "whisper": WHISPER_MODEL, "tts": "XTTS-v2", "transport": "webrtc"}
+    return {"status": "ok", "whisper": WHISPER_MODEL, "tts": "Piper-daniela", "transport": "webrtc"}
 
 
 # --- Audio utils ---
@@ -144,24 +134,31 @@ def ask_claude(conversation: list[dict]) -> str:
     return "Disculpa, no pude procesar tu mensaje. ¿Podrías repetirlo?"
 
 
+PIPER_CONFIG = SynthesisConfig(
+    length_scale=0.75,      # más rápido (conversacional)
+    noise_scale=0.8,        # más expresivo
+    noise_w_scale=0.6,      # variación natural en duración
+)
+
+
 def synthesize(text: str) -> tuple[np.ndarray, int]:
-    """Genera audio int16 desde texto con XTTS v2. Retorna (audio, sample_rate)."""
+    """Genera audio int16 desde texto con Piper. Retorna (audio, sample_rate)."""
     try:
-        audio_list = xtts_model.tts(
-            text=text,
-            language="es",
-            speaker_wav=XTTS_REF_VOICE,
-        )
+        all_audio = []
+        for chunk in piper_voice.synthesize(text, syn_config=PIPER_CONFIG):
+            int16_audio = (chunk.audio_float_array * 32767).astype(np.int16)
+            all_audio.append(int16_audio)
 
-        audio_np = np.array(audio_list, dtype=np.float32)
-        audio_int16 = (audio_np * 32767).astype(np.int16)
+        if not all_audio:
+            return np.array([], dtype=np.int16), piper_voice.config.sample_rate
 
-        return audio_int16, XTTS_SAMPLE_RATE
+        audio_data = np.concatenate(all_audio)
+        return audio_data, piper_voice.config.sample_rate
 
     except Exception as e:
-        logger.error(f"XTTS error: {e}\n{traceback.format_exc()}")
+        logger.error(f"Piper error: {e}\n{traceback.format_exc()}")
 
-    return np.array([], dtype=np.int16), XTTS_SAMPLE_RATE
+    return np.array([], dtype=np.int16), 22050
 
 
 # --- TTS Audio Track ---
