@@ -4,10 +4,9 @@ import os
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
-from livekit.plugins import anthropic, silero, noise_cancellation
+from livekit.plugins import anthropic, deepgram, silero, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-from stt_whisper import FasterWhisperSTT
 from tts_piper import PiperTTS
 
 load_dotenv(".env.local", override=True)
@@ -55,12 +54,11 @@ async def entrypoint(ctx: agents.JobContext):
         mcp_servers.append(mcp.MCPServerHTTP(odoo_mcp_url))
         logger.info(f"Odoo MCP conectado: {odoo_mcp_url}")
 
-    # Local STT: faster-whisper (non-streaming, wrapped with StreamAdapter + VAD)
-    whisper_stt = FasterWhisperSTT(
-        model_size="small",
-        device="cpu",
-        compute_type="int8",
+    # Cloud STT: Deepgram Nova 3 (streaming, low latency)
+    deepgram_stt = deepgram.STT(
+        model="nova-3",
         language="es",
+        api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
 
     # Local TTS: Piper (daniela AR, high quality)
@@ -71,7 +69,7 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     session = AgentSession(
-        stt=whisper_stt,
+        stt=deepgram_stt,
         llm=anthropic.LLM(
             model="claude-haiku-4-5-20251001",
             temperature=0.7,
