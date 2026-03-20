@@ -1160,8 +1160,8 @@ services:
       odoo_mcp:
         condition: service_healthy
 
-    cpus: 1.0
-    mem_limit: 512m
+    cpus: 3.0
+    mem_limit: 2048m
 
     logging:
       driver: "json-file"
