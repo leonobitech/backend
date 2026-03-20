@@ -108,6 +108,13 @@ async def entrypoint(ctx: agents.JobContext):
 
     await ctx.connect()
 
+    # Disconnect agent when user leaves — close room immediately
+    @ctx.room.on("participant_disconnected")
+    def on_participant_left(participant: rtc.RemoteParticipant):
+        if participant.identity.startswith("user-"):
+            logger.info(f"User left, disconnecting agent from room {ctx.room.name}")
+            ctx.shutdown(reason="user disconnected")
+
 
 if __name__ == "__main__":
     agents.cli.run_app(server)
