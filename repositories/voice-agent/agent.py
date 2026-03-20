@@ -4,7 +4,8 @@ import os
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
-from livekit.plugins import anthropic, deepgram, elevenlabs, silero
+from livekit.plugins import anthropic, deepgram, silero
+from tts_piper import PiperTTS
 
 try:
     from livekit.plugins import noise_cancellation
@@ -65,19 +66,11 @@ async def entrypoint(ctx: agents.JobContext):
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
 
-    # Cloud TTS: ElevenLabs (streaming, high quality)
-    elevenlabs_tts = elevenlabs.TTS(
-        voice_id="QK4xDwo9ESPHA4JNUpX3",
-        model="eleven_multilingual_v2",
-        language="es",
-        voice_settings=elevenlabs.VoiceSettings(
-            stability=0.5,
-            similarity_boost=0.75,
-            style=0.2,
-            speed=1.1,
-            use_speaker_boost=True,
-        ),
-        api_key=os.getenv("ELEVENLABS_API_KEY"),
+    # Local TTS: Piper (free, no API costs)
+    piper_tts = PiperTTS(
+        length_scale=0.75,
+        noise_scale=0.8,
+        noise_w=0.6,
     )
 
     session = AgentSession(
@@ -87,7 +80,7 @@ async def entrypoint(ctx: agents.JobContext):
             temperature=0.7,
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         ),
-        tts=elevenlabs_tts,
+        tts=piper_tts,
         vad=ctx.proc.userdata["vad"],
         mcp_servers=mcp_servers,
     )

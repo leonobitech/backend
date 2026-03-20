@@ -2,30 +2,41 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# System deps for audio processing
+# System deps for audio processing + piper-phonemize
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         gcc \
         libffi-dev \
+        libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files
 COPY pyproject.toml ./
 COPY agent.py ./
+COPY tts_piper.py ./
 
-# Install Python deps
-RUN pip install --no-cache-dir -e ".[cloud]"
+# Install Python deps (cloud STT + local TTS)
+RUN pip install --no-cache-dir -e ".[cloud,local]"
+
+# Download Piper model at build time
+RUN mkdir -p /app/models && \
+    pip install --no-cache-dir huggingface-hub && \
+    python -c "from huggingface_hub import hf_hub_download; \
+        hf_hub_download('rhasspy/piper-voices', 'es/es_AR/daniela/high/es_AR-daniela-high.onnx', local_dir='/app/models', local_dir_use_symlinks=False); \
+        hf_hub_download('rhasspy/piper-voices', 'es/es_AR/daniela/high/es_AR-daniela-high.onnx.json', local_dir='/app/models', local_dir_use_symlinks=False)" && \
+    mv /app/models/es/es_AR/daniela/high/* /app/models/ && \
+    rm -rf /app/models/es
 
 # Shared cache dir accessible by all users (including subprocesses)
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface
 
-# Download models at build time
+# Download LiveKit agent models at build time
 RUN python agent.py download-files || true
 
 # Non-root user
 RUN useradd -r -u 10010 agent && \
-    chown -R agent:agent /app/.cache
+    chown -R agent:agent /app/.cache /app/models
 
 USER agent
 
