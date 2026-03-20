@@ -4,8 +4,7 @@ import os
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
-from livekit.plugins import anthropic, deepgram, silero
-from tts_piper import PiperTTS
+from livekit.plugins import anthropic, deepgram, elevenlabs, silero
 
 try:
     from livekit.plugins import noise_cancellation
@@ -43,10 +42,6 @@ server = AgentServer()
 
 def prewarm(proc: agents.JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
-    # Preload Piper model so first request is fast
-    piper = PiperTTS()
-    piper._ensure_model()
-    proc.userdata["piper_tts"] = piper
 
 
 server.setup_fnc = prewarm
@@ -70,8 +65,20 @@ async def entrypoint(ctx: agents.JobContext):
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
 
-    # Local TTS: Piper (preloaded in prewarm)
-    piper_tts = ctx.proc.userdata["piper_tts"]
+    # Cloud TTS: ElevenLabs Flash (low latency, streaming)
+    elevenlabs_tts = elevenlabs.TTS(
+        voice_id="QK4xDwo9ESPHA4JNUpX3",
+        model="eleven_flash_v2_5",
+        language="es",
+        voice_settings=elevenlabs.VoiceSettings(
+            stability=0.5,
+            similarity_boost=0.75,
+            style=0.2,
+            speed=1.1,
+            use_speaker_boost=True,
+        ),
+        api_key=os.getenv("ELEVENLABS_API_KEY"),
+    )
 
     session = AgentSession(
         stt=deepgram_stt,
@@ -80,7 +87,7 @@ async def entrypoint(ctx: agents.JobContext):
             temperature=0.7,
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         ),
-        tts=piper_tts,
+        tts=elevenlabs_tts,
         vad=ctx.proc.userdata["vad"],
         mcp_servers=mcp_servers,
     )
