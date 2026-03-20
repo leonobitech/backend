@@ -43,6 +43,10 @@ server = AgentServer()
 
 def prewarm(proc: agents.JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
+    # Preload Piper model so first request is fast
+    piper = PiperTTS()
+    piper._ensure_model()
+    proc.userdata["piper_tts"] = piper
 
 
 server.setup_fnc = prewarm
@@ -66,12 +70,8 @@ async def entrypoint(ctx: agents.JobContext):
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
 
-    # Local TTS: Piper (free, no API costs)
-    piper_tts = PiperTTS(
-        length_scale=0.75,
-        noise_scale=0.8,
-        noise_w=0.6,
-    )
+    # Local TTS: Piper (preloaded in prewarm)
+    piper_tts = ctx.proc.userdata["piper_tts"]
 
     session = AgentSession(
         stt=deepgram_stt,

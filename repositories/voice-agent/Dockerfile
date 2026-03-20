@@ -18,13 +18,13 @@ COPY tts_piper.py ./
 # Install Python deps (cloud STT + local TTS)
 RUN pip install --no-cache-dir -e ".[cloud,local]"
 
-# Download Piper model at build time
+# Download Piper model at build time (medium = faster on CPU)
 RUN mkdir -p /app/models && \
     pip install --no-cache-dir huggingface-hub && \
     python -c "from huggingface_hub import hf_hub_download; \
-        hf_hub_download('rhasspy/piper-voices', 'es/es_AR/daniela/high/es_AR-daniela-high.onnx', local_dir='/app/models', local_dir_use_symlinks=False); \
-        hf_hub_download('rhasspy/piper-voices', 'es/es_AR/daniela/high/es_AR-daniela-high.onnx.json', local_dir='/app/models', local_dir_use_symlinks=False)" && \
-    mv /app/models/es/es_AR/daniela/high/* /app/models/ && \
+        hf_hub_download('rhasspy/piper-voices', 'es/es_ES/davefx/medium/es_ES-davefx-medium.onnx', local_dir='/app/models', local_dir_use_symlinks=False); \
+        hf_hub_download('rhasspy/piper-voices', 'es/es_ES/davefx/medium/es_ES-davefx-medium.onnx.json', local_dir='/app/models', local_dir_use_symlinks=False)" && \
+    mv /app/models/es/es_ES/davefx/medium/* /app/models/ && \
     rm -rf /app/models/es
 
 # Shared cache dir accessible by all users (including subprocesses)

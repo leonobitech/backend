@@ -9,7 +9,7 @@ from livekit.agents.types import APIConnectOptions
 
 logger = logging.getLogger("tts.piper")
 
-DEFAULT_MODEL = Path(__file__).parent / "models" / "es_AR-daniela-high.onnx"
+DEFAULT_MODEL = Path(__file__).parent / "models" / "es_ES-davefx-medium.onnx"
 
 PIPER_SAMPLE_RATE = 22050
 
