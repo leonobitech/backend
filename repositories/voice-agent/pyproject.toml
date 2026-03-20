@@ -1,3 +1,6 @@
+[tool.setuptools]
+py-modules = ["agent", "tts_piper"]
+
 [project]
 name = "voice-agent"
 version = "0.1.0"
