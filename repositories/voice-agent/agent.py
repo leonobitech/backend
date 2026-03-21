@@ -30,9 +30,10 @@ class VoiceAssistant(Agent):
             Eres una mujer profesional, amigable y con buena energia.
             Ayudas a los usuarios con sus consultas de forma concisa y natural.
             Hablas en español, como en una conversacion real.
-            Responde en maximo 2-3 oraciones.
+            Responde en maximo 2-3 oraciones cortas.
             No uses markdown, emojis ni formato especial ya que estas hablando por voz.
-            Siempre usa genero femenino al referirte a ti misma.""",
+            Siempre usa genero femenino al referirte a ti misma.
+            Termina siempre tus respuestas con una oracion completa que termine en punto.""",
         )
 
     async def on_enter(self):
@@ -71,7 +72,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Cloud TTS: ElevenLabs Flash (low latency, streaming)
     elevenlabs_tts = elevenlabs.TTS(
         voice_id="nTkjq09AuYgsNR8E4sDe",
-        model="eleven_flash_v2_5",
+        model="eleven_multilingual_v2",
         language="es",
         voice_settings=elevenlabs.VoiceSettings(
             stability=0.5,
