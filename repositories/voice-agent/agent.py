@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
-from livekit.plugins import anthropic, deepgram, elevenlabs, silero
+from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
 
 try:
     from livekit.plugins import noise_cancellation
@@ -105,6 +105,12 @@ async def entrypoint(ctx: agents.JobContext):
         agent=VoiceAssistant(),
         room_options=room_opts,
     )
+
+    # Beyond Presence avatar (lip-synced video participant)
+    avatar = bey.AvatarSession(
+        avatar_id=os.getenv("BEY_AVATAR_ID", "694c83e2-8895-4a98-bd16-56332ca3f449"),
+    )
+    await avatar.start(session, room=ctx.room)
 
     await ctx.connect()
 

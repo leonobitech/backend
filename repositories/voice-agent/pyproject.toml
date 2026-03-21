@@ -20,6 +20,7 @@ local = [
 cloud = [
     "livekit-plugins-deepgram~=1.5",
     "livekit-plugins-elevenlabs~=1.5",
+    "livekit-plugins-bey~=1.0",
 ]
 
 [project.scripts]
