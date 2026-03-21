@@ -108,6 +108,7 @@ async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
 
     # Beyond Presence avatar (lip-synced video participant)
+    avatar = None
     avatar_id = os.getenv("BEY_AVATAR_ID", "694c83e2-8895-4a98-bd16-56332ca3f449")
     logger.info(f"Starting Beyond Presence avatar: {avatar_id}")
     try:
@@ -125,11 +126,18 @@ async def entrypoint(ctx: agents.JobContext):
             instructions="Saluda al usuario brevemente y pregunta en que puedes ayudarle."
         )
 
-    # Disconnect agent when user leaves — close room immediately
+    # Disconnect agent + avatar when user leaves
     @ctx.room.on("participant_disconnected")
     def on_participant_left(participant: rtc.RemoteParticipant):
         if participant.identity.startswith("user-"):
             logger.info(f"User left, disconnecting agent from room {ctx.room.name}")
+            if avatar:
+                try:
+                    import asyncio
+                    asyncio.ensure_future(avatar.close())
+                    logger.info("Beyond Presence avatar closed")
+                except Exception as e:
+                    logger.warning(f"Error closing avatar: {e}")
             ctx.shutdown(reason="user disconnected")
 
 
