@@ -106,13 +106,17 @@ async def entrypoint(ctx: agents.JobContext):
         room_options=room_opts,
     )
 
-    # Beyond Presence avatar (lip-synced video participant)
-    avatar = bey.AvatarSession(
-        avatar_id=os.getenv("BEY_AVATAR_ID", "694c83e2-8895-4a98-bd16-56332ca3f449"),
-    )
-    await avatar.start(session, room=ctx.room)
-
     await ctx.connect()
+
+    # Beyond Presence avatar (lip-synced video participant)
+    avatar_id = os.getenv("BEY_AVATAR_ID", "694c83e2-8895-4a98-bd16-56332ca3f449")
+    logger.info(f"Starting Beyond Presence avatar: {avatar_id}")
+    try:
+        avatar = bey.AvatarSession(avatar_id=avatar_id)
+        await avatar.start(session, room=ctx.room)
+        logger.info("Beyond Presence avatar started successfully")
+    except Exception as e:
+        logger.error(f"Beyond Presence avatar failed: {e}")
 
     # Disconnect agent when user leaves — close room immediately
     @ctx.room.on("participant_disconnected")
