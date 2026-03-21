@@ -91,6 +91,10 @@ async def entrypoint(ctx: agents.JobContext):
         tts=elevenlabs_tts,
         vad=ctx.proc.userdata["vad"],
         mcp_servers=mcp_servers,
+        # Interruption handling
+        allow_interruptions=True,
+        min_interruption_duration=0.5,
+        min_interruption_words=1,
     )
 
     room_opts = room_io.RoomOptions()
