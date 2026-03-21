@@ -75,7 +75,7 @@ async def entrypoint(ctx: agents.JobContext):
             stability=0.5,
             similarity_boost=0.75,
             style=0.2,
-            speed=1.1,
+            speed=1.0,
             use_speaker_boost=True,
         ),
         api_key=os.getenv("ELEVENLABS_API_KEY"),
