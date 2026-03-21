@@ -66,11 +66,8 @@ async def entrypoint(ctx: agents.JobContext):
     deepgram_stt = deepgram.STT(
         model="nova-3",
         language="es",
-        interim_results=True,
         smart_format=True,
-        no_delay=True,
-        endpointing=300,
-        utterance_end_ms=1000,
+        endpointing_ms=300,
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
 
