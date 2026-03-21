@@ -66,6 +66,11 @@ async def entrypoint(ctx: agents.JobContext):
     deepgram_stt = deepgram.STT(
         model="nova-3",
         language="es",
+        interim_results=True,
+        smart_format=True,
+        no_delay=True,
+        endpointing=300,
+        utterance_end_ms=1000,
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
 
@@ -77,10 +82,11 @@ async def entrypoint(ctx: agents.JobContext):
         voice_settings=elevenlabs.VoiceSettings(
             stability=0.5,
             similarity_boost=0.75,
-            style=0.2,
+            style=0.0,
             speed=1.0,
             use_speaker_boost=True,
         ),
+        chunk_length_schedule=[50],
         api_key=os.getenv("ELEVENLABS_API_KEY"),
     )
 
@@ -88,7 +94,7 @@ async def entrypoint(ctx: agents.JobContext):
         stt=deepgram_stt,
         llm=anthropic.LLM(
             model="claude-haiku-4-5-20251001",
-            temperature=0.7,
+            temperature=0.5,
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         ),
         tts=elevenlabs_tts,
@@ -98,6 +104,10 @@ async def entrypoint(ctx: agents.JobContext):
         allow_interruptions=True,
         min_interruption_duration=0.5,
         min_interruption_words=1,
+        # Faster turn detection
+        min_endpointing_delay=0.3,
+        max_endpointing_delay=1.5,
+        preemptive_generation=True,
     )
 
     room_opts = room_io.RoomOptions()
