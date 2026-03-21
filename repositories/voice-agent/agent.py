@@ -32,9 +32,8 @@ class VoiceAssistant(Agent):
         )
 
     async def on_enter(self):
-        self.session.generate_reply(
-            instructions="Saluda al usuario brevemente y pregunta en que puedes ayudarle."
-        )
+        # Greeting is triggered after avatar is ready, not here
+        pass
 
 
 server = AgentServer()
@@ -115,8 +114,16 @@ async def entrypoint(ctx: agents.JobContext):
         avatar = bey.AvatarSession(avatar_id=avatar_id)
         await avatar.start(session, room=ctx.room)
         logger.info("Beyond Presence avatar started successfully")
+        # Greet only after avatar is visible
+        session.generate_reply(
+            instructions="Saluda al usuario brevemente y pregunta en que puedes ayudarle."
+        )
     except Exception as e:
         logger.error(f"Beyond Presence avatar failed: {e}")
+        # Greet anyway if avatar fails
+        session.generate_reply(
+            instructions="Saluda al usuario brevemente y pregunta en que puedes ayudarle."
+        )
 
     # Disconnect agent when user leaves — close room immediately
     @ctx.room.on("participant_disconnected")
