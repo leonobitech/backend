@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
+from livekit.api import LiveKitAPI
 from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
 
 try:
@@ -149,17 +150,22 @@ async def entrypoint(ctx: agents.JobContext):
             instructions="Saluda al usuario brevemente y pregunta en que puedes ayudarle."
         )
 
-    # Disconnect agent + avatar when user leaves
+    # Disconnect agent + force delete room when user leaves
     @ctx.room.on("participant_disconnected")
     def on_participant_left(participant: rtc.RemoteParticipant):
         if participant.identity.startswith("user-"):
-            logger.info(f"User left, disconnecting agent from room {ctx.room.name}")
-            if avatar:
+            logger.info(f"User left, cleaning up room {ctx.room.name}")
+
+            async def cleanup_room():
                 try:
-                    asyncio.ensure_future(avatar.aclose())
-                    logger.info("Beyond Presence avatar closed")
+                    api = LiveKitAPI()
+                    await api.room.delete_room(ctx.room.name)
+                    await api.aclose()
+                    logger.info(f"Room {ctx.room.name} deleted via API")
                 except Exception as e:
-                    logger.warning(f"Error closing avatar: {e}")
+                    logger.warning(f"Error deleting room: {e}")
+
+            asyncio.ensure_future(cleanup_room())
             ctx.shutdown(reason="user disconnected")
 
 
