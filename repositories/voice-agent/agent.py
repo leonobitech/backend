@@ -152,7 +152,7 @@ async def entrypoint(ctx: agents.JobContext):
         try:
             await asyncio.wait_for(avatar_ready.wait(), timeout=15.0)
             logger.info("Avatar video track ready, waiting for render...")
-            await asyncio.sleep(1.5)  # Give frontend time to attach and render first frame
+            await asyncio.sleep(0.5)  # Brief pause for frontend to render first frame
             logger.info("Greeting user")
         except asyncio.TimeoutError:
             logger.warning("Avatar video track timeout, greeting anyway")
