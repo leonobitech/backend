@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
-from livekit.api import LiveKitAPI
+from livekit.api import LiveKitAPI, DeleteRoomRequest
 from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
 
 try:
@@ -159,7 +159,7 @@ async def entrypoint(ctx: agents.JobContext):
             async def cleanup_room():
                 try:
                     api = LiveKitAPI()
-                    await api.room.delete_room(ctx.room.name)
+                    await api.room.delete_room(DeleteRoomRequest(room=ctx.room.name))
                     await api.aclose()
                     logger.info(f"Room {ctx.room.name} deleted via API")
                 except Exception as e:
