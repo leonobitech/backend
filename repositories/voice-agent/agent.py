@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 
@@ -115,13 +116,35 @@ async def entrypoint(ctx: agents.JobContext):
         avatar = bey.AvatarSession(avatar_id=avatar_id)
         await avatar.start(session, room=ctx.room)
         logger.info("Beyond Presence avatar started successfully")
-        # Greet only after avatar is visible
+
+        # Wait for avatar to publish video track before greeting
+        avatar_ready = asyncio.Event()
+
+        @ctx.room.on("track_published")
+        def on_track_published(publication: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant):
+            if participant.identity.startswith("bey-") and publication.kind == rtc.TrackKind.KIND_VIDEO:
+                logger.info(f"Avatar video track published by {participant.identity}")
+                avatar_ready.set()
+
+        # Check if avatar already published (race condition)
+        for p in ctx.room.remote_participants.values():
+            if p.identity.startswith("bey-"):
+                for pub in p.track_publications.values():
+                    if pub.kind == rtc.TrackKind.KIND_VIDEO:
+                        avatar_ready.set()
+                        break
+
+        try:
+            await asyncio.wait_for(avatar_ready.wait(), timeout=15.0)
+            logger.info("Avatar video ready, greeting user")
+        except asyncio.TimeoutError:
+            logger.warning("Avatar video track timeout, greeting anyway")
+
         session.generate_reply(
             instructions="Saluda al usuario brevemente y pregunta en que puedes ayudarle."
         )
     except Exception as e:
         logger.error(f"Beyond Presence avatar failed: {e}")
-        # Greet anyway if avatar fails
         session.generate_reply(
             instructions="Saluda al usuario brevemente y pregunta en que puedes ayudarle."
         )
@@ -133,8 +156,7 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info(f"User left, disconnecting agent from room {ctx.room.name}")
             if avatar:
                 try:
-                    import asyncio
-                    asyncio.ensure_future(avatar.close())
+                    asyncio.ensure_future(avatar.aclose())
                     logger.info("Beyond Presence avatar closed")
                 except Exception as e:
                     logger.warning(f"Error closing avatar: {e}")
