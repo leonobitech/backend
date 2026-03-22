@@ -166,11 +166,19 @@ async def entrypoint(ctx: agents.JobContext):
         else:
             logger.info(f"[PIPELINE] turn={turn_counter['n']} role={role} t={elapsed:.3f}s text=\"{text[:80]}\"")
 
+    last_usage = {"tokens": 0}
+
     @session.on("session_usage_updated")
     def on_usage_updated(ev):
         usage = ev.usage
-        for mu in usage.model_usage:
-            logger.info(f"[USAGE] model={getattr(mu, 'model', 'unknown')} input_tokens={getattr(mu, 'input_tokens', 0)} output_tokens={getattr(mu, 'output_tokens', 0)}")
+        total = sum(getattr(mu, "input_tokens", 0) + getattr(mu, "output_tokens", 0) for mu in usage.model_usage)
+        if total != last_usage["tokens"]:
+            last_usage["tokens"] = total
+            for mu in usage.model_usage:
+                inp = getattr(mu, "input_tokens", 0)
+                out = getattr(mu, "output_tokens", 0)
+                if inp or out:
+                    logger.info(f"[USAGE] model={getattr(mu, 'model', 'unknown')} in={inp} out={out}")
 
     # ── Beyond Presence avatar (lip-synced video participant) ──────
     avatar = None
