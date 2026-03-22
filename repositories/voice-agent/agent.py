@@ -215,6 +215,8 @@ async def entrypoint(ctx: agents.JobContext):
         except asyncio.TimeoutError:
             logger.warning(f"[PIPELINE] avatar_timeout after 15.0s")
 
+        # Wait for frontend ready tone (0.5s) before greeting
+        await asyncio.sleep(0.5)
         greeting_start = time.monotonic()
         session.generate_reply(
             instructions="Presentate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en que puedes ayudar."
