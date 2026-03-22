@@ -1,10 +1,11 @@
 import asyncio
 import logging
 import os
+import time
 
 from dotenv import load_dotenv
 from livekit import agents, rtc
-from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt
+from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt, metrics
 from livekit.api import LiveKitAPI, DeleteRoomRequest
 from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
 
@@ -123,14 +124,40 @@ async def entrypoint(ctx: agents.JobContext):
 
     await ctx.connect()
 
-    # Beyond Presence avatar (lip-synced video participant)
+    # ── Pipeline metrics & timing ──────────────────────────────────
+    session_start_time = time.monotonic()
+
+    @session.on("metrics_collected")
+    def on_metrics_collected(ev):
+        metrics.log_metrics(ev.metrics)
+
+    @session.on("agent_state_changed")
+    def on_agent_state_changed(state: str):
+        elapsed = time.monotonic() - session_start_time
+        logger.info(f"[PIPELINE] agent_state={state} t={elapsed:.3f}s")
+
+    @session.on("user_state_changed")
+    def on_user_state_changed(state: str):
+        elapsed = time.monotonic() - session_start_time
+        logger.info(f"[PIPELINE] user_state={state} t={elapsed:.3f}s")
+
+    @session.on("user_input_transcribed")
+    def on_user_input(ev):
+        elapsed = time.monotonic() - session_start_time
+        is_final = getattr(ev, "is_final", True)
+        text = getattr(ev, "text", str(ev))
+        logger.info(f"[PIPELINE] stt_transcript final={is_final} t={elapsed:.3f}s text=\"{text}\"")
+
+    # ── Beyond Presence avatar (lip-synced video participant) ──────
     avatar = None
     avatar_id = os.getenv("BEY_AVATAR_ID", "694c83e2-8895-4a98-bd16-56332ca3f449")
-    logger.info(f"Starting Beyond Presence avatar: {avatar_id}")
+    avatar_boot_start = time.monotonic()
+    logger.info(f"[PIPELINE] avatar_boot_start id={avatar_id} t={avatar_boot_start - session_start_time:.3f}s")
     try:
         avatar = bey.AvatarSession(avatar_id=avatar_id)
         await avatar.start(session, room=ctx.room)
-        logger.info("Beyond Presence avatar started successfully")
+        avatar_started = time.monotonic() - avatar_boot_start
+        logger.info(f"[PIPELINE] avatar_session_started dt={avatar_started:.3f}s")
 
         # Wait for avatar to publish video track before greeting
         avatar_ready = asyncio.Event()
@@ -138,7 +165,8 @@ async def entrypoint(ctx: agents.JobContext):
         @ctx.room.on("track_published")
         def on_track_published(publication: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant):
             if participant.identity.startswith("bey-") and publication.kind == rtc.TrackKind.KIND_VIDEO:
-                logger.info(f"Avatar video track published by {participant.identity}")
+                avatar_track_dt = time.monotonic() - avatar_boot_start
+                logger.info(f"[PIPELINE] avatar_video_track_ready dt={avatar_track_dt:.3f}s participant={participant.identity}")
                 avatar_ready.set()
 
         # Check if avatar already published (race condition)
@@ -151,15 +179,18 @@ async def entrypoint(ctx: agents.JobContext):
 
         try:
             await asyncio.wait_for(avatar_ready.wait(), timeout=15.0)
-            logger.info("Avatar video track ready, greeting user")
+            avatar_total = time.monotonic() - avatar_boot_start
+            logger.info(f"[PIPELINE] avatar_ready_total dt={avatar_total:.3f}s")
         except asyncio.TimeoutError:
-            logger.warning("Avatar video track timeout, greeting anyway")
+            logger.warning(f"[PIPELINE] avatar_timeout after 15.0s")
 
+        greeting_start = time.monotonic()
         session.generate_reply(
             instructions="Presentate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en que puedes ayudar."
         )
+        logger.info(f"[PIPELINE] greeting_dispatched t={time.monotonic() - session_start_time:.3f}s")
     except Exception as e:
-        logger.error(f"Beyond Presence avatar failed: {e}")
+        logger.error(f"[PIPELINE] avatar_failed error={e} dt={time.monotonic() - avatar_boot_start:.3f}s")
         session.generate_reply(
             instructions="Presentate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en que puedes ayudar."
         )
