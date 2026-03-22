@@ -68,8 +68,7 @@ async def entrypoint(ctx: agents.JobContext):
     deepgram_stt = deepgram.STT(
         model="nova-3",
         language="es",
-        smart_format=True,
-        endpointing_ms=300,
+        endpointing_ms=200,
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
 
@@ -83,9 +82,9 @@ async def entrypoint(ctx: agents.JobContext):
             similarity_boost=0.75,
             style=0.0,
             speed=1.0,
-            use_speaker_boost=True,
+            use_speaker_boost=False,
         ),
-        chunk_length_schedule=[50],
+        chunk_length_schedule=[30, 50, 100],
         api_key=os.getenv("ELEVENLABS_API_KEY"),
     )
 
@@ -93,7 +92,7 @@ async def entrypoint(ctx: agents.JobContext):
         stt=deepgram_stt,
         llm=anthropic.LLM(
             model="claude-haiku-4-5-20251001",
-            temperature=0.5,
+            temperature=0.3,
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         ),
         tts=elevenlabs_tts,
