@@ -98,12 +98,10 @@ async def entrypoint(ctx: agents.JobContext):
         tts=elevenlabs_tts,
         vad=ctx.proc.userdata["vad"],
         mcp_servers=mcp_servers,
-        # Interruption handling with false interruption recovery
+        # Interruption handling
         allow_interruptions=True,
-        min_interruption_duration=0.8,
-        min_interruption_words=2,
-        resume_false_interruption=True,
-        false_interruption_timeout=2.0,
+        min_interruption_duration=0.5,
+        min_interruption_words=1,
         # Turn detection: AI-based multilingual model (replaces VAD-only endpointing)
         turn_detection=MultilingualModel(),
         min_endpointing_delay=0.3,
