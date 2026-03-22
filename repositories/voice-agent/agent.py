@@ -128,9 +128,11 @@ async def entrypoint(ctx: agents.JobContext):
 
     # ── Pipeline metrics & timing ──────────────────────────────────
     session_start_time = time.monotonic()
+    turn_counter = {"n": 0}
 
     @session.on("metrics_collected")
     def on_metrics_collected(ev):
+        # Still works in 1.5.0, will migrate when ChatMessage.metrics is available
         metrics.log_metrics(ev.metrics)
 
     @session.on("agent_state_changed")
@@ -147,8 +149,28 @@ async def entrypoint(ctx: agents.JobContext):
     def on_user_input(ev):
         elapsed = time.monotonic() - session_start_time
         is_final = getattr(ev, "is_final", True)
-        text = getattr(ev, "text", str(ev))
-        logger.info(f"[PIPELINE] stt_transcript final={is_final} t={elapsed:.3f}s text=\"{text}\"")
+        transcript = getattr(ev, "transcript", "")
+        if is_final and transcript:
+            logger.info(f"[PIPELINE] stt_final t={elapsed:.3f}s text=\"{transcript}\"")
+
+    @session.on("conversation_item_added")
+    def on_conversation_item(ev):
+        elapsed = time.monotonic() - session_start_time
+        item = ev.item
+        role = getattr(item, "role", "unknown")
+        text = getattr(item, "text_content", "")
+        interrupted = getattr(item, "interrupted", False)
+        if role == "assistant":
+            turn_counter["n"] += 1
+            logger.info(f"[PIPELINE] turn={turn_counter['n']} role={role} interrupted={interrupted} t={elapsed:.3f}s text=\"{text[:80]}\"")
+        else:
+            logger.info(f"[PIPELINE] turn={turn_counter['n']} role={role} t={elapsed:.3f}s text=\"{text[:80]}\"")
+
+    @session.on("session_usage_updated")
+    def on_usage_updated(ev):
+        usage = ev.usage
+        for mu in usage.model_usage:
+            logger.info(f"[USAGE] model={getattr(mu, 'model', 'unknown')} input_tokens={getattr(mu, 'input_tokens', 0)} output_tokens={getattr(mu, 'output_tokens', 0)}")
 
     # ── Beyond Presence avatar (lip-synced video participant) ──────
     avatar = None
