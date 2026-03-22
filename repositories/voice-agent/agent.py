@@ -8,6 +8,7 @@ from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt, metrics
 from livekit.api import LiveKitAPI, DeleteRoomRequest
 from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 try:
     from livekit.plugins import noise_cancellation
@@ -102,8 +103,9 @@ async def entrypoint(ctx: agents.JobContext):
         allow_interruptions=True,
         min_interruption_duration=0.5,
         min_interruption_words=1,
-        # Faster turn detection
-        min_endpointing_delay=0.05,
+        # Turn detection: AI-based multilingual model (replaces VAD-only endpointing)
+        turn_detection=MultilingualModel(),
+        min_endpointing_delay=0.3,
         max_endpointing_delay=1.5,
         preemptive_generation=True,
     )
