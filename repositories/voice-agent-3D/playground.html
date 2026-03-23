@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Agent - Leonobitech</title>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            text-align: center;
+            max-width: 480px;
+            padding: 2rem;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #fff; }
+        .subtitle { color: #888; margin-bottom: 2rem; font-size: 0.9rem; }
+        #status {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            background: #1a1a1a;
+            margin-bottom: 2rem;
+            font-size: 0.85rem;
+        }
+        .status-disconnected { border: 1px solid #444; color: #888; }
+        .status-connecting { border: 1px solid #f59e0b; color: #f59e0b; }
+        .status-connected { border: 1px solid #10b981; color: #10b981; }
+        .status-speaking { border: 1px solid #3b82f6; color: #3b82f6; }
+        #connectBtn {
+            padding: 1rem 3rem;
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            background: #3b82f6;
+            color: white;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        #connectBtn:hover { background: #2563eb; transform: scale(1.02); }
+        #connectBtn:disabled { background: #333; cursor: not-allowed; transform: none; }
+        #connectBtn.active { background: #ef4444; }
+        #connectBtn.active:hover { background: #dc2626; }
+        .transcript {
+            margin-top: 2rem;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 1rem;
+            background: #111;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+        .msg-user { color: #3b82f6; }
+        .msg-agent { color: #10b981; }
+        .msg-label { font-weight: 600; }
+        .visualizer {
+            margin: 1.5rem 0;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+        }
+        .bar {
+            width: 4px;
+            background: #3b82f6;
+            border-radius: 2px;
+            transition: height 0.1s;
+            height: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Voice Agent</h1>
+        <p class="subtitle">Leonobitech — Whisper + Claude + Piper</p>
+
+        <div id="status" class="status-disconnected">Desconectado</div>
+
+        <div class="visualizer" id="visualizer"></div>
+
+        <button id="connectBtn" onclick="toggleConnection()">Conectar</button>
+
+        <div class="transcript" id="transcript" style="display:none;"></div>
+    </div>
+
+    <script>
+        const LIVEKIT_URL = 'ws://localhost:7880';
+        let TOKEN = null;
+
+        let room = null;
+        let connected = false;
+
+        // Create visualizer bars
+        const vizEl = document.getElementById('visualizer');
+        for (let i = 0; i < 20; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            vizEl.appendChild(bar);
+        }
+        const bars = vizEl.querySelectorAll('.bar');
+
+        function setStatus(text, cls) {
+            const el = document.getElementById('status');
+            el.textContent = text;
+            el.className = cls;
+        }
+
+        function addMessage(role, text) {
+            const el = document.getElementById('transcript');
+            el.style.display = 'block';
+            const label = role === 'user' ? 'Tú' : 'Agente';
+            const cls = role === 'user' ? 'msg-user' : 'msg-agent';
+            el.innerHTML += `<div class="${cls}"><span class="msg-label">${label}:</span> ${text}</div>`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        async function toggleConnection() {
+            if (connected) {
+                await disconnect();
+            } else {
+                await connect();
+            }
+        }
+
+        async function connect() {
+            const btn = document.getElementById('connectBtn');
+            btn.disabled = true;
+            setStatus('Obteniendo token...', 'status-connecting');
+
+            try {
+                // Fetch fresh token
+                const resp = await fetch('/token');
+                const data = await resp.json();
+                TOKEN = data.token;
+                console.log('Token obtenido');
+
+                setStatus('Conectando a LiveKit...', 'status-connecting');
+
+                room = new LivekitClient.Room({
+                    audioCaptureDefaults: { autoGainControl: true, noiseSuppression: true },
+                });
+
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+                    if (track.kind === LivekitClient.Track.Kind.Audio) {
+                        const el = track.attach();
+                        document.body.appendChild(el);
+                        setStatus('Agente conectado — habla!', 'status-connected');
+                    }
+                });
+
+                room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+                    try {
+                        const msg = JSON.parse(new TextDecoder().decode(payload));
+                        if (msg.text) {
+                            const role = participant?.identity?.includes('agent') ? 'agent' : 'user';
+                            addMessage(role, msg.text);
+                        }
+                    } catch {}
+                });
+
+                room.on(LivekitClient.RoomEvent.TranscriptionReceived, (segments, participant) => {
+                    for (const seg of segments) {
+                        if (seg.final && seg.text.trim()) {
+                            const isAgent = participant?.identity !== room.localParticipant?.identity;
+                            addMessage(isAgent ? 'agent' : 'user', seg.text);
+                        }
+                    }
+                });
+
+                room.on(LivekitClient.RoomEvent.Disconnected, () => {
+                    connected = false;
+                    btn.textContent = 'Conectar';
+                    btn.classList.remove('active');
+                    setStatus('Desconectado', 'status-disconnected');
+                    resetBars();
+                });
+
+                await room.connect(LIVEKIT_URL, TOKEN);
+                await room.localParticipant.setMicrophoneEnabled(true);
+
+                connected = true;
+                btn.disabled = false;
+                btn.textContent = 'Desconectar';
+                btn.classList.add('active');
+                setStatus('Conectado — habla!', 'status-connected');
+
+                // Audio visualizer
+                startVisualizer();
+
+            } catch (err) {
+                console.error('Connection error:', err);
+                setStatus('Error: ' + err.message, 'status-disconnected');
+                btn.disabled = false;
+            }
+        }
+
+        async function disconnect() {
+            if (room) {
+                await room.disconnect();
+                room = null;
+            }
+            connected = false;
+            const btn = document.getElementById('connectBtn');
+            btn.textContent = 'Conectar';
+            btn.classList.remove('active');
+            setStatus('Desconectado', 'status-disconnected');
+            resetBars();
+        }
+
+        function resetBars() {
+            bars.forEach(b => b.style.height = '4px');
+        }
+
+        function startVisualizer() {
+            if (!room) return;
+            const track = room.localParticipant.audioTrackPublications.values().next().value;
+            if (!track?.track) { setTimeout(startVisualizer, 500); return; }
+
+            const stream = track.track.mediaStream;
+            if (!stream) { setTimeout(startVisualizer, 500); return; }
+
+            const ctx = new AudioContext();
+            const src = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 64;
+            src.connect(analyser);
+
+            const data = new Uint8Array(analyser.frequencyBinCount);
+
+            function draw() {
+                if (!connected) return;
+                analyser.getByteFrequencyData(data);
+                bars.forEach((bar, i) => {
+                    const val = data[i] || 0;
+                    bar.style.height = Math.max(4, val / 4) + 'px';
+                });
+                requestAnimationFrame(draw);
+            }
+            draw();
+        }
+    </script>
+</body>
+</html>
