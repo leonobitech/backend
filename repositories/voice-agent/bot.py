@@ -14,7 +14,7 @@ from livekit import api as livekit_api
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import TTSSpeakFrame, EndFrame
+from pipecat.frames.frames import EndFrame, LLMMessagesFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask, PipelineParams
@@ -172,11 +172,11 @@ async def run_bot(room_name: str):
     @transport.event_handler("on_first_participant_joined")
     async def on_first_participant_joined(transport, participant_id):
         logger.info(f"[PIPELINE] user_joined participant={participant_id} room={room_name}")
-        await task.queue_frame(
-            TTSSpeakFrame(
-                "Hola, soy Leonobit, la asistente virtual de Leonobitech. ¿En qué puedo ayudarte?"
-            )
-        )
+        # Inject greeting via LLM so it flows through full pipeline (generates RTVI events for chat)
+        greeting_messages = context.get_messages() + [
+            {"role": "user", "content": "Presentate brevemente y pregunta en que puedes ayudar."}
+        ]
+        await task.queue_frame(LLMMessagesFrame(greeting_messages))
 
     @transport.event_handler("on_participant_left")
     async def on_participant_left(transport, participant_id, reason):
