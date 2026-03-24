@@ -117,6 +117,9 @@ services:
     volumes:
       - redis_core_data:/data
 
+    ports:
+      - "127.0.0.1:6379:6379"  # Exposed to host for LiveKit Server (host mode)
+
     networks:
       - leonobitech-net
 
@@ -1162,6 +1165,31 @@ services:
 
     cpus: 3.0
     mem_limit: 2048m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 🎙️ LiveKit Server — Self-hosted WebRTC SFU + TURN
+  # Runs in host mode for optimal WebRTC performance (UDP media bypass)
+  # Signaling proxied by Traefik: wss://lk.leonobitech.com -> localhost:7880
+  livekit_server:
+    image: livekit/livekit-server:latest
+    container_name: livekit_server
+    restart: unless-stopped
+
+    network_mode: host
+
+    volumes:
+      - ./repositories/livekit/livekit.yaml:/etc/livekit.yaml:ro
+
+    command: --config /etc/livekit.yaml
+
+    depends_on:
+      redis_core:
+        condition: service_healthy
 
     logging:
       driver: "json-file"

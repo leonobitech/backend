@@ -1,0 +1,33 @@
+# LiveKit Server — Self-hosted config for Leonobitech VPS
+# Copy to livekit.yaml and fill in secrets
+# Docs: https://docs.livekit.io/transport/self-hosting/
+
+port: 7880
+log_level: info
+
+# API authentication
+keys:
+  ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+
+# Redis for room state (shared redis_core, DB 5)
+redis:
+  address: 127.0.0.1:6379
+  password: ${REDIS_PASSWORD}
+  db: 5
+
+# Room settings
+room:
+  empty_timeout: 300  # 5 min before deleting empty rooms
+
+# WebRTC / RTC settings
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+
+# Built-in TURN server (NAT traversal)
+turn:
+  enabled: true
+  udp_port: 443
+  domain: lk.leonobitech.com
