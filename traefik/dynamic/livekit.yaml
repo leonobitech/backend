@@ -1,10 +1,9 @@
 # ./traefik/dynamic/livekit.yaml
 #
 # 🎙️ LiveKit Server — Self-hosted WebRTC signaling
-# Routes wss://lk.leonobitech.com -> http://host:7880
-# Note: LiveKit runs with network_mode: host, so we use file provider (not Docker labels)
-# 172.18.0.1 = host gateway from leonobitech-net bridge network
-# WebRTC media (UDP 50000-60000) and TURN (UDP 443) bypass Traefik entirely
+# Routes wss://lk.leonobitech.com -> http://livekit_server:7880
+# LiveKit runs on leonobitech-net bridge, Traefik reaches it by container name
+# WebRTC media (UDP 50000-50100) and TURN (UDP 443) are port-mapped to host
 # -----------------------------------------------------------------------------
 
 http:
@@ -21,4 +20,4 @@ http:
     livekit:
       loadBalancer:
         servers:
-          - url: "http://172.18.0.1:7880"
+          - url: "http://livekit_server:7880"

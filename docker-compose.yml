@@ -117,9 +117,6 @@ services:
     volumes:
       - redis_core_data:/data
 
-    ports:
-      - "127.0.0.1:6379:6379"  # Exposed to host for LiveKit Server (host mode)
-
     networks:
       - leonobitech-net
 
@@ -1173,19 +1170,25 @@ services:
         max-file: "3"
 
   # 🎙️ LiveKit Server — Self-hosted WebRTC SFU + TURN
-  # Runs in host mode for optimal WebRTC performance (UDP media bypass)
-  # Signaling proxied by Traefik: wss://lk.leonobitech.com -> localhost:7880
+  # Bridge network for Traefik access, explicit port mappings for WebRTC/TURN
+  # Signaling proxied by Traefik: wss://lk.leonobitech.com -> livekit_server:7880
   livekit_server:
     image: livekit/livekit-server:latest
     container_name: livekit_server
     restart: unless-stopped
 
-    network_mode: host
-
     volumes:
       - ./repositories/livekit/livekit.yaml:/etc/livekit.yaml:ro
 
     command: --config /etc/livekit.yaml
+
+    ports:
+      - "7881:7881/tcp"             # WebRTC TCP fallback
+      - "443:443/udp"               # TURN UDP
+      - "50000-50100:50000-50100/udp"  # WebRTC media (100 ports = ~50 concurrent tracks)
+
+    networks:
+      - leonobitech-net
 
     depends_on:
       redis_core:
