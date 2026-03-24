@@ -34,9 +34,7 @@ class VoiceAssistant(Agent):
             Hablas en español, como en una conversacion real.
             Responde en maximo 2-3 oraciones cortas.
             No uses markdown, emojis ni formato especial ya que estas hablando por voz.
-            Siempre usa genero femenino al referirte a ti misma.
-            Termina siempre tus respuestas con una oracion completa que termine en punto.
-            IMPORTANTE: Al final de cada respuesta, agrega siempre un punto seguido de tres puntos suspensivos (. ...) para crear una pausa natural al terminar de hablar.""",
+            Siempre usa genero femenino al referirte a ti misma.""",
         )
 
     async def on_enter(self):
