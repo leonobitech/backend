@@ -1151,6 +1151,7 @@ services:
     restart: unless-stopped
 
     network_mode: host
+    shm_size: '256m'
 
     tmpfs:
       - /tmp
