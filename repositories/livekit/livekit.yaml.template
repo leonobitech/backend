@@ -9,9 +9,9 @@ log_level: info
 keys:
   ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
 
-# Redis for room state (redis_core on bridge network, DB 5)
+# Redis for room state (host mode, access via localhost)
 redis:
-  address: redis_core:6379
+  address: 127.0.0.1:6379
   password: ${REDIS_PASSWORD}
   db: 5
 

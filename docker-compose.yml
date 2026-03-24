@@ -45,6 +45,9 @@ services:
       # - --log.level=DEBUG
       # - --accesslog=true
 
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     ports:
       - "80:80"
       - "443:443"
@@ -116,6 +119,9 @@ services:
 
     volumes:
       - redis_core_data:/data
+
+    ports:
+      - "127.0.0.1:6379:6379"  # Exposed to host for LiveKit + voice_agent (host mode)
 
     networks:
       - leonobitech-net
@@ -1144,21 +1150,13 @@ services:
     image: leonobitech/voice-agent:v1.0
     restart: unless-stopped
 
+    network_mode: host
+
     tmpfs:
       - /tmp
 
-    security_opt:
-      - no-new-privileges:true
-
     env_file:
       - ./repositories/voice-agent/.env
-
-    networks:
-      - leonobitech-net
-
-    depends_on:
-      odoo_mcp:
-        condition: service_healthy
 
     cpus: 3.0
     mem_limit: 2048m
@@ -1170,29 +1168,19 @@ services:
         max-file: "3"
 
   # 🎙️ LiveKit Server — Self-hosted WebRTC SFU + TURN
-  # Bridge network for Traefik access, explicit port mappings for WebRTC/TURN
-  # Signaling proxied by Traefik: wss://lk.leonobitech.com -> livekit_server:7880
+  # Both LiveKit + voice_agent run in host mode for native WebRTC
+  # Traefik reaches LiveKit via host.docker.internal:7880
   livekit_server:
     image: livekit/livekit-server:latest
     container_name: livekit_server
     restart: unless-stopped
 
+    network_mode: host
+
     volumes:
       - ./repositories/livekit/livekit.yaml:/etc/livekit.yaml:ro
 
     command: --config /etc/livekit.yaml
-
-    ports:
-      - "7881:7881/tcp"             # WebRTC TCP fallback
-      - "443:443/udp"               # TURN UDP
-      - "50000-50100:50000-50100/udp"  # WebRTC media (100 ports = ~50 concurrent tracks)
-
-    networks:
-      - leonobitech-net
-
-    depends_on:
-      redis_core:
-        condition: service_healthy
 
     logging:
       driver: "json-file"
