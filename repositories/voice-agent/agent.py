@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io, function_tool, RunContext, mcp, stt, metrics
 from livekit.api import LiveKitAPI, DeleteRoomRequest
-from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
+from livekit.plugins import anthropic, deepgram, elevenlabs, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 try:
@@ -41,7 +41,6 @@ class VoiceAssistant(Agent):
         )
 
     async def on_enter(self):
-        # Greeting is triggered after avatar is ready, not here
         pass
 
 
@@ -133,7 +132,6 @@ async def entrypoint(ctx: agents.JobContext):
 
     @session.on("metrics_collected")
     def on_metrics_collected(ev):
-        # Still works in 1.5.0, will migrate when ChatMessage.metrics is available
         metrics.log_metrics(ev.metrics)
 
     @session.on("agent_state_changed")
@@ -181,57 +179,11 @@ async def entrypoint(ctx: agents.JobContext):
                 if inp or out:
                     logger.info(f"[USAGE] model={getattr(mu, 'model', 'unknown')} in={inp} out={out}")
 
-    # ── Beyond Presence avatar (lip-synced video participant) ──────
-    avatar = None
-    avatar_id = os.getenv("BEY_AVATAR_ID")
-    if not avatar_id:
-        logger.error("[PIPELINE] BEY_AVATAR_ID env var is required")
-        return
-    avatar_boot_start = time.monotonic()
-    logger.info(f"[PIPELINE] avatar_boot_start id={avatar_id} t={avatar_boot_start - session_start_time:.3f}s")
-    try:
-        avatar = bey.AvatarSession(avatar_id=avatar_id)
-        # Beyond Presence connects from external servers, needs public URL (not internal ws://127.0.0.1)
-        public_livekit_url = os.getenv("LIVEKIT_PUBLIC_URL", os.getenv("LIVEKIT_URL"))
-        await avatar.start(session, room=ctx.room, livekit_url=public_livekit_url)
-        avatar_started = time.monotonic() - avatar_boot_start
-        logger.info(f"[PIPELINE] avatar_session_started dt={avatar_started:.3f}s")
-
-        # Wait for avatar to publish video track before greeting
-        avatar_ready = asyncio.Event()
-
-        @ctx.room.on("track_published")
-        def on_track_published(publication: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant):
-            if participant.identity.startswith("bey-") and publication.kind == rtc.TrackKind.KIND_VIDEO:
-                avatar_track_dt = time.monotonic() - avatar_boot_start
-                logger.info(f"[PIPELINE] avatar_video_track_ready dt={avatar_track_dt:.3f}s participant={participant.identity}")
-                avatar_ready.set()
-
-        # Check if avatar already published (race condition)
-        for p in ctx.room.remote_participants.values():
-            if p.identity.startswith("bey-"):
-                for pub in p.track_publications.values():
-                    if pub.kind == rtc.TrackKind.KIND_VIDEO:
-                        avatar_ready.set()
-                        break
-
-        try:
-            await asyncio.wait_for(avatar_ready.wait(), timeout=15.0)
-            avatar_total = time.monotonic() - avatar_boot_start
-            logger.info(f"[PIPELINE] avatar_ready_total dt={avatar_total:.3f}s")
-        except asyncio.TimeoutError:
-            logger.warning(f"[PIPELINE] avatar_timeout after 15.0s")
-
-        greeting_start = time.monotonic()
-        session.generate_reply(
-            instructions="Presentate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en que puedes ayudar."
-        )
-        logger.info(f"[PIPELINE] greeting_dispatched t={time.monotonic() - session_start_time:.3f}s")
-    except Exception as e:
-        logger.error(f"[PIPELINE] avatar_failed error={e} dt={time.monotonic() - avatar_boot_start:.3f}s")
-        session.generate_reply(
-            instructions="Presentate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en que puedes ayudar."
-        )
+    # ── Greeting (immediate, no avatar wait) ──────────────────────
+    session.generate_reply(
+        instructions="Presentate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en que puedes ayudar."
+    )
+    logger.info(f"[PIPELINE] greeting_dispatched t={time.monotonic() - session_start_time:.3f}s")
 
     # Disconnect agent + force delete room when user leaves
     @ctx.room.on("participant_disconnected")
