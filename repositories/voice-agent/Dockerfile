@@ -16,15 +16,20 @@ COPY bot.py ./
 # Install Python deps
 RUN pip install --no-cache-dir "."
 
-# Shared cache dir (Silero VAD model)
+# Cache dirs for models and NLTK data
 ENV HF_HOME=/app/.cache/huggingface
-RUN mkdir -p /app/.cache/huggingface
+ENV NLTK_DATA=/app/.cache/nltk_data
+RUN mkdir -p /app/.cache/huggingface /app/.cache/nltk_data
 
-# Pre-download Silero VAD model at build time
-RUN python -c "from pipecat.audio.vad.silero import SileroVADAnalyzer; SileroVADAnalyzer()"
+# Pre-download NLTK tokenizer + Silero VAD model at build time
+RUN python -c "\
+import nltk; \
+nltk.download('punkt_tab', download_dir='/app/.cache/nltk_data'); \
+from pipecat.audio.vad.silero import SileroVADAnalyzer; \
+SileroVADAnalyzer()"
 
 # Non-root user
-RUN useradd -r -u 10010 agent && \
+RUN useradd -r -u 10010 -d /app agent && \
     chown -R agent:agent /app/.cache
 
 USER agent
