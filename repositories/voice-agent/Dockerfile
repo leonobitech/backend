@@ -11,17 +11,17 @@ RUN apt-get update && \
 
 # Copy project files
 COPY pyproject.toml ./
-COPY agent.py ./
+COPY bot.py ./
 
-# Install Python deps (cloud only: Deepgram STT + ElevenLabs TTS)
-RUN pip install --no-cache-dir ".[cloud]"
+# Install Python deps
+RUN pip install --no-cache-dir "."
 
-# Shared cache dir accessible by all users (including subprocesses)
+# Shared cache dir (Silero VAD model)
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface
 
-# Download models at build time (fail build if models can't be fetched)
-RUN python agent.py download-files
+# Pre-download Silero VAD model at build time
+RUN python -c "from pipecat.audio.vad.silero import SileroVADAnalyzer; SileroVADAnalyzer()"
 
 # Non-root user
 RUN useradd -r -u 10010 agent && \
@@ -29,5 +29,7 @@ RUN useradd -r -u 10010 agent && \
 
 USER agent
 
-# LiveKit agent entrypoint
-ENTRYPOINT ["python", "agent.py", "start"]
+EXPOSE 8200
+
+# Pipecat bot entrypoint
+ENTRYPOINT ["python", "bot.py"]

@@ -1,27 +1,17 @@
 [tool.setuptools]
-py-modules = ["agent", "tts_piper"]
+py-modules = ["bot"]
 
 [project]
 name = "voice-agent"
-version = "0.1.0"
-description = "Voice AI agent for Leonobitech - LiveKit + Deepgram + Piper/ElevenLabs + Claude"
+version = "2.0.0"
+description = "Voice AI agent for Leonobitech - Pipecat + LiveKit + Deepgram + ElevenLabs + Claude"
 requires-python = ">=3.11"
 dependencies = [
-    "livekit-agents[anthropic,silero,mcp]~=1.5",
+    "pipecat-ai[livekit,deepgram,anthropic,elevenlabs,silero]",
+    "livekit-api>=1.0.5,<2",
+    "aiohttp",
     "python-dotenv",
 ]
 
-[project.optional-dependencies]
-local = [
-    "faster-whisper",
-    "piper-tts",
-    "numpy",
-]
-cloud = [
-    "livekit-plugins-deepgram~=1.5",
-    "livekit-plugins-elevenlabs~=1.5",
-    "livekit-plugins-turn-detector~=1.5",
-]
-
 [project.scripts]
-start = "agent:server"
+start = "bot:main"

@@ -1,0 +1,25 @@
+# ./traefik/dynamic/voice-bot.yaml
+#
+# 🤖 Voice Bot dispatch endpoint
+# Routes https://bot.leonobitech.com -> http://host:8200
+# Bot runs in host mode, Traefik reaches it via host.docker.internal
+# Protected by X-Bot-Api-Key header (no public access)
+# -----------------------------------------------------------------------------
+
+http:
+  routers:
+    voice-bot:
+      rule: "Host(`bot.leonobitech.com`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: le
+      middlewares:
+        - rate-limit-strict@file
+      service: voice-bot
+
+  services:
+    voice-bot:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8200"
