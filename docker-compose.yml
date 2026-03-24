@@ -1153,11 +1153,28 @@ services:
     network_mode: host
     shm_size: '256m'
 
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
     tmpfs:
       - /tmp
 
     env_file:
       - ./repositories/voice-agent/.env
+
+    depends_on:
+      livekit_server:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
     cpus: 3.0
     mem_limit: 2048m
@@ -1172,7 +1189,7 @@ services:
   # Both LiveKit + voice_agent run in host mode for native WebRTC
   # Traefik reaches LiveKit via host.docker.internal:7880
   livekit_server:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.10.0
     container_name: livekit_server
     restart: unless-stopped
 
@@ -1182,6 +1199,17 @@ services:
       - ./repositories/livekit/livekit.yaml:/etc/livekit.yaml:ro
 
     command: --config /etc/livekit.yaml
+
+    depends_on:
+      redis_core:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7880/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
     logging:
       driver: "json-file"

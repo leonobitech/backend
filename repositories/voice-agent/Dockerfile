@@ -20,8 +20,8 @@ RUN pip install --no-cache-dir -e ".[cloud]"
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface
 
-# Download models at build time
-RUN python agent.py download-files || true
+# Download models at build time (fail build if models can't be fetched)
+RUN python agent.py download-files
 
 # Non-root user
 RUN useradd -r -u 10010 agent && \

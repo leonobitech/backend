@@ -180,7 +180,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     # ── Beyond Presence avatar (lip-synced video participant) ──────
     avatar = None
-    avatar_id = os.getenv("BEY_AVATAR_ID", "694c83e2-8895-4a98-bd16-56332ca3f449")
+    avatar_id = os.getenv("BEY_AVATAR_ID")
+    if not avatar_id:
+        logger.error("[PIPELINE] BEY_AVATAR_ID env var is required")
+        return
     avatar_boot_start = time.monotonic()
     logger.info(f"[PIPELINE] avatar_boot_start id={avatar_id} t={avatar_boot_start - session_start_time:.3f}s")
     try:

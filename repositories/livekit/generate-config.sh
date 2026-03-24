@@ -34,8 +34,8 @@ for var in LIVEKIT_API_KEY LIVEKIT_API_SECRET REDIS_PASSWORD; do
   fi
 done
 
-# Generate config using envsubst
+# Generate config with restricted permissions from the start
+install -m 600 /dev/null "$OUTPUT"
 envsubst < "$TEMPLATE" > "$OUTPUT"
-chmod 600 "$OUTPUT"
 
 echo "Generated $OUTPUT"

@@ -27,7 +27,9 @@ rtc:
   use_external_ip: true
 
 # Built-in TURN server (NAT traversal)
+# WARNING: Re-enabling requires verifying firewall rules and port availability
+# UDP 443 works because Traefik uses TCP 443 (no conflict), but 3478 is safer
 turn:
-  enabled: true
-  udp_port: 443
+  enabled: false
+  udp_port: 3478
   domain: lk.leonobitech.com
