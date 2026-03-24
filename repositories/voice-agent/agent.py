@@ -187,7 +187,9 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info(f"[PIPELINE] avatar_boot_start id={avatar_id} t={avatar_boot_start - session_start_time:.3f}s")
     try:
         avatar = bey.AvatarSession(avatar_id=avatar_id)
-        await avatar.start(session, room=ctx.room)
+        # Beyond Presence connects from external servers, needs public URL (not internal ws://127.0.0.1)
+        public_livekit_url = os.getenv("LIVEKIT_PUBLIC_URL", os.getenv("LIVEKIT_URL"))
+        await avatar.start(session, room=ctx.room, livekit_url=public_livekit_url)
         avatar_started = time.monotonic() - avatar_boot_start
         logger.info(f"[PIPELINE] avatar_session_started dt={avatar_started:.3f}s")
 
