@@ -60,15 +60,21 @@ Para cualquier accion que modifique datos como crear, cancelar o reprogramar cit
 
 def generate_bot_token(room_name: str) -> str:
     """Generate a LiveKit JWT token for the bot to join a room."""
-    token = livekit_api.AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
-    token.identity = f"agent-{room_name[:8]}"
-    token.name = "Leonobit"
-    token.video_grants = livekit_api.VideoGrants(
-        room_join=True,
-        room=room_name,
-        can_publish=True,
-        can_subscribe=True,
-        can_publish_data=True,
+    token = (
+        livekit_api.AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
+        .with_identity(f"agent-{room_name[:8]}")
+        .with_name("Leonobit")
+        .with_kind("agent")
+        .with_grants(
+            livekit_api.VideoGrants(
+                room_join=True,
+                room=room_name,
+                can_publish=True,
+                can_subscribe=True,
+                can_publish_data=True,
+            )
+        )
+        .with_ttl(900)  # 15 minutes
     )
     return token.to_jwt()
 
