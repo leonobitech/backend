@@ -14,6 +14,9 @@ http:
         - websecure
       tls:
         certResolver: le
+      middlewares:
+        - rate-limit-strict@file
+        - ws-safe@file
       service: livekit
 
   services:

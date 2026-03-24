@@ -14,7 +14,7 @@ COPY pyproject.toml ./
 COPY agent.py ./
 
 # Install Python deps (cloud only: Deepgram STT + ElevenLabs TTS)
-RUN pip install --no-cache-dir -e ".[cloud]"
+RUN pip install --no-cache-dir ".[cloud]"
 
 # Shared cache dir accessible by all users (including subprocesses)
 ENV HF_HOME=/app/.cache/huggingface

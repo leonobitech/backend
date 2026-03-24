@@ -102,7 +102,7 @@ services:
         max-file: "3"
 
   redis_core:
-    image: redis:latest
+    image: redis:7-alpine
     container_name: redis_core
     restart: unless-stopped
 
@@ -468,7 +468,7 @@ services:
         condition: service_healthy
 
   redis_n8n:
-    image: redis:latest
+    image: redis:7-alpine
     container_name: redis_n8n
     restart: unless-stopped
 
@@ -724,7 +724,7 @@ services:
       start_period: 10s
 
   redis_baserow:
-    image: redis:latest
+    image: redis:7-alpine
     container_name: redis_baserow
     restart: unless-stopped
 
