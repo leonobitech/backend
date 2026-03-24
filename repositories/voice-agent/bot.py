@@ -7,7 +7,7 @@ import asyncio
 import logging
 import os
 
-import aiohttp
+import datetime
 from aiohttp import web
 from dotenv import load_dotenv
 from livekit import api as livekit_api
@@ -74,7 +74,7 @@ def generate_bot_token(room_name: str) -> str:
                 can_publish_data=True,
             )
         )
-        .with_ttl(900)  # 15 minutes
+        .with_ttl(datetime.timedelta(minutes=15))
     )
     return token.to_jwt()
 
