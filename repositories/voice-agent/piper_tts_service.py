@@ -61,7 +61,7 @@ class PiperHTTPTTSService(TTSService):
             await self._session.close()
             self._session = None
 
-    async def run_tts(self, text: str) -> AsyncGenerator[Frame, None]:
+    async def run_tts(self, text: str, context_id: str = "") -> AsyncGenerator[Frame, None]:
         """Generate audio from text via Piper HTTP API."""
         if not text.strip():
             return
