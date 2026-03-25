@@ -128,19 +128,36 @@ async def entrypoint(ctx: agents.JobContext):
     # ── Pipeline metrics & timing ──────────────────────────────────
     session_start_time = time.monotonic()
     turn_counter = {"n": 0}
+    user_stop_time = {"t": 0.0}
 
     @session.on("metrics_collected")
     def on_metrics_collected(ev):
-        metrics.log_metrics(ev.metrics)
+        m = ev.metrics
+        if hasattr(m, "ttft"):  # LLMMetrics
+            logger.info(f"[METRICS] llm ttft={m.ttft:.3f}s tokens_in={m.prompt_tokens} tokens_out={m.completion_tokens} tok/s={m.tokens_per_second:.1f}")
+        elif hasattr(m, "ttfb") and hasattr(m, "audio_duration"):  # TTSMetrics
+            logger.info(f"[METRICS] tts ttfb={m.ttfb:.3f}s audio_duration={m.audio_duration:.2f}s")
+        elif hasattr(m, "audio_duration") and not hasattr(m, "ttfb"):  # STTMetrics
+            logger.info(f"[METRICS] stt audio_duration={m.audio_duration:.2f}s")
+        elif hasattr(m, "total_duration") and hasattr(m, "prediction_duration"):  # InterruptionMetrics
+            logger.info(f"[METRICS] interruption total={m.total_duration:.3f}s prediction={m.prediction_duration:.3f}s")
 
     @session.on("agent_state_changed")
     def on_agent_state_changed(state: str):
         elapsed = time.monotonic() - session_start_time
+        state_name = getattr(state, "new_state", state)
+        if str(state_name) == "speaking" and user_stop_time["t"] > 0:
+            latency = time.monotonic() - user_stop_time["t"]
+            logger.info(f"[METRICS] user_to_bot_latency={latency:.3f}s t={elapsed:.3f}s")
+            user_stop_time["t"] = 0.0
         logger.info(f"[PIPELINE] agent_state={state} t={elapsed:.3f}s")
 
     @session.on("user_state_changed")
     def on_user_state_changed(state: str):
         elapsed = time.monotonic() - session_start_time
+        state_name = getattr(state, "new_state", state)
+        if str(state_name) == "listening":
+            user_stop_time["t"] = time.monotonic()
         logger.info(f"[PIPELINE] user_state={state} t={elapsed:.3f}s")
 
     @session.on("user_input_transcribed")
