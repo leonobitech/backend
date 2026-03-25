@@ -1,9 +1,8 @@
 """
 Custom Pipecat TTS Service for Piper HTTP API.
-Calls the Piper TTS server to generate audio from text, sentence by sentence.
+Calls the Piper TTS server to generate audio from text.
 """
 
-import struct
 from typing import AsyncGenerator
 
 import aiohttp
@@ -18,28 +17,32 @@ from pipecat.frames.frames import (
     TTSStartedFrame,
     TTSStoppedFrame,
 )
-from pipecat.services.ai_services import TTSService
+from pipecat.services.tts_service import TTSService
 
 
 class PiperHTTPTTSService(TTSService):
     """TTS service that calls a Piper HTTP server.
 
     Piper generates audio very fast on CPU (~30x real-time).
-    The HTTP API returns complete audio per request (non-streaming),
-    but Pipecat's text aggregation splits text into sentences,
-    so each sentence fires a separate fast Piper call.
+    Each text chunk fires a separate HTTP request to Piper.
     """
 
-    class Settings(TTSService.Settings):
-        url: str = "http://127.0.0.1:5000/tts"
-        length_scale: float = 1.0
-        noise_scale: float = 0.667
-        noise_w: float = 0.8
-        piper_sample_rate: int = 22050
-
-    def __init__(self, *, settings: "PiperHTTPTTSService.Settings | None" = None, **kwargs):
-        super().__init__(sample_rate=settings.piper_sample_rate if settings else 22050, **kwargs)
-        self._settings = settings or self.Settings()
+    def __init__(
+        self,
+        *,
+        url: str = "http://127.0.0.1:5000/tts",
+        length_scale: float = 1.0,
+        noise_scale: float = 0.667,
+        noise_w: float = 0.8,
+        piper_sample_rate: int = 22050,
+        **kwargs,
+    ):
+        super().__init__(sample_rate=piper_sample_rate, **kwargs)
+        self._url = url
+        self._length_scale = length_scale
+        self._noise_scale = noise_scale
+        self._noise_w = noise_w
+        self._piper_sample_rate = piper_sample_rate
         self._session: aiohttp.ClientSession | None = None
 
     async def start(self, frame: StartFrame):
@@ -66,19 +69,19 @@ class PiperHTTPTTSService(TTSService):
         if not self._session:
             self._session = aiohttp.ClientSession()
 
-        logger.debug(f"PiperTTS: generating audio for '{text[:50]}...' ({len(text)} chars)")
+        logger.debug(f"PiperTTS: generating '{text[:60]}' ({len(text)} chars)")
 
         yield TTSStartedFrame()
 
         try:
             async with self._session.post(
-                self._settings.url,
+                self._url,
                 json={
                     "text": text,
                     "output_format": "wav",
-                    "length_scale": self._settings.length_scale,
-                    "noise_scale": self._settings.noise_scale,
-                    "noise_w": self._settings.noise_w,
+                    "length_scale": self._length_scale,
+                    "noise_scale": self._noise_scale,
+                    "noise_w": self._noise_w,
                 },
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
@@ -97,10 +100,9 @@ class PiperHTTPTTSService(TTSService):
                     pcm_data = wav_data
 
                 if pcm_data:
-                    # Send as single audio frame (Piper is fast enough)
                     yield TTSAudioRawFrame(
                         audio=pcm_data,
-                        sample_rate=self._settings.piper_sample_rate,
+                        sample_rate=self._piper_sample_rate,
                         num_channels=1,
                     )
 

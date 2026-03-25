@@ -120,10 +120,8 @@ async def run_bot(room_name: str):
 
     # ── TTS: Piper (local, CPU, free) ───────────────────────────
     tts = PiperHTTPTTSService(
-        settings=PiperHTTPTTSService.Settings(
-            url=PIPER_TTS_URL,
-            length_scale=1.0,
-        ),
+        url=PIPER_TTS_URL,
+        length_scale=1.0,
     )
 
     # ── Context + VAD ─────────────────────────────────────────────
