@@ -1,0 +1,1307 @@
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+
+    # Mantener privilegios al mínimo
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - .env
+
+    command:
+      # ✅ Dashboard y /ping (sólo en 127.0.0.1:8080)
+      - --api.dashboard=true
+      - --api.insecure=false
+      - --ping=true
+      - --entrypoints.traefik.address=:8080
+
+      # 📡 Entrypoints HTTP/HTTPS
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+      - --entrypoints.websecure.address=:443
+
+      # 🐳 Provider: Docker (sólo contenedores con label enable=true)
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      # Asegura que Traefik use la red donde están tus servicios
+      - --providers.docker.network=leonobitech-net
+
+      # 📂 Provider: archivos dinámicos (middlewares, etc.)
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+
+      # 🔐 Let's Encrypt (ACME) — HTTP-01
+      - --certificatesresolvers.le.acme.email=${SSL_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+
+      # (Opcional) logs para debug:
+      # - --log.level=DEBUG
+      # - --accesslog=true
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      - "80:80"
+      - "443:443"
+      # Dashboard/health sólo local:
+      - "127.0.0.1:8080:8080"
+
+    volumes:
+      # Docker socket en sólo lectura
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # ACME en volumen/archivo persistente
+      - ./traefik/acme.json:/letsencrypt/acme.json:rw
+
+      # 🔴 Importante: montar el DIRECTORIO dinámico completo
+      - ./traefik/dynamic/:/etc/traefik/dynamic:ro
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+    labels:
+      # ✅ Habilitar Traefik para este contenedor (necesario para el router del dashboard)
+      - "traefik.enable=true"
+
+      #########################################
+      # 🔐 Middleware: BasicAuth (definido por label)
+      #########################################
+      # Usa variable TRAEFIK_AUTH tipo htpasswd (p.ej. `admin:$$apr1$$...`)
+      - "traefik.http.middlewares.auth-traefik.basicauth.users=${TRAEFIK_AUTH}"
+
+      #########################################
+      # 🚪 Router: Acceso seguro al dashboard
+      #########################################
+      - "traefik.http.routers.traefik.rule=Host(`traefik.leonobitech.com`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=le"
+      - "traefik.http.routers.traefik.service=api@internal"
+      # Cadena de middlewares: auth (labels) + headers/rules (file)
+      - "traefik.http.routers.traefik.middlewares=auth-traefik@docker,block-trackers@file,secure-strict@file"
+
+    # Rotación de logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis_core:
+    image: redis:7-alpine
+    container_name: redis_core
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/redis/.env
+
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --databases ${REDIS_DATABASES}
+
+    volumes:
+      - redis_core_data:/data
+
+    ports:
+      - "127.0.0.1:6379:6379"  # Exposed to host for LiveKit + voice_agent (host mode)
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  core:
+    container_name: core
+    build:
+      context: ./repositories/core
+    image: leonobitech/core:v1.0.1
+    restart: unless-stopped
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/core/.env
+
+    volumes:
+      - ./repositories/core/keys:/app/keys:ro
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      redis_core:
+        condition: service_healthy
+      traefik:
+        condition: service_started
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''http'').get(''http://localhost:8000/health'', res => process.exit(res.statusCode === 200 ? 0 : 1))"',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    labels:
+      - "traefik.enable=true"
+
+      #########################################
+      # 📡 Servicio unico (WS transport con idle 1h, compatible con HTTP)
+      #########################################
+      - "traefik.http.services.core.loadbalancer.server.port=8000"
+      - "traefik.http.services.core.loadbalancer.serversTransport=ws-transport@file"
+
+      #########################################
+      # 🔌 Router: WebSocket IoT (higher priority)
+      #########################################
+      - "traefik.http.routers.core-ws.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`) && PathPrefix(`/ws/`)"
+      - "traefik.http.routers.core-ws.entrypoints=websecure"
+      - "traefik.http.routers.core-ws.tls.certresolver=le"
+      - "traefik.http.routers.core-ws.priority=20"
+      - "traefik.http.routers.core-ws.middlewares=ws-safe@file"
+      - "traefik.http.routers.core-ws.service=core"
+
+      #########################################
+      # 🌐 Router: Microservicio Core público
+      #########################################
+      - "traefik.http.routers.core.rule=Host(`${SUBDOMAINCORE}.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.core.entrypoints=websecure"
+      - "traefik.http.routers.core.tls.certresolver=le"
+      - "traefik.http.routers.core.priority=10"
+      - "traefik.http.routers.core.service=core"
+
+      #########################################
+      # 🧩 Middlewares globales aplicados al router
+      #########################################
+      - "traefik.http.routers.core.middlewares=core-rate-limit@file,core-secure@file,block-trackers@file,api-nostore-vary@file"
+
+  odoo_mcp:
+    container_name: odoo_mcp
+    build:
+      context: ./repositories/odoo-mcp
+    image: leonobitech/odoo-mcp:v2.0
+    restart: unless-stopped
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/odoo-mcp/.env
+
+    volumes:
+      - ./repositories/odoo-mcp/keys:/app/keys:ro
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      redis_core:
+        condition: service_healthy
+      traefik:
+        condition: service_started
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''http'').get(''http://localhost:8100/healthz'', res => process.exit(res.statusCode === 200 ? 0 : 1))"',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    labels:
+      - "traefik.enable=true"
+
+      # 🌐 Router: Odoo MCP (Odoo maneja su propia auth)
+      - "traefik.http.routers.odoo-mcp.rule=Host(`${SUBDOMAINODOO}.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.odoo-mcp.entrypoints=websecure"
+      - "traefik.http.routers.odoo-mcp.tls.certresolver=le"
+      - "traefik.http.routers.odoo-mcp.middlewares=secure-relaxed@file"
+      - "traefik.http.routers.odoo-mcp.service=odoo-mcp-service"
+
+      # 📡 Service
+      - "traefik.http.services.odoo-mcp-service.loadbalancer.server.port=8100"
+
+  n8n_main:
+    build:
+      context: ./repositories/n8n
+    image: leonobitech/n8n:latest
+    container_name: n8n_main
+    restart: unless-stopped
+
+    env_file:
+      - ./repositories/n8n/.env
+
+    volumes:
+      - n8n_data_main:/home/node/.n8n
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      postgres_n8n:
+        condition: service_healthy
+
+    labels:
+      # ✅ Activar Traefik
+      - "traefik.enable=true"
+
+      #########################################
+      # 📡 Servicio interno de n8n (puerto)
+      #########################################
+      - "traefik.http.services.n8n_main.loadbalancer.server.port=5678"
+
+      #########################################
+      # 🌟 Router: UI protegida con auth delegada al Core
+      #########################################
+      - "traefik.http.routers.n8n_ui.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.n8n_ui.entrypoints=websecure"
+      - "traefik.http.routers.n8n_ui.tls.certresolver=le"
+      - "traefik.http.routers.n8n_ui.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_ui.middlewares=core-auth@file,secure-relaxed@file"
+
+      #########################################
+      # 🎨 Assets estáticos (sin auth, mayor prioridad)
+      #########################################
+      - "traefik.http.routers.n8n_assets.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/assets/`)"
+      - "traefik.http.routers.n8n_assets.entrypoints=websecure"
+      - "traefik.http.routers.n8n_assets.tls.certresolver=le"
+      - "traefik.http.routers.n8n_assets.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_assets.priority=30"
+      - "traefik.http.routers.n8n_assets.middlewares=secure-basic@file"
+
+      #########################################
+      # 🔧 API / Webhooks (públicos pero con headers seguros)
+      #########################################
+      - "traefik.http.routers.n8n_rest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && (PathPrefix(`/rest/`) || PathPrefix(`/webhook/`) || PathPrefix(`/api/`) || PathPrefix(`/executions/`) || PathPrefix(`/workflows/`) || PathPrefix(`/js/`) || PathPrefix(`/css/`) || PathPrefix(`/fonts/`))"
+      - "traefik.http.routers.n8n_rest.entrypoints=websecure"
+      - "traefik.http.routers.n8n_rest.tls.certresolver=le"
+      - "traefik.http.routers.n8n_rest.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_rest.priority=50"
+      - "traefik.http.routers.n8n_rest.middlewares=secure-relaxed@file,api-nostore-vary@file"
+
+      #########################################
+      # 🖼️ Rutas estáticas (íconos, sin auth)
+      #########################################
+      - "traefik.http.routers.n8n_icons.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/icons/`)"
+      - "traefik.http.routers.n8n_icons.entrypoints=websecure"
+      - "traefik.http.routers.n8n_icons.tls.certresolver=le"
+      - "traefik.http.routers.n8n_icons.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_icons.middlewares=secure-relaxed@file"
+
+      #########################################
+      # 🎯 Webhook público de test (libre pero con headers mínimos)
+      #########################################
+      - "traefik.http.routers.n8n_webhooktest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook-test`)"
+      - "traefik.http.routers.n8n_webhooktest.entrypoints=websecure"
+      - "traefik.http.routers.n8n_webhooktest.tls.certresolver=le"
+      - "traefik.http.routers.n8n_webhooktest.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_webhooktest.middlewares=secure-relaxed@file"
+
+      #########################################
+      # 🎯 MCP público de test (libre pero con headers mínimos)
+      #########################################
+      - "traefik.http.routers.n8n_mcptest.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/mcp-test`)"
+      - "traefik.http.routers.n8n_mcptest.entrypoints=websecure"
+      - "traefik.http.routers.n8n_mcptest.tls.certresolver=le"
+      - "traefik.http.routers.n8n_mcptest.service=n8n_main@docker"
+      - "traefik.http.routers.n8n_mcptest.middlewares=secure-relaxed@file"
+
+  n8n_webhook_1:
+    image: leonobitech/n8n:latest
+    container_name: n8n_webhook_1
+    restart: unless-stopped
+
+    command: webhook
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/n8n/.env
+
+    environment:
+      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
+
+    volumes:
+      - n8n_data_main:/home/node/.n8n
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      postgres_n8n:
+        condition: service_healthy
+      redis_n8n:
+        condition: service_healthy
+
+    labels:
+      # ✅ Habilitar Traefik
+      - "traefik.enable=true"
+
+      #########################################
+      # 🚪 Servicio interno de webhooks
+      #########################################
+      - "traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678"
+
+      #########################################
+      # 🌐 Router: Público para /webhook/*
+      #########################################
+      - "traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)"
+      - "traefik.http.routers.n8n_webhook.entrypoints=websecure"
+      - "traefik.http.routers.n8n_webhook.tls.certresolver=le"
+      - "traefik.http.routers.n8n_webhook.service=n8n_webhook_1@docker"
+      - "traefik.http.routers.n8n_webhook.middlewares=secure-basic@file"
+
+      #########################################
+      # 🌐 Router: Público para /MCP/*
+      #########################################
+      - "traefik.http.routers.n8n_mcp.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/mcp`)"
+      - "traefik.http.routers.n8n_mcp.entrypoints=websecure"
+      - "traefik.http.routers.n8n_mcp.tls.certresolver=le"
+      - "traefik.http.routers.n8n_mcp.service=n8n_webhook_1@docker"
+      - "traefik.http.routers.n8n_mcp.middlewares=secure-basic@file"
+
+  n8n_worker_1:
+    image: leonobitech/n8n:latest
+    container_name: n8n_worker_1
+    restart: unless-stopped
+
+    command: worker
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/n8n/.env
+
+    environment:
+      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
+
+    volumes:
+      - n8n_data_main:/home/node/.n8n
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      postgres_n8n:
+        condition: service_healthy
+      redis_n8n:
+        condition: service_healthy
+
+  n8n_worker_2:
+    image: leonobitech/n8n:latest
+    container_name: n8n_worker_2
+    restart: unless-stopped
+
+    command: worker
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/n8n/.env
+
+    environment:
+      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
+
+    volumes:
+      - n8n_data_main:/home/node/.n8n
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      postgres_n8n:
+        condition: service_healthy
+      redis_n8n:
+        condition: service_healthy
+
+  redis_n8n:
+    image: redis:7-alpine
+    container_name: redis_n8n
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/n8n/.env
+
+    command: >
+      redis-server
+      --requirepass ${REDIS_N8N_PASSWORD}
+      --databases ${REDIS_N8N_DATABASES}
+
+    volumes:
+      - redis_n8n_data:/data
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_N8N_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postgres_n8n:
+    image: postgres:latest
+    container_name: postgres_n8n
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/n8n/.env
+
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER_N8N}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_N8N}
+      - POSTGRES_DB=${POSTGRES_DB_N8N}
+
+    volumes:
+      - n8n_postgres_data:/var/lib/postgresql/data
+
+    tmpfs:
+      - /tmp
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USER_N8N}",
+          "-d",
+          "${POSTGRES_DB_N8N}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postgres_odoo:
+    image: postgres:latest
+    container_name: postgres_odoo
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/odoo/.env
+
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB_ODOO}
+      - POSTGRES_USER=${POSTGRES_USER_ODOO}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_ODOO}
+
+    volumes:
+      - odoo_postgres_data:/var/lib/postgresql/data
+
+    tmpfs:
+      - /tmp
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USER_ODOO}",
+          "-d",
+          "${POSTGRES_DB_ODOO}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  odoo:
+    image: odoo:latest
+    container_name: odoo
+    restart: unless-stopped
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/odoo/.env
+
+    volumes:
+      - ./repositories/odoo/odoo.conf:/etc/odoo/odoo.conf:ro
+      - ./repositories/odoo/addons:/mnt/extra-addons:rw
+      - odoo_data:/var/lib/odoo
+
+    command:
+      [
+        "odoo",
+        "-c",
+        "/etc/odoo/odoo.conf",
+        "-d",
+        "leonobitech",
+        "--no-database-list",
+      ]
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      postgres_odoo:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "odoo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    labels:
+      - "traefik.enable=true"
+
+      #########################################
+      # 📡 Servicio interno
+      #########################################
+      - "traefik.http.services.odoo.loadbalancer.server.port=8069"
+      - "traefik.http.services.odoo-ws.loadbalancer.server.port=8072"
+
+      #########################################
+      # 🌍 Router principal
+      #########################################
+      - "traefik.http.routers.odoo-main.rule=Host(`odoo.${DOMAIN_NAME}`) || Host(`leraysi.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.odoo-main.entrypoints=websecure"
+      - "traefik.http.routers.odoo-main.tls=true"
+      - "traefik.http.routers.odoo-main.tls.certresolver=le"
+      - "traefik.http.routers.odoo-main.service=odoo"
+      #- "traefik.http.routers.odoo-main.middlewares=core-auth@file,secure-odoo@file"
+      - "traefik.http.routers.odoo-main.middlewares=secure-odoo@file"
+
+      #########################################
+      # 🔌 WebSocket (longpolling)
+      #########################################
+      - "traefik.http.routers.odoo-ws.rule=(Host(`odoo.${DOMAIN_NAME}`) || Host(`leraysi.${DOMAIN_NAME}`)) && PathPrefix(`/websocket`)"
+      - "traefik.http.routers.odoo-ws.entrypoints=websecure"
+      - "traefik.http.routers.odoo-ws.tls=true"
+      - "traefik.http.routers.odoo-ws.tls.certresolver=le"
+      - "traefik.http.routers.odoo-ws.service=odoo-ws"
+      - "traefik.http.routers.odoo-ws.middlewares=secure-basic@file"
+
+      #########################################
+      # 📦 Media pública y binarios (descargas, imágenes)
+      #########################################
+      - "traefik.http.routers.odoo-media.rule=(Host(`odoo.${DOMAIN_NAME}`) || Host(`leraysi.${DOMAIN_NAME}`)) && (PathPrefix(`/web/content`) || PathPrefix(`/web/image`) || PathPrefix(`/web/binary`) || PathPrefix(`/media`))"
+      - "traefik.http.routers.odoo-media.entrypoints=websecure"
+      - "traefik.http.routers.odoo-media.tls=true"
+      - "traefik.http.routers.odoo-media.service=odoo@docker"
+      - "traefik.http.routers.odoo-media.middlewares=odoo-media@file"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    networks:
+      - leonobitech-net
+
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
+
+    expose:
+      - "6333"
+
+    healthcheck:
+      disable: true
+
+  postgres_baserow:
+    image: postgres:latest
+    container_name: postgres_baserow
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    tmpfs:
+      - /tmp
+
+    env_file:
+      - ./repositories/baserow/.env
+
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER_BR}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_BR}
+      - POSTGRES_DB=${POSTGRES_DB_BR}
+
+    volumes:
+      - baserow_postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USER_BR}",
+          "-d",
+          "${POSTGRES_DB_BR}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis_baserow:
+    image: redis:7-alpine
+    container_name: redis_baserow
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/baserow/.env
+
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --databases ${REDIS_DATABASES}
+
+    volumes:
+      - baserow_redis_data:/data
+
+    networks:
+      - leonobitech-net
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    image: baserow/backend:latest
+    container_name: baserow_backend
+    user: "9999:9999"
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/baserow/.env
+
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MALLOC_ARENA_MAX=2
+      # Gunicorn más contenido (2 workers x 2 threads), recicla workers para evitar crecimiento
+      - WEB_CONCURRENCY=2
+      - GUNICORN_CMD_ARGS=--workers=2 --threads=2 --timeout 300 --graceful-timeout 60 --max-requests 200 --max-requests-jitter 50 --worker-tmp-dir /dev/shm
+      # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
+      - UMASK=0022
+      # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
+      - FILE_UPLOAD_PERMISSIONS=420
+
+    volumes:
+      - baserow_data:/baserow/data
+      - baserow_media:/baserow/media
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      postgres_baserow:
+        condition: service_healthy
+      redis_baserow:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/_health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # Parada ordenada del backend
+    stop_grace_period: 45s
+    # Límites conservadores
+    cpus: 1.5
+    mem_limit: 896m
+    # Rotación de logs del contenedor
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      # ✅ Habilitar Traefik para el backend
+      - "traefik.enable=true"
+
+      #########################################
+      # 🌐 API pública: acceso desde el frontend
+      #########################################
+      - "traefik.http.routers.baserow-api.rule=Host(`br.leonobitech.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.baserow-api.entrypoints=websecure"
+      - "traefik.http.routers.baserow-api.tls.certresolver=le"
+      - "traefik.http.routers.baserow-api.service=baserow-api"
+      - "traefik.http.routers.baserow-api.middlewares=secure-strict@file,block-trackers@file,api-nostore-vary@file"
+      - "traefik.http.services.baserow-api.loadbalancer.server.port=8000"
+
+      #########################################
+      # 🔄 WebSockets: canal de tiempo real
+      #########################################
+      - "traefik.http.routers.baserow-ws.rule=Host(`br.leonobitech.com`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.baserow-ws.entrypoints=websecure"
+      - "traefik.http.routers.baserow-ws.tls.certresolver=le"
+      - "traefik.http.routers.baserow-ws.service=baserow-ws"
+      - "traefik.http.routers.baserow-ws.middlewares=ws-safe@file"
+      - "traefik.http.services.baserow-ws.loadbalancer.server.port=8000"
+      - "traefik.http.services.baserow-ws.loadbalancer.serverstransport=ws-transport@file"
+
+      #########################################
+      # 🔓 MCP: bypass auth para /mcp/*
+      #########################################
+      - "traefik.http.routers.baserow-mcp.rule=Host(`br.leonobitech.com`) && PathPrefix(`/mcp`)"
+      - "traefik.http.routers.baserow-mcp.entrypoints=websecure"
+      - "traefik.http.routers.baserow-mcp.tls.certresolver=le"
+      - "traefik.http.routers.baserow-mcp.service=baserow-api"
+      - "traefik.http.routers.baserow-mcp.priority=50"
+      - "traefik.http.routers.baserow-mcp.middlewares=secure-basic@file"
+
+      #########################################
+      # 🖼️ Archivos /media (opcional, descomentable)
+      #########################################
+      # - "traefik.http.routers.baserow-media.rule=Host(`br.leonobitech.com`) && PathPrefix(`/media`)"
+      # - "traefik.http.routers.baserow-media.entrypoints=websecure"
+      # - "traefik.http.routers.baserow-media.tls.certresolver=le"
+      # - "traefik.http.routers.baserow-media.service=baserow-media"
+      # - "traefik.http.routers.baserow-media.middlewares=secure-basic@file"
+      # - "traefik.http.services.baserow-media.loadbalancer.server.port=8000"
+
+  baserow_celery:
+    image: baserow/backend:latest
+    container_name: baserow_celery
+    restart: unless-stopped
+
+    command:
+      [
+        "celery-worker",
+        "--concurrency=2",
+        "--max-tasks-per-child=100",
+        "--prefetch-multiplier=1",
+      ]
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/baserow/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MALLOC_ARENA_MAX=2
+      # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
+      - UMASK=0022
+      # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
+      - FILE_UPLOAD_PERMISSIONS=420
+
+    volumes:
+      - baserow_media:/baserow/media
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "cat /proc/1/cmdline | tr '\\0' ' ' | grep -q celery"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    stop_grace_period: 60s
+    cpus: 1.5
+    mem_limit: 896m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  baserow_celery_export_worker:
+    image: baserow/backend:latest
+    container_name: baserow_celery_export_worker
+    restart: unless-stopped
+
+    command:
+      [
+        "celery-exportworker",
+        "--concurrency=1",
+        "--max-tasks-per-child=50",
+        "--prefetch-multiplier=1",
+        "--max-memory-per-child=220000",
+      ]
+    env_file:
+      - ./repositories/baserow/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MALLOC_ARENA_MAX=2
+      # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
+      - UMASK=0022
+      # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
+      - FILE_UPLOAD_PERMISSIONS=420
+
+    volumes:
+      - baserow_media:/baserow/media
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "cat /proc/1/cmdline | tr '\\0' ' ' | grep -q celery"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    security_opt:
+      - no-new-privileges:true
+
+    stop_grace_period: 60s
+    mem_limit: 448m
+    cpus: 0.5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  baserow_celery_beat:
+    image: baserow/backend:latest
+    container_name: baserow_celery_beat
+    restart: unless-stopped
+
+    command: celery-beat
+
+    env_file:
+      - ./repositories/baserow/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MALLOC_ARENA_MAX=2
+      # Beat no usa concurrency, pero dejamos prefetch bajo en tareas delegadas
+      - CELERY_PREFETCH_MULTIPLIER=1
+      # 🔓 Permisos de archivos: umask 022 → archivos con 644 (lectura pública)
+      - UMASK=0022
+      # 🔓 Django: forzar permisos 644 en archivos subidos (ignora UMASK)
+      - FILE_UPLOAD_PERMISSIONS=420
+
+    volumes:
+      - baserow_media:/baserow/media
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD-SHELL", "cat /proc/1/cmdline | tr '\\0' ' ' | grep -q celery"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    stop_grace_period: 60s
+    cpus: 0.3
+    mem_limit: 320m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  baserow:
+    image: baserow/web-frontend:latest
+    container_name: baserow
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      - ./repositories/baserow/.env
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      postgres_baserow:
+        condition: service_healthy
+      redis_baserow:
+        condition: service_healthy
+
+    # Web frontend (Node) con techo
+    cpus: 1.0
+    mem_limit: 512m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      # ✅ Activar Traefik
+      - "traefik.enable=true"
+
+      #########################################
+      # 🗺️ Block sourcemap requests (priority > frontend)
+      #########################################
+      - "traefik.http.routers.baserow-block-maps.rule=Host(`br.leonobitech.com`) && PathRegexp(`.*\\.js\\.map$$`)"
+      - "traefik.http.routers.baserow-block-maps.entrypoints=websecure"
+      - "traefik.http.routers.baserow-block-maps.tls.certresolver=le"
+      - "traefik.http.routers.baserow-block-maps.priority=9999"
+      - "traefik.http.routers.baserow-block-maps.service=blackhole@file"
+
+      #########################################
+      # 🌍 Router principal para el frontend
+      #########################################
+      - "traefik.http.routers.baserow.rule=Host(`br.leonobitech.com`)"
+      - "traefik.http.routers.baserow.entrypoints=websecure"
+      - "traefik.http.routers.baserow.tls.certresolver=le"
+      - "traefik.http.routers.baserow.service=baserow"
+      - "traefik.http.routers.baserow.middlewares=core-auth@file,secure-relaxed@file"
+
+      #########################################
+      # 🔁 Servicio expuesto en el puerto 3000
+      #########################################
+      - "traefik.http.services.baserow.loadbalancer.server.port=3000"
+
+  baserow_media:
+    image: nginx:alpine
+    container_name: baserow_media_server
+    restart: unless-stopped
+
+    volumes:
+      - baserow_media:/baserow/media:ro
+      - ./nginx/media.conf:/etc/nginx/conf.d/default.conf:ro
+
+    networks:
+      - leonobitech-net
+
+    cpus: 0.25
+    mem_limit: 128m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      # ✅ Activar Traefik
+      - "traefik.enable=true"
+
+      #########################################
+      # 🌐 Router para servir archivos estáticos /media/*
+      #########################################
+      - "traefik.http.routers.baserow-media.rule=Host(`br.leonobitech.com`) && PathPrefix(`/media`)"
+      - "traefik.http.routers.baserow-media.entrypoints=websecure"
+      - "traefik.http.routers.baserow-media.tls.certresolver=le"
+      - "traefik.http.routers.baserow-media.service=baserow-media"
+      - "traefik.http.routers.baserow-media.middlewares=secure-basic@file"
+
+      #########################################
+      # 🔁 Servicio expuesto en el puerto estándar de Nginx
+      #########################################
+      - "traefik.http.services.baserow-media.loadbalancer.server.port=80"
+
+      #########################################
+      # 🌐 Red que debe usar Traefik
+      #########################################
+      - "traefik.docker.network=leonobitech-net"
+
+  piper_tts:
+    profiles: ["legacy"]  # Not used in production, only starts with: docker compose --profile legacy up piper_tts
+    container_name: piper_tts
+    build:
+      context: ./repositories/piper-tts
+      dockerfile: Dockerfile
+    image: leonobitech/piper-tts:v1.0
+    restart: unless-stopped
+
+    # Seguridad
+    user: "10002:65534"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    networks:
+      - leonobitech-net
+
+    ports:
+      - "127.0.0.1:5000:5000"  # Exposed to host for voice_agent (host mode)
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    # Recursos (TTS es CPU-intensive)
+    cpus: 2.0
+    mem_limit: 1024m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  voice_agent:
+    container_name: voice_agent
+    build:
+      context: ./repositories/voice-agent
+    image: leonobitech/voice-agent:v3.0
+    restart: unless-stopped
+
+    network_mode: host
+    shm_size: '256m'
+
+    security_opt:
+      - no-new-privileges:true
+
+    tmpfs:
+      - /tmp
+
+    env_file:
+      - ./repositories/voice-agent/.env
+
+    depends_on:
+      livekit_server:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/')\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    cpus: 3.0
+    mem_limit: 2048m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 🎙️ LiveKit Server — Self-hosted WebRTC SFU + TURN
+  # Both LiveKit + voice_agent run in host mode for native WebRTC
+  # Traefik reaches LiveKit via host.docker.internal:7880
+  livekit_server:
+    image: livekit/livekit-server:v1.10.0
+    container_name: livekit_server
+    restart: unless-stopped
+
+    network_mode: host
+
+    volumes:
+      - ./repositories/livekit/livekit.yaml:/etc/livekit.yaml:ro
+
+    command: --config /etc/livekit.yaml
+
+    depends_on:
+      redis_core:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7880/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  wa_signature_proxy:
+    container_name: wa_signature_proxy
+    build:
+      context: ./repositories/wa-signature-proxy
+    image: leonobitech/wa-signature-proxy:v1.0
+    restart: unless-stopped
+
+    read_only: true
+
+    security_opt:
+      - no-new-privileges:true
+
+    environment:
+      - WA_APP_SECRET=${WA_APP_SECRET}
+      - WA_VERIFY_TOKEN=${WA_VERIFY_TOKEN}
+      - N8N_TARGET=http://n8n_webhook_1:5678
+      - PORT=3100
+
+    networks:
+      - leonobitech-net
+
+    depends_on:
+      traefik:
+        condition: service_started
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    cpus: 0.25
+    mem_limit: 64m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      - "traefik.enable=true"
+
+      #########################################
+      # WhatsApp Signature Proxy
+      #########################################
+      - "traefik.http.routers.wa-proxy.rule=Host(`wa.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.wa-proxy.entrypoints=websecure"
+      - "traefik.http.routers.wa-proxy.tls.certresolver=le"
+      - "traefik.http.routers.wa-proxy.service=wa-proxy"
+      - "traefik.http.routers.wa-proxy.middlewares=webhook-open@file"
+
+      - "traefik.http.services.wa-proxy.loadbalancer.server.port=3100"
+
+volumes:
+  # 🔴 Redis
+  redis_core_data: # Almacena los datos persistentes del Redis del Core
+  redis_n8n_data: # Redis exclusivo para el ecosistema de n8n
+
+  # 🟢 PostgreSQL
+  n8n_postgres_data: # Base de datos de n8n
+  odoo_postgres_data: # Base de datos de Odoo
+  baserow_postgres_data: # Base de datos de Baserow
+
+  # 🔵 Qdrant (vector search)
+  qdrant_data: # Almacenamiento principal de Qdrant
+  qdrant_snapshots: # Snapshots de backup/restauración de vectores
+
+  # 🟡 n8n - nodos individuales
+  n8n_data_main: # Volumen principal del nodo UI de n8n
+  n8n_data_webhook_1: # Volumen del nodo exclusivo para Webhooks
+  n8n_data_worker_1: # Volumen del worker de ejecución 1
+  n8n_data_worker_2: # Volumen del worker de ejecución 2
+
+  # 🟠 Baserow
+  baserow_data: # Datos internos de Baserow (keys, tokens, config)
+  baserow_media: # Archivos subidos por usuarios y exportaciones
+  baserow_redis_data: # Redis de Baserow (caching, async)
+
+  # 🟤 Odoo
+  odoo_data:
+    external: false
+
+networks:
+  leonobitech-net:
+    name: leonobitech-net
+    driver: bridge
+    ipam:
+      driver: default
