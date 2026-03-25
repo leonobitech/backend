@@ -1103,6 +1103,7 @@ services:
       - "traefik.docker.network=leonobitech-net"
 
   piper_tts:
+    profiles: ["legacy"]  # Not used in production, only starts with: docker compose --profile legacy up piper_tts
     container_name: piper_tts
     build:
       context: ./repositories/piper-tts
