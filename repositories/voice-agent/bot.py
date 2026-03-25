@@ -182,11 +182,11 @@ async def run_bot(room_name: str):
         logger.info(f"[METRICS] first_bot_speech={latency_secs:.3f}s room={room_name}")
 
     @turn_observer.event_handler("on_turn_started")
-    async def on_turn_start(turn_number):
+    async def on_turn_start(observer, turn_number):
         logger.info(f"[METRICS] turn_started={turn_number} room={room_name}")
 
     @turn_observer.event_handler("on_turn_ended")
-    async def on_turn_end(turn_number, duration, was_interrupted):
+    async def on_turn_end(observer, turn_number, duration, was_interrupted):
         logger.info(f"[METRICS] turn_ended={turn_number} duration={duration:.2f}s interrupted={was_interrupted} room={room_name}")
 
     task = PipelineTask(
@@ -218,7 +218,7 @@ async def run_bot(room_name: str):
         # Cleanup room
         try:
             lk_api = livekit_api.LiveKitAPI(
-                url=LIVEKIT_URL,
+                url=LIVEKIT_URL.replace("ws://", "http://").replace("wss://", "https://"),
                 api_key=LIVEKIT_API_KEY,
                 api_secret=LIVEKIT_API_SECRET,
             )
