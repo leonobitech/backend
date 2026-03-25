@@ -28,6 +28,8 @@ from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transports.livekit.transport import LiveKitTransport, LiveKitParams
 from pipecat.transcriptions.language import Language
+from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
+from pipecat.observers.turn_tracking_observer import TurnTrackingObserver
 
 # Load .env.local only in local dev (skip in Docker where env is injected)
 if os.path.exists(".env.local"):
@@ -163,6 +165,30 @@ async def run_bot(room_name: str):
         context_aggregator.assistant(),
     ])
 
+    # ── Observers (metrics & instrumentation) ───────────────────
+    latency_observer = UserBotLatencyObserver()
+    turn_observer = TurnTrackingObserver()
+
+    @latency_observer.event_handler("on_latency_measured")
+    async def on_latency(observer, latency_secs):
+        logger.info(f"[METRICS] user_to_bot_latency={latency_secs:.3f}s room={room_name}")
+
+    @latency_observer.event_handler("on_latency_breakdown")
+    async def on_breakdown(observer, breakdown):
+        logger.info(f"[METRICS] breakdown room={room_name} {breakdown}")
+
+    @latency_observer.event_handler("on_first_bot_speech_latency")
+    async def on_first_speech(observer, latency_secs):
+        logger.info(f"[METRICS] first_bot_speech={latency_secs:.3f}s room={room_name}")
+
+    @turn_observer.event_handler("on_turn_started")
+    async def on_turn_start(turn_number):
+        logger.info(f"[METRICS] turn_started={turn_number} room={room_name}")
+
+    @turn_observer.event_handler("on_turn_ended")
+    async def on_turn_end(turn_number, duration, was_interrupted):
+        logger.info(f"[METRICS] turn_ended={turn_number} duration={duration:.2f}s interrupted={was_interrupted} room={room_name}")
+
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
@@ -170,6 +196,7 @@ async def run_bot(room_name: str):
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
+        observers=[latency_observer, turn_observer],
     )
 
     # ── Events ────────────────────────────────────────────────────
