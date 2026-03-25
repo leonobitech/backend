@@ -211,10 +211,14 @@ async def run_bot(room_name: str):
         logger.info(f"[PIPELINE] user_left participant={participant_id} reason={reason} room={room_name}")
         await task.queue_frame(EndFrame())
 
+    room_cleaned = {"done": False}
+
     @transport.event_handler("on_disconnected")
     async def on_disconnected(transport):
+        if room_cleaned["done"]:
+            return
+        room_cleaned["done"] = True
         logger.info(f"[PIPELINE] disconnected room={room_name}")
-        # Cleanup room
         try:
             lk_api = livekit_api.LiveKitAPI(
                 url=LIVEKIT_URL.replace("ws://", "http://").replace("wss://", "https://"),
