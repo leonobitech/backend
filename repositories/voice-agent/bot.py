@@ -28,6 +28,7 @@ from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.transports.livekit.transport import LiveKitTransport, LiveKitParams
 from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.transcriptions.language import Language
+from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy
 from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
 from pipecat.observers.turn_tracking_observer import TurnTrackingObserver
 
@@ -133,13 +134,17 @@ async def run_bot(room_name: str):
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(
-                    confidence=0.6,    # Lower = more sensitive to speech (default 0.7)
-                    start_secs=0.15,   # Faster detection of speech start (default 0.2)
-                    stop_secs=0.5,     # React faster to silence (default 0.8)
-                    min_volume=0.5,    # More sensitive to quiet speech (default 0.6)
+                    confidence=0.6,
+                    start_secs=0.1,    # 100ms to detect speech start
+                    stop_secs=0.3,     # 300ms silence = turn ended (aggressive)
+                    min_volume=0.5,
                 ),
             ),
-            user_turn_stop_timeout=3.0,  # Shorter timeout for user turn (default 5.0)
+            # Fast turn detection — 300ms silence = turn ended
+            user_turn_strategies=UserTurnStrategies(
+                stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.3)],
+            ),
+            user_turn_stop_timeout=2.0,
         ),
     )
 
