@@ -74,7 +74,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Cloud TTS: ElevenLabs Flash (low latency, streaming)
     elevenlabs_tts = elevenlabs.TTS(
-        voice_id="nTkjq09AuYgsNR8E4sDe",
+        voice_id="9oPKasc15pfAbMr7N6Gs",
         model="eleven_flash_v2_5",
         language="es",
         voice_settings=elevenlabs.VoiceSettings(
