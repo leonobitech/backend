@@ -1123,8 +1123,8 @@ services:
     networks:
       - leonobitech-net
 
-    expose:
-      - "5000"
+    ports:
+      - "127.0.0.1:5000:5000"  # Exposed to host for voice_agent (host mode)
 
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\" || exit 1"]

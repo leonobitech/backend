@@ -12,6 +12,7 @@ RUN apt-get update && \
 # Copy project files
 COPY pyproject.toml ./
 COPY bot.py ./
+COPY piper_tts_service.py ./
 
 # Install Python deps
 RUN pip install --no-cache-dir "."
