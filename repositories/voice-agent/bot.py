@@ -120,7 +120,7 @@ async def run_bot(room_name: str):
     # ── TTS: Deepgram Aura (streaming, low latency, ~$0.005/1K chars)
     tts = DeepgramTTSService(
         api_key=DEEPGRAM_API_KEY,
-        voice="aura-luna-es",
+        voice="aura-2-selena-es",
     )
 
     # ── Context + VAD ─────────────────────────────────────────────
