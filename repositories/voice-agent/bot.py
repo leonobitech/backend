@@ -26,8 +26,8 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.services.anthropic.llm import AnthropicLLMService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.transports.livekit.transport import LiveKitTransport, LiveKitParams
+from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.transcriptions.language import Language
-from piper_tts_service import PiperHTTPTTSService
 from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
 from pipecat.observers.turn_tracking_observer import TurnTrackingObserver
 
@@ -43,7 +43,6 @@ LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-PIPER_TTS_URL = os.getenv("PIPER_TTS_URL", "http://127.0.0.1:5000/tts")
 BOT_PORT = int(os.getenv("BOT_PORT", "8200"))
 BOT_API_KEY = os.getenv("BOT_API_KEY", "")
 
@@ -118,10 +117,10 @@ async def run_bot(room_name: str):
         ),
     )
 
-    # ── TTS: Piper (local, CPU, free) ───────────────────────────
-    tts = PiperHTTPTTSService(
-        url=PIPER_TTS_URL,
-        length_scale=1.0,
+    # ── TTS: Deepgram Aura (streaming, low latency, ~$0.005/1K chars)
+    tts = DeepgramTTSService(
+        api_key=DEEPGRAM_API_KEY,
+        voice="aura-luna-es",
     )
 
     # ── Context + VAD ─────────────────────────────────────────────
@@ -185,7 +184,6 @@ async def run_bot(room_name: str):
             allow_interruptions=True,
             enable_metrics=True,
             enable_usage_metrics=True,
-            audio_out_sample_rate=22050,  # Piper outputs 22050Hz
         ),
         observers=[latency_observer, turn_observer],
     )
