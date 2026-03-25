@@ -4,12 +4,12 @@ Replaces LiveKit Agents SDK with Pipecat for fine-grained pipeline control.
 """
 
 import asyncio
-import logging
 import os
 
 import datetime
 from aiohttp import web
 from dotenv import load_dotenv
+from loguru import logger
 from livekit import api as livekit_api
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -35,8 +35,7 @@ from pipecat.observers.turn_tracking_observer import TurnTrackingObserver
 if os.path.exists(".env.local"):
     load_dotenv(".env.local", override=True)
 
-logger = logging.getLogger("voice-agent")
-logger.setLevel(logging.INFO)
+logger.info("[BOT] Voice agent module loaded")
 
 # ── Config from env ──────────────────────────────────────────────
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "ws://127.0.0.1:7880")
