@@ -142,10 +142,13 @@ async def run_bot(room_name: str):
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(
-                    stop_secs=0.8,
-                    min_volume=0.6,
+                    confidence=0.6,    # Lower = more sensitive to speech (default 0.7)
+                    start_secs=0.15,   # Faster detection of speech start (default 0.2)
+                    stop_secs=0.5,     # React faster to silence (default 0.8)
+                    min_volume=0.5,    # More sensitive to quiet speech (default 0.6)
                 ),
             ),
+            user_turn_stop_timeout=3.0,  # Shorter timeout for user turn (default 5.0)
         ),
     )
 
@@ -163,6 +166,7 @@ async def run_bot(room_name: str):
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
+            allow_interruptions=True,
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
