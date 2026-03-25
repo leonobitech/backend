@@ -11,31 +11,23 @@ RUN apt-get update && \
 
 # Copy project files
 COPY pyproject.toml ./
-COPY bot.py ./
-COPY piper_tts_service.py ./
+COPY agent.py ./
 
-# Install Python deps
-RUN pip install --no-cache-dir "."
+# Install Python deps (cloud only: Deepgram STT + ElevenLabs TTS)
+RUN pip install --no-cache-dir ".[cloud]"
 
-# Cache dirs for models and NLTK data
+# Shared cache dir accessible by all users (including subprocesses)
 ENV HF_HOME=/app/.cache/huggingface
-ENV NLTK_DATA=/app/.cache/nltk_data
-RUN mkdir -p /app/.cache/huggingface /app/.cache/nltk_data
+RUN mkdir -p /app/.cache/huggingface
 
-# Pre-download NLTK tokenizer + Silero VAD model at build time
-RUN python -c "\
-import nltk; \
-nltk.download('punkt_tab', download_dir='/app/.cache/nltk_data'); \
-from pipecat.audio.vad.silero import SileroVADAnalyzer; \
-SileroVADAnalyzer()"
+# Download models at build time (fail build if models can't be fetched)
+RUN python agent.py download-files
 
 # Non-root user
-RUN useradd -r -u 10010 -d /app agent && \
+RUN useradd -r -u 10010 agent && \
     chown -R agent:agent /app/.cache
 
 USER agent
 
-EXPOSE 8200
-
-# Pipecat bot entrypoint
-ENTRYPOINT ["python", "bot.py"]
+# LiveKit agent entrypoint
+ENTRYPOINT ["python", "agent.py", "start"]

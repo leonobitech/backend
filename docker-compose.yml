@@ -1147,7 +1147,7 @@ services:
     container_name: voice_agent
     build:
       context: ./repositories/voice-agent
-    image: leonobitech/voice-agent:v2.0
+    image: leonobitech/voice-agent:v3.0
     restart: unless-stopped
 
     network_mode: host
@@ -1167,7 +1167,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8200/')\" || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/')\" || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
