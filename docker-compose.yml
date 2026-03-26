@@ -262,7 +262,7 @@ services:
   n8n_main:
     build:
       context: ./repositories/n8n
-    image: leonobitech/n8n:latest
+    image: leonobitech/n8n:v2.9
     container_name: n8n_main
     restart: unless-stopped
 
