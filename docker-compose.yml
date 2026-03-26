@@ -344,54 +344,13 @@ services:
       - "traefik.http.routers.n8n_mcptest.service=n8n_main@docker"
       - "traefik.http.routers.n8n_mcptest.middlewares=secure-relaxed@file"
 
-  n8n_webhook_1:
-    image: leonobitech/n8n:latest
-    container_name: n8n_webhook_1
-    restart: unless-stopped
-
-    command: webhook
-
-    read_only: true
-    tmpfs:
-      - /tmp
-
-    security_opt:
-      - no-new-privileges:true
-
-    env_file:
-      - ./repositories/n8n/.env
-
-    environment:
-      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
-
-    volumes:
-      - n8n_data_main:/home/node/.n8n
-
-    networks:
-      - leonobitech-net
-
-    depends_on:
-      postgres_n8n:
-        condition: service_healthy
-      redis_n8n:
-        condition: service_healthy
-
-    labels:
-      # ✅ Habilitar Traefik
-      - "traefik.enable=true"
-
-      #########################################
-      # 🚪 Servicio interno de webhooks
-      #########################################
-      - "traefik.http.services.n8n_webhook_1.loadbalancer.server.port=5678"
-
       #########################################
       # 🌐 Router: Público para /webhook/*
       #########################################
       - "traefik.http.routers.n8n_webhook.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/webhook`)"
       - "traefik.http.routers.n8n_webhook.entrypoints=websecure"
       - "traefik.http.routers.n8n_webhook.tls.certresolver=le"
-      - "traefik.http.routers.n8n_webhook.service=n8n_webhook_1@docker"
+      - "traefik.http.routers.n8n_webhook.service=n8n_main@docker"
       - "traefik.http.routers.n8n_webhook.middlewares=secure-basic@file"
 
       #########################################
@@ -400,101 +359,8 @@ services:
       - "traefik.http.routers.n8n_mcp.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/mcp`)"
       - "traefik.http.routers.n8n_mcp.entrypoints=websecure"
       - "traefik.http.routers.n8n_mcp.tls.certresolver=le"
-      - "traefik.http.routers.n8n_mcp.service=n8n_webhook_1@docker"
+      - "traefik.http.routers.n8n_mcp.service=n8n_main@docker"
       - "traefik.http.routers.n8n_mcp.middlewares=secure-basic@file"
-
-  n8n_worker_1:
-    image: leonobitech/n8n:latest
-    container_name: n8n_worker_1
-    restart: unless-stopped
-
-    command: worker
-
-    read_only: true
-    tmpfs:
-      - /tmp
-
-    security_opt:
-      - no-new-privileges:true
-
-    env_file:
-      - ./repositories/n8n/.env
-
-    environment:
-      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
-
-    volumes:
-      - n8n_data_main:/home/node/.n8n
-
-    networks:
-      - leonobitech-net
-
-    depends_on:
-      postgres_n8n:
-        condition: service_healthy
-      redis_n8n:
-        condition: service_healthy
-
-  n8n_worker_2:
-    image: leonobitech/n8n:latest
-    container_name: n8n_worker_2
-    restart: unless-stopped
-
-    command: worker
-
-    read_only: true
-    tmpfs:
-      - /tmp
-
-    security_opt:
-      - no-new-privileges:true
-
-    env_file:
-      - ./repositories/n8n/.env
-
-    environment:
-      - N8N_LICENSE_AUTO_RENEW_ENABLED=true
-
-    volumes:
-      - n8n_data_main:/home/node/.n8n
-
-    networks:
-      - leonobitech-net
-
-    depends_on:
-      postgres_n8n:
-        condition: service_healthy
-      redis_n8n:
-        condition: service_healthy
-
-  redis_n8n:
-    image: redis:7-alpine
-    container_name: redis_n8n
-    restart: unless-stopped
-
-    security_opt:
-      - no-new-privileges:true
-
-    env_file:
-      - ./repositories/n8n/.env
-
-    command: >
-      redis-server
-      --requirepass ${REDIS_N8N_PASSWORD}
-      --databases ${REDIS_N8N_DATABASES}
-
-    volumes:
-      - redis_n8n_data:/data
-
-    networks:
-      - leonobitech-net
-
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_N8N_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
   postgres_n8n:
     image: postgres:latest
@@ -1230,7 +1096,7 @@ services:
     environment:
       - WA_APP_SECRET=${WA_APP_SECRET}
       - WA_VERIFY_TOKEN=${WA_VERIFY_TOKEN}
-      - N8N_TARGET=http://n8n_webhook_1:5678
+      - N8N_TARGET=http://n8n_main:5678
       - PORT=3100
 
     networks:
@@ -1273,7 +1139,7 @@ services:
 volumes:
   # 🔴 Redis
   redis_core_data: # Almacena los datos persistentes del Redis del Core
-  redis_n8n_data: # Redis exclusivo para el ecosistema de n8n
+  # redis_n8n_data: # Ya no se usa — n8n en modo single no requiere Redis
 
   # 🟢 PostgreSQL
   n8n_postgres_data: # Base de datos de n8n
@@ -1286,9 +1152,9 @@ volumes:
 
   # 🟡 n8n - nodos individuales
   n8n_data_main: # Volumen principal del nodo UI de n8n
-  n8n_data_webhook_1: # Volumen del nodo exclusivo para Webhooks
-  n8n_data_worker_1: # Volumen del worker de ejecución 1
-  n8n_data_worker_2: # Volumen del worker de ejecución 2
+  # n8n_data_webhook_1: # Ya no se usa — modo single
+  # n8n_data_worker_1: # Ya no se usa — modo single
+  # n8n_data_worker_2: # Ya no se usa — modo single
 
   # 🟠 Baserow
   baserow_data: # Datos internos de Baserow (keys, tokens, config)
