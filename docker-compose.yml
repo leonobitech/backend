@@ -363,7 +363,7 @@ services:
       - "traefik.http.routers.n8n_mcp.middlewares=secure-basic@file"
 
   postgres_n8n:
-    image: postgres:latest
+    image: postgres:17
     container_name: postgres_n8n
     restart: unless-stopped
 
@@ -403,7 +403,7 @@ services:
       start_period: 10s
 
   postgres_odoo:
-    image: postgres:latest
+    image: postgres:17
     container_name: postgres_odoo
     restart: unless-stopped
 
@@ -550,7 +550,7 @@ services:
       disable: true
 
   postgres_baserow:
-    image: postgres:latest
+    image: postgres:17
     container_name: postgres_baserow
     restart: unless-stopped
 
