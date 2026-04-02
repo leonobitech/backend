@@ -28,20 +28,19 @@
     /* Modules */
     "module": "ESNext",                                  /* Specify what module code is generated. */
     "rootDir": "./src",                                  /* Specify the root folder within your source files. */
-    "moduleResolution": "node",                          /* Specify how TypeScript looks up a file from a given module specifier. */
-    "baseUrl": "./src",                                  /* Specify the base directory to resolve non-relative module names. */
+    "moduleResolution": "bundler",                        /* Specify how TypeScript looks up a file from a given module specifier. */
     "paths": {
-      "@config/*": ["config/*"],
-      "@constants/*": ["constants/*"],
-      "@controllers/*": ["controllers/*"],
-      "@middlewares/*": ["middlewares/*"],
-      "@routes/*": ["routes/*"],
-      "@schemas/*": ["schemas/*"],
-      "@services/*": ["services/*"],
-      "@utils/*": ["utils/*"],
-      "@test/*": ["test/*"],
-      "@custom-types/*": ["types/*"],
-      "@websockets/*": ["websockets/*"],
+      "@config/*": ["./src/config/*"],
+      "@constants/*": ["./src/constants/*"],
+      "@controllers/*": ["./src/controllers/*"],
+      "@middlewares/*": ["./src/middlewares/*"],
+      "@routes/*": ["./src/routes/*"],
+      "@schemas/*": ["./src/schemas/*"],
+      "@services/*": ["./src/services/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@test/*": ["./src/test/*"],
+      "@custom-types/*": ["./src/types/*"],
+      "@websockets/*": ["./src/websockets/*"],
     },                                                   /* Specify a set of entries that re-map imports to additional lookup locations. */
     //"rootDirs": ["./src"],                               /* Allow multiple folders to be treated as one when resolving modules. */
     //"typeRoots": ["./node_modules/@types"],            /* Specify multiple folders that act like './node_modules/@types'. */
