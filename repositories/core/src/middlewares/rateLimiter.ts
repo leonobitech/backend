@@ -96,6 +96,24 @@ export const emailVerificationRateLimiter = rateLimit({
 });
 
 /**
+ * 🔑 Rate Limiter para magic link
+ * Límite: 5 solicitudes cada 15 minutos por IP
+ */
+export const magicLinkRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: {
+    error: "Too many login requests. Please try again in 15 minutes.",
+    retryAfter: "15 minutes",
+  },
+  statusCode: HTTP_CODE.TOO_MANY_REQUESTS,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+  validate: { trustProxy: false },
+});
+
+/**
  * 🔒 Rate Limiter para rutas de Admin
  * Más restrictivo para operaciones sensibles
  * Límite: 30 requests por minuto por IP

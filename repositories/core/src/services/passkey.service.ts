@@ -41,6 +41,7 @@ import { getJwtExpiration } from "@utils/auth/getJwtExpiration";
 import { thirtyDaysFromNow } from "@utils/date/date";
 import type { UserRole } from "@constants/userRole";
 import { loggerEvent } from "@utils/logging/loggerEvent";
+import { revokeAllUserSessions } from "@utils/auth/revokeAllUserSessions";
 
 /**
  * 📝 PASO 1 DE REGISTRO: Generar challenge para crear un passkey
@@ -896,8 +897,10 @@ export async function verifyPasskeyAuthentication(
     "passkey.service"
   );
 
-  // 9️⃣ Crear una nueva sesión en la base de datos
-  // Una sesión representa un login activo que expira en 30 días
+  // 9️⃣ Revocar sesiones anteriores (sesión única por usuario)
+  await revokeAllUserSessions(passkey.user.id);
+
+  // 🔟 Crear una nueva sesión en la base de datos
   loggerEvent(
     "passkey.service.login.verify.creating-session",
     { userId: passkey.user.id, deviceId: device.id },
@@ -909,8 +912,8 @@ export async function verifyPasskeyAuthentication(
     data: {
       userId: passkey.user.id,
       deviceId: device.id,
-      clientKey: "", // Se actualiza en el siguiente paso
-      expiresAt: thirtyDaysFromNow(), // 30 días de expiración
+      clientKey: "",
+      expiresAt: thirtyDaysFromNow(),
     },
   });
 
@@ -1404,7 +1407,10 @@ export async function verifyPasskeySetupAndLogin(
   // 7️⃣ Eliminar challenge
   await redis.del(challengeKey);
 
-  // 8️⃣ Crear sesión completa
+  // 8️⃣ Revocar sesiones anteriores (sesión única por usuario)
+  await revokeAllUserSessions(user.id);
+
+  // 9️⃣ Crear sesión completa
   const session = await prisma.session.create({
     data: {
       userId: user.id,

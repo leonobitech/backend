@@ -9,7 +9,7 @@ import logger from "@utils/logging/logger";
 
 /**
  * 🛡️ Middleware para restringir acceso a ciertos roles.
- * Uso: `authorize(UserRole.Admin)` o `authorize(UserRole.Admin, UserRole.Moderator)`
+ * Uso: `authorize(UserRole.Admin)` o `authorize(UserRole.Admin, UserRole.Student)`
  */
 const authorize =
   (...allowedRoles: UserRole[]): RequestHandler =>

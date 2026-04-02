@@ -229,3 +229,32 @@ export type PasskeyRecoverySentResponse = {
     expiresIn: number;
   };
 };
+
+//==============================================================================
+//                          Magic Link Types
+//==============================================================================
+
+export type MagicLinkSentResponse = {
+  status: typeof API_STATUS.MAGIC_LINK_SENT;
+  message: string;
+  data: {
+    email: string;
+    expiresIn: number;
+  };
+};
+
+export type MagicLinkOnboardingRequiredResponse = {
+  status: typeof API_STATUS.ONBOARDING_REQUIRED;
+  message: string;
+  data: {
+    userId: string;
+    email: string;
+    pendingToken: string;
+    expiresIn: number;
+  };
+};
+
+export type MagicLinkVerifyResponse =
+  | MagicLinkOnboardingRequiredResponse
+  | LoginPasskeySetupRequiredResponse
+  | LoginPasskeyVerifyRequiredResponse;

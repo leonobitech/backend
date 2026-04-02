@@ -211,6 +211,13 @@ export const changePassword = catchErrors(
     );
 
     // Verificar que la contraseña actual sea correcta
+    appAssert(
+      user.password,
+      HTTP_CODE.BAD_REQUEST,
+      "This account uses passwordless login",
+      ERROR_CODE.INVALID_INPUT
+    );
+
     const isCurrentPasswordValid = await compareValue(
       currentPassword,
       user.password

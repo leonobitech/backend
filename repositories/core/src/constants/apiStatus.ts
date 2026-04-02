@@ -17,6 +17,9 @@ export const API_STATUS = {
   PASSKEY_SETUP_REQUIRED: "passkeySetupRequired",
   PASSKEY_VERIFY_REQUIRED: "passkeyVerifyRequired",
   PASSKEY_RECOVERY_SENT: "passkeyRecoverySent",
+  // 🔑 Magic Link states
+  MAGIC_LINK_SENT: "magicLinkSent",
+  ONBOARDING_REQUIRED: "onboardingRequired",
 } as const;
 
 export type ApiStatus = (typeof API_STATUS)[keyof typeof API_STATUS];

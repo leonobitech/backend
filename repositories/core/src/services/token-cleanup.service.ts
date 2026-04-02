@@ -104,7 +104,7 @@ export async function cleanupExpiredTokens(): Promise<{
       deleted: result.count,
     };
   } catch (error) {
-    logger.error({ err: error }, "❌ Failed to cleanup expired tokens");
+    logger.error("❌ Failed to cleanup expired tokens", { err: error });
     throw error;
   }
 }
@@ -117,7 +117,7 @@ export function scheduleTokenCleanup() {
 
   // Ejecutar inmediatamente al inicio
   cleanupExpiredTokens().catch((error) => {
-    logger.error({ err: error }, "❌ Initial token cleanup failed");
+    logger.error("❌ Initial token cleanup failed", { err: error });
   });
 
   // Luego cada 10 minutos
@@ -125,12 +125,9 @@ export function scheduleTokenCleanup() {
     try {
       await cleanupExpiredTokens();
     } catch (error) {
-      logger.error({ err: error }, "❌ Scheduled token cleanup failed");
+      logger.error("❌ Scheduled token cleanup failed", { err: error });
     }
   }, CLEANUP_INTERVAL);
 
-  logger.info(
-    { intervalMs: CLEANUP_INTERVAL },
-    "✅ Token cleanup scheduled"
-  );
+  logger.info("✅ Token cleanup scheduled", { intervalMs: CLEANUP_INTERVAL });
 }

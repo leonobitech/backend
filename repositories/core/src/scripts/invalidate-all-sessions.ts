@@ -24,7 +24,7 @@ async function invalidateAllSessions() {
     // 2. Limpiar Redis completamente
     const keys = await redis.keys("access_token:*");
     if (keys.length > 0) {
-      await redis.del(...keys);
+      await redis.del(keys);
       console.log(`✅ ${keys.length} tokens eliminados de Redis`);
     }
 

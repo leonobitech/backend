@@ -17,7 +17,7 @@ datasource db {
 model User {
   id               String   @id @default(auto()) @map("_id") @db.ObjectId
   email            String   @unique
-  password         String
+  password         String?
   name             String?
   avatar           String?
   bio              String?
@@ -35,10 +35,6 @@ model User {
   socialInstagram  String?
   socialYoutube    String?
   socialGithub     String?
-
-  twoFactorEnabled Boolean  @default(false)
-  twoFactorSecret  String?
-  twoFactorAttempts Int     @default(0)
 
   sessions          Session[]
   verificationCodes VerificationCode[]
@@ -204,8 +200,9 @@ model Podcast {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   title       String
   description String
-  videoUrl    String   // Baserow URL to MP4 file
-  duration    Int      // Duration in seconds
+  videoUrl      String   // Baserow URL to MP4 file
+  thumbnailUrl  String?  // Thumbnail image URL
+  duration      Int      // Duration in seconds
   width       Int?     // Video width in pixels
   height      Int?     // Video height in pixels
   publishedAt DateTime @default(now())

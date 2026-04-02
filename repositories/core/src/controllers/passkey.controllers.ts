@@ -334,7 +334,7 @@ export const getPasskeys = catchErrors(async (req: Request, res: Response) => {
 export const deletePasskeyById = catchErrors(
   async (req: Request, res: Response) => {
     const userId = req.userId!;
-    const { passkeyId } = req.params;
+    const passkeyId = req.params.passkeyId as string;
 
     loggerEvent(
       "passkey.delete.start",

@@ -39,7 +39,7 @@ export const getPodcasts = async (_req: Request, res: Response): Promise<void> =
  * GET /podcasts/:id
  */
 export const getPodcastById = async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   try {
     const podcast = await prisma.podcast.findUnique({

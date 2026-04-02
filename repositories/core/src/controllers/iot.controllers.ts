@@ -83,7 +83,7 @@ export const handleRegister = catchErrors(
  */
 export const handleTelemetry = catchErrors(
   async (req: Request, res: Response<SendTelemetryResponse>): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const deviceIdHeader = req.get("x-device-id");
     const apiKey = req.get("x-api-key");
 
@@ -130,7 +130,7 @@ export const handleTelemetry = catchErrors(
  */
 export const handleGetPendingCommands = catchErrors(
   async (req: Request, res: Response<GetPendingCommandsResponse>): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const deviceIdHeader = req.get("x-device-id");
     const apiKey = req.get("x-api-key");
 
@@ -170,7 +170,8 @@ export const handleGetPendingCommands = catchErrors(
  */
 export const handleAckCommand = catchErrors(
   async (req: Request, res: Response<AckCommandResponse>): Promise<void> => {
-    const { deviceId, commandId } = req.params;
+    const deviceId = req.params.deviceId as string;
+    const commandId = req.params.commandId as string;
     const deviceIdHeader = req.get("x-device-id");
     const apiKey = req.get("x-api-key");
 
@@ -218,7 +219,7 @@ export const handleAckCommand = catchErrors(
  */
 export const handleStatus = catchErrors(
   async (req: Request, res: Response<SendStatusResponse>): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const deviceIdHeader = req.get("x-device-id");
     const apiKey = req.get("x-api-key");
 
@@ -284,7 +285,7 @@ export const handleListDevices = catchErrors(
  */
 export const handleGetDevice = catchErrors(
   async (req: Request, res: Response<GetDeviceDetailsResponse>): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
 
@@ -300,7 +301,7 @@ export const handleGetDevice = catchErrors(
  */
 export const handleSendCommand = catchErrors(
   async (req: Request, res: Response<SendCommandResponse>): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const { action, params } = req.body;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
@@ -363,7 +364,7 @@ export const handleCreateDevice = catchErrors(
  */
 export const handleGetTelemetry = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const limit = parseInt(req.query.limit as string) || 50;
     const since = req.query.since ? new Date(req.query.since as string) : undefined;
 
@@ -381,7 +382,7 @@ export const handleGetTelemetry = catchErrors(
  */
 export const handleGetCommands = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const limit = parseInt(req.query.limit as string) || 20;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
@@ -398,7 +399,7 @@ export const handleGetCommands = catchErrors(
  */
 export const handleDeleteDevice = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
 
@@ -462,7 +463,7 @@ export const handleDevicesAction = catchErrors(
  */
 export const handleDeviceAction = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const { action } = req.body;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
@@ -491,7 +492,7 @@ export const handleDeviceAction = catchErrors(
  */
 export const handleTelemetryAction = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const { action, limit = 50, since } = req.body;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
@@ -513,7 +514,7 @@ export const handleTelemetryAction = catchErrors(
  */
 export const handleCommandsAction = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const { action, limit = 20, command, params } = req.body;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
@@ -563,7 +564,7 @@ export const handleCommandsAction = catchErrors(
  */
 export const handleSchedulesAction = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const { action, scheduleId, name, description, points, isActive } = req.body;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);
@@ -668,7 +669,7 @@ export const handleSchedulesAction = catchErrors(
  */
 export const handleLightStateAction = catchErrors(
   async (req: Request, res: Response): Promise<void> => {
-    const { deviceId } = req.params;
+    const deviceId = req.params.deviceId as string;
     const { intensity, temperature, mode } = req.body;
 
     appAssert(req.userId, HTTP_CODE.UNAUTHORIZED, "Authentication required", ERROR_CODE.UNAUTHORIZED);

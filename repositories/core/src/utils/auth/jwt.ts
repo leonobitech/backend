@@ -294,7 +294,7 @@ export const getExpirationDate = (role: UserRole, audience: Audience): Date => {
       : thirtyDaysFromNow();
   }
 
-  if (role === UserRole.Moderator) {
+  if (role === UserRole.Student) {
     return audience === Audience.Access
       ? thirtyMinutesFromNow()
       : thirtyDaysFromNow();

@@ -319,3 +319,80 @@ export const getPasskeyRecoveryTemplate = (code: string) => {
       `,
   };
 };
+
+export const getMagicLinkTemplate = (magicLinkUrl: string) => {
+  return {
+    subject: "🔑 Inicia sesión en Leonobitech",
+    text: `Haz clic en el siguiente enlace para iniciar sesión: ${magicLinkUrl}. Este enlace expirará en 5 minutos.`,
+    html: `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Magic Link - Leonobitech</title>
+          <style>
+              body {
+                  font-family: Arial, sans-serif;
+                  background-color: #f4f4f4;
+                  margin: 0;
+                  padding: 0;
+                  text-align: center;
+              }
+              .container {
+                  width: 100%;
+                  max-width: 600px;
+                  margin: 30px auto;
+                  background: #ffffff;
+                  padding: 20px;
+                  border-radius: 8px;
+                  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+              }
+              h1 {
+                  color: #333;
+              }
+              p {
+                  font-size: 16px;
+                  color: #555;
+              }
+              .button {
+                  display: inline-block;
+                  margin: 24px 0;
+                  padding: 14px 32px;
+                  background-color: #171717;
+                  color: #ffffff !important;
+                  text-decoration: none;
+                  border-radius: 8px;
+                  font-size: 16px;
+                  font-weight: bold;
+                  letter-spacing: 0.5px;
+              }
+              .link-fallback {
+                  font-size: 12px;
+                  color: #999;
+                  word-break: break-all;
+                  margin-top: 8px;
+              }
+              .footer {
+                  font-size: 12px;
+                  color: #777;
+                  margin-top: 20px;
+              }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>Inicia sesión</h1>
+              <p>Haz clic en el botón para acceder a tu cuenta en <strong>Leonobitech</strong>.</p>
+              <a href="${magicLinkUrl}" class="button">Iniciar sesión</a>
+              <p class="link-fallback">Si el botón no funciona, copia y pega este enlace:<br/>${magicLinkUrl}</p>
+              <p>Este enlace expirará en <strong>5 minutos</strong>. Si no solicitaste este correo, puedes ignorarlo.</p>
+              <div class="footer">
+                  <p>&copy; ${new Date().getFullYear()} Leonobitech. Todos los derechos reservados.</p>
+              </div>
+          </div>
+      </body>
+      </html>
+    `,
+  };
+};

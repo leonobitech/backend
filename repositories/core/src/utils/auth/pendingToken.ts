@@ -73,7 +73,7 @@ export async function generatePendingToken(
   };
 
   // Firmar el token
-  const token = await new SignJWT(payload)
+  const token = await new SignJWT(payload as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS512" })
     .setIssuer(JWT_ISSUER)
     .setAudience(Audience.PasskeyPending)

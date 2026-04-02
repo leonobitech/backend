@@ -9,60 +9,58 @@ import {
   requestPasswordResetController,
   resetPasswordController,
 } from "@controllers/account.controllers";
+import {
+  requestMagicLinkController,
+  verifyMagicLinkController,
+  completeOnboardingController,
+} from "@controllers/magicLink.controllers";
 import authenticate from "@middlewares/authenticate";
 import {
   loginRateLimiter,
   registerRateLimiter,
   passwordResetRateLimiter,
   emailVerificationRateLimiter,
+  magicLinkRateLimiter,
 } from "@middlewares/rateLimiter";
 
 const accountRoutes = Router();
 
 // 🌐 prefix: /account
 
-/**
- * @route   POST /account/register
- * @desc    Registra un nuevo usuario y envía un código de verificación por email
- * @limit   3 registros por hora por IP
- */
-accountRoutes.post("/register", registerRateLimiter, registerController);
+// ====================================================================
+// 🔑 Magic Link (new passwordless auth)
+// ====================================================================
 
 /**
- * @route   POST /account/verify-email
- * @desc    Verifica el código de email y activa la cuenta del usuario
+ * @route   POST /account/auth/magic-link
+ * @desc    Solicita un magic link para login/registro (passwordless)
+ * @limit   5 solicitudes cada 15 minutos por IP
+ */
+accountRoutes.post("/auth/magic-link", magicLinkRateLimiter, requestMagicLinkController);
+
+/**
+ * @route   POST /account/auth/verify-magic-link
+ * @desc    Verifica el token del magic link y emite pendingToken
  * @limit   5 intentos cada 15 minutos por IP
  */
-accountRoutes.post("/verify-email", emailVerificationRateLimiter, verifyEmailController);
+accountRoutes.post("/auth/verify-magic-link", magicLinkRateLimiter, verifyMagicLinkController);
 
 /**
- * @route   POST /account/login
- * @desc    Inicia sesión y genera tokens de acceso + sesión persistente
- * @limit   5 intentos cada 15 minutos por IP
+ * @route   POST /account/auth/onboarding
+ * @desc    Completa el onboarding de un usuario nuevo (nombre)
  */
-accountRoutes.post("/login", loginRateLimiter, loginController);
+accountRoutes.post("/auth/onboarding", completeOnboardingController);
+
+// ====================================================================
+// 🔄 Token & Session Management
+// ====================================================================
 
 /**
- * @route   POST /account/refresh-token
+ * @route   POST /account/refresh
  * @desc    Rota refreshToken y genera nuevo accessToken
  * @access  Público (solo con refreshToken válido)
  */
 accountRoutes.post("/refresh", refreshAccessTokenController);
-
-/**
- * @route   POST /account/password/forgot
- * @desc    Solicita un restablecimiento de contraseña y envía un email con el código.
- * @limit   3 solicitudes por hora por IP
- */
-accountRoutes.post("/password/forgot", passwordResetRateLimiter, requestPasswordResetController);
-
-/**
- * @route   POST /password/reset
- * @desc    Restablece la contraseña del usuario y activa la cuenta
- * @access  Público (solo con token de restablecimiento válido)
- * @limit   3 intentos por hora por IP
- */
-accountRoutes.post("/password/reset", passwordResetRateLimiter, resetPasswordController);
 
 /**
  * @route   POST /account/logout
@@ -76,10 +74,16 @@ accountRoutes.post("/logout", authenticate, logoutController);
  * @desc    Cierra todas las sesiones activas excepto la actual
  * @access  Protegido
  */
-accountRoutes.post(
-  "/logout-all",
-  authenticate,
-  logoutAllOtherSessionsController
-);
+accountRoutes.post("/logout-all", authenticate, logoutAllOtherSessionsController);
+
+// ====================================================================
+// 🕰️ Legacy routes (will be removed after migration)
+// ====================================================================
+
+accountRoutes.post("/register", registerRateLimiter, registerController);
+accountRoutes.post("/verify-email", emailVerificationRateLimiter, verifyEmailController);
+accountRoutes.post("/login", loginRateLimiter, loginController);
+accountRoutes.post("/password/forgot", passwordResetRateLimiter, requestPasswordResetController);
+accountRoutes.post("/password/reset", passwordResetRateLimiter, resetPasswordController);
 
 export default accountRoutes;

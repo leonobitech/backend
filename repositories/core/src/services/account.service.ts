@@ -61,6 +61,7 @@ import { revokeAccessToken } from "@utils/auth/tokenRedis";
 import { loggerAudit } from "@utils/logging/loggerAudit";
 import { createNewDevice } from "@utils/auth/createNewDevice";
 import { checkDeviceOrSendVerification } from "@utils/auth/checkDeviceOrSendVerification";
+import { revokeAllUserSessions } from "@utils/auth/revokeAllUserSessions";
 import { loggerEvent } from "@utils/logging/loggerEvent";
 import { TokenType } from "@prisma/client";
 
@@ -279,10 +280,13 @@ export const verifyEmailService = async ({
     });
   }
 
-  // 10. Crear dispositivo para esta sesión
+  // 10. Revocar sesiones anteriores (sesión única por usuario)
+  await revokeAllUserSessions(user.id);
+
+  // 11. Crear dispositivo para esta sesión
   const device = await createNewDevice(user.id, meta);
 
-  // 11. Crear la sesión
+  // 12. Crear la sesión
   const session = await prisma.session.create({
     data: {
       userId: user.id,
@@ -381,6 +385,13 @@ export const loginService = async ({
     HTTP_CODE.UNAUTHORIZED,
     "Debes verificar tu email antes de iniciar sesión",
     ERROR_CODE.EMAIL_NOT_VERIFIED
+  );
+
+  appAssert(
+    user.password,
+    HTTP_CODE.UNAUTHORIZED,
+    "This account uses passwordless login",
+    ERROR_CODE.INVALID_CREDENTIALS
   );
 
   const isMatch = await compareValue(password, user.password);
@@ -1055,7 +1066,7 @@ export const resetPasswordService = async ({
   }
 
   // 🚫 Prevenir reuse de contraseña
-  const isSamePassword = await compareValue(newPassword, user.password);
+  const isSamePassword = user.password ? await compareValue(newPassword, user.password) : false;
   appAssert(
     !isSamePassword,
     HTTP_CODE.BAD_REQUEST,
@@ -1098,6 +1109,9 @@ export const resetPasswordService = async ({
   //REVIEW: Revisar Vulnerabilidad.
   //TODO: revisar si se puede crear nuevo dispositivo desde una ruta publica,
   //  deberia haber un dispositvo registrado por que hay un usuario!
+  // 🔒 Revocar sesiones anteriores (sesión única por usuario)
+  await revokeAllUserSessions(user.id);
+
   // 📱 Crear o encontrar el dispositivo
   const device = await findOrCreateDevice(user.id, meta);
 

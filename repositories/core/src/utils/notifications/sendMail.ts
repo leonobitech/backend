@@ -6,6 +6,7 @@ import {
   getPasswordResetTemplate,
   getDeviceValidationTemplate,
   getPasskeyRecoveryTemplate,
+  getMagicLinkTemplate,
 } from "./emailTemplates";
 
 type Params = {
@@ -107,6 +108,23 @@ export const sendPasskeyRecoveryEmail = async (
   recoveryCode: string
 ) => {
   const template = getPasskeyRecoveryTemplate(recoveryCode);
+
+  await sendMail({
+    to,
+    subject: template.subject,
+    text: template.text,
+    html: template.html,
+  });
+};
+
+/**
+ * 🔑 Enviar magic link para login sin password.
+ */
+export const sendMagicLinkEmail = async (
+  to: string,
+  magicLinkUrl: string
+) => {
+  const template = getMagicLinkTemplate(magicLinkUrl);
 
   await sendMail({
     to,

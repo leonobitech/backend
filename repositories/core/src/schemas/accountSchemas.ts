@@ -58,3 +58,17 @@ export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
   newPassword: passwordSchema,
 });
+
+// Magic Link schemas
+export const magicLinkRequestSchema = z.object({
+  email: emailSchema,
+});
+
+export const magicLinkVerifySchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  requestId: z.string().min(1, "Request ID is required"),
+});
+
+export const onboardingSchema = z.object({
+  name: z.string().min(1, "Name is required").max(50, "Name is too long"),
+});
