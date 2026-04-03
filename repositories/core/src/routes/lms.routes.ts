@@ -3,6 +3,7 @@ import { createCourse, listCourses, getCourse, updateCourse, deleteCourse, publi
 import { createModule, updateModule, deleteModule, reorderModules } from "@controllers/lms/module.controller";
 import { createLesson, updateLesson, deleteLesson, reorderLessons } from "@controllers/lms/lesson.controller";
 import { listEnrollments } from "@controllers/lms/enrollment.controller";
+import { createAssessment, getAssessment, updateAssessment, deleteAssessment } from "@controllers/lms/assessment.controller";
 
 const lmsRouter = Router();
 
@@ -40,5 +41,14 @@ lmsRouter.put("/modules/:moduleId/reorder-lessons", reorderLessons);
 // =============================================================================
 
 lmsRouter.get("/enrollments", listEnrollments);
+
+// =============================================================================
+// Assessments (admin CRUD)
+// =============================================================================
+
+lmsRouter.post("/courses/:courseId/assessments", createAssessment);
+lmsRouter.get("/assessments/:id", getAssessment);
+lmsRouter.put("/assessments/:id", updateAssessment);
+lmsRouter.delete("/assessments/:id", deleteAssessment);
 
 export default lmsRouter;
