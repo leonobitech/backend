@@ -4,6 +4,7 @@ import { createModule, updateModule, deleteModule, reorderModules } from "@contr
 import { createLesson, updateLesson, deleteLesson, reorderLessons } from "@controllers/lms/lesson.controller";
 import { listEnrollments } from "@controllers/lms/enrollment.controller";
 import { createAssessment, getAssessment, updateAssessment, deleteAssessment } from "@controllers/lms/assessment.controller";
+import { listGraduatesAdmin, verifyGraduate } from "@controllers/lms/graduate.controller";
 
 const lmsRouter = Router();
 
@@ -50,5 +51,12 @@ lmsRouter.post("/courses/:courseId/assessments", createAssessment);
 lmsRouter.get("/assessments/:id", getAssessment);
 lmsRouter.put("/assessments/:id", updateAssessment);
 lmsRouter.delete("/assessments/:id", deleteAssessment);
+
+// =============================================================================
+// Graduates (admin review)
+// =============================================================================
+
+lmsRouter.get("/graduates", listGraduatesAdmin);
+lmsRouter.put("/graduates/:id/verify", verifyGraduate);
 
 export default lmsRouter;

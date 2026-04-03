@@ -40,6 +40,7 @@ import lmsRouter from "@routes/lms.routes";
 import catalogRouter from "@routes/catalog.routes";
 import paymentRouter, { webhookRouter } from "@routes/payment.routes";
 import learnRouter from "@routes/learn.routes";
+import graduatesRouter from "@routes/graduates.routes";
 
 // controllers (for specific routes)
 import { updateAvatarFromN8n } from "@controllers/user.controllers";
@@ -160,6 +161,9 @@ app.use("/podcasts", podcastRouter);
 
 // 📚 Public course catalog (read-only, no auth required)
 app.use("/courses", catalogRouter);
+
+// 🎓 Public graduates directory (no auth required)
+app.use("/graduates", graduatesRouter);
 
 // 🤖 IoT Device routes
 // Device API: register, telemetry, commands - uses x-device-id and x-api-key headers

@@ -6,6 +6,7 @@ import {
   completeLesson,
 } from "@controllers/lms/learn.controller";
 import { getStudentAssessment, submitStudentAssessment } from "@controllers/lms/assessment.controller";
+import { submitProject } from "@controllers/lms/graduate.controller";
 
 const learnRouter = Router();
 
@@ -18,5 +19,8 @@ learnRouter.post("/lessons/:lessonId/complete", completeLesson);
 // Assessments (student)
 learnRouter.get("/courses/:courseSlug/assessment", getStudentAssessment);
 learnRouter.post("/assessments/:assessmentId/submit", submitStudentAssessment);
+
+// Graduate project submission (student)
+learnRouter.post("/courses/:courseSlug/graduate", submitProject);
 
 export default learnRouter;
