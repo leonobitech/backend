@@ -52,10 +52,13 @@ const parseUA = (ua: string) => {
   else if (ua.includes("Vivaldi")) browser = "Vivaldi";
   else if (ua.includes("OPR/")) browser = "Opera";
 
-  const os =
-    osRaw.name && osRaw.version
-      ? `${osRaw.name} ${osRaw.version}`
-      : osRaw.name || "Unknown";
+  // Simplify OS names to match frontend clientMeta (no version)
+  let os = osRaw.name || "Unknown";
+  if (os.includes("Mac OS")) os = "macOS";
+  else if (os.includes("Windows")) os = "Windows";
+  else if (os.includes("Linux")) os = "Linux";
+  else if (os.includes("Android")) os = "Android";
+  else if (os.includes("iOS")) os = "iOS";
 
   return {
     device: deviceRaw.type || "Desktop",
