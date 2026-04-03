@@ -1039,10 +1039,17 @@ export async function verifyPasskeyAuthentication(
     "passkey.service"
   );
 
-  // 1️⃣4️⃣ Retornar los datos al controlador
-  // El controlador usará estos datos para:
-  // - Establecer cookies (accessKey, clientKey)
-  // - Enviar datos del usuario al frontend
+  // 1️⃣4️⃣ Send login notification email (fire & forget, non-blocking)
+  import("@utils/notifications/sendMail").then(({ sendLoginNotificationEmail }) => {
+    sendLoginNotificationEmail(passkey.user.email, {
+      browser: meta.deviceInfo.browser,
+      os: meta.deviceInfo.os,
+      device: meta.deviceInfo.device,
+      ipAddress: meta.ipAddress || "Unknown",
+      date: new Date().toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }),
+    }).catch(() => {});
+  });
+
   loggerEvent(
     "passkey.service.login.verify.complete",
     {
@@ -1061,8 +1068,8 @@ export async function verifyPasskeyAuthentication(
       expiresAt: session.expiresAt,
     },
     tokens: {
-      accessTokenId, // Se guarda en cookie "accessKey"
-      hashedPublicKey, // Se guarda en cookie "clientKey"
+      accessTokenId,
+      hashedPublicKey,
     },
   };
 }
@@ -1459,6 +1466,17 @@ export async function verifyPasskeySetupAndLogin(
         revoked: false,
       },
     ],
+  });
+
+  // Send login notification email (fire & forget, non-blocking)
+  import("@utils/notifications/sendMail").then(({ sendLoginNotificationEmail }) => {
+    sendLoginNotificationEmail(user.email, {
+      browser: meta.deviceInfo.browser,
+      os: meta.deviceInfo.os,
+      device: meta.deviceInfo.device,
+      ipAddress: meta.ipAddress || "Unknown",
+      date: new Date().toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }),
+    }).catch(() => {});
   });
 
   loggerEvent(

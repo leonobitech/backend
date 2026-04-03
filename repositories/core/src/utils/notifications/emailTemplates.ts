@@ -208,3 +208,36 @@ export const getMagicLinkTemplate = (magicLinkUrl: string) => ({
   <p style="margin:0;font-size:12px;color:#a1a1aa">If you didn't request this email, you can safely ignore it.</p>
 </td></tr>`),
 });
+
+export const getLoginNotificationTemplate = (deviceInfo: {
+  browser: string;
+  os: string;
+  device: string;
+  ipAddress: string;
+  date: string;
+}) => ({
+  subject: "New sign-in to your Leonobitech account",
+  text: `A new sign-in was detected on your account from ${deviceInfo.browser} on ${deviceInfo.os} (${deviceInfo.ipAddress}) at ${deviceInfo.date}.`,
+  html: emailWrapper(`
+<tr><td style="padding:32px 32px 8px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Security</p>
+  <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">New sign-in detected</h1>
+</td></tr>
+<tr><td style="padding:16px 32px 32px;text-align:center">
+  <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
+    A new sign-in to your <strong style="color:#1a1a1a">Leonobitech</strong> account was detected.
+  </p>
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;border-radius:8px;overflow:hidden">
+    <tr><td style="padding:16px 20px">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr><td style="padding:4px 0;font-size:13px;color:#a1a1aa;width:80px">Device</td><td style="padding:4px 0;font-size:13px;color:#1a1a1a;font-weight:500">${deviceInfo.device} &middot; ${deviceInfo.os}</td></tr>
+        <tr><td style="padding:4px 0;font-size:13px;color:#a1a1aa">Browser</td><td style="padding:4px 0;font-size:13px;color:#1a1a1a;font-weight:500">${deviceInfo.browser}</td></tr>
+        <tr><td style="padding:4px 0;font-size:13px;color:#a1a1aa">IP</td><td style="padding:4px 0;font-size:13px;color:#1a1a1a;font-family:monospace">${deviceInfo.ipAddress}</td></tr>
+        <tr><td style="padding:4px 0;font-size:13px;color:#a1a1aa">Date</td><td style="padding:4px 0;font-size:13px;color:#1a1a1a">${deviceInfo.date}</td></tr>
+      </table>
+    </td></tr>
+  </table>
+  <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa">If this was you, no action is needed.</p>
+  <p style="margin:8px 0 0;font-size:13px;color:#a1a1aa">If you don't recognize this activity, please secure your account immediately.</p>
+</td></tr>`),
+});

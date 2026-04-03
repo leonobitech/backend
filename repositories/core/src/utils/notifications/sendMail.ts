@@ -7,6 +7,7 @@ import {
   getDeviceValidationTemplate,
   getPasskeyRecoveryTemplate,
   getMagicLinkTemplate,
+  getLoginNotificationTemplate,
 } from "./emailTemplates";
 
 type Params = {
@@ -125,6 +126,29 @@ export const sendMagicLinkEmail = async (
   magicLinkUrl: string
 ) => {
   const template = getMagicLinkTemplate(magicLinkUrl);
+
+  await sendMail({
+    to,
+    subject: template.subject,
+    text: template.text,
+    html: template.html,
+  });
+};
+
+/**
+ * Send login notification after successful sign-in.
+ */
+export const sendLoginNotificationEmail = async (
+  to: string,
+  deviceInfo: {
+    browser: string;
+    os: string;
+    device: string;
+    ipAddress: string;
+    date: string;
+  }
+) => {
+  const template = getLoginNotificationTemplate(deviceInfo);
 
   await sendMail({
     to,
