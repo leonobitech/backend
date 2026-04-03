@@ -44,6 +44,10 @@ model User {
   passkeys          Passkey[]
   podcasts          Podcast[]
   iotDevices        IotDevice[]
+
+  // LMS
+  enrollments       Enrollment[]
+  graduates         Graduate[]
 }
 
 model Device {
@@ -334,4 +338,172 @@ model LightSchedule {
 
   @@index([deviceId])
   @@index([isActive])
+}
+
+// =============================================================================
+// LMS Models - Learning Management System
+// =============================================================================
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+  QUIZ
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  REFUNDED
+}
+
+model Course {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  slug          String       @unique
+  description   String
+  thumbnailUrl  String?
+  price         Float
+  currency      String       @default("USD")
+  status        CourseStatus  @default(DRAFT)
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  modules       Module[]
+  enrollments   Enrollment[]
+  assessments   Assessment[]
+  graduates     Graduate[]
+
+  @@index([status])
+}
+
+model Module {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  courseId   String   @map("courseId") @db.ObjectId
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  order     Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lessons   Lesson[]
+
+  @@index([courseId])
+}
+
+model Lesson {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  moduleId    String     @map("moduleId") @db.ObjectId
+  module      Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title       String
+  slug        String
+  description String?
+  videoUrl    String?
+  duration    Int?       // Duration in seconds
+  order       Int
+  type        LessonType @default(VIDEO)
+  content     String?    // Rich text content for TEXT type lessons
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  progress    Progress[]
+
+  @@unique([moduleId, slug])
+  @@index([moduleId])
+}
+
+model Enrollment {
+  id              String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String           @map("userId") @db.ObjectId
+  user            User             @relation(fields: [userId], references: [id])
+  courseId         String           @map("courseId") @db.ObjectId
+  course          Course           @relation(fields: [courseId], references: [id])
+  status          EnrollmentStatus @default(ACTIVE)
+  stripePaymentId String?
+  stripeSessionId String?
+  enrolledAt      DateTime         @default(now())
+  completedAt     DateTime?
+
+  progress           Progress[]
+  assessmentAttempts  AssessmentAttempt[]
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+}
+
+model Progress {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  enrollmentId String     @map("enrollmentId") @db.ObjectId
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId     String     @map("lessonId") @db.ObjectId
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completed    Boolean    @default(false)
+  completedAt  DateTime?
+
+  @@unique([enrollmentId, lessonId])
+  @@index([enrollmentId])
+}
+
+model Assessment {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  courseId      String   @map("courseId") @db.ObjectId
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title        String
+  questions    Json     // Array of question objects
+  passingScore Int      @default(70)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  attempts     AssessmentAttempt[]
+
+  @@index([courseId])
+}
+
+model AssessmentAttempt {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  enrollmentId String     @map("enrollmentId") @db.ObjectId
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  assessmentId String     @map("assessmentId") @db.ObjectId
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  answers      Json
+  score        Int
+  passed       Boolean
+  completedAt  DateTime   @default(now())
+
+  @@index([enrollmentId])
+  @@index([assessmentId])
+}
+
+model Graduate {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId              String   @map("userId") @db.ObjectId
+  user                User     @relation(fields: [userId], references: [id])
+  courseId             String   @map("courseId") @db.ObjectId
+  course              Course   @relation(fields: [courseId], references: [id])
+  slug                String   @unique
+  projectTitle        String
+  projectDescription  String
+  projectDemoUrl      String?
+  projectScreenshots  String[]
+  verified            Boolean  @default(false)
+  publishedAt         DateTime?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+  @@index([verified])
 }

@@ -36,6 +36,8 @@ import serviceRoutes from "@routes/service.routes";
 import uploadRouter from "@routes/upload.routes";
 import podcastRouter from "@routes/podcast.routes";
 import iotRoutes from "@routes/iot.routes";
+import lmsRouter from "@routes/lms.routes";
+import catalogRouter from "@routes/catalog.routes";
 
 // controllers (for specific routes)
 import { updateAvatarFromN8n } from "@controllers/user.controllers";
@@ -151,6 +153,9 @@ app.use("/upload", uploadRouter);
 // 📻 Public podcast routes (read-only, no auth required)
 app.use("/podcasts", podcastRouter);
 
+// 📚 Public course catalog (read-only, no auth required)
+app.use("/courses", catalogRouter);
+
 // 🤖 IoT Device routes
 // Device API: register, telemetry, commands - uses x-device-id and x-api-key headers
 // Dashboard API: list/manage devices - requires user auth (handled in routes)
@@ -175,6 +180,7 @@ app.patch("/account/avatar/update-from-n8n", apiKeyGuard, updateAvatarFromN8n);
 app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
 app.use("/admin", authenticate, authorize(UserRole.Admin), adminRateLimiter, adminRouter);
+app.use("/lms", authenticate, authorize(UserRole.Admin), adminRateLimiter, lmsRouter);
 
 // Test route for error handling
 app.use("/api", testRouter);
