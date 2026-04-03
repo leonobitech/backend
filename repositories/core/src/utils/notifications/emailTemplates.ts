@@ -1,6 +1,8 @@
 // =============================================================================
-// Shared email wrapper with Leonobitech branding
+// Shared email wrapper with Leonobitech branding (full HTML/CSS, no images)
 // =============================================================================
+
+const currentYear = new Date().getFullYear();
 
 const emailWrapper = (content: string) => `<!DOCTYPE html>
 <html>
@@ -9,16 +11,92 @@ const emailWrapper = (content: string) => `<!DOCTYPE html>
 <tr><td align="center" style="padding:0 16px">
 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
 
-<!-- Header Image -->
-<tr><td style="padding:0;background-color:#2B2B2B">
-  <img src="https://www.leonobitech.com/opengraph-image.png" style="display:block;width:100%;height:auto" alt="Leonobitech" />
+<!-- Header -->
+<tr><td style="background-color:#2B2B2B;padding:24px 32px">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="vertical-align:middle">
+        <table cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="vertical-align:middle;padding-right:12px">
+              <img src="https://www.leonobitech.com/icon_512x512.png" width="40" height="40" style="display:block;border-radius:8px" alt="L" />
+            </td>
+            <td style="vertical-align:middle">
+              <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px">Leonobitech</p>
+              <p style="margin:2px 0 0;font-size:12px;color:#78716C">Soluciones Empresariales con IA</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td style="vertical-align:middle;text-align:right">
+        <a href="https://www.leonobitech.com" style="font-size:12px;color:#a1a1aa;text-decoration:none">leonobitech.com</a>
+      </td>
+    </tr>
+  </table>
 </td></tr>
 
 ${content}
 
 <!-- Footer -->
-<tr><td style="padding:20px 24px;text-align:center;background-color:#2B2B2B;border-top:1px solid rgba(255,255,255,0.06)">
-  <p style="margin:0;font-size:11px;color:#78716C">&copy; ${new Date().getFullYear()} Leonobitech &middot; leonobitech.com</p>
+<tr><td style="background-color:#2B2B2B;padding:32px">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <!-- Logo + Description -->
+    <tr><td style="padding-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.08)">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="vertical-align:top;width:50%">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="vertical-align:middle;padding-right:10px">
+                  <img src="https://www.leonobitech.com/icon_512x512.png" width="28" height="28" style="display:block;border-radius:6px" alt="L" />
+                </td>
+                <td style="vertical-align:middle">
+                  <p style="margin:0;font-size:16px;font-weight:700;color:#D1D5DB">Leonobitech</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:10px 0 0;font-size:12px;color:#78716C;line-height:1.5;max-width:260px">
+              Agentes de voz, automatizaci&oacute;n inteligente, cursos y consultor&iacute;a con el ecosistema Anthropic.
+            </p>
+          </td>
+          <td style="vertical-align:top;text-align:right">
+            <p style="margin:0 0 8px;font-size:11px;color:#78716C;text-transform:uppercase;letter-spacing:1px">Contacto</p>
+            <p style="margin:0;font-size:12px;color:#A8A29E">felix@leonobitech.com</p>
+            <p style="margin:4px 0 0;font-size:12px;color:#A8A29E">leonobitech.com</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+
+    <!-- Social + Copyright -->
+    <tr><td style="padding-top:20px">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td>
+            <!-- Social Icons -->
+            <a href="https://x.com/leonobitech" style="text-decoration:none;margin-right:12px">
+              <img src="https://img.icons8.com/ios-filled/20/78716C/twitterx--v1.png" width="20" height="20" alt="X" style="display:inline-block" />
+            </a>
+            <a href="https://www.instagram.com/leonobitech/" style="text-decoration:none;margin-right:12px">
+              <img src="https://img.icons8.com/ios-filled/20/78716C/instagram-new--v1.png" width="20" height="20" alt="IG" style="display:inline-block" />
+            </a>
+            <a href="https://www.linkedin.com/company/leonobitech" style="text-decoration:none;margin-right:12px">
+              <img src="https://img.icons8.com/ios-filled/20/78716C/linkedin.png" width="20" height="20" alt="LI" style="display:inline-block" />
+            </a>
+            <a href="https://www.youtube.com/@leonobitech" style="text-decoration:none;margin-right:12px">
+              <img src="https://img.icons8.com/ios-filled/20/78716C/youtube-play.png" width="20" height="20" alt="YT" style="display:inline-block" />
+            </a>
+            <a href="https://github.com/leonobitech" style="text-decoration:none">
+              <img src="https://img.icons8.com/ios-filled/20/78716C/github.png" width="20" height="20" alt="GH" style="display:inline-block" />
+            </a>
+          </td>
+          <td style="text-align:right">
+            <p style="margin:0;font-size:11px;color:#78716C">&copy; ${currentYear} Leonobitech. Todos los derechos reservados.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
 </td></tr>
 
 </table>
@@ -61,13 +139,13 @@ export const getPasswordResetTemplate = (code: string) => ({
   text: `Tu código para restablecer la contraseña es: ${code}. Este código expirará en 5 minutos.`,
   html: emailWrapper(`
 <!-- Title -->
-<tr><td style="padding:32px 24px 8px;text-align:center">
+<tr><td style="padding:32px 32px 8px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Seguridad</p>
   <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Restablece tu contraseña</h1>
 </td></tr>
 
 <!-- Content -->
-<tr><td style="padding:16px 24px 24px;text-align:center">
+<tr><td style="padding:16px 32px 32px;text-align:center">
   <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
     Recibimos una solicitud para restablecer tu contraseña en <strong style="color:#1a1a1a">Leonobitech</strong>.
   </p>
@@ -77,7 +155,7 @@ export const getPasswordResetTemplate = (code: string) => ({
   </p>
 </td></tr>
 
-<tr><td style="padding:0 24px 24px;text-align:center">
+<tr><td style="padding:0 32px 32px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa">Si no solicitaste este correo, puedes ignorarlo de forma segura.</p>
 </td></tr>`),
 });
@@ -87,13 +165,13 @@ export const getVerifyEmailTemplate = (code: string) => ({
   text: `Tu código de verificación es: ${code}. Este código expirará en 15 minutos.`,
   html: emailWrapper(`
 <!-- Title -->
-<tr><td style="padding:32px 24px 8px;text-align:center">
+<tr><td style="padding:32px 32px 8px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Bienvenido</p>
   <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Verifica tu cuenta</h1>
 </td></tr>
 
 <!-- Content -->
-<tr><td style="padding:16px 24px 24px;text-align:center">
+<tr><td style="padding:16px 32px 32px;text-align:center">
   <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
     Gracias por registrarte en <strong style="color:#1a1a1a">Leonobitech</strong>. Usa el siguiente código para verificar tu cuenta:
   </p>
@@ -103,7 +181,7 @@ export const getVerifyEmailTemplate = (code: string) => ({
   </p>
 </td></tr>
 
-<tr><td style="padding:0 24px 24px;text-align:center">
+<tr><td style="padding:0 32px 32px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa">Si no solicitaste este correo, puedes ignorarlo de forma segura.</p>
 </td></tr>`),
 });
@@ -113,13 +191,13 @@ export const getTwoFactorAuthTemplate = (otpCode: string) => ({
   text: `Tu código de autenticación de dos factores (2FA) es: ${otpCode}. Este código expirará en 15 minutos.`,
   html: emailWrapper(`
 <!-- Title -->
-<tr><td style="padding:32px 24px 8px;text-align:center">
+<tr><td style="padding:32px 32px 8px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Autenticación</p>
   <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Código 2FA</h1>
 </td></tr>
 
 <!-- Content -->
-<tr><td style="padding:16px 24px 24px;text-align:center">
+<tr><td style="padding:16px 32px 32px;text-align:center">
   <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
     Tu código de autenticación de dos factores es:
   </p>
@@ -129,7 +207,7 @@ export const getTwoFactorAuthTemplate = (otpCode: string) => ({
   </p>
 </td></tr>
 
-<tr><td style="padding:0 24px 24px;text-align:center">
+<tr><td style="padding:0 32px 32px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa">Si no solicitaste este código, ignora este mensaje.</p>
 </td></tr>`),
 });
@@ -139,13 +217,13 @@ export const getDeviceValidationTemplate = (code: string) => ({
   text: `Recibimos un intento de inicio de sesión desde un nuevo dispositivo. Tu código de verificación es: ${code}. Este código expirará en 10 minutos.`,
   html: emailWrapper(`
 <!-- Title -->
-<tr><td style="padding:32px 24px 8px;text-align:center">
+<tr><td style="padding:32px 32px 8px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Seguridad</p>
   <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Nuevo dispositivo detectado</h1>
 </td></tr>
 
 <!-- Content -->
-<tr><td style="padding:16px 24px 24px;text-align:center">
+<tr><td style="padding:16px 32px 32px;text-align:center">
   <p style="margin:0 0 16px;font-size:15px;color:#52525b;line-height:1.6">
     Detectamos un intento de inicio de sesión desde un dispositivo no registrado en <strong style="color:#1a1a1a">Leonobitech</strong>.
   </p>
@@ -165,13 +243,13 @@ export const getPasskeyRecoveryTemplate = (code: string) => ({
   text: `Tu código de recuperación de passkey es: ${code}. Este código expirará en 10 minutos. Si no solicitaste este código, ignora este mensaje.`,
   html: emailWrapper(`
 <!-- Title -->
-<tr><td style="padding:32px 24px 8px;text-align:center">
+<tr><td style="padding:32px 32px 8px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Recuperación</p>
   <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Recuperación de Passkey</h1>
 </td></tr>
 
 <!-- Content -->
-<tr><td style="padding:16px 24px 24px;text-align:center">
+<tr><td style="padding:16px 32px 32px;text-align:center">
   <p style="margin:0 0 16px;font-size:15px;color:#52525b;line-height:1.6">
     Recibimos una solicitud para recuperar el acceso a tu cuenta en <strong style="color:#1a1a1a">Leonobitech</strong>.
   </p>
@@ -194,13 +272,13 @@ export const getMagicLinkTemplate = (magicLinkUrl: string) => ({
   text: `Haz clic en el siguiente enlace para iniciar sesión: ${magicLinkUrl}. Este enlace expirará en 5 minutos.`,
   html: emailWrapper(`
 <!-- Title -->
-<tr><td style="padding:32px 24px 8px;text-align:center">
+<tr><td style="padding:32px 32px 8px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Acceso Seguro</p>
   <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Inicia sesión</h1>
 </td></tr>
 
 <!-- Content -->
-<tr><td style="padding:16px 24px 24px;text-align:center">
+<tr><td style="padding:16px 32px 32px;text-align:center">
   <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
     Haz clic en el botón para acceder a tu cuenta en <strong style="color:#1a1a1a">Leonobitech</strong>.
   </p>
@@ -211,7 +289,7 @@ export const getMagicLinkTemplate = (magicLinkUrl: string) => ({
 </td></tr>
 
 <!-- Link Fallback -->
-<tr><td style="padding:0 24px 24px">
+<tr><td style="padding:0 32px 32px">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;border-radius:8px;overflow:hidden">
     <tr><td style="padding:12px 16px">
       <p style="margin:0 0 6px;font-size:11px;color:#a1a1aa;text-transform:uppercase;letter-spacing:1px">Si el botón no funciona</p>
@@ -220,7 +298,7 @@ export const getMagicLinkTemplate = (magicLinkUrl: string) => ({
   </table>
 </td></tr>
 
-<tr><td style="padding:0 24px 24px;text-align:center">
+<tr><td style="padding:0 32px 32px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa">Si no solicitaste este correo, puedes ignorarlo de forma segura.</p>
 </td></tr>`),
 });
