@@ -324,75 +324,73 @@ export const getMagicLinkTemplate = (magicLinkUrl: string) => {
   return {
     subject: "🔑 Inicia sesión en Leonobitech",
     text: `Haz clic en el siguiente enlace para iniciar sesión: ${magicLinkUrl}. Este enlace expirará en 5 minutos.`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="es">
-      <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Magic Link - Leonobitech</title>
-          <style>
-              body {
-                  font-family: Arial, sans-serif;
-                  background-color: #f4f4f4;
-                  margin: 0;
-                  padding: 0;
-                  text-align: center;
-              }
-              .container {
-                  width: 100%;
-                  max-width: 600px;
-                  margin: 30px auto;
-                  background: #ffffff;
-                  padding: 20px;
-                  border-radius: 8px;
-                  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-              }
-              h1 {
-                  color: #333;
-              }
-              p {
-                  font-size: 16px;
-                  color: #555;
-              }
-              .button {
-                  display: inline-block;
-                  margin: 24px 0;
-                  padding: 14px 32px;
-                  background-color: #171717;
-                  color: #ffffff !important;
-                  text-decoration: none;
-                  border-radius: 8px;
-                  font-size: 16px;
-                  font-weight: bold;
-                  letter-spacing: 0.5px;
-              }
-              .link-fallback {
-                  font-size: 12px;
-                  color: #999;
-                  word-break: break-all;
-                  margin-top: 8px;
-              }
-              .footer {
-                  font-size: 12px;
-                  color: #777;
-                  margin-top: 20px;
-              }
-          </style>
-      </head>
-      <body>
-          <div class="container">
-              <h1>Inicia sesión</h1>
-              <p>Haz clic en el botón para acceder a tu cuenta en <strong>Leonobitech</strong>.</p>
-              <a href="${magicLinkUrl}" class="button">Iniciar sesión</a>
-              <p class="link-fallback">Si el botón no funciona, copia y pega este enlace:<br/>${magicLinkUrl}</p>
-              <p>Este enlace expirará en <strong>5 minutos</strong>. Si no solicitaste este correo, puedes ignorarlo.</p>
-              <div class="footer">
-                  <p>&copy; ${new Date().getFullYear()} Leonobitech. Todos los derechos reservados.</p>
-              </div>
-          </div>
-      </body>
-      </html>
-    `,
+    html: `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:20px 0">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+
+<!-- Header Image (dark branding) -->
+<tr><td style="padding:0;background-color:#2B2B2B">
+  <img src="https://www.leonobitech.com/opengraph-image.png" width="600" style="display:block;width:100%;height:auto" alt="Leonobitech" />
+</td></tr>
+
+<!-- Title -->
+<tr><td style="padding:32px 24px 8px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Acceso Seguro</p>
+  <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Inicia sesión</h1>
+</td></tr>
+
+<!-- Content -->
+<tr><td style="padding:16px 24px 24px;text-align:center">
+  <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
+    Haz clic en el botón para acceder a tu cuenta en <strong style="color:#1a1a1a">Leonobitech</strong>.
+  </p>
+
+  <!-- Button (dark, matching brand) -->
+  <table cellpadding="0" cellspacing="0" style="margin:0 auto">
+    <tr>
+      <td style="background-color:#2B2B2B;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+        <a href="${magicLinkUrl}" style="display:inline-block;padding:14px 40px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;letter-spacing:0.5px">
+          Iniciar sesión
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Expiry -->
+  <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa">
+    Este enlace expira en <strong style="color:#52525b">5 minutos</strong>
+  </p>
+</td></tr>
+
+<!-- Link Fallback -->
+<tr><td style="padding:0 24px 24px">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;border-radius:8px;overflow:hidden">
+    <tr><td style="padding:12px 16px">
+      <p style="margin:0 0 6px;font-size:11px;color:#a1a1aa;text-transform:uppercase;letter-spacing:1px">Si el botón no funciona</p>
+      <p style="margin:0;font-size:12px;color:#52525b;word-break:break-all;font-family:monospace">${magicLinkUrl}</p>
+    </td></tr>
+  </table>
+</td></tr>
+
+<!-- Security Notice -->
+<tr><td style="padding:0 24px 24px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa">
+    Si no solicitaste este correo, puedes ignorarlo de forma segura.
+  </p>
+</td></tr>
+
+<!-- Footer (dark, matching brand) -->
+<tr><td style="padding:20px 24px;text-align:center;background-color:#2B2B2B;border-top:1px solid rgba(255,255,255,0.06)">
+  <p style="margin:0;font-size:11px;color:#78716C">&copy; ${new Date().getFullYear()} Leonobitech &middot; leonobitech.com</p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`,
   };
 };
