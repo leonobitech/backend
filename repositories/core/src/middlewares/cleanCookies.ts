@@ -69,14 +69,21 @@ export default function cleanCookies(
   // 🧹 Enviar Set-Cookie para borrar cookies no autorizadas del browser
   if (removed.length > 0) {
     for (const name of removed) {
-      res.cookie(name, "", {
-        maxAge: 0,
-        path: "/",
-        domain: ".leonobitech.com",
-        httpOnly: true,
-        secure: true,
-        sameSite: "strict",
-      });
+      // Skip invalid cookie names that would crash cookie.serialize()
+      if (!name || !/^[\w!#$%&'*+\-.^`|~]+$/.test(name)) continue;
+
+      try {
+        res.cookie(name, "", {
+          maxAge: 0,
+          path: "/",
+          domain: ".leonobitech.com",
+          httpOnly: true,
+          secure: true,
+          sameSite: "strict",
+        });
+      } catch {
+        // Silently skip cookies that can't be cleared
+      }
     }
 
     loggerAudit(
