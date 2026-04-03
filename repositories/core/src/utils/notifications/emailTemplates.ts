@@ -6,46 +6,59 @@ const currentYear = new Date().getFullYear();
 
 const emailWrapper = (content: string) => `<!DOCTYPE html>
 <html>
-<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:20px 0">
+<body style="margin:0;padding:0;background-color:#222222;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+
+<!-- Header full-width -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#2B2B2B">
 <tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
-
-<!-- Header Banner -->
-<tr><td style="padding:0;background-color:#2B2B2B">
-  <img src="https://www.leonobitech.com/email-header.png" width="600" style="display:block;width:100%;height:auto" alt="Leonobitech" />
-</td></tr>
-
-${content}
-
-<!-- Footer -->
-<tr><td style="background-color:#2B2B2B;padding:24px 32px">
-  <table width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td style="vertical-align:top">
-        <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#D1D5DB">Leonobitech</p>
-        <p style="margin:0;font-size:11px;color:#78716C;line-height:1.5">Soluciones Empresariales con IA</p>
-      </td>
-      <td style="vertical-align:top;text-align:right">
-        <p style="margin:0 0 6px;font-size:11px;color:#78716C">felix@leonobitech.com</p>
-        <p style="margin:0;font-size:11px">
-          <a href="https://x.com/leonobitech" style="color:#78716C;text-decoration:none;margin-right:8px">X</a>
-          <a href="https://www.instagram.com/leonobitech/" style="color:#78716C;text-decoration:none;margin-right:8px">IG</a>
-          <a href="https://www.linkedin.com/company/leonobitech" style="color:#78716C;text-decoration:none;margin-right:8px">LI</a>
-          <a href="https://www.youtube.com/@leonobitech" style="color:#78716C;text-decoration:none;margin-right:8px">YT</a>
-          <a href="https://github.com/leonobitech" style="color:#78716C;text-decoration:none">GH</a>
-        </p>
-      </td>
-    </tr>
-    <tr><td colspan="2" style="padding-top:16px;border-top:1px solid rgba(255,255,255,0.08)">
-      <p style="margin:12px 0 0;font-size:10px;color:#52524e;text-align:center">&copy; ${currentYear} Leonobitech. Todos los derechos reservados.</p>
+  <table width="600" cellpadding="0" cellspacing="0">
+    <tr><td style="padding:0">
+      <img src="https://www.leonobitech.com/email-header.png" width="600" style="display:block;width:100%;height:auto" alt="Leonobitech" />
     </td></tr>
   </table>
 </td></tr>
-
 </table>
+
+<!-- Body card -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#222222">
+<tr><td align="center" style="padding:0">
+  <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff">
+    ${content}
+  </table>
 </td></tr>
 </table>
+
+<!-- Footer full-width -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#2B2B2B">
+<tr><td align="center">
+  <table width="600" cellpadding="0" cellspacing="0">
+    <tr><td style="padding:24px 32px">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="vertical-align:top">
+            <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#D1D5DB">Leonobitech</p>
+            <p style="margin:0;font-size:11px;color:#78716C;line-height:1.5">Soluciones Empresariales con IA</p>
+          </td>
+          <td style="vertical-align:top;text-align:right">
+            <p style="margin:0 0 6px;font-size:11px;color:#78716C">felix@leonobitech.com</p>
+            <p style="margin:0;font-size:11px">
+              <a href="https://x.com/leonobitech" style="color:#A8A29E;text-decoration:none;margin-right:8px">X</a>
+              <a href="https://www.instagram.com/leonobitech/" style="color:#A8A29E;text-decoration:none;margin-right:8px">IG</a>
+              <a href="https://www.linkedin.com/company/leonobitech" style="color:#A8A29E;text-decoration:none;margin-right:8px">LI</a>
+              <a href="https://www.youtube.com/@leonobitech" style="color:#A8A29E;text-decoration:none;margin-right:8px">YT</a>
+              <a href="https://github.com/leonobitech" style="color:#A8A29E;text-decoration:none">GH</a>
+            </p>
+          </td>
+        </tr>
+        <tr><td colspan="2" style="padding-top:16px;border-top:1px solid rgba(255,255,255,0.08)">
+          <p style="margin:12px 0 0;font-size:10px;color:#52524e;text-align:center">&copy; ${currentYear} Leonobitech. Todos los derechos reservados.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+
 </body>
 </html>`;
 
