@@ -17,7 +17,7 @@ import logger from "@utils/logging/logger";
 import { findAccessTokenOrThrow } from "@utils/auth/tokenRedis";
 import { createHash } from "crypto";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
-import { generateClientKeyLegacy } from "@utils/auth/generateClientKeyLegacy";
+import { revokeAllUserSessions } from "@utils/auth/revokeAllUserSessions";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
 import { clearAuthCookies, refreshClientMetaCookie } from "@utils/auth/cookies";
 import { refreshAccessTokenService } from "@services/account.service";
@@ -248,10 +248,12 @@ const authenticate: RequestHandler = catchErrors(
 
     // Validar clientKey si NO viene de DB (en DB ya se validó)
     if (!refreshed && clientKey !== clientKeyHash) {
-      logger.warn("🧹 ClientKey mismatch - limpiando cookies", {
+      logger.warn("🧹 ClientKey mismatch - revocando sesión y limpiando cookies", {
         ...meta,
         event: "auth.clientkey.mismatch.cleanup",
       });
+      // Revocar sesión completa para no dejar tokens huérfanos
+      if (dbUserId) await revokeAllUserSessions(dbUserId);
       clearAuthCookies(res);
       throw new HttpException(
         HTTP_CODE.UNAUTHORIZED,
@@ -313,8 +315,7 @@ const authenticate: RequestHandler = catchErrors(
         clientKey,
         meta,
         lang,
-        req,
-        clientKeyHash // Pasar formato alternativo para backward compatibility
+        req
       );
 
       const { payload } = await verifyToken(
@@ -444,25 +445,14 @@ const authenticate: RequestHandler = catchErrors(
         );
       }
 
-      // Validar fingerprint (device + IP)
+      // Validar fingerprint (campos estables del dispositivo, sin IP)
       const expectedClientKey = await generateClientKeyFromMeta(
         meta,
         tokenPayload.userId,
         tokenPayload.sessionId
       );
 
-      // Backward compatibility: Intentar también con formato legacy (IP /24)
-      const expectedClientKeyLegacy = await generateClientKeyLegacy(
-        meta,
-        tokenPayload.userId,
-        tokenPayload.sessionId
-      );
-
-      const isValidFingerprint =
-        clientKey === expectedClientKey ||
-        clientKey === expectedClientKeyLegacy;
-
-      if (!isValidFingerprint) {
+      if (clientKey !== expectedClientKey) {
         await loggerSecurityEvent({
           meta,
           type: "client_key_mismatch",
@@ -470,35 +460,24 @@ const authenticate: RequestHandler = catchErrors(
           sessionId: tokenPayload.sessionId,
           details: {
             receivedClientKey: clientKey,
-            expectedNew: expectedClientKey,
-            expectedLegacy: expectedClientKeyLegacy,
+            expectedClientKey,
           },
         });
 
-        logger.warn("🧹 Fingerprint mismatch - limpiando cookies", {
+        logger.warn("🧹 Fingerprint mismatch - revocando sesión y limpiando cookies", {
           ...meta,
           userId: tokenPayload.userId,
           event: "auth.fingerprint.mismatch.cleanup",
         });
+        // Revocar sesión completa para no dejar tokens huérfanos
+        await revokeAllUserSessions(tokenPayload.userId);
         clearAuthCookies(res);
 
         throw new HttpException(
           HTTP_CODE.UNAUTHORIZED,
-          "This token was not generated from this device or IP address.",
+          "Device fingerprint does not match.",
           ERROR_CODE.INVALID_CLIENT_KEY
         );
-      }
-
-      // Log si detectamos uso de formato legacy
-      if (
-        clientKey === expectedClientKeyLegacy &&
-        clientKey !== expectedClientKey
-      ) {
-        logger.info("🔄 Cliente usando formato legacy de clientKey detectado", {
-          userId: tokenPayload.userId,
-          sessionId: tokenPayload.sessionId,
-          event: "auth.clientkey.legacy_detected",
-        });
       }
 
       payload = tokenPayload;
@@ -519,8 +498,7 @@ const authenticate: RequestHandler = catchErrors(
           clientKey,
           meta,
           lang,
-          req,
-          clientKeyHash // Formato alternativo para backward compatibility
+          req
         );
 
         const { payload: recoveredPayload } = await verifyToken(

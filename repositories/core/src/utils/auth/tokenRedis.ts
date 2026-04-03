@@ -4,9 +4,8 @@ import { HTTP_CODE } from "@constants/httpCode";
 import HttpException from "@utils/http/HttpException";
 import prisma from "@config/prisma";
 import { generateClientKeyFromMeta } from "./generateClientKey";
-import { generateClientKeyLegacy } from "./generateClientKeyLegacy";
 import { loggerSecurityEvent } from "@utils/logging/loggerSecurityEvent";
-import appAssert from "@utils/validation/appAssert";
+import { revokeAllUserSessions } from "./revokeAllUserSessions";
 
 /**
  * 🎯 Convención de claves Redis:
@@ -126,22 +125,17 @@ export const findAccessTokenOrThrow = async (
       where: {
         jti: accessKey,
         type: "ACCESS",
-        // ✅ Permitir tokens revocados SI aún no han expirado (grace period)
         OR: [
           { revoked: false },
           {
             revoked: true,
-            expiresAt: { gt: new Date() } // Solo si aún está en grace period
+            expiresAt: { gt: new Date() }
           }
         ]
       },
       include: {
         user: true,
-        session: {
-          include: {
-            device: true,
-          },
-        },
+        session: true,
       },
     });
 
@@ -153,25 +147,14 @@ export const findAccessTokenOrThrow = async (
       );
     }
 
-    // 🔐 Validación de huella digital con soporte para formato legacy
+    // 🔐 Validación de huella digital (campos estables, sin IP)
     const expectedClientKey = await generateClientKeyFromMeta(
       meta,
       record.userId,
       record.sessionId
     );
 
-    // 🔄 BACKWARD COMPATIBILITY: Intentar también con formato legacy (IP /24)
-    const expectedClientKeyLegacy = await generateClientKeyLegacy(
-      meta,
-      record.userId,
-      record.sessionId
-    );
-
-    const isValidFingerprint =
-      clientKey === expectedClientKey ||
-      clientKey === expectedClientKeyLegacy;
-
-    if (!isValidFingerprint) {
+    if (clientKey !== expectedClientKey || record.session.clientKey !== expectedClientKey) {
       await loggerSecurityEvent({
         meta,
         type: "client_key_mismatch",
@@ -179,51 +162,16 @@ export const findAccessTokenOrThrow = async (
         sessionId: record.sessionId,
         details: {
           receivedClientKey: clientKey,
-          expectedNew: expectedClientKey,
-          expectedLegacy: expectedClientKeyLegacy,
+          expectedClientKey,
         },
       });
 
-      throw new HttpException(
-        HTTP_CODE.UNAUTHORIZED,
-        "This token was not generated from this device or IP address.",
-        ERROR_CODE.INVALID_CLIENT_KEY
-      );
-    }
-
-    // 🔄 Validar también contra session.clientKey
-    // La session puede estar en nuevo formato mientras el cliente envía legacy
-    // Solo validamos que la session coincida con uno de los dos formatos esperados
-    const isValidSessionFingerprint =
-      record.session.clientKey === expectedClientKey ||
-      record.session.clientKey === expectedClientKeyLegacy;
-
-    appAssert(
-      isValidSessionFingerprint,
-      HTTP_CODE.UNAUTHORIZED,
-      "Session fingerprint does not match expected format.",
-      ERROR_CODE.INVALID_CLIENT_KEY
-    );
-
-    // 🔐 VALIDACIÓN ADICIONAL: Verificar IP contra Device.ipAddress
-    // Esta validación previene que una sesión siga siendo válida si la IP
-    // del dispositivo fue modificada en la base de datos
-    if (record.session.device.ipAddress !== meta.ipAddress) {
-      await loggerSecurityEvent({
-        meta,
-        type: "ip_mismatch",
-        userId: record.userId,
-        sessionId: record.sessionId,
-        details: {
-          requestIp: meta.ipAddress,
-          storedIp: record.session.device.ipAddress,
-          message: "IP address does not match stored device IP",
-        },
-      });
+      // Revocar sesión completa para no dejar tokens huérfanos
+      await revokeAllUserSessions(record.userId);
 
       throw new HttpException(
         HTTP_CODE.UNAUTHORIZED,
-        "IP address does not match stored device. Session may have been compromised.",
+        "Device fingerprint does not match.",
         ERROR_CODE.INVALID_CLIENT_KEY
       );
     }
@@ -231,7 +179,6 @@ export const findAccessTokenOrThrow = async (
     const expiresAt = record.expiresAt.getTime();
     const ttlFromDb = Math.floor((expiresAt - Date.now()) / 1000);
 
-    // ✅ Retornar también userId, sessionId, y role para evitar segunda query en middleware
     return {
       token: record.token,
       clientKeyHash: record.publicKey,

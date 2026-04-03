@@ -52,7 +52,6 @@ import { generatePendingToken } from "@utils/auth/pendingToken";
 import { API_STATUS } from "@constants/apiStatus";
 import { getJwtExpiration } from "@utils/auth/getJwtExpiration";
 import { generateClientKeyFromMeta } from "@utils/auth/generateClientKey";
-import { generateClientKeyLegacy } from "@utils/auth/generateClientKeyLegacy";
 import logger from "@utils/logging/logger";
 import { findOrCreateDevice } from "@utils/auth/findOrCreateDevice";
 import { findRefreshTokenByClientKey } from "@utils/auth/tokenDatabase";
@@ -470,15 +469,9 @@ export const refreshAccessTokenService = async (
   clientKey: string,
   meta: RequestMeta,
   lang: SupportedLang,
-  req: Request,
-  alternativeClientKey?: string
+  req: Request
 ): Promise<RefreshTokenResponse> => {
-  // 🔄 BACKWARD COMPATIBILITY: Buscar con ambos formatos (legacy y nuevo)
-  // Si alternativeClientKey está presente, buscar con ambos
-  const tokenRecord = await findRefreshTokenByClientKey(
-    clientKey,
-    alternativeClientKey
-  );
+  const tokenRecord = await findRefreshTokenByClientKey(clientKey);
 
   appAssert(
     tokenRecord,
@@ -494,25 +487,14 @@ export const refreshAccessTokenService = async (
     ERROR_CODE.TOKEN_EXPIRED
   );
 
-  // 🔐 Validación de huella digital con soporte para formato legacy
+  // 🔐 Validación de huella digital (campos estables, sin IP)
   const expectedClientKey = await generateClientKeyFromMeta(
     meta,
     tokenRecord.user.id,
     tokenRecord.session.id
   );
 
-  // 🔄 BACKWARD COMPATIBILITY: Intentar también con formato legacy (IP /24)
-  const expectedClientKeyLegacy = await generateClientKeyLegacy(
-    meta,
-    tokenRecord.user.id,
-    tokenRecord.session.id
-  );
-
-  const isValidFingerprint =
-    expectedClientKey === tokenRecord.publicKey ||
-    expectedClientKeyLegacy === tokenRecord.publicKey;
-
-  if (!isValidFingerprint) {
+  if (expectedClientKey !== tokenRecord.publicKey) {
     await loggerSecurityEvent({
       meta,
       type: "auth.refresh.fingerprint.mismatch",
@@ -520,10 +502,8 @@ export const refreshAccessTokenService = async (
       sessionId: tokenRecord.session.id,
       details: {
         storedKey: tokenRecord.publicKey,
-        expectedNew: expectedClientKey,
-        expectedLegacy: expectedClientKeyLegacy,
+        expectedClientKey,
         receivedClientKey: clientKey,
-        meta,
       },
     });
     appAssert(
@@ -534,32 +514,7 @@ export const refreshAccessTokenService = async (
     );
   }
 
-  // 🔄 Si usó formato legacy, actualizar a nuevo formato automáticamente
-  let activeClientKey = clientKey; // Por defecto, usar el clientKey recibido
-
-  if (expectedClientKeyLegacy === tokenRecord.publicKey && expectedClientKey !== tokenRecord.publicKey) {
-    logger.info("🔄 Migrando clientKey de formato legacy a nuevo formato", {
-      userId: tokenRecord.user.id,
-      sessionId: tokenRecord.session.id,
-      oldFormat: clientKey.substring(0, 16) + "...",
-      newFormat: expectedClientKey.substring(0, 16) + "...",
-      event: "auth.clientkey.auto_migration",
-    });
-
-    // Actualizar Session y TokenRecords con el nuevo formato
-    await prisma.session.update({
-      where: { id: tokenRecord.session.id },
-      data: { clientKey: expectedClientKey },
-    });
-
-    await prisma.tokenRecord.updateMany({
-      where: { sessionId: tokenRecord.session.id },
-      data: { publicKey: expectedClientKey },
-    });
-
-    // 🔑 IMPORTANTE: Usar el nuevo clientKey para generar tokens
-    activeClientKey = expectedClientKey;
-  }
+  const activeClientKey = clientKey;
 
   // Verificación del token registrado
   const { payload } = await verifyToken(tokenRecord.token, lang, req);

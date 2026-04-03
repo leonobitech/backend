@@ -3,27 +3,18 @@ import { TokenType } from "@prisma/client";
 
 /**
  * Busca el refresh token válido más reciente por clientKey (publicKey hash).
- *
- * @param clientKey - El clientKey recibido del cliente (puede ser legacy o nuevo formato)
- * @param alternativeClientKey - Formato alternativo para backward compatibility (opcional)
  */
 export const findRefreshTokenByClientKey = async (
-  clientKey: string,
-  alternativeClientKey?: string
+  clientKey: string
 ) => {
-  // Si hay formato alternativo, buscar con ambos formatos
-  const publicKeyCondition = alternativeClientKey
-    ? { OR: [{ publicKey: clientKey }, { publicKey: alternativeClientKey }] }
-    : { publicKey: clientKey };
-
   return prisma.tokenRecord.findFirst({
     where: {
-      ...publicKeyCondition,
+      publicKey: clientKey,
       type: TokenType.REFRESH,
       revoked: false,
     },
     orderBy: {
-      expiresAt: "desc", // o createdAt: "desc" si lo prefieres
+      expiresAt: "desc",
     },
     include: {
       user: true,
