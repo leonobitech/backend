@@ -1,341 +1,198 @@
-export const getPasswordResetTemplate = (code: string) => {
-  return {
-    subject: "Restablece tu contraseña en Leonobitech",
-    text: `Tu código para restablecer la contraseña es: ${code}. Este código expirará en 5 minutos.`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="es">
-      <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Restablecimiento de Contraseña</title>
-          <style>
-              body {
-                  font-family: Arial, sans-serif;
-                  background-color: #f4f4f4;
-                  margin: 0;
-                  padding: 0;
-                  text-align: center;
-              }
-              .container {
-                  width: 100%;
-                  max-width: 600px;
-                  margin: 30px auto;
-                  background: #ffffff;
-                  padding: 20px;
-                  border-radius: 8px;
-                  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-              }
-              h1 {
-                  color: #333;
-              }
-              p {
-                  font-size: 16px;
-                  color: #555;
-              }
-              .code {
-                  font-size: 24px;
-                  font-weight: bold;
-                  color: #2196F3;
-                  margin: 20px 0;
-                  padding: 10px;
-                  background: #f3f3f3;
-                  border-radius: 5px;
-                  display: inline-block;
-                  letter-spacing: 2px;
-              }
-              .footer {
-                  font-size: 12px;
-                  color: #777;
-                  margin-top: 20px;
-              }
-          </style>
-      </head>
-      <body>
-          <div class="container">
-              <h1>Restablece tu contraseña</h1>
-              <p>Recibimos una solicitud para restablecer tu contraseña de <strong>Leonobitech</strong>.</p>
-              <p>Ingresa el siguiente código para continuar con el proceso:</p>
-              <div class="code">${code}</div>
-              <p>Este código expirará en <strong>5 minutos</strong>. Si no fuiste tú quien lo solicitó, puedes ignorar este mensaje.</p>
-              <div class="footer">
-                  <p>&copy; ${new Date().getFullYear()} Leonobitech. Todos los derechos reservados.</p>
-              </div>
-          </div>
-      </body>
-      </html>
-    `,
-  };
-};
+// =============================================================================
+// Shared email wrapper with Leonobitech branding
+// =============================================================================
 
-export const getVerifyEmailTemplate = (code: string) => {
-  return {
-    subject: "🚀 Bienvenido a Leonobitech - Verifica tu cuenta",
-    text: `Tu código de verificación es: ${code}. Este código expirará en 15 minutos.`,
-    html: `
-      <!DOCTYPE html>
-      <html>
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Verificación de cuenta</title>
-          <style>
-              body {
-                  font-family: Arial, sans-serif;
-                  background-color: #f4f4f4;
-                  margin: 0;
-                  padding: 0;
-                  text-align: center;
-              }
-              .container {
-                  width: 100%;
-                  max-width: 600px;
-                  margin: 30px auto;
-                  background: #ffffff;
-                  padding: 20px;
-                  border-radius: 8px;
-                  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-              }
-              h1 {
-                  color: #333;
-              }
-              p {
-                  font-size: 16px;
-                  color: #555;
-              }
-              .code {
-                  font-size: 24px;
-                  font-weight: bold;
-                  color: #4CAF50;
-                  margin: 20px 0;
-                  display: inline-block;
-                  padding: 10px;
-                  border-radius: 5px;
-                  background: #f3f3f3;
-              }
-              .footer {
-                  font-size: 12px;
-                  color: #777;
-                  margin-top: 20px;
-              }
-          </style>
-      </head>
-      <body>
-          <div class="container">
-              <h1>Verifica tu cuenta</h1>
-              <p>Gracias por registrarte en <strong>Leonobitech</strong>. Usa el siguiente código para verificar tu cuenta:</p>
-              <div class="code">${code}</div>
-              <p>Este código expirará en 15 minutos. Si no solicitaste este correo, puedes ignorarlo.</p>
-              <div class="footer">
-                  <p>&copy; ${new Date().getFullYear()} Leonobitech. Todos los derechos reservados.</p>
-              </div>
-          </div>
-      </body>
-      </html>
-    `,
-  };
-};
-
-export const getTwoFactorAuthTemplate = (otpCode: string) => ({
-  subject: "🔐 Tu código de autenticación 2FA",
-  text: `Tu código de autenticación de dos factores (2FA) es: ${otpCode}. Este código expirará en 15 minutos.`,
-  html: `<!DOCTYPE html>
-    <html lang="es">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Código de Autenticación 2FA</title>
-      <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; text-align: center; padding: 20px; }
-        .container { background-color: white; padding: 20px; border-radius: 5px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
-        .code { font-size: 24px; font-weight: bold; background: #eee; padding: 10px 20px; display: inline-block; border-radius: 5px; }
-        .footer { font-size: 12px; color: #666; margin-top: 20px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <h2>🔐 Autenticación de Dos Factores</h2>
-        <p>Tu código de autenticación es:</p>
-        <p class="code">${otpCode}</p>
-        <p>Este código expirará en <strong>15 minutos</strong>. No compartas este código con nadie.</p>
-        <p class="footer">Si no solicitaste este código, ignora este mensaje.</p>
-      </div>
-    </body>
-    </html>`,
-});
-
-export const getDeviceValidationTemplate = (code: string) => {
-  return {
-    subject: "⚠️ Nuevo dispositivo detectado en Leonobitech",
-    text: `Recibimos un intento de inicio de sesión desde un nuevo dispositivo. Tu código de verificación es: ${code}. Este código expirará en 10 minutos.`,
-    html: `
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>Verificación de Dispositivo</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    background-color: #f4f4f4;
-                    margin: 0;
-                    padding: 0;
-                    text-align: center;
-                }
-                .container {
-                    width: 100%;
-                    max-width: 600px;
-                    margin: 30px auto;
-                    background: #ffffff;
-                    padding: 20px;
-                    border-radius: 8px;
-                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-                }
-                h1 {
-                    color: #333;
-                }
-                p {
-                    font-size: 16px;
-                    color: #555;
-                }
-                .code {
-                    font-size: 24px;
-                    font-weight: bold;
-                    color: #ff9800;
-                    margin: 20px 0;
-                    padding: 10px;
-                    background: #f3f3f3;
-                    border-radius: 5px;
-                    display: inline-block;
-                    letter-spacing: 2px;
-                }
-                .footer {
-                    font-size: 12px;
-                    color: #777;
-                    margin-top: 20px;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Nuevo dispositivo detectado</h1>
-                <p>Detectamos un intento de inicio de sesión desde un dispositivo no registrado en <strong>Leonobitech</strong>.</p>
-                <p>Si fuiste tú, utiliza el siguiente código para autorizarlo:</p>
-                <div class="code">${code}</div>
-                <p>Este código expirará en <strong>10 minutos</strong>. Si no fuiste tú, ignora este mensaje o cambia tu contraseña.</p>
-                <div class="footer">
-                    <p>&copy; ${new Date().getFullYear()} Leonobitech. Todos los derechos reservados.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-      `,
-  };
-};
-
-/**
- * 🔐 Template para recuperación de passkey
- * Se envía cuando el usuario pierde acceso a su teléfono y necesita configurar un nuevo passkey.
- */
-export const getPasskeyRecoveryTemplate = (code: string) => {
-  return {
-    subject: "🔐 Código de recuperación de Passkey - Leonobitech",
-    text: `Tu código de recuperación de passkey es: ${code}. Este código expirará en 10 minutos. Si no solicitaste este código, ignora este mensaje.`,
-    html: `
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>Recuperación de Passkey</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    background-color: #f4f4f4;
-                    margin: 0;
-                    padding: 0;
-                    text-align: center;
-                }
-                .container {
-                    width: 100%;
-                    max-width: 600px;
-                    margin: 30px auto;
-                    background: #ffffff;
-                    padding: 20px;
-                    border-radius: 8px;
-                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-                }
-                h1 {
-                    color: #333;
-                }
-                p {
-                    font-size: 16px;
-                    color: #555;
-                }
-                .warning {
-                    background: #fff3cd;
-                    border: 1px solid #ffc107;
-                    border-radius: 5px;
-                    padding: 15px;
-                    margin: 20px 0;
-                    color: #856404;
-                }
-                .code {
-                    font-size: 28px;
-                    font-weight: bold;
-                    color: #dc3545;
-                    margin: 20px 0;
-                    padding: 15px 25px;
-                    background: #f8d7da;
-                    border-radius: 8px;
-                    display: inline-block;
-                    letter-spacing: 4px;
-                }
-                .footer {
-                    font-size: 12px;
-                    color: #777;
-                    margin-top: 20px;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🔐 Recuperación de Passkey</h1>
-                <p>Recibimos una solicitud para recuperar el acceso a tu cuenta en <strong>Leonobitech</strong>.</p>
-                <div class="warning">
-                    <strong>⚠️ Importante:</strong> Si no solicitaste este código, alguien podría estar intentando acceder a tu cuenta. Ignora este mensaje y considera cambiar tu contraseña.
-                </div>
-                <p>Ingresa el siguiente código para continuar con la recuperación:</p>
-                <div class="code">${code}</div>
-                <p>Este código expirará en <strong>10 minutos</strong>.</p>
-                <p>Después de verificar el código, podrás configurar un nuevo passkey desde tu teléfono.</p>
-                <div class="footer">
-                    <p>&copy; ${new Date().getFullYear()} Leonobitech. Todos los derechos reservados.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-      `,
-  };
-};
-
-export const getMagicLinkTemplate = (magicLinkUrl: string) => {
-  return {
-    subject: "🔑 Inicia sesión en Leonobitech",
-    text: `Haz clic en el siguiente enlace para iniciar sesión: ${magicLinkUrl}. Este enlace expirará en 5 minutos.`,
-    html: `<!DOCTYPE html>
+const emailWrapper = (content: string) => `<!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:20px 0">
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
 
-<!-- Header Image (dark branding) -->
+<!-- Header Image -->
 <tr><td style="padding:0;background-color:#2B2B2B">
   <img src="https://www.leonobitech.com/opengraph-image.png" width="600" style="display:block;width:100%;height:auto" alt="Leonobitech" />
 </td></tr>
 
+${content}
+
+<!-- Footer -->
+<tr><td style="padding:20px 24px;text-align:center;background-color:#2B2B2B;border-top:1px solid rgba(255,255,255,0.06)">
+  <p style="margin:0;font-size:11px;color:#78716C">&copy; ${new Date().getFullYear()} Leonobitech &middot; leonobitech.com</p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+const codeBlock = (code: string) => `
+<table cellpadding="0" cellspacing="0" style="margin:0 auto">
+  <tr>
+    <td style="background-color:#f4f4f5;border-radius:10px;padding:16px 32px">
+      <span style="font-size:28px;font-weight:700;color:#1a1a1a;letter-spacing:6px;font-family:monospace">${code}</span>
+    </td>
+  </tr>
+</table>`;
+
+const buttonBlock = (url: string, label: string) => `
+<table cellpadding="0" cellspacing="0" style="margin:0 auto">
+  <tr>
+    <td style="background-color:#2B2B2B;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+      <a href="${url}" style="display:inline-block;padding:14px 40px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;letter-spacing:0.5px">${label}</a>
+    </td>
+  </tr>
+</table>`;
+
+const warningBlock = (text: string) => `
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fef3c7;border:1px solid #f59e0b;border-radius:8px;overflow:hidden">
+  <tr><td style="padding:12px 16px">
+    <p style="margin:0;font-size:13px;color:#92400e"><strong>&#9888;&#65039; Importante:</strong> ${text}</p>
+  </td></tr>
+</table>`;
+
+// =============================================================================
+// Templates
+// =============================================================================
+
+export const getPasswordResetTemplate = (code: string) => ({
+  subject: "Restablece tu contraseña en Leonobitech",
+  text: `Tu código para restablecer la contraseña es: ${code}. Este código expirará en 5 minutos.`,
+  html: emailWrapper(`
+<!-- Title -->
+<tr><td style="padding:32px 24px 8px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Seguridad</p>
+  <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Restablece tu contraseña</h1>
+</td></tr>
+
+<!-- Content -->
+<tr><td style="padding:16px 24px 24px;text-align:center">
+  <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
+    Recibimos una solicitud para restablecer tu contraseña en <strong style="color:#1a1a1a">Leonobitech</strong>.
+  </p>
+  ${codeBlock(code)}
+  <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa">
+    Este código expira en <strong style="color:#52525b">5 minutos</strong>
+  </p>
+</td></tr>
+
+<tr><td style="padding:0 24px 24px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa">Si no solicitaste este correo, puedes ignorarlo de forma segura.</p>
+</td></tr>`),
+});
+
+export const getVerifyEmailTemplate = (code: string) => ({
+  subject: "🚀 Bienvenido a Leonobitech - Verifica tu cuenta",
+  text: `Tu código de verificación es: ${code}. Este código expirará en 15 minutos.`,
+  html: emailWrapper(`
+<!-- Title -->
+<tr><td style="padding:32px 24px 8px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Bienvenido</p>
+  <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Verifica tu cuenta</h1>
+</td></tr>
+
+<!-- Content -->
+<tr><td style="padding:16px 24px 24px;text-align:center">
+  <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
+    Gracias por registrarte en <strong style="color:#1a1a1a">Leonobitech</strong>. Usa el siguiente código para verificar tu cuenta:
+  </p>
+  ${codeBlock(code)}
+  <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa">
+    Este código expira en <strong style="color:#52525b">15 minutos</strong>
+  </p>
+</td></tr>
+
+<tr><td style="padding:0 24px 24px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa">Si no solicitaste este correo, puedes ignorarlo de forma segura.</p>
+</td></tr>`),
+});
+
+export const getTwoFactorAuthTemplate = (otpCode: string) => ({
+  subject: "🔐 Tu código de autenticación 2FA",
+  text: `Tu código de autenticación de dos factores (2FA) es: ${otpCode}. Este código expirará en 15 minutos.`,
+  html: emailWrapper(`
+<!-- Title -->
+<tr><td style="padding:32px 24px 8px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Autenticación</p>
+  <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Código 2FA</h1>
+</td></tr>
+
+<!-- Content -->
+<tr><td style="padding:16px 24px 24px;text-align:center">
+  <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
+    Tu código de autenticación de dos factores es:
+  </p>
+  ${codeBlock(otpCode)}
+  <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa">
+    Este código expira en <strong style="color:#52525b">15 minutos</strong>. No compartas este código con nadie.
+  </p>
+</td></tr>
+
+<tr><td style="padding:0 24px 24px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa">Si no solicitaste este código, ignora este mensaje.</p>
+</td></tr>`),
+});
+
+export const getDeviceValidationTemplate = (code: string) => ({
+  subject: "⚠️ Nuevo dispositivo detectado en Leonobitech",
+  text: `Recibimos un intento de inicio de sesión desde un nuevo dispositivo. Tu código de verificación es: ${code}. Este código expirará en 10 minutos.`,
+  html: emailWrapper(`
+<!-- Title -->
+<tr><td style="padding:32px 24px 8px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Seguridad</p>
+  <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Nuevo dispositivo detectado</h1>
+</td></tr>
+
+<!-- Content -->
+<tr><td style="padding:16px 24px 24px;text-align:center">
+  <p style="margin:0 0 16px;font-size:15px;color:#52525b;line-height:1.6">
+    Detectamos un intento de inicio de sesión desde un dispositivo no registrado en <strong style="color:#1a1a1a">Leonobitech</strong>.
+  </p>
+  <div style="padding:0 0 16px">
+    ${warningBlock("Si no fuiste tú, ignora este mensaje. Tu cuenta permanece segura.")}
+  </div>
+  <p style="margin:0 0 24px;font-size:15px;color:#52525b">Si fuiste tú, usa el siguiente código para autorizarlo:</p>
+  ${codeBlock(code)}
+  <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa">
+    Este código expira en <strong style="color:#52525b">10 minutos</strong>
+  </p>
+</td></tr>`),
+});
+
+export const getPasskeyRecoveryTemplate = (code: string) => ({
+  subject: "🔐 Código de recuperación de Passkey - Leonobitech",
+  text: `Tu código de recuperación de passkey es: ${code}. Este código expirará en 10 minutos. Si no solicitaste este código, ignora este mensaje.`,
+  html: emailWrapper(`
+<!-- Title -->
+<tr><td style="padding:32px 24px 8px;text-align:center">
+  <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Recuperación</p>
+  <h1 style="margin:12px 0 0;font-size:24px;color:#1a1a1a;font-weight:700">Recuperación de Passkey</h1>
+</td></tr>
+
+<!-- Content -->
+<tr><td style="padding:16px 24px 24px;text-align:center">
+  <p style="margin:0 0 16px;font-size:15px;color:#52525b;line-height:1.6">
+    Recibimos una solicitud para recuperar el acceso a tu cuenta en <strong style="color:#1a1a1a">Leonobitech</strong>.
+  </p>
+  <div style="padding:0 0 16px">
+    ${warningBlock("Si no solicitaste este código, alguien podría estar intentando acceder a tu cuenta. Ignora este mensaje.")}
+  </div>
+  <p style="margin:0 0 24px;font-size:15px;color:#52525b">Ingresa el siguiente código para continuar:</p>
+  ${codeBlock(code)}
+  <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa">
+    Este código expira en <strong style="color:#52525b">10 minutos</strong>
+  </p>
+  <p style="margin:8px 0 0;font-size:13px;color:#a1a1aa">
+    Después de verificar el código, podrás configurar un nuevo passkey.
+  </p>
+</td></tr>`),
+});
+
+export const getMagicLinkTemplate = (magicLinkUrl: string) => ({
+  subject: "🔑 Inicia sesión en Leonobitech",
+  text: `Haz clic en el siguiente enlace para iniciar sesión: ${magicLinkUrl}. Este enlace expirará en 5 minutos.`,
+  html: emailWrapper(`
 <!-- Title -->
 <tr><td style="padding:32px 24px 8px;text-align:center">
   <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:3px">Acceso Seguro</p>
@@ -347,19 +204,7 @@ export const getMagicLinkTemplate = (magicLinkUrl: string) => {
   <p style="margin:0 0 24px;font-size:15px;color:#52525b;line-height:1.6">
     Haz clic en el botón para acceder a tu cuenta en <strong style="color:#1a1a1a">Leonobitech</strong>.
   </p>
-
-  <!-- Button (dark, matching brand) -->
-  <table cellpadding="0" cellspacing="0" style="margin:0 auto">
-    <tr>
-      <td style="background-color:#2B2B2B;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
-        <a href="${magicLinkUrl}" style="display:inline-block;padding:14px 40px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;letter-spacing:0.5px">
-          Iniciar sesión
-        </a>
-      </td>
-    </tr>
-  </table>
-
-  <!-- Expiry -->
+  ${buttonBlock(magicLinkUrl, "Iniciar sesión")}
   <p style="margin:24px 0 0;font-size:13px;color:#a1a1aa">
     Este enlace expira en <strong style="color:#52525b">5 minutos</strong>
   </p>
@@ -375,22 +220,7 @@ export const getMagicLinkTemplate = (magicLinkUrl: string) => {
   </table>
 </td></tr>
 
-<!-- Security Notice -->
 <tr><td style="padding:0 24px 24px;text-align:center">
-  <p style="margin:0;font-size:12px;color:#a1a1aa">
-    Si no solicitaste este correo, puedes ignorarlo de forma segura.
-  </p>
-</td></tr>
-
-<!-- Footer (dark, matching brand) -->
-<tr><td style="padding:20px 24px;text-align:center;background-color:#2B2B2B;border-top:1px solid rgba(255,255,255,0.06)">
-  <p style="margin:0;font-size:11px;color:#78716C">&copy; ${new Date().getFullYear()} Leonobitech &middot; leonobitech.com</p>
-</td></tr>
-
-</table>
-</td></tr>
-</table>
-</body>
-</html>`,
-  };
-};
+  <p style="margin:0;font-size:12px;color:#a1a1aa">Si no solicitaste este correo, puedes ignorarlo de forma segura.</p>
+</td></tr>`),
+});
