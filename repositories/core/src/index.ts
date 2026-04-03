@@ -39,6 +39,7 @@ import iotRoutes from "@routes/iot.routes";
 import lmsRouter from "@routes/lms.routes";
 import catalogRouter from "@routes/catalog.routes";
 import paymentRouter, { webhookRouter } from "@routes/payment.routes";
+import learnRouter from "@routes/learn.routes";
 
 // controllers (for specific routes)
 import { updateAvatarFromN8n } from "@controllers/user.controllers";
@@ -186,6 +187,7 @@ app.use("/account/sessions", authenticate, sessionRoutes);
 app.use("/admin", authenticate, authorize(UserRole.Admin), adminRateLimiter, adminRouter);
 app.use("/lms", authenticate, authorize(UserRole.Admin), adminRateLimiter, lmsRouter);
 app.use("/payments", paymentRouter);
+app.use("/learn", authenticate, learnRouter);
 
 // Test route for error handling
 app.use("/api", testRouter);
