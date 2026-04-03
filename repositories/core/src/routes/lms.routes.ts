@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createCourse, listCourses, getCourse, updateCourse, deleteCourse, publishCourse } from "@controllers/lms/course.controller";
 import { createModule, updateModule, deleteModule, reorderModules } from "@controllers/lms/module.controller";
 import { createLesson, updateLesson, deleteLesson, reorderLessons } from "@controllers/lms/lesson.controller";
+import { listEnrollments } from "@controllers/lms/enrollment.controller";
 
 const lmsRouter = Router();
 
@@ -33,5 +34,11 @@ lmsRouter.post("/modules/:moduleId/lessons", createLesson);
 lmsRouter.put("/lessons/:id", updateLesson);
 lmsRouter.delete("/lessons/:id", deleteLesson);
 lmsRouter.put("/modules/:moduleId/reorder-lessons", reorderLessons);
+
+// =============================================================================
+// Enrollments (admin view)
+// =============================================================================
+
+lmsRouter.get("/enrollments", listEnrollments);
 
 export default lmsRouter;
