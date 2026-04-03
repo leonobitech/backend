@@ -8,8 +8,8 @@ const emailWrapper = (content: string) => `<!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
 
-<!-- Header full-width -->
-<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#2B2B2B">
+<!-- Header -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff">
 <tr><td align="center">
   <table width="600" cellpadding="0" cellspacing="0">
     <tr><td style="padding:0">
