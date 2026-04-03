@@ -31,3 +31,5 @@ export const SERVICE_TOKEN_TTL_SECONDS = Number.parseInt(
   10
 );
 export const SERVICE_CLIENTS = getEnv("SERVICE_CLIENTS", "[]");
+export const STRIPE_SECRET_KEY = getEnv("STRIPE_SECRET_KEY");
+export const STRIPE_WEBHOOK_SECRET = getEnv("STRIPE_WEBHOOK_SECRET");

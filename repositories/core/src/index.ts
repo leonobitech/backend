@@ -38,6 +38,7 @@ import podcastRouter from "@routes/podcast.routes";
 import iotRoutes from "@routes/iot.routes";
 import lmsRouter from "@routes/lms.routes";
 import catalogRouter from "@routes/catalog.routes";
+import paymentRouter, { webhookRouter } from "@routes/payment.routes";
 
 // controllers (for specific routes)
 import { updateAvatarFromN8n } from "@controllers/user.controllers";
@@ -56,6 +57,9 @@ const app: Application = express();
 
 // 🔐 Necesario para Traefik o NGINX
 app.set("trust proxy", true);
+
+// 💳 Stripe webhook needs raw body BEFORE json parser
+app.use("/payments", express.raw({ type: "application/json" }), webhookRouter);
 
 // parse application/json
 app.use(express.json());
@@ -181,6 +185,7 @@ app.use("/account", authenticate, userRoutes);
 app.use("/account/sessions", authenticate, sessionRoutes);
 app.use("/admin", authenticate, authorize(UserRole.Admin), adminRateLimiter, adminRouter);
 app.use("/lms", authenticate, authorize(UserRole.Admin), adminRateLimiter, lmsRouter);
+app.use("/payments", paymentRouter);
 
 // Test route for error handling
 app.use("/api", testRouter);
