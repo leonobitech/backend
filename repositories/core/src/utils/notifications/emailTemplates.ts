@@ -7,7 +7,7 @@ const emailWrapper = (content: string) => `<!DOCTYPE html>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:20px 0">
 <tr><td align="center" style="padding:0 16px">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:800px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
 
 <!-- Header Image -->
 <tr><td style="padding:0;background-color:#2B2B2B">
