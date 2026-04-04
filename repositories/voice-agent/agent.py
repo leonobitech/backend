@@ -53,7 +53,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Gemini 3.1 Flash Live — native audio-to-audio (replaces STT+LLM+TTS pipeline)
     gemini_realtime = google.realtime.RealtimeModel(
         model="gemini-3.1-flash-live-preview",
-        voice="Kore",
+        voice="Zephyr",
         api_key=os.getenv("GOOGLE_API_KEY"),
     )
 
