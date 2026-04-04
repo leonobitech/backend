@@ -7,7 +7,7 @@ version = "0.2.0"
 description = "Voice AI agent for Leonobitech - LiveKit + Gemini 3.1 Flash Live (native audio-to-audio)"
 requires-python = ">=3.11"
 dependencies = [
-    "livekit-agents[mcp]~=1.5",
+    "livekit-agents[mcp] @ git+https://github.com/livekit/agents.git#subdirectory=livekit-agents",
     "livekit-plugins-google @ git+https://github.com/livekit/agents.git#subdirectory=livekit-plugins/livekit-plugins-google",
     "python-dotenv",
 ]
