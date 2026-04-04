@@ -21,7 +21,7 @@ logger.setLevel(logging.INFO)
 class VoiceAssistant(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions="""Eres Leonobít, la asistente virtual de Leonobitech.
+            instructions="""Eres Leonóbit, la asistente virtual de Leonobitech.
             Eres amigable, cálida y profesional. Ayudas a los usuarios con lo que necesiten.
             IMPORTANTE: Responde en máximo 1-2 oraciones cortas y directas. Sé breve.
             Siempre habla en español.
