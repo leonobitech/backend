@@ -68,7 +68,7 @@ const buttonBlock = (url: string, label: string) => `
 <table cellpadding="0" cellspacing="0" style="margin:0 auto">
   <tr>
     <td style="background:linear-gradient(135deg,#E91E63,#9B5DE5);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
-      <a href="${url}" style="display:inline-block;padding:14px 40px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;letter-spacing:0.5px">${label}</a>
+      <a href="${url}" style="display:inline-block;padding:12px 40px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;letter-spacing:0.5px">${label}</a>
     </td>
   </tr>
 </table>`;
