@@ -88,7 +88,9 @@ class VoiceAssistant(Agent):
         )
         logger.info(f"[TOOL] data track sent: {len(results)} restaurants")
 
-        return json.dumps(results, ensure_ascii=False)
+        # Retornar resumen corto para que Gemini pueda hablar sobre los resultados
+        names = ", ".join(r["name"] for r in results)
+        return f"Se encontraron {len(results)} restaurantes: {names}. Los resultados ya se muestran en pantalla."
 
     async def on_enter(self):
         pass
