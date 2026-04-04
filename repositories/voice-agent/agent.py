@@ -6,7 +6,7 @@ import time
 
 from dotenv import load_dotenv
 from livekit import agents, rtc
-from livekit.agents import AgentServer, AgentSession, Agent, mcp, function_tool, RunContext
+from livekit.agents import AgentServer, AgentSession, Agent, mcp, function_tool, RunContext, get_job_context
 from livekit.api import LiveKitAPI, DeleteRoomRequest
 from livekit.plugins import google
 
@@ -79,8 +79,9 @@ class VoiceAssistant(Agent):
         results = MOCK_RESTAURANTS
 
         # Enviar resultados al frontend via data track
+        room = get_job_context().room
         payload = json.dumps({"type": "restaurant_cards", "data": results}).encode()
-        await context.session.room.local_participant.publish_data(
+        await room.local_participant.publish_data(
             payload,
             reliable=True,
             topic="leonobit.ui",
