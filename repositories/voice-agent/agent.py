@@ -81,14 +81,9 @@ async def entrypoint(ctx: agents.JobContext):
     @session.on("metrics_collected")
     def on_metrics_collected(ev):
         m = ev.metrics
-        if hasattr(m, "ttft"):  # LLMMetrics
-            logger.info(f"[METRICS] llm ttft={m.ttft:.3f}s tokens_in={m.prompt_tokens} tokens_out={m.completion_tokens} tok/s={m.tokens_per_second:.1f}")
-        elif hasattr(m, "ttfb") and hasattr(m, "audio_duration"):  # TTSMetrics
-            logger.info(f"[METRICS] tts ttfb={m.ttfb:.3f}s audio_duration={m.audio_duration:.2f}s")
-        elif hasattr(m, "audio_duration") and not hasattr(m, "ttfb"):  # STTMetrics
-            logger.info(f"[METRICS] stt audio_duration={m.audio_duration:.2f}s")
-        elif hasattr(m, "total_duration") and hasattr(m, "prediction_duration"):  # InterruptionMetrics
-            logger.info(f"[METRICS] interruption total={m.total_duration:.3f}s prediction={m.prediction_duration:.3f}s")
+        # RealtimeModelMetrics (Gemini) — log available fields safely
+        if hasattr(m, "ttft"):
+            logger.info(f"[METRICS] ttft={m.ttft:.3f}s type={type(m).__name__}")
 
     @session.on("agent_state_changed")
     def on_agent_state_changed(state: str):
