@@ -3,7 +3,7 @@ const crypto = require("crypto");
 
 const APP_SECRET = process.env.WA_APP_SECRET;
 const VERIFY_TOKEN = process.env.WA_VERIFY_TOKEN;
-const N8N_TARGET = process.env.N8N_TARGET || "http://n8n_webhook_1:5678";
+const N8N_TARGET = process.env.N8N_TARGET || "http://n8n_main:5678";
 const PORT = parseInt(process.env.PORT || "3100", 10);
 const FORWARD_TIMEOUT = 15000; // 15s timeout for n8n forwarding
 const RATE_WINDOW = 60000; // 1 minute window

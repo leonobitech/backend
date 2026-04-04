@@ -9,7 +9,7 @@ import {
 } from "@utils/auth/uploadToken";
 
 // n8n internal Docker URL (comunicación por red interna)
-const N8N_WEBHOOK_URL = process.env.N8N_INTERNAL_URL || "http://n8n_webhook_1:5678";
+const N8N_WEBHOOK_URL = process.env.N8N_INTERNAL_URL || "http://n8n_main:5678";
 const N8N_WEBHOOK_KEY = process.env.N8N_WEBHOOK_KEY || "";
 
 // Directorio temporal para archivos
