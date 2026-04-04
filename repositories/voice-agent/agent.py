@@ -32,7 +32,9 @@ class VoiceAssistant(Agent):
         )
 
     async def on_enter(self):
-        pass
+        await self.session.generate_reply(
+            instructions="Preséntate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en qué puedes ayudar."
+        )
 
 
 server = AgentServer()
@@ -137,12 +139,6 @@ async def entrypoint(ctx: agents.JobContext):
                 out = getattr(mu, "output_tokens", 0)
                 if inp or out:
                     logger.info(f"[USAGE] model={getattr(mu, 'model', 'unknown')} in={inp} out={out}")
-
-    # ── Greeting (immediate, no avatar wait) ──────────────────────
-    session.generate_reply(
-        instructions="Preséntate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en qué puedes ayudar."
-    )
-    logger.info(f"[PIPELINE] greeting_dispatched t={time.monotonic() - session_start_time:.3f}s")
 
     # Disconnect agent + force delete room when user leaves
     @ctx.room.on("participant_disconnected")
