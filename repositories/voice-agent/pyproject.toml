@@ -1,26 +1,23 @@
 [tool.setuptools]
-py-modules = ["agent", "tts_piper"]
+py-modules = ["agent"]
 
 [project]
 name = "voice-agent"
-version = "0.1.0"
-description = "Voice AI agent for Leonobitech - LiveKit + Deepgram + Piper/ElevenLabs + Claude"
+version = "0.2.0"
+description = "Voice AI agent for Leonobitech - LiveKit + Gemini 3.1 Flash Live (native audio-to-audio)"
 requires-python = ">=3.11"
 dependencies = [
-    "livekit-agents[anthropic,silero,mcp]~=1.5",
+    "livekit-agents[mcp]~=1.5",
+    "livekit-plugins-google @ git+https://github.com/livekit/agents.git#subdirectory=livekit-plugins/livekit-plugins-google",
     "python-dotenv",
 ]
 
 [project.optional-dependencies]
-local = [
-    "faster-whisper",
-    "piper-tts",
-    "numpy",
-]
-cloud = [
+legacy = [
     "livekit-plugins-deepgram~=1.5",
     "livekit-plugins-elevenlabs~=1.5",
     "livekit-plugins-turn-detector~=1.5",
+    "livekit-agents[anthropic]~=1.5",
 ]
 
 [project.scripts]
