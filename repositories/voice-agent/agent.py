@@ -21,7 +21,7 @@ logger.setLevel(logging.INFO)
 class VoiceAssistant(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions="""Eres Leonobit, la asistente virtual de Leonobitech.
+            instructions="""Eres Leonobít, la asistente virtual de Leonobitech.
             Eres amigable, cálida y profesional. Ayudas a los usuarios con lo que necesiten.
             IMPORTANTE: Responde en máximo 1-2 oraciones cortas y directas. Sé breve.
             Siempre habla en español.
@@ -33,7 +33,7 @@ class VoiceAssistant(Agent):
 
     async def on_enter(self):
         await self.session.generate_reply(
-            instructions="Preséntate como Leonobit, la asistente virtual de Leonobitech. Saluda brevemente y pregunta en qué puedes ayudar."
+            user_input="Hola"
         )
 
 
@@ -55,7 +55,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Gemini 3.1 Flash Live — native audio-to-audio (replaces STT+LLM+TTS pipeline)
     gemini_realtime = google.realtime.RealtimeModel(
         model="gemini-3.1-flash-live-preview",
-        voice="Kore",
+        voice="Aoede",
         api_key=os.getenv("GOOGLE_API_KEY"),
     )
 
