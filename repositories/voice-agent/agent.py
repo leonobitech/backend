@@ -73,7 +73,8 @@ class VoiceAssistant(Agent):
     @function_tool()
     async def search_restaurants(self, context: RunContext, query: str, location: str = "Palermo, Buenos Aires"):
         """Busca restaurantes cercanos según el tipo de comida y ubicación. Usa esta herramienta cuando el usuario pida recomendaciones de restaurantes o comida."""
-        logger.info(f"[TOOL] search_restaurants query='{query}' location='{location}'")
+        t0 = time.monotonic()
+        logger.info(f"[TOOL:START] search_restaurants query='{query}' location='{location}' t={t0:.3f}")
 
         # Mock: filtrar por query (en producción sería Google Places API)
         results = MOCK_RESTAURANTS
@@ -86,11 +87,15 @@ class VoiceAssistant(Agent):
             reliable=True,
             topic="leonobit.ui",
         )
-        logger.info(f"[TOOL] data track sent: {len(results)} restaurants")
+        t1 = time.monotonic()
+        logger.info(f"[TOOL:DATA_SENT] data track sent: {len(results)} restaurants elapsed={t1-t0:.3f}s")
 
         # Retornar resumen corto para que Gemini pueda hablar sobre los resultados
         names = ", ".join(r["name"] for r in results)
-        return f"Se encontraron {len(results)} restaurantes: {names}. Los resultados ya se muestran en pantalla."
+        result = f"Se encontraron {len(results)} restaurantes: {names}. Los resultados ya se muestran en pantalla."
+        t2 = time.monotonic()
+        logger.info(f"[TOOL:END] returning result elapsed={t2-t0:.3f}s")
+        return result
 
     async def on_enter(self):
         pass
