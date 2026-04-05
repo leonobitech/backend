@@ -81,10 +81,7 @@ class VoiceAssistant(Agent):
         results = MOCK_RESTAURANTS
 
         # Guardar para que display_card los encuentre
-        if not hasattr(context, 'userdata') or context.userdata is None:
-            self._restaurants_cache = {r["name"]: r for r in results}
-        else:
-            context.userdata["restaurants"] = {r["name"]: r for r in results}
+        self._restaurants_cache = {r["name"]: r for r in results}
 
         # Solo retornar texto a Gemini, sin cards
         summaries = []
@@ -99,9 +96,6 @@ class VoiceAssistant(Agent):
 
         # Buscar en cache
         restaurants = getattr(self, '_restaurants_cache', {})
-        if hasattr(context, 'userdata') and context.userdata and "restaurants" in context.userdata:
-            restaurants = context.userdata["restaurants"]
-
         r = restaurants.get(name)
         if not r:
             return f"No encontré un restaurante llamado '{name}'."
