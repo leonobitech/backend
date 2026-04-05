@@ -79,16 +79,17 @@ class VoiceAssistant(Agent):
         # Mock: filtrar por query (en producción sería Google Places API)
         results = MOCK_RESTAURANTS
 
-        # Enviar resultados al frontend via data track
+        # Enviar cada restaurante como data track individual
         room = get_job_context().room
-        payload = json.dumps({"type": "restaurant_cards", "data": results}).encode()
-        await room.local_participant.publish_data(
-            payload,
-            reliable=True,
-            topic="leonobit.ui",
-        )
+        for r in results:
+            payload = json.dumps({"type": "restaurant_card", "data": r}).encode()
+            await room.local_participant.publish_data(
+                payload,
+                reliable=True,
+                topic="leonobit.ui",
+            )
         t1 = time.monotonic()
-        logger.info(f"[TOOL:DATA_SENT] data track sent: {len(results)} restaurants elapsed={t1-t0:.3f}s")
+        logger.info(f"[TOOL:DATA_SENT] {len(results)} cards sent individually elapsed={t1-t0:.3f}s")
 
         # Retornar resumen corto para que Gemini pueda hablar sobre los resultados
         names = ", ".join(r["name"] for r in results)
