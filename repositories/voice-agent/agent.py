@@ -84,7 +84,7 @@ class VoiceAssistant(Agent):
         async def send_cards_delayed():
             for i, r in enumerate(results):
                 if i > 0:
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(6)
                 payload = json.dumps({"type": "restaurant_card", "data": r}).encode()
                 await room.local_participant.publish_data(
                     payload,
