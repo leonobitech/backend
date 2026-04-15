@@ -42,6 +42,12 @@ Thumbs.db
 # 🔐 Certificates SSL (Let's Encrypt - Traefik)
 # ─────────────────────────────────────────────
 traefik/acme.json
+traefik/acme.json.bak
+
+# ─────────────────────────────────────────────
+# 🔐 RSA Keys (leraysi-mcp)
+# ─────────────────────────────────────────────
+repositories/leraysi-mcp/keys/*.pem
 
 # Ignorar los datos de Odoo
 /repositories/odoo/odoo.conf
