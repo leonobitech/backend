@@ -1,4 +1,4 @@
-# 🧠 Leonobitech Backend Monorepo
+# 🧠 Leonobitech Backend
 
 This is the **official backend monorepo** for the Leonobitech platform.
 
