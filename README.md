@@ -1,6 +1,6 @@
 # 🧠 Leonobitech Backend
 
-This is the **official backend monorepo** for the Leonobitech platform.
+This is the **official backend** for the Leonobitech platform.
 
 It follows a **modular microservices architecture**, powered by:
 - ⚡ **Traefik** as reverse proxy with automatic HTTPS via Let's Encrypt
