@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Status**: Public showcase repository. This codebase is shared publicly for portfolio/reference purposes and **does not auto-deploy to any production environment**. All commands and setup instructions are intended for local development only.
+
 ---
 
 ## Repository Structure
@@ -126,19 +128,21 @@ docker compose down -v --remove-orphans       # Stop & clean
    - Redis caches active access tokens for fast lookup
    - `/account/sessions` endpoint for listing/revoking sessions
 
-3. **Traefik Integration**:
-   - Backend exposed via subdomain routing (e.g., `core.leonobitech.com`)
-   - `/security/verify-admin` endpoint used by Traefik ForwardAuth for protecting admin services (n8n, Odoo)
+3. **Reverse Proxy Integration** (reference only):
+   - Backend can be exposed behind a reverse proxy (e.g., Traefik) via subdomain routing
+   - `/security/verify-admin` endpoint supports ForwardAuth-style protection for downstream admin services
 
-### Infrastructure (Docker Compose)
+### Infrastructure (Local Dev — Docker Compose)
 
-- **Traefik**: Reverse proxy with automatic SSL cert management
+The included `docker-compose.yml` is intended for **local development**:
+
+- **Traefik**: Reverse proxy with automatic SSL cert management (optional, for local subdomain testing)
 - **Core**: Authentication microservice (Express)
 - **n8n**: Workflow automation with webhook queue
 - **Redis**: Token cache (DB 2) + shared cache for microservices
-- **PostgreSQL**: Prisma-managed database (not in docker-compose, external)
+- **PostgreSQL**: Prisma-managed database (external, not included in compose)
 
-All services communicate via Docker networks with subdomain routing handled by Traefik.
+All services communicate via Docker networks. No production deployment is configured in this repo.
 
 ---
 
@@ -278,7 +282,7 @@ feat(api)!: change authentication response format
 - **Token storage**: Access tokens in Redis only, refresh tokens in DB
 - **Client key validation**: Always verify `clientKey` matches device metadata to prevent token theft
 - **Rate limiting**: Not yet implemented (consider adding for production)
-- **CORS**: Configured in [src/index.ts:56](backend/repositories/core/src/index.ts#L56) - update `APP_ORIGIN` for new domains
+- **CORS**: Configured in [src/index.ts:56](backend/repositories/core/src/index.ts#L56) - update `APP_ORIGIN` env var for your local frontend origin
 
 ---
 
@@ -305,8 +309,8 @@ npm test  # Not configured yet
 Create `.env.local`:
 
 ```env
-NEXT_PUBLIC_API_URL=https://core.leonobitech.com
-NEXT_PUBLIC_APP_URL=https://leonobitech.com
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 ### Backend (Core)
@@ -315,10 +319,10 @@ Required environment variables (see `.env.example`):
 
 ```env
 # Server
-NODE_ENV=production
+NODE_ENV=development
 PORT=3001
-API_ORIGIN=https://core.leonobitech.com
-APP_ORIGIN=https://leonobitech.com
+API_ORIGIN=http://localhost:3001
+APP_ORIGIN=http://localhost:3000
 
 # Database
 DATABASE_URL=postgresql://...
@@ -342,11 +346,11 @@ Generate RSA keys: `npm run generate:keys`
 
 ### Backend (Docker)
 
-Root `.env` for Docker Compose:
+Root `.env` for Docker Compose (only needed if running Traefik locally with custom domains):
 
 ```env
-DOMAIN_NAME=leonobitech.com
-SSL_EMAIL=admin@leonobitech.com
+DOMAIN_NAME=localhost
+SSL_EMAIL=dev@example.com
 ```
 
 ---
